@@ -43,4 +43,5 @@ private:
     float tonalAirEnv = 0.0f;
     float tonalNoiseFloorDb = -80.0f;
     bool controlsPrimed = false;
+    float smoothedMakeupDb = 0.0f;
 };

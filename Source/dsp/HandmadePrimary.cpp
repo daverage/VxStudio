@@ -118,7 +118,7 @@ void HandmadePrimary::prepare(double sampleRate, int maxBlockSize) {
     for (size_t i = 0; i < fftSize; ++i)
         window[i] = std::sqrt(0.5f - 0.5f * std::cos(2.0f * juce::MathConstants<float>::pi
                                                      * static_cast<float>(i)
-                                                     / static_cast<float>(fftSize - 1)));
+                                                     / static_cast<float>(fftSize)));
 
     currPow.assign(bins, 1.0e-8f);
     prevMag.assign(bins, 0.0f);
@@ -258,6 +258,22 @@ void HandmadePrimary::clearLearnedProfile() {
     std::fill(learnAccumSq.begin(), learnAccumSq.end(), 0.0f);
     for (auto& history : learnHistory)
         history.clear();
+}
+
+bool HandmadePrimary::getLearnedProfileData(std::vector<float>& outProfile, float& outConfidence) const {
+    if (!learnedProfileReady || noisePowFrozen.size() != bins)
+        return false;
+    outProfile = noisePowFrozen;
+    outConfidence = learnedProfileConfidence;
+    return true;
+}
+
+void HandmadePrimary::restoreLearnedProfile(const std::vector<float>& profile, float confidence) {
+    if (profile.size() != bins)
+        return;
+    noisePowFrozen = profile;
+    learnedProfileConfidence = confidence;
+    learnedProfileReady = true;
 }
 
 void HandmadePrimary::resetStreamingState() {

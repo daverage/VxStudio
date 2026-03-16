@@ -123,6 +123,7 @@ private:
 
     // ── Anti-flicker ─────────────────────────────────────────────────────────
     std::vector<int> suppressCount;  // slow-release suppression counter
+    int stftFrameCount = 0;          // monotonic frame index — used for slow-release gating
 
     // ── Bark transient detection ──────────────────────────────────────────────
     std::array<float, 24> barkFluxAvg {};
@@ -135,6 +136,7 @@ private:
     int   sideDelayRead  = 0;
     int   sideDelayCount = 0;
     float smoothedSideRatio = 1.0f;
+    float prevSideScale     = 1.0f;  // sideScale from previous block — interpolated per-sample
 
     // Latency-aligned dry mid for side ratio computation
     std::vector<float> midDryDelayBuf;

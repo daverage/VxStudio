@@ -1,6 +1,7 @@
 #include "VxSubtractProcessor.h"
 
 #include <cmath>
+#include <cstring>
 
 namespace {
 
@@ -90,13 +91,19 @@ juce::AudioProcessorEditor* VXSubtractAudioProcessor::createEditor() {
 void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     subtractDsp.prepare(currentSampleRateHz, samplesPerBlock);
+    // prepare() clears the learned profile — restore it if we have one saved
+    if (!savedLearnProfile.empty()) {
+        subtractDsp.restoreLearnedProfile(savedLearnProfile, savedLearnConfidence);
+        learnReady.store(true, std::memory_order_relaxed);
+        learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
+    }
     setLatencySamples(subtractDsp.getLatencySamples());
     ensureScratchCapacity(getTotalNumOutputChannels(), samplesPerBlock);
     resetSuite();
 }
 
 void VXSubtractAudioProcessor::resetSuite() {
-    subtractDsp.reset();
+    subtractDsp.resetStreamingState();
     dryScratch.clear();
     alignedDryScratch.clear();
     for (auto& line : dryDelayLines)
@@ -258,6 +265,58 @@ void VXSubtractAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outp
         const auto* dry = alignedDryScratch.getReadPointer(ch);
         for (int i = 0; i < samples; ++i)
             out[i] = dry[i] - out[i];
+    }
+}
+
+void VXSubtractAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    auto xml = parameters.copyState().createXml();
+    if (!xml)
+        return;
+
+    std::vector<float> profile;
+    float confidence = 0.0f;
+    if (subtractDsp.getLearnedProfileData(profile, confidence)) {
+        auto* el = xml->createNewChildElement("LearnedProfile");
+        el->setAttribute("confidence", static_cast<double>(confidence));
+        juce::MemoryBlock blob(profile.data(), profile.size() * sizeof(float));
+        el->setAttribute("data", blob.toBase64Encoding());
+    }
+
+    copyXmlToBinary(*xml, destData);
+}
+
+void VXSubtractAudioProcessor::setStateInformation(const void* data, const int sizeInBytes) {
+    std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
+    if (!xml)
+        return;
+
+    if (xml->hasTagName(parameters.state.getType()))
+        parameters.replaceState(juce::ValueTree::fromXml(*xml));
+
+    savedLearnProfile.clear();
+    savedLearnConfidence = 0.0f;
+
+    if (auto* el = xml->getChildByName("LearnedProfile")) {
+        const float confidence = static_cast<float>(el->getDoubleAttribute("confidence", 0.0));
+        juce::MemoryBlock blob;
+        if (blob.fromBase64Encoding(el->getStringAttribute("data"))) {
+            const size_t count = blob.getSize() / sizeof(float);
+            if (count > 0) {
+                savedLearnProfile.resize(count);
+                std::memcpy(savedLearnProfile.data(), blob.getData(), blob.getSize());
+                savedLearnConfidence = confidence;
+                // Apply immediately if already prepared
+                subtractDsp.restoreLearnedProfile(savedLearnProfile, savedLearnConfidence);
+                learnReady.store(subtractDsp.hasLearnedProfile(), std::memory_order_relaxed);
+                learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
+            }
+        }
+    } else {
+        subtractDsp.clearLearnedProfile();
+        learnReady.store(false, std::memory_order_relaxed);
+        learnConfidence.store(0.0f, std::memory_order_relaxed);
+        learnProgress.store(0.0f, std::memory_order_relaxed);
+        learnObservedSeconds.store(0.0f, std::memory_order_relaxed);
     }
 }
 

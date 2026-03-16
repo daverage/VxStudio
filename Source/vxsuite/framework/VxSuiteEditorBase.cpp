@@ -121,7 +121,7 @@ void EditorBase::paint(juce::Graphics& g) {
         const int lights = std::min(activityLightCount, static_cast<int>(activityLights.size()));
         const float slotW = strip.getWidth() / static_cast<float>(std::max(1, lights));
         const float ledRadius = juce::jmin(strip.getHeight() * 0.20f, slotW * 0.08f, 5.0f);
-        const float ledY = strip.getY() + ledRadius + 2.0f;
+        const float ledY = strip.getY() + ledRadius * 2.5f + 2.0f;
         const float labelY = ledY + ledRadius + 3.0f;
         const float labelH = strip.getBottom() - labelY;
 
@@ -252,7 +252,7 @@ void EditorBase::resized() {
     activityLightCount = processor.getActivityLightCount();
     activityStripBounds = {};
     if (activityLightCount > 0) {
-        activityStripBounds = body.removeFromTop(scaled(30)).reduced(scaled(20), 0);
+        activityStripBounds = body.removeFromTop(scaled(38)).reduced(scaled(20), 0);
         body.removeFromTop(scaled(4));
     }
 

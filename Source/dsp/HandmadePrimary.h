@@ -29,6 +29,9 @@ public:
     float getLearnObservedSeconds() const;
     float getLearnConfidence() const noexcept { return learnedProfileConfidence; }
 
+    bool getLearnedProfileData(std::vector<float>& outProfile, float& outConfidence) const;
+    void restoreLearnedProfile(const std::vector<float>& profile, float confidence);
+
     bool  processInPlace(juce::AudioBuffer<float>&, float amount,
                          const DenoiseOptions&) override;
 

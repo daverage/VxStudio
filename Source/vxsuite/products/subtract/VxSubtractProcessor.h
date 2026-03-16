@@ -21,6 +21,9 @@ public:
     bool isLearnReady() const noexcept override { return learnReady.load(std::memory_order_relaxed); }
     juce::AudioProcessorEditor* createEditor() override;
 
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
+
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
@@ -48,6 +51,8 @@ private:
     bool controlsPrimed = false;
     bool learnToggleLatched = false;
     float learnSilentSeconds = 0.0f;
+    std::vector<float> savedLearnProfile;
+    float savedLearnConfidence = 0.0f;
     std::atomic<float> learnProgress { 0.0f };
     std::atomic<float> learnConfidence { 0.0f };
     std::atomic<float> learnObservedSeconds { 0.0f };

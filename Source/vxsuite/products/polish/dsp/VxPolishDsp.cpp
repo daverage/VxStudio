@@ -631,7 +631,7 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
                           + presenceBandCh * (presenceGain - 1.0f)
                           + airBand * (airGain - 1.0f);
 
-            d[i] = juce::jlimit(-1.0f, 1.0f, y);
+            d[i] = y;
         }
     }
     recoveryLiftDb = liftAccDb / static_cast<float>(numSamples);

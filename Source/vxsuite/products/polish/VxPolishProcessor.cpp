@@ -119,6 +119,7 @@ void VXPolishAudioProcessor::resetSuite() {
     smoothedDetrouble = 0.0f;
     smoothedBody = 0.0f;
     smoothedFocus = 0.5f;
+    smoothedMakeupDb = 0.0f;
     tonalLowLp = 0.0f;
     tonalLowMidLp = 0.0f;
     tonalPresenceLoLp = 0.0f;
@@ -266,7 +267,42 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     params.hiShelfOn = hiShelfOn;
 
     polishChain.setParams(params);
+
+    // Measure pre-corrective RMS for makeup gain tracking
+    auto bufRms = [&]() {
+        float sum = 0.0f;
+        const int nch = buffer.getNumChannels();
+        for (int ch = 0; ch < nch; ++ch) {
+            const float* r = buffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                sum += r[i] * r[i];
+        }
+        return std::sqrt(sum / static_cast<float>(std::max(1, nch * numSamples)));
+    };
+    const float preRms = bufRms();
     polishChain.processCorrective(buffer);
+    const float postRms = bufRms();
+
+    // Smart auto-makeup: compensate corrective reduction without re-amplifying noise.
+    // Slow attack prevents pumping on transients; noise gate prevents boosting silence.
+    {
+        const float reductionDb = juce::Decibels::gainToDecibels(preRms + 1.0e-6f)
+                                - juce::Decibels::gainToDecibels(postRms + 1.0e-6f);
+        const float targetMakeupDb = juce::jlimit(0.0f, 12.0f, reductionDb);
+        const float alpha = targetMakeupDb > smoothedMakeupDb
+            ? blockBlendAlpha(currentSampleRateHz, numSamples, 0.800f)  // slow attack
+            : blockBlendAlpha(currentSampleRateHz, numSamples, 0.300f); // moderate release
+        smoothedMakeupDb += alpha * (targetMakeupDb - smoothedMakeupDb);
+
+        // Noise guard: fade out when signal approaches estimated noise floor
+        const float signalDb = juce::Decibels::gainToDecibels(tonalInputEnv + 1.0e-6f, -120.0f);
+        const float noiseGuard = juce::jlimit(0.0f, 1.0f,
+            (signalDb - (tonalNoiseFloorDb + 6.0f)) / 12.0f);
+        const float makeupGain = juce::Decibels::decibelsToGain(smoothedMakeupDb * noiseGuard);
+        if (makeupGain > 1.001f)
+            buffer.applyGain(makeupGain);
+    }
+
     polishChain.processRecovery(buffer);
     polishChain.processLimiter(buffer);
 }

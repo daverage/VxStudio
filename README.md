@@ -155,13 +155,13 @@ Profile-guided subtractive denoiser. Designed for cases where a learned noise pr
 
 ### VXDeverb
 
-Dereverberation processor built on spectral late-reverberant suppression (LRSV). Introduces latency; compensates internally and reports it to the host. In `Vocal` mode, optionally applies a WPE-style stage for speech-oriented smear reduction.
+Dereverberation processor built on spectral late-reverberant suppression (LRSV). Introduces latency; compensates internally and reports it to the host. In `Vocal` mode, it additionally runs a full per-bin online WPE (Weighted Prediction Error) dereverberation stage — a statistically principled algorithm for separating direct speech from reverberant components that has very few open-source real-time implementations.
 
 **What it does:**
 - Estimates room decay characteristics using a shared RT60 tracker
 - Performs STFT-domain late-tail suppression using delayed spectral history
 - Scales over-subtraction with the `Reduce` amount
-- Applies WPE-style cleanup in `Vocal` mode
+- In `Vocal` mode: applies per-bin online WPE with RLS adaptation — builds a K-tap complex prediction filter per frequency bin, updated each frame using a rank-1 inverse correlation update (O(K²) per bin), with a PSD variance estimate to weight the adaptation and a numerical stability guard for silence resilience
 - Reconstructs with reported host latency
 - Restores low-frequency weight post-dereverberation via `Blend`
 
@@ -172,7 +172,7 @@ Dereverberation processor built on spectral late-reverberant suppression (LRSV).
 `Blend` — Low-body restoration after dereverberation. Reintroduces low-end toward the dry-aligned reference. Useful when the room cleanup makes the voice feel lean or over-dried.
 
 **Mode differences:**
-- `Vocal`: preserves direct speech more aggressively; includes WPE-style cleanup
+- `Vocal`: preserves direct speech more aggressively; includes full per-bin online WPE
 - `General`: allows deeper tail reduction across the full range
 
 **Listen:** outputs the removed room contribution using a latency-aligned dry reference.

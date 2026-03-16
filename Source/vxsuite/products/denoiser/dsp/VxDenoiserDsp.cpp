@@ -155,6 +155,8 @@ void DenoiserDsp::reset() {
     sideDelayWrite = sideDelayRead = sideDelayCount = 0;
     midDryDelayWrite = midDryDelayRead = midDryDelayCount = 0;
     smoothedSideRatio = 1.0f;
+    prevSideScale     = 1.0f;
+    stftFrameCount    = 0;
 
     inFifoWritePos = 0;
     hopFillCount   = 0;
@@ -299,6 +301,16 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         const float sideScale = juce::jlimit(0.50f, 1.0f,
             1.0f + (smoothedSideRatio - 1.0f) * 0.35f * wet);
 
+        // Interpolate sideScale from prev block to current across samples to
+        // avoid a step at the block boundary (block-rate step is otherwise
+        // audible as a low-frequency thump when stereo image changes quickly).
+        const float sideScaleStart = prevSideScale;
+        const float sideScaleEnd   = sideScale;
+        const float sideScaleInc   = (numSmp > 1)
+            ? (sideScaleEnd - sideScaleStart) / static_cast<float>(numSmp - 1)
+            : 0.0f;
+        prevSideScale = sideScale;
+
         for (int i = 0; i < numSmp; ++i) {
             float sideD = 0.0f;
             if (sideDelayCount > latencySamples) {
@@ -306,9 +318,10 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 sideDelayRead  = (sideDelayRead + 1) % sideDelaySize;
                 --sideDelayCount;
             }
-            const float mo = monoOut[static_cast<size_t>(i)];
-            l[i] = safe(mo + sideD * sideScale);
-            r[i] = safe(mo - sideD * sideScale);
+            const float mo   = monoOut[static_cast<size_t>(i)];
+            const float ss   = sideScaleStart + sideScaleInc * static_cast<float>(i);
+            l[i] = safe(mo + sideD * ss);
+            r[i] = safe(mo - sideD * ss);
         }
     } else {
         float* d = buffer.getWritePointer(0);
@@ -323,6 +336,8 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
 void DenoiserDsp::processFrame(const float amount,
                                 const ProcessOptions& options) noexcept {
+    ++stftFrameCount;
+
     // ── 1. Extract windowed frame ─────────────────────────────────────────────
     for (int n = 0; n < kFftSize; ++n) {
         const int ring = (inFifoWritePos + n) % kFftSize;
@@ -442,8 +457,8 @@ void DenoiserDsp::processFrame(const float amount,
         if (g <= minGain + 0.05f) {
             suppressCount[k] = std::min(suppressCount[k] + 1, 24);
         } else {
-            // Slow release: decrement every 4 frames only
-            if ((suppressCount[k] & 3) == 0 && suppressCount[k] > 0)
+            // Slow release: decrement every 4 frames only (gate on frame clock, not count value)
+            if ((stftFrameCount & 3) == 0 && suppressCount[k] > 0)
                 --suppressCount[k];
         }
         if (g > gainSmooth[k]) {
