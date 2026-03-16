@@ -11,6 +11,8 @@ public:
 
     const juce::String getName() const override;
     juce::String getStatusText() const override;
+    float getLowShelfActivity()  const noexcept override;
+    float getHighShelfActivity() const noexcept override;
     juce::AudioProcessorEditor* createEditor() override;
 
 protected:

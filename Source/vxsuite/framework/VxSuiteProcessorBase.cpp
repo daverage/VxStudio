@@ -11,8 +11,14 @@ ProcessorBase::ProcessorBase(ProductIdentity identity,
 
 void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
-    listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(8192, samplesPerBlock), false, false, true);
+    listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
     prepareSuite(sampleRate, samplesPerBlock);
+}
+
+void ProcessorBase::reset() {
+    voiceAnalysis.reset();
+    listenInputScratch.clear();
+    resetSuite();
 }
 
 void ProcessorBase::releaseResources() {

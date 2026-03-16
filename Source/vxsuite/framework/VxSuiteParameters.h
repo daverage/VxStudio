@@ -23,6 +23,18 @@ inline juce::AudioParameterBoolAttributes makeListenAttributes() {
     return attrs;
 }
 
+inline juce::AudioParameterBoolAttributes makeBypassAttributes(std::string_view label) {
+    juce::AudioParameterBoolAttributes attrs;
+    attrs = attrs.withLabel(label.data());
+    return attrs;
+}
+
+inline juce::AudioParameterBoolAttributes makeLearnAttributes(std::string_view label) {
+    juce::AudioParameterBoolAttributes attrs;
+    attrs = attrs.withLabel(label.data());
+    return attrs;
+}
+
 inline juce::StringArray makeModeChoiceLabels() {
     return juce::StringArray {
         toJuceString(kVocalModePolicy.label),
@@ -47,6 +59,27 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             false,
             makeListenAttributes()));
     }
+    if (identity.supportsLearnButton()) {
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { identity.learnParamId.data(), 1 },
+            toJuceString(identity.learnButtonLabel.empty() ? "Learn" : identity.learnButtonLabel),
+            false,
+            makeLearnAttributes(identity.learnButtonLabel.empty() ? "Learn" : identity.learnButtonLabel)));
+    }
+    if (identity.supportsLowShelfToggle()) {
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { identity.lowShelfParamId.data(), 1 },
+            "Low Shelf",
+            true,
+            makeBypassAttributes("Low Shelf")));
+    }
+    if (identity.supportsHighShelfToggle()) {
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { identity.highShelfParamId.data(), 1 },
+            "High Shelf",
+            true,
+            makeBypassAttributes("High Shelf")));
+    }
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { identity.primaryParamId.data(), 1 },
         toJuceString(identity.primaryLabel),
@@ -66,16 +99,6 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
             0.5f,
             juce::AudioParameterFloatAttributes().withLabel(identity.tertiaryLabel.data())));
-    }
-    if (identity.supportsLowShelfToggle()) {
-        layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID { identity.lowShelfParamId.data(), 1 },
-            "Low Shelf", true));
-    }
-    if (identity.supportsHighShelfToggle()) {
-        layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID { identity.highShelfParamId.data(), 1 },
-            "High Shelf", true));
     }
     return layout;
 }

@@ -53,10 +53,10 @@ vxsuite::ProductIdentity VXPolishAudioProcessor::makeIdentity() {
     identity.primaryHint = "Smooth mud, boxiness, harshness, and fizz with one smart macro.";
     identity.secondaryHint = "Restore useful low and low-mid weight after smoothing so the voice stays natural.";
     identity.tertiaryHint = "Steer correction from low-mid cleanup toward upper-mid and top-end smoothing.";
-    identity.showLowShelfIcon  = true;
-    identity.showHighShelfIcon = true;
     identity.lowShelfParamId   = kDeMudOnParam;
     identity.highShelfParamId  = kDeEssOnParam;
+    identity.lowShelfTooltip   = "De-mud: cuts low-mid boxiness (200-500 Hz). Click to bypass.";
+    identity.highShelfTooltip  = "De-ess: tames sibilance and top-end harshness. Click to bypass.";
     identity.theme.accentRgb = { 0.86f, 0.42f, 0.16f };
     identity.theme.accent2Rgb = { 0.15f, 0.09f, 0.06f };
     identity.theme.backgroundRgb = { 0.07f, 0.05f, 0.04f };
@@ -77,6 +77,9 @@ juce::String VXPolishAudioProcessor::getStatusText() const {
     return isVoice ? "Vocal - speech-safe smoothing with restrained lift"
                    : "General - broader cleanup with more full-range reach";
 }
+
+float VXPolishAudioProcessor::getLowShelfActivity()  const noexcept { return polishChain.getDeMudActivity(); }
+float VXPolishAudioProcessor::getHighShelfActivity() const noexcept { return polishChain.getDeEssActivity(); }
 
 juce::AudioProcessorEditor* VXPolishAudioProcessor::createEditor() {
     return new vxsuite::EditorBase(*this);

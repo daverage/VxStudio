@@ -40,6 +40,7 @@ public:
     float getRecoveryLiftDb() const noexcept { return recoveryLiftDb; }
     float getLimiterReductionDb() const noexcept { return limiterReductionDb; }
     float getTotalReductionDb() const noexcept { return correctiveReductionDb + limiterReductionDb - recoveryLiftDb; }
+    float getDeMudActivity() const noexcept { return deMudActivity; }
     float getDeEssActivity() const noexcept { return deEssActivity; }
     float getPlosiveActivity() const noexcept { return plosiveActivity; }
 
@@ -121,6 +122,7 @@ private:
     float correctiveReductionDb = 0.0f;
     float recoveryLiftDb = 0.0f;
     float limiterReductionDb = 0.0f;
+    float deMudActivity = 0.0f;
     float deEssActivity = 0.0f;
     float plosiveActivity = 0.0f;
 };

@@ -177,6 +177,7 @@ void Dsp::reset() {
     correctiveReductionDb = 0.0f;
     recoveryLiftDb = 0.0f;
     limiterReductionDb = 0.0f;
+    deMudActivity = 0.0f;
     deEssActivity = 0.0f;
     plosiveActivity = 0.0f;
 }
@@ -205,6 +206,7 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
 
     activeThisBlock = false;
     correctiveReductionDb = 0.0f;
+    deMudActivity = 0.0f;
     deEssActivity = 0.0f;
     plosiveActivity = 0.0f;
     if (deMudAmt <= 1.0e-6f && deEssAmt <= 1.0e-6f && plosiveAmt <= 1.0e-6f
@@ -258,6 +260,7 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
     const float compSidechainBoost = juce::Decibels::decibelsToGain(juce::jlimit(0.0f, 18.0f, params.compSidechainBoostDb));
 
     float reductionAcc = 0.0f;
+    float deMudAcc = 0.0f;
     float deEssAcc = 0.0f;
     float plosiveAcc = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
@@ -303,6 +306,7 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         const float deEssA = deEssTarget > deEssEnv ? deEssAtk : deEssRel;
         deEssEnv = deEssA * deEssEnv + (1.0f - deEssA) * deEssTarget;
         const float deEssGain = juce::Decibels::decibelsToGain(-deEssMaxCutDb * deEssEnv);
+        deMudAcc += deMudEnv;
         deEssAcc += deEssEnv;
         plosiveAcc += plosiveEnv;
 
@@ -363,6 +367,7 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         }
     }
     correctiveReductionDb = reductionAcc / static_cast<float>(numSamples);
+    deMudActivity = deMudAcc / static_cast<float>(numSamples);
     deEssActivity = deEssAcc / static_cast<float>(numSamples);
     plosiveActivity = plosiveAcc / static_cast<float>(numSamples);
 }

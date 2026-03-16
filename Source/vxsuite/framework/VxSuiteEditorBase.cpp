@@ -5,10 +5,98 @@ namespace vxsuite {
 #define VXSUITE_VERSION_STRING "0.1.0"
 #endif
 
+class EditorBase::ShelfIconButton final : public juce::Button {
+public:
+    enum class Kind {
+        lowShelf,
+        highShelf
+    };
+
+    explicit ShelfIconButton(const Kind newKind)
+        : juce::Button(newKind == Kind::lowShelf ? "LowShelf" : "HighShelf"),
+          kind(newKind) {}
+
+    void setActivity(const float newActivity) {
+        const float clamped = juce::jlimit(0.0f, 1.0f, newActivity);
+        if (std::abs(activity - clamped) < 0.001f)
+            return;
+        activity = clamped;
+        repaint();
+    }
+
+    void paintButton(juce::Graphics& g, const bool isMouseOverButton, const bool isButtonDown) override {
+        const auto bounds = getLocalBounds().toFloat().reduced(1.0f);
+        const float corner = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.28f;
+        auto fill = juce::Colour(0xff24202a);
+        if (getToggleState())
+            fill = fill.brighter(isMouseOverButton ? 0.25f : 0.12f);
+        else
+            fill = fill.withMultipliedAlpha(isMouseOverButton ? 0.95f : 0.82f);
+        if (isButtonDown)
+            fill = fill.brighter(0.08f);
+
+        g.setColour(fill);
+        g.fillRoundedRectangle(bounds, corner);
+        g.setColour(juce::Colours::white.withAlpha(getToggleState() ? 0.34f : 0.18f));
+        g.drawRoundedRectangle(bounds, corner, 1.0f);
+
+        auto iconArea = bounds.reduced(bounds.getWidth() * 0.20f, bounds.getHeight() * 0.22f);
+        const float left = iconArea.getX();
+        const float right = iconArea.getRight();
+        const float top = iconArea.getY();
+        const float bottom = iconArea.getBottom();
+        const float midY = iconArea.getCentreY();
+        const float shelfY = kind == Kind::lowShelf ? bottom - iconArea.getHeight() * 0.18f
+                                                    : top + iconArea.getHeight() * 0.18f;
+        const float bendX = iconArea.getX() + iconArea.getWidth() * 0.42f;
+
+        juce::Path path;
+        if (kind == Kind::lowShelf) {
+            path.startNewSubPath(left, shelfY);
+            path.lineTo(bendX, shelfY);
+            path.lineTo(right, top);
+        } else {
+            path.startNewSubPath(left, bottom);
+            path.lineTo(bendX, shelfY);
+            path.lineTo(right, shelfY);
+        }
+
+        g.setColour(juce::Colours::white.withAlpha(getToggleState() ? 0.95f : 0.42f));
+        g.strokePath(path, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        const float ledRadius = juce::jmax(4.2f, bounds.getWidth() * 0.16f);
+        const juce::Point<float> ledCentre(bounds.getRight() - ledRadius * 1.75f,
+                                           bounds.getY() + ledRadius * 1.75f);
+        const float ledLevel = std::sqrt(juce::jlimit(0.0f, 1.0f, activity * 2.4f));
+        const auto ringColour = juce::Colours::black.withAlpha(0.34f);
+        const auto offColour = juce::Colour::fromFloatRGBA(0.42f, 0.14f, 0.12f, 0.96f);
+        const auto onColour = juce::Colour::fromFloatRGBA(1.00f, 0.72f, 0.18f, 0.78f + 0.22f * ledLevel);
+
+        g.setColour(ringColour);
+        g.fillEllipse(ledCentre.x - ledRadius, ledCentre.y - ledRadius, ledRadius * 2.0f, ledRadius * 2.0f);
+        if (activity > 0.01f) {
+            g.setColour(onColour.withAlpha(0.24f + 0.30f * ledLevel));
+            g.fillEllipse(ledCentre.x - ledRadius * 2.2f, ledCentre.y - ledRadius * 2.2f,
+                          ledRadius * 4.4f, ledRadius * 4.4f);
+        }
+        g.setColour(activity > 0.01f ? onColour : offColour);
+        g.fillEllipse(ledCentre.x - ledRadius * 0.72f, ledCentre.y - ledRadius * 0.72f,
+                      ledRadius * 1.44f, ledRadius * 1.44f);
+        g.setColour(juce::Colours::white.withAlpha(activity > 0.01f ? 0.65f : 0.18f));
+        g.fillEllipse(ledCentre.x - ledRadius * 0.26f, ledCentre.y - ledRadius * 0.26f,
+                      ledRadius * 0.52f, ledRadius * 0.52f);
+    }
+
+private:
+    Kind kind;
+    float activity = 0.0f;
+};
+
 EditorBase::EditorBase(ProcessorBase& owner)
     : juce::AudioProcessorEditor(&owner),
       processor(owner),
-      lookAndFeel(owner.getProductIdentity().theme) {
+      lookAndFeel(owner.getProductIdentity().theme),
+      tooltipWindow(this, 700) {
     setLookAndFeel(&lookAndFeel);
     setResizable(true, false);
     const bool hasTertiary = owner.getProductIdentity().supportsTertiaryControl();
@@ -37,6 +125,17 @@ EditorBase::EditorBase(ProcessorBase& owner)
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.62f));
     addAndMakeVisible(statusLabel);
 
+    learnMeterLabel.setJustificationType(juce::Justification::centredLeft);
+    learnMeterLabel.setFont(juce::FontOptions().withHeight(11.0f).withKerningFactor(0.05f));
+    learnMeterLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.74f));
+    learnMeterBar.setColour(juce::ProgressBar::backgroundColourId, juce::Colour(0xff14141c));
+    learnMeterBar.setColour(juce::ProgressBar::foregroundColourId,
+                            lookAndFeel.findColour(juce::Slider::rotarySliderFillColourId).withAlpha(0.92f));
+    if (identity.supportsLearnButton()) {
+        addAndMakeVisible(learnMeterLabel);
+        addAndMakeVisible(learnMeterBar);
+    }
+
     modeBox.addItem("Vocal", 1);
     modeBox.addItem("General", 2);
     modeBox.setWantsKeyboardFocus(true);
@@ -48,6 +147,22 @@ EditorBase::EditorBase(ProcessorBase& owner)
     listenButton.setWantsKeyboardFocus(true);
     if (identity.supportsListenMode())
         addAndMakeVisible(listenButton);
+
+    learnButton.setButtonText(identity.learnButtonLabel.empty() ? "Learn" : toJuceString(identity.learnButtonLabel));
+    learnButton.setClickingTogglesState(true);
+    learnButton.setWantsKeyboardFocus(true);
+    if (identity.supportsLearnButton())
+        addAndMakeVisible(learnButton);
+
+    if (identity.supportsLowShelfToggle()) {
+        lowShelfButton = std::make_unique<ShelfIconButton>(ShelfIconButton::Kind::lowShelf);
+        configureShelfButton(*lowShelfButton, identity.lowShelfTooltip);
+    }
+
+    if (identity.supportsHighShelfToggle()) {
+        highShelfButton = std::make_unique<ShelfIconButton>(ShelfIconButton::Kind::highShelf);
+        configureShelfButton(*highShelfButton, identity.highShelfTooltip);
+    }
 
     configureKnob(primarySlider, primaryLabel, identity.primaryLabel, identity.primaryHint);
     configureKnob(secondarySlider, secondaryLabel, identity.secondaryLabel, identity.secondaryHint);
@@ -63,12 +178,17 @@ EditorBase::EditorBase(ProcessorBase& owner)
         modeAttachment = std::make_unique<ComboAttachment>(state, identity.modeParamId.data(), modeBox);
     if (identity.supportsListenMode())
         listenAttachment = std::make_unique<ButtonAttachment>(state, identity.listenParamId.data(), listenButton);
+    if (identity.supportsLearnButton())
+        learnAttachment = std::make_unique<ButtonAttachment>(state, identity.learnParamId.data(), learnButton);
+    if (identity.supportsLowShelfToggle() && lowShelfButton != nullptr)
+        lowShelfAttachment = std::make_unique<ButtonAttachment>(state, identity.lowShelfParamId.data(), *lowShelfButton);
+    if (identity.supportsHighShelfToggle() && highShelfButton != nullptr)
+        highShelfAttachment = std::make_unique<ButtonAttachment>(state, identity.highShelfParamId.data(), *highShelfButton);
     primaryAttachment = std::make_unique<SliderAttachment>(state, identity.primaryParamId.data(), primarySlider);
     secondaryAttachment = std::make_unique<SliderAttachment>(state, identity.secondaryParamId.data(), secondarySlider);
     if (identity.supportsTertiaryControl())
         tertiaryAttachment = std::make_unique<SliderAttachment>(state, identity.tertiaryParamId.data(), tertiarySlider);
 
-    addMouseListener(this, true);
     timerCallback();
     startTimerHz(12);
 }
@@ -109,68 +229,18 @@ void EditorBase::paint(juce::Graphics& g) {
                body.getBottom() - static_cast<float>(scaled(48)),
                1.0f);
 
-    // ── Shelf filter icons ────────────────────────────────────────────────────
-    const auto& id = processor.getProductIdentity();
-    if (id.showLowShelfIcon || id.showHighShelfIcon) {
-        const auto accent = lookAndFeel.findColour(juce::Label::textColourId);
-        auto& state = processor.getValueTreeState();
-        const bool lowOn  = !id.supportsLowShelfToggle()  || readBool(state, id.lowShelfParamId,  true);
-        const bool highOn = !id.supportsHighShelfToggle() || readBool(state, id.highShelfParamId, true);
-
-        // Helper: draws a small rounded box with a filter-response curve inside.
-        // isLow=true  → high-pass / low-shelf cut shape (curve rises left-to-right)
-        // isLow=false → low-pass / high-shelf cut shape (curve drops left-to-right)
-        // active=false → icon is dimmed to indicate the processing is bypassed.
-        auto drawShelfIcon = [&](juce::Rectangle<int> bounds, bool isLow, bool active) {
-            const auto r = bounds.toFloat();
-            const float x = r.getX(), y = r.getY();
-            const float w = r.getWidth(), h = r.getHeight();
-            const float curveAlpha = active ? 0.72f : 0.20f;
-
-            g.setColour(accent.withAlpha(active ? 0.10f : 0.05f));
-            g.fillRoundedRectangle(r, static_cast<float>(scaled(4)));
-            g.setColour(accent.withAlpha(active ? 0.35f : 0.12f));
-            g.drawRoundedRectangle(r.reduced(0.5f), static_cast<float>(scaled(4)), 0.75f);
-
-            juce::Path p;
-            if (isLow) {
-                // Rises from bottom-left, sweeps up, then flat to the right
-                p.startNewSubPath(x + w * 0.04f, y + h * 0.82f);
-                p.cubicTo(x + w * 0.28f, y + h * 0.82f,
-                          x + w * 0.46f, y + h * 0.18f,
-                          x + w * 0.62f, y + h * 0.18f);
-                p.lineTo(x + w * 0.96f, y + h * 0.18f);
-            } else {
-                // Flat from left, then sweeps down to bottom-right
-                p.startNewSubPath(x + w * 0.04f, y + h * 0.18f);
-                p.lineTo(x + w * 0.38f, y + h * 0.18f);
-                p.cubicTo(x + w * 0.54f, y + h * 0.18f,
-                          x + w * 0.72f, y + h * 0.82f,
-                          x + w * 0.96f, y + h * 0.82f);
-            }
-            g.setColour(accent.withAlpha(curveAlpha));
-            g.strokePath(p, juce::PathStrokeType(1.5f,
-                            juce::PathStrokeType::curved,
-                            juce::PathStrokeType::rounded));
-        };
-
-        if (id.showLowShelfIcon  && !lowShelfIconBounds .isEmpty())
-            drawShelfIcon(lowShelfIconBounds,  true,  lowOn);
-        if (id.showHighShelfIcon && !highShelfIconBounds.isEmpty())
-            drawShelfIcon(highShelfIconBounds, false, highOn);
-    }
-
     g.setColour(lookAndFeel.findColour(juce::Label::textColourId).withAlpha(0.45f));
     g.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(11))));
     g.drawFittedText(footerText(),
                      getLocalBounds().reduced(scaled(24), scaled(18)),
                      juce::Justification::bottomRight,
                      1);
+
 }
 
 void EditorBase::resized() {
     auto bounds = getLocalBounds().reduced(scaled(20), scaled(16));
-    auto header = bounds.removeFromTop(scaled(104));
+    auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton() ? scaled(130) : scaled(104));
     auto body = bounds.reduced(0, scaled(10));
 
     suiteLabel.setBounds(header.removeFromTop(scaled(20)));
@@ -188,34 +258,32 @@ void EditorBase::resized() {
         listenButton.setBounds(modeRow.removeFromLeft(scaled(96)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
-    statusLabel.setBounds(modeRow);
-
-    const auto& layoutId = processor.getProductIdentity();
-    const bool hasTertiary = layoutId.supportsTertiaryControl();
-    const bool stacked = body.getWidth() < scaled(hasTertiary ? 760 : 560);
-
-    // Compute shelf icon bounds — both icons side-by-side and centred horizontally
-    // on the upper separator line (top of the knob area).  The separator is drawn
-    // in paint() at paint_body.getY() + 72; in resized() coordinates that maps to
-    // body.getY() + 64, so both sets of coordinates land on the same screen pixel.
-    {
-        const int iconW  = scaled(28);
-        const int iconH  = scaled(16);
-        const int gap    = scaled(8);
-        const int iconY  = body.getY() + scaled(64) - iconH / 2;
-
-        const bool bothVisible = layoutId.showLowShelfIcon && layoutId.showHighShelfIcon;
-        const int  rowW  = bothVisible ? iconW * 2 + gap : iconW;
-        const int  iconX0 = body.getCentreX() - rowW / 2;
-        const int  iconX1 = iconX0 + iconW + gap;
-
-        lowShelfIconBounds  = layoutId.showLowShelfIcon
-            ? juce::Rectangle<int>(iconX0, iconY, iconW, iconH)
-            : juce::Rectangle<int>();
-        highShelfIconBounds = layoutId.showHighShelfIcon
-            ? juce::Rectangle<int>(iconX1, iconY, iconW, iconH)
-            : juce::Rectangle<int>();
+    if (processor.getProductIdentity().supportsLearnButton()) {
+        learnButton.setBounds(modeRow.removeFromLeft(scaled(88)).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(12));
     }
+
+    const int iconSize = scaled(28);
+    if (lowShelfButton != nullptr) {
+        lowShelfButton->setBounds(modeRow.removeFromLeft(iconSize).reduced(0, scaled(1)));
+        modeRow.removeFromLeft(scaled(10));
+    }
+    if (highShelfButton != nullptr) {
+        highShelfButton->setBounds(modeRow.removeFromLeft(iconSize).reduced(0, scaled(1)));
+        modeRow.removeFromLeft(scaled(14));
+    }
+
+    statusLabel.setBounds(modeRow);
+    if (processor.getProductIdentity().supportsLearnButton()) {
+        header.removeFromTop(scaled(6));
+        auto learnRow = header.removeFromTop(scaled(18));
+        learnMeterLabel.setBounds(learnRow.removeFromLeft(scaled(118)));
+        learnRow.removeFromLeft(scaled(8));
+        learnMeterBar.setBounds(learnRow.removeFromLeft(scaled(180)));
+    }
+
+    const bool hasTertiary = processor.getProductIdentity().supportsTertiaryControl();
+    const bool stacked = body.getWidth() < scaled(hasTertiary ? 760 : 560);
     if (stacked) {
         body.removeFromBottom(scaled(34));
         const int rows = hasTertiary ? 3 : 2;
@@ -319,6 +387,13 @@ void EditorBase::configureKnob(juce::Slider& slider,
     hintLabel->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.72f));
 }
 
+void EditorBase::configureShelfButton(ShelfIconButton& button, const std::string_view tooltip) {
+    button.setClickingTogglesState(true);
+    button.setWantsKeyboardFocus(true);
+    button.setTooltip(toJuceString(tooltip));
+    addAndMakeVisible(button);
+}
+
 juce::String EditorBase::footerText() const {
     return juce::String("v") + juce::String(VXSUITE_VERSION_STRING) + "    (c) Andrzej Marczewski 2026";
 }
@@ -327,40 +402,47 @@ int EditorBase::scaled(const int value) const {
     return juce::roundToInt(static_cast<float>(value) * uiScale);
 }
 
-void EditorBase::mouseDown(const juce::MouseEvent& e) {
-    const auto& id = processor.getProductIdentity();
-    auto& state    = processor.getValueTreeState();
-
-    auto toggleParam = [&](std::string_view paramId) {
-        if (auto* param = state.getParameter(paramId.data())) {
-            param->beginChangeGesture();
-            param->setValueNotifyingHost(param->getValue() < 0.5f ? 1.0f : 0.0f);
-            param->endChangeGesture();
-            repaint();
-        }
-    };
-
-    const auto localPos = e.getEventRelativeTo(this).getPosition();
-    if (id.supportsLowShelfToggle()  && lowShelfIconBounds .contains(localPos))
-        toggleParam(id.lowShelfParamId);
-    else if (id.supportsHighShelfToggle() && highShelfIconBounds.contains(localPos))
-        toggleParam(id.highShelfParamId);
-    else if (e.eventComponent == this)
-        juce::AudioProcessorEditor::mouseDown(e);
-}
-
 void EditorBase::timerCallback() {
     statusLabel.setText(processor.getStatusText(), juce::dontSendNotification);
+    updateActivityIndicators();
+    updateLearnUi();
+}
 
-    // Repaint if shelf toggle state changed (e.g. from automation or undo)
-    const auto& id = processor.getProductIdentity();
-    auto& state    = processor.getValueTreeState();
-    const bool lowOn  = !id.supportsLowShelfToggle()  || readBool(state, id.lowShelfParamId,  true);
-    const bool highOn = !id.supportsHighShelfToggle() || readBool(state, id.highShelfParamId, true);
-    if (lowOn != lastLowShelfOn || highOn != lastHighShelfOn) {
-        lastLowShelfOn  = lowOn;
-        lastHighShelfOn = highOn;
-        repaint();
+void EditorBase::updateActivityIndicators() {
+    lowShelfActivity = juce::jlimit(0.0f, 1.0f, processor.getLowShelfActivity());
+    highShelfActivity = juce::jlimit(0.0f, 1.0f, processor.getHighShelfActivity());
+    if (lowShelfButton != nullptr)
+        lowShelfButton->setActivity(lowShelfActivity);
+    if (highShelfButton != nullptr)
+        highShelfButton->setActivity(highShelfActivity);
+}
+
+void EditorBase::updateLearnUi() {
+    if (!processor.getProductIdentity().supportsLearnButton())
+        return;
+
+    const bool active = processor.isLearnActive();
+    const bool ready = processor.isLearnReady();
+    const float progress = juce::jlimit(0.0f, 1.0f, processor.getLearnProgress());
+    const float confidence = juce::jlimit(0.0f, 1.0f, processor.getLearnConfidence());
+    const float observedSeconds = juce::jmax(0.0f, processor.getLearnObservedSeconds());
+
+    learnMeterUi = active ? static_cast<double>(progress) : static_cast<double>(confidence);
+    learnMeterBar.setVisible(active || ready);
+    if (active) {
+        learnMeterLabel.setText("Learning " + juce::String(juce::roundToInt(progress * 100.0f)) + "%  "
+                                + juce::String(observedSeconds, 1) + "s",
+                                juce::dontSendNotification);
+        learnButton.setButtonText("Learning");
+    } else if (ready) {
+        learnMeterLabel.setText("Confidence " + juce::String(juce::roundToInt(confidence * 100.0f)) + "%",
+                                juce::dontSendNotification);
+        learnButton.setButtonText("Learn");
+        if (learnButton.getToggleState())
+            learnButton.setToggleState(false, juce::sendNotificationSync);
+    } else {
+        learnMeterLabel.setText("Learn a representative noise print", juce::dontSendNotification);
+        learnButton.setButtonText("Learn");
     }
 }
 

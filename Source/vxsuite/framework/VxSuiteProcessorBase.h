@@ -17,9 +17,17 @@ public:
     juce::AudioProcessorValueTreeState& getValueTreeState() noexcept { return parameters; }
     const juce::AudioProcessorValueTreeState& getValueTreeState() const noexcept { return parameters; }
     virtual juce::String getStatusText() const { return {}; }
+    virtual float getLowShelfActivity() const noexcept { return 0.0f; }
+    virtual float getHighShelfActivity() const noexcept { return 0.0f; }
+    virtual float getLearnProgress() const noexcept { return 0.0f; }
+    virtual float getLearnConfidence() const noexcept { return 0.0f; }
+    virtual float getLearnObservedSeconds() const noexcept { return 0.0f; }
+    virtual bool isLearnActive() const noexcept { return false; }
+    virtual bool isLearnReady() const noexcept { return false; }
     VoiceAnalysisSnapshot getVoiceAnalysisSnapshot() const noexcept { return voiceAnalysis.snapshot(); }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void reset() override;
     void releaseResources() override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) final;
     bool isBusesLayoutSupported(const BusesLayout& layouts) const override;

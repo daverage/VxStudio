@@ -124,6 +124,33 @@ target_link_libraries(VXPolish PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXPolishPlugin ALL DEPENDS VXPolish_VST3)
 vxsuite_stage_vst3_bundle(VXPolish_VST3 "VXPolish")
 
+juce_add_plugin(VXSubtract
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxsubtract"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXSB"
+)
+target_compile_definitions(VXSubtract PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXSubtract)
+target_sources(VXSubtract PRIVATE
+  Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
+  Source/dsp/HandmadePrimary.cpp
+)
+target_include_directories(VXSubtract PRIVATE Source)
+target_link_libraries(VXSubtract PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXSubtractPlugin ALL DEPENDS VXSubtract_VST3)
+vxsuite_stage_vst3_bundle(VXSubtract_VST3 "VXSubtract")
+
 juce_add_plugin(VXDenoiser
   FORMATS VST3
   COMPANY_NAME "VX Suite"
@@ -156,10 +183,12 @@ add_custom_target(VXSuite_VST3
     VXDeverb_VST3
     VXProximity_VST3
     VXPolish_VST3
+    VXSubtract_VST3
     VXDenoiser_VST3
     VXDeverbStage
     VXProximityStage
     VXPolishStage
+    VXSubtractStage
     VXDenoiserStage
   COMMENT "Building all VX Suite VST3 products")
 

@@ -33,6 +33,12 @@ struct ProductIdentity {
     std::string_view primaryHint;
     std::string_view secondaryHint;
     std::string_view tertiaryHint;
+    std::string_view learnParamId;
+    std::string_view learnButtonLabel;
+    std::string_view lowShelfParamId;
+    std::string_view highShelfParamId;
+    std::string_view lowShelfTooltip;
+    std::string_view highShelfTooltip;
     Mode defaultMode = Mode::vocal;
     ProductTheme theme {};
 
@@ -48,19 +54,17 @@ struct ProductIdentity {
         return !tertiaryParamId.empty();
     }
 
-    // Optional shelf-type filter icons drawn on the body separator line.
-    // showLowShelfIcon  → HP/low-shelf curve on the left  (e.g. deMud)
-    // showHighShelfIcon → LP/high-shelf curve on the right (e.g. deEss)
-    bool showLowShelfIcon  = false;
-    bool showHighShelfIcon = false;
+    bool supportsLearnButton() const noexcept {
+        return !learnParamId.empty();
+    }
 
-    // Optional parameter IDs for shelf toggle bools (empty = icon is decorative only).
-    // When set, the icon becomes a click-toggle: icon dims when the param is false.
-    std::string_view lowShelfParamId;
-    std::string_view highShelfParamId;
+    bool supportsLowShelfToggle() const noexcept {
+        return !lowShelfParamId.empty();
+    }
 
-    bool supportsLowShelfToggle()  const noexcept { return !lowShelfParamId.empty(); }
-    bool supportsHighShelfToggle() const noexcept { return !highShelfParamId.empty(); }
+    bool supportsHighShelfToggle() const noexcept {
+        return !highShelfParamId.empty();
+    }
 };
 
 } // namespace vxsuite
