@@ -66,18 +66,18 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             false,
             makeLearnAttributes(identity.learnButtonLabel.empty() ? "Learn" : identity.learnButtonLabel)));
     }
-    if (identity.supportsLowShelfToggle()) {
+    if (!identity.lowShelfParamId.empty()) {
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID { identity.lowShelfParamId.data(), 1 },
             "Low Shelf",
-            true,
+            identity.defaultLowShelf,
             makeBypassAttributes("Low Shelf")));
     }
-    if (identity.supportsHighShelfToggle()) {
+    if (!identity.highShelfParamId.empty()) {
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID { identity.highShelfParamId.data(), 1 },
             "High Shelf",
-            true,
+            identity.defaultHighShelf,
             makeBypassAttributes("High Shelf")));
     }
     layout.add(std::make_unique<juce::AudioParameterFloat>(

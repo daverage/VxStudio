@@ -105,13 +105,11 @@ void VXSubtractAudioProcessor::resetSuite() {
     smoothedSubtract = 0.0f;
     smoothedProtect = 0.5f;
     controlsPrimed = false;
-    learnToggleLatched = false;
+    learnToggleLatched = true;  // prevents false start-edge if Learn was left on
     learnSilentSeconds = 0.0f;
-    learnProgress.store(0.0f, std::memory_order_relaxed);
-    learnConfidence.store(0.0f, std::memory_order_relaxed);
-    learnObservedSeconds.store(0.0f, std::memory_order_relaxed);
     learnActive.store(false, std::memory_order_relaxed);
-    learnReady.store(false, std::memory_order_relaxed);
+    // learnReady / learnProgress / learnConfidence / learnObservedSeconds are
+    // intentionally preserved — the learned noise profile survives playback stops.
 }
 
 void VXSubtractAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {
@@ -193,9 +191,14 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const bool learnRequested = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     const bool learnStartEdge = learnRequested && !learnToggleLatched;
+    const bool learnStopEdge = !learnRequested && learnToggleLatched;
     if (learnStartEdge) {
         subtractDsp.clearLearnedProfile();
         subtractDsp.setLearning(true);
+        learnSilentSeconds = 0.0f;
+    }
+    if (learnStopEdge && subtractDsp.isLearning()) {
+        subtractDsp.setLearning(false);
         learnSilentSeconds = 0.0f;
     }
 
@@ -216,17 +219,21 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         learnSilentSeconds = 0.0f;
     }
 
+    const bool learnedReady = subtractDsp.hasLearnedProfile();
+
     vxcleaner::dsp::ProcessOptions options {};
     options.isVoiceMode = isVoice;
-    options.sourceProtect = clamp01(0.35f + 0.65f * smoothedProtect);
-    options.guardStrictness = clamp01(0.25f + 0.75f * smoothedProtect);
-    options.speechFocus = isVoice ? clamp01(0.55f + 0.45f * smoothedProtect) : 0.35f;
+    options.sourceProtect = clamp01(0.45f + 0.55f * smoothedProtect);
+    options.guardStrictness = clamp01(0.40f + 0.60f * smoothedProtect);
+    options.speechFocus = isVoice ? clamp01(0.65f + 0.35f * smoothedProtect) : 0.42f;
     options.learningActive = subtractDsp.isLearning();
-    options.subtract = 5.0f * clamp01(smoothedSubtract);
-    options.sensitivity = 1.5f * clamp01(1.0f - smoothedProtect);
+    options.subtract = 7.0f * clamp01(smoothedSubtract);
+    options.sensitivity = 1.1f * clamp01(1.0f - smoothedProtect);
     options.labRawMode = false;
 
-    subtractDsp.processInPlace(buffer, clamp01(smoothedSubtract), options);
+    const float blindAmount = learnedReady ? 0.0f
+                                           : clamp01(0.55f * smoothedSubtract);
+    subtractDsp.processInPlace(buffer, blindAmount, options);
 
     learnProgress.store(subtractDsp.getLearnProgress(), std::memory_order_relaxed);
     learnConfidence.store(subtractDsp.getLearnConfidence(), std::memory_order_relaxed);

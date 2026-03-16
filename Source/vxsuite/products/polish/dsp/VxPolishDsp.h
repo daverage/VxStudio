@@ -26,6 +26,8 @@ public:
         float proximityContext = 0.0f;
         float speechPresence = 0.5f;
         float noiseFloorDb = -80.0f;
+        bool hpfOn      = false;
+        bool hiShelfOn  = false;
     };
 
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
@@ -43,6 +45,10 @@ public:
     float getDeMudActivity() const noexcept { return deMudActivity; }
     float getDeEssActivity() const noexcept { return deEssActivity; }
     float getPlosiveActivity() const noexcept { return plosiveActivity; }
+    float getCompActivity() const noexcept { return compActivity; }
+    float getTroubleActivity() const noexcept { return troubleActivity; }
+    float getRecoveryActivity() const noexcept { return recoveryActivity; }
+    float getLimiterActivity() const noexcept { return limiterActivity; }
 
 private:
     Params params{};
@@ -72,6 +78,27 @@ private:
     float cPresenceHiA = 0.0f;
     float cAirLoA = 0.0f;
     float cLimiterGainSmooth = 0.0f;
+
+    // HPF (2nd-order Butterworth) — recomputed in setParams
+    float hpfB0 = 1.0f, hpfB1 = 0.0f, hpfB2 = 0.0f, hpfA1 = 0.0f, hpfA2 = 0.0f;
+    std::vector<float> hpfZ1, hpfZ2;
+
+    // High-shelf cut (1st-order) — recomputed in setParams
+    float hiShelfB0 = 1.0f, hiShelfB1 = 0.0f, hiShelfA1 = 0.0f;
+    std::vector<float> hiShelfZ1;
+
+    // troubleSmooth dynamic detection
+    float cTroubleRefA = 0.0f;
+    float cTroubleAtk  = 0.0f;
+    float cTroubleRel  = 0.0f;
+    std::array<float, 6> troubleDetBpfB0 {};
+    std::array<float, 6> troubleDetBpfA1 {};
+    std::array<float, 6> troubleDetBpfA2 {};
+    float troubleRefLp  = 0.0f;
+    float troubleRefRms = 0.0f;
+    std::array<float, 6> troubleBandZ1  {};
+    std::array<float, 6> troubleBandZ2  {};
+    std::array<float, 6> troubleBandRms {};
 
     float deMudEnv = 0.0f;
     float deMudDetMudZ1 = 0.0f;
@@ -125,6 +152,10 @@ private:
     float deMudActivity = 0.0f;
     float deEssActivity = 0.0f;
     float plosiveActivity = 0.0f;
+    float compActivity = 0.0f;
+    float troubleActivity = 0.0f;
+    float recoveryActivity = 0.0f;
+    float limiterActivity = 0.0f;
 };
 
 } // namespace vxsuite::polish

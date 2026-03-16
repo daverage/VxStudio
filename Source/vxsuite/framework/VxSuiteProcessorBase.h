@@ -19,6 +19,9 @@ public:
     virtual juce::String getStatusText() const { return {}; }
     virtual float getLowShelfActivity() const noexcept { return 0.0f; }
     virtual float getHighShelfActivity() const noexcept { return 0.0f; }
+    virtual int getActivityLightCount() const noexcept { return 0; }
+    virtual float getActivityLight(int) const noexcept { return 0.0f; }
+    virtual std::string_view getActivityLightLabel(int) const noexcept { return {}; }
     virtual float getLearnProgress() const noexcept { return 0.0f; }
     virtual float getLearnConfidence() const noexcept { return 0.0f; }
     virtual float getLearnObservedSeconds() const noexcept { return 0.0f; }

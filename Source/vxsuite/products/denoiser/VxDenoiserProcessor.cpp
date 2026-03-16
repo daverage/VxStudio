@@ -179,13 +179,15 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     // Map user controls + ModePolicy onto ProcessOptions
     vxsuite::ProcessOptions opts;
+    const float effectiveClean = isVoice ? clamp01(0.58f * smoothedClean)
+                                         : clamp01(0.72f * smoothedClean);
     opts.isVoiceMode        = isVoice;
-    opts.sourceProtect      = clamp01(smoothedGuard * policy.sourceProtect);
+    opts.sourceProtect      = clamp01(0.35f + 0.65f * smoothedGuard * policy.sourceProtect);
     opts.lateTailAggression = policy.lateTailAggression;
-    opts.guardStrictness    = clamp01(smoothedGuard * policy.guardStrictness);
-    opts.speechFocus        = policy.speechFocus;
+    opts.guardStrictness    = clamp01(0.40f + 0.60f * smoothedGuard * policy.guardStrictness);
+    opts.speechFocus        = isVoice ? juce::jmax(0.60f, policy.speechFocus) : policy.speechFocus;
 
-    denoiserDsp.processInPlace(buffer, clamp01(smoothedClean), opts);
+    denoiserDsp.processInPlace(buffer, effectiveClean, opts);
 
     // Build latency-aligned dry scratch for listen output
     if (alignedDryScratch.getNumChannels() >= numCh

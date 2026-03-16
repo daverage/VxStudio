@@ -35,10 +35,15 @@ struct ProductIdentity {
     std::string_view tertiaryHint;
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
+    // Decorative filter-curve icons drawn above the knobs (no interactivity).
+    bool showLowShelfIcon  = false;   // HP/low-shelf shape
+    bool showHighShelfIcon = false;   // LP/high-shelf shape
+
+    // Optional params for shelf toggles (kept for processor use, not connected to icons).
     std::string_view lowShelfParamId;
     std::string_view highShelfParamId;
-    std::string_view lowShelfTooltip;
-    std::string_view highShelfTooltip;
+    bool defaultLowShelf  = true;
+    bool defaultHighShelf = true;
     Mode defaultMode = Mode::vocal;
     ProductTheme theme {};
 
@@ -58,13 +63,6 @@ struct ProductIdentity {
         return !learnParamId.empty();
     }
 
-    bool supportsLowShelfToggle() const noexcept {
-        return !lowShelfParamId.empty();
-    }
-
-    bool supportsHighShelfToggle() const noexcept {
-        return !highShelfParamId.empty();
-    }
 };
 
 } // namespace vxsuite

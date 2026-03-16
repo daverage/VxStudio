@@ -25,10 +25,9 @@ private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
-    class ShelfIconButton;
 
     void configureKnob(juce::Slider& slider, juce::Label& label, std::string_view text, std::string_view hint);
-    void configureShelfButton(ShelfIconButton& button, std::string_view tooltip);
+    void mouseDown(const juce::MouseEvent&) override;
     void timerCallback() override;
     int scaled(int value) const;
     juce::String footerText() const;
@@ -37,9 +36,9 @@ private:
 
     SuiteLookAndFeel lookAndFeel;
     float uiScale = 1.0f;
-    float lowShelfActivity = 0.0f;
-    float highShelfActivity = 0.0f;
     double learnMeterUi = 0.0;
+    int activityLightCount = 0;
+    std::array<float, 8> activityLights {};
     juce::Label suiteLabel;
     juce::Label productLabel;
     juce::Label modeLabel;
@@ -49,8 +48,6 @@ private:
     juce::ComboBox modeBox;
     juce::ToggleButton listenButton;
     juce::TextButton learnButton;
-    std::unique_ptr<ShelfIconButton> lowShelfButton;
-    std::unique_ptr<ShelfIconButton> highShelfButton;
     juce::Slider primarySlider;
     juce::Slider secondarySlider;
     juce::Slider tertiarySlider;
@@ -66,9 +63,12 @@ private:
     std::unique_ptr<ComboAttachment> modeAttachment;
     std::unique_ptr<ButtonAttachment> listenAttachment;
     std::unique_ptr<ButtonAttachment> learnAttachment;
-    std::unique_ptr<ButtonAttachment> lowShelfAttachment;
-    std::unique_ptr<ButtonAttachment> highShelfAttachment;
     juce::TooltipWindow tooltipWindow;
+    juce::Rectangle<int> activityStripBounds;
+    juce::Rectangle<int> lowShelfIconBounds;
+    juce::Rectangle<int> highShelfIconBounds;
+    bool lastLowShelfOn  = false;
+    bool lastHighShelfOn = false;
 };
 
 } // namespace vxsuite

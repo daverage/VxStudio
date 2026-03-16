@@ -315,27 +315,30 @@ bool HandmadePrimary::finalizeLearnedProfile() {
     }
 
     const float invN = 1.0f / static_cast<float>(learnFrames);
+    float weightedRelStd = 0.0f;
+    float weightSum = 0.0f;
     for (size_t k = 0; k < bins; ++k) {
         const float mean = std::max(1.0e-10f, learnAccum[k] * invN);
         const float meanSq = std::max(1.0e-10f, learnAccumSq[k] * invN);
         const float var = std::max(0.0f, meanSq - mean * mean);
         const float stddev = std::sqrt(var);
-
-        float p20 = mean;
-        auto& history = learnHistory[k];
-        if (!history.empty()) {
-            const size_t idx = static_cast<size_t>(std::floor(0.20f * static_cast<float>(history.size() - 1)));
-            std::nth_element(history.begin(), history.begin() + static_cast<std::ptrdiff_t>(idx), history.end());
-            p20 = history[idx];
-        }
-        noisePowFrozen[k] = std::max(1.0e-10f, p20 + learnedSensitivity * stddev);
+        const float relStd = stddev / std::max(1.0e-7f, mean);
+        const float weight = std::sqrt(mean);
+        weightedRelStd += relStd * weight;
+        weightSum += weight;
+        noisePowFrozen[k] = std::max(1.0e-10f, mean + (0.75f + 0.75f * learnedSensitivity) * stddev);
     }
     learnedProfileReady = true;
     const float progress = getLearnProgress();
     const float quality = learnQualityFrames > 0
         ? juce::jlimit(0.0f, 1.0f, learnQualityAccum / static_cast<float>(learnQualityFrames))
         : 0.0f;
-    learnedProfileConfidence = juce::jlimit(0.0f, 1.0f, 0.30f * progress + 0.70f * quality);
+    const float relStdAvg = weightSum > 1.0e-6f ? (weightedRelStd / weightSum) : 1.0f;
+    const float stability = juce::jlimit(0.0f, 1.0f, 1.0f - relStdAvg / 1.10f);
+    learnedProfileConfidence = juce::jlimit(0.0f, 1.0f,
+                                            0.20f * progress
+                                          + 0.35f * quality
+                                          + 0.45f * stability);
     learningPrev = learning;
     return true;
 }
@@ -517,8 +520,6 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                 if (learning) {
                     learnAccum[k] += p;
                     learnAccumSq[k] += p * p;
-                    if (learnFrames < learnTargetFrames)
-                        learnHistory[k].push_back(p);
                 }
 
                 const float n = std::max(1.0e-10f, activeNoise(k));
@@ -616,17 +617,19 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
 
             if (learning) {
                 ++learnFrames;
-                const float noiseLike = clamp01((spectralFlatness - 0.18f) / 0.42f);
+                const float noiseLike = clamp01((spectralFlatness - 0.12f) / 0.38f);
                 const float steady = clamp01(1.0f - std::abs(std::log(std::max(0.25f, std::min(4.0f, energyRatio)))) / 1.2f);
                 const float quietSpeech = 1.0f - clamp01(signalPresenceAvg);
                 const float quality = juce::jlimit(0.0f, 1.0f,
-                                                   0.45f * noiseLike
+                                                   0.50f * noiseLike
                                                  + 0.30f * steady
-                                                 + 0.25f * quietSpeech
-                                                 - (energyRatio > 1.38f ? 0.20f : 0.0f));
+                                                 + 0.20f * quietSpeech
+                                                 - (energyRatio > 1.38f ? 0.12f : 0.0f));
                 learnQualityAccum += quality;
                 ++learnQualityFrames;
-                learnedProfileConfidence = juce::jlimit(0.0f, 1.0f, getLearnProgress() * quality);
+                learnedProfileConfidence = juce::jlimit(0.0f, 1.0f,
+                                                        0.55f * getLearnProgress()
+                                                      + 0.45f * quality);
             }
 
             // Frequency smoothing

@@ -14,6 +14,8 @@ constexpr std::string_view kModeParam     = "mode";
 constexpr std::string_view kListenParam   = "listen";
 constexpr std::string_view kDeMudOnParam  = "demud_on";
 constexpr std::string_view kDeEssOnParam  = "deess_on";
+constexpr std::string_view kHpfOnParam    = "hpf_on";
+constexpr std::string_view kHiShelfOnParam = "hishelf_on";
 
 float clamp01(const float value) {
     return juce::jlimit(0.0f, 1.0f, value);
@@ -53,10 +55,12 @@ vxsuite::ProductIdentity VXPolishAudioProcessor::makeIdentity() {
     identity.primaryHint = "Smooth mud, boxiness, harshness, and fizz with one smart macro.";
     identity.secondaryHint = "Restore useful low and low-mid weight after smoothing so the voice stays natural.";
     identity.tertiaryHint = "Steer correction from low-mid cleanup toward upper-mid and top-end smoothing.";
-    identity.lowShelfParamId   = kDeMudOnParam;
-    identity.highShelfParamId  = kDeEssOnParam;
-    identity.lowShelfTooltip   = "De-mud: cuts low-mid boxiness (200-500 Hz). Click to bypass.";
-    identity.highShelfTooltip  = "De-ess: tames sibilance and top-end harshness. Click to bypass.";
+    identity.showLowShelfIcon  = true;
+    identity.showHighShelfIcon = true;
+    identity.lowShelfParamId   = kHpfOnParam;
+    identity.highShelfParamId  = kHiShelfOnParam;
+    identity.defaultLowShelf   = false;
+    identity.defaultHighShelf  = false;
     identity.theme.accentRgb = { 0.86f, 0.42f, 0.16f };
     identity.theme.accent2Rgb = { 0.15f, 0.09f, 0.06f };
     identity.theme.backgroundRgb = { 0.07f, 0.05f, 0.04f };
@@ -80,6 +84,25 @@ juce::String VXPolishAudioProcessor::getStatusText() const {
 
 float VXPolishAudioProcessor::getLowShelfActivity()  const noexcept { return polishChain.getDeMudActivity(); }
 float VXPolishAudioProcessor::getHighShelfActivity() const noexcept { return polishChain.getDeEssActivity(); }
+int VXPolishAudioProcessor::getActivityLightCount() const noexcept { return 4; }
+float VXPolishAudioProcessor::getActivityLight(int index) const noexcept {
+    switch (index) {
+        case 0: return polishChain.getDeEssActivity();
+        case 1: return polishChain.getPlosiveActivity();
+        case 2: return polishChain.getCompActivity();
+        case 3: return polishChain.getLimiterActivity();
+        default: return 0.0f;
+    }
+}
+std::string_view VXPolishAudioProcessor::getActivityLightLabel(int index) const noexcept {
+    switch (index) {
+        case 0: return "De-ess";
+        case 1: return "Plosive";
+        case 2: return "Comp";
+        case 3: return "Limit";
+        default: return {};
+    }
+}
 
 juce::AudioProcessorEditor* VXPolishAudioProcessor::createEditor() {
     return new vxsuite::EditorBase(*this);
@@ -211,6 +234,8 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
 
     const bool deMudOn = vxsuite::readBool(parameters, kDeMudOnParam, true);
     const bool deEssOn = vxsuite::readBool(parameters, kDeEssOnParam, true);
+    const bool hpfOn     = vxsuite::readBool(parameters, kHpfOnParam,     false);
+    const bool hiShelfOn = vxsuite::readBool(parameters, kHiShelfOnParam, false);
 
     vxsuite::polish::Dsp::Params params {};
     params.contentMode = voiceMode ? 0 : 1;
@@ -237,6 +262,8 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     params.proximityContext = juce::jlimit(0.0f, 1.0f, 0.55f * lowBias + 0.45f * (1.0f - analysis.directness));
     params.speechPresence = juce::jlimit(0.0f, 1.0f, speechConfidence);
     params.noiseFloorDb = juce::jlimit(-96.0f, -36.0f, tonalNoiseFloorDb);
+    params.hpfOn     = hpfOn;
+    params.hiShelfOn = hiShelfOn;
 
     polishChain.setParams(params);
     polishChain.processCorrective(buffer);

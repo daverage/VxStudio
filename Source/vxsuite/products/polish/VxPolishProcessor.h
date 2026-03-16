@@ -13,6 +13,9 @@ public:
     juce::String getStatusText() const override;
     float getLowShelfActivity()  const noexcept override;
     float getHighShelfActivity() const noexcept override;
+    int getActivityLightCount() const noexcept override;
+    float getActivityLight(int index) const noexcept override;
+    std::string_view getActivityLightLabel(int index) const noexcept override;
     juce::AudioProcessorEditor* createEditor() override;
 
 protected:

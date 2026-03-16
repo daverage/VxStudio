@@ -103,6 +103,22 @@ void Dsp::prepare(double sampleRate, int, int numChannels) {
     cPresenceHiA = onePoleCoeff(sr, 5200.0f);
     cAirLoA = onePoleCoeff(sr, 6400.0f);
     cLimiterGainSmooth = std::exp(-1.0f / (0.0020f * fsr));
+    cTroubleRefA = onePoleCoeff(sr, 800.0f);
+    cTroubleAtk  = std::exp(-1.0f / (0.006f * fsr));
+    cTroubleRel  = std::exp(-1.0f / (0.080f * fsr));
+    {
+        const std::array<float, 6> centers { 1400.0f, 2400.0f, 3600.0f, 5200.0f, 7600.0f, 10500.0f };
+        const std::array<float, 6> qVals   { 1.10f,   1.20f,   1.20f,   1.15f,   1.05f,   0.90f   };
+        for (size_t b = 0; b < 6; ++b) {
+            const BiquadCoeffs bpf = makeBandpass(sr, centers[b], qVals[b]);
+            troubleDetBpfB0[b] = bpf.b0;
+            troubleDetBpfA1[b] = bpf.a1;
+            troubleDetBpfA2[b] = bpf.a2;
+        }
+    }
+    hpfZ1.assign(static_cast<size_t>(channels), 0.0f);
+    hpfZ2.assign(static_cast<size_t>(channels), 0.0f);
+    hiShelfZ1.assign(static_cast<size_t>(channels), 0.0f);
     {
         const BiquadCoeffs mudBpf = makeBandpass(sr, 300.0f, 1.2f);
         mudActBpfB0 = mudBpf.b0;
@@ -127,6 +143,36 @@ void Dsp::prepare(double sampleRate, int, int numChannels) {
 }
 
 void Dsp::setParams(const Params& newParams) {
+    // Recompute HPF coefficients when mode or on-state changes
+    if (newParams.hpfOn != params.hpfOn || newParams.contentMode != params.contentMode) {
+        const float fc = (newParams.contentMode == 0) ? 80.0f : 40.0f;
+        const float K  = std::tan(juce::MathConstants<float>::pi * fc / static_cast<float>(sr));
+        const float K2 = K * K;
+        const float norm = 1.0f / (1.0f + juce::MathConstants<float>::sqrt2 * K + K2);
+        hpfB0 =  norm;
+        hpfB1 = -2.0f * norm;
+        hpfB2 =  norm;
+        hpfA1 =  2.0f * (K2 - 1.0f) * norm;
+        hpfA2 =  (1.0f - juce::MathConstants<float>::sqrt2 * K + K2) * norm;
+        if (newParams.hpfOn && !params.hpfOn) {
+            std::fill(hpfZ1.begin(), hpfZ1.end(), 0.0f);
+            std::fill(hpfZ2.begin(), hpfZ2.end(), 0.0f);
+        }
+    }
+    // Recompute high-shelf coefficients when mode or on-state changes
+    if (newParams.hiShelfOn != params.hiShelfOn || newParams.contentMode != params.contentMode) {
+        const float fc  = (newParams.contentMode == 0) ? 12000.0f : 16000.0f;
+        const float dB  = (newParams.contentMode == 0) ? -4.0f : -3.0f;
+        const float G   = std::pow(10.0f, dB / 20.0f);
+        const float K   = std::tan(juce::MathConstants<float>::pi * fc / static_cast<float>(sr));
+        const float denom = 1.0f + K;
+        hiShelfB0 = (G + K) / denom;
+        hiShelfB1 = (G - K) / denom;
+        hiShelfA1 = (K - 1.0f) / denom;
+        if (newParams.hiShelfOn && !params.hiShelfOn) {
+            std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+        }
+    }
     params = newParams;
 }
 
@@ -180,6 +226,18 @@ void Dsp::reset() {
     deMudActivity = 0.0f;
     deEssActivity = 0.0f;
     plosiveActivity = 0.0f;
+    compActivity = 0.0f;
+    troubleActivity = 0.0f;
+    recoveryActivity = 0.0f;
+    limiterActivity = 0.0f;
+    std::fill(hpfZ1.begin(), hpfZ1.end(), 0.0f);
+    std::fill(hpfZ2.begin(), hpfZ2.end(), 0.0f);
+    std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+    troubleRefLp  = 0.0f;
+    troubleRefRms = 0.0f;
+    troubleBandZ1.fill(0.0f);
+    troubleBandZ2.fill(0.0f);
+    troubleBandRms.fill(0.0f);
 }
 
 void Dsp::process(juce::AudioBuffer<float>& buffer) {
@@ -204,26 +262,41 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
     const float loudNorm = juce::jlimit(0.0f, 1.0f, (params.speechLoudnessDb + 48.0f) / 42.0f);
     const bool voiceMode = params.contentMode == 0;
 
+    // HPF — remove subsonic buildup before corrective detection
+    if (params.hpfOn) {
+        for (int ch = 0; ch < numChannels; ++ch) {
+            auto* buf = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                buf[i] = processBiquadDf2(buf[i], hpfB0, hpfB1, hpfB2, hpfA1, hpfA2,
+                                          hpfZ1[static_cast<size_t>(ch)],
+                                          hpfZ2[static_cast<size_t>(ch)]);
+        }
+    }
+
     activeThisBlock = false;
     correctiveReductionDb = 0.0f;
     deMudActivity = 0.0f;
     deEssActivity = 0.0f;
     plosiveActivity = 0.0f;
+    compActivity = 0.0f;
+    troubleActivity = 0.0f;
     if (deMudAmt <= 1.0e-6f && deEssAmt <= 1.0e-6f && plosiveAmt <= 1.0e-6f
         && compAmt <= 1.0e-6f && troubleAmt <= 1.0e-6f)
         return;
     activeThisBlock = true;
     std::array<BiquadCoeffs, 6> troubleCoeffs{};
-    if (troubleAmt > 1.0e-6f) {
-        const std::array<float, 6> centers { 1400.0f, 2400.0f, 3600.0f, 5200.0f, 7600.0f, 10500.0f };
-        const std::array<float, 6> qVals { 1.10f, 1.20f, 1.20f, 1.15f, 1.05f, 0.90f };
-        const std::array<float, 6> maxCutDb { 3.0f, 4.5f, 5.5f, 6.0f, 5.5f, 4.5f };
-        const float smoothCtx = juce::jlimit(0.90f, 1.35f, 1.00f + 0.30f * params.artifactRisk - 0.03f * speechPresence);
-        for (size_t b = 0; b < troubleCoeffs.size(); ++b) {
-            const float cutDb = -maxCutDb[b] * troubleAmt * smoothCtx;
-            troubleCoeffs[b] = makePeakingEq(sr, centers[b], qVals[b], cutDb);
-        }
-    }
+    const std::array<float, 6> troubleCenters { 1400.0f, 2400.0f, 3600.0f, 5200.0f, 7600.0f, 10500.0f };
+    const std::array<float, 6> troubleQVals   { 1.10f,   1.20f,   1.20f,   1.15f,   1.05f,   0.90f   };
+    // Vocal: more tolerance for legitimate upper-mid and air; General: tighter on harshness/air, higher max cuts
+    const std::array<float, 6> troubleMaxCut = voiceMode
+        ? std::array<float, 6>{ 3.0f, 4.5f, 5.5f, 6.0f, 5.5f, 4.5f }
+        : std::array<float, 6>{ 3.0f, 4.5f, 6.0f, 7.0f, 6.0f, 5.0f };
+    const std::array<float, 6> troubleThresh = voiceMode
+        ? std::array<float, 6>{ 2.0f, 1.5f, 1.0f, 0.5f, 0.0f, 1.5f }
+        : std::array<float, 6>{ 2.0f, 1.5f, 0.5f, 0.0f, 0.0f, 0.5f };
+    constexpr float             troubleRange  = 6.0f;
+    const float smoothCtx = juce::jlimit(0.90f, 1.35f,
+        1.00f + 0.30f * params.artifactRisk - 0.03f * speechPresence);
 
     const float a180 = cA180;
     const BiquadCoeffs mudDetBpf = makeBandpass(sr, 300.0f, 0.8f);
@@ -263,6 +336,8 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
     float deMudAcc = 0.0f;
     float deEssAcc = 0.0f;
     float plosiveAcc = 0.0f;
+    float compAcc = 0.0f;
+    float troubleAcc = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
         float monoLinear = 0.0f;
         float monoAbs = 0.0f;
@@ -273,6 +348,32 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         }
         monoLinear /= static_cast<float>(numChannels);
         monoAbs /= static_cast<float>(numChannels);
+
+        // troubleSmooth dynamic detection
+        float troubleDbSample = 0.0f;
+        if (troubleAmt > 1.0e-6f) {
+            troubleRefLp  = cTroubleRefA * troubleRefLp  + (1.0f - cTroubleRefA) * monoLinear;
+            troubleRefRms = cRmsA        * troubleRefRms + (1.0f - cRmsA)        * (troubleRefLp * troubleRefLp);
+            const float refEnv = std::sqrt(troubleRefRms + 1.0e-12f);
+            float bandCutSum = 0.0f;
+            for (size_t b = 0; b < 6; ++b) {
+                const float bs = processBiquadDf2(monoLinear, troubleDetBpfB0[b], 0.0f, -troubleDetBpfB0[b],
+                                                  troubleDetBpfA1[b], troubleDetBpfA2[b],
+                                                  troubleBandZ1[b], troubleBandZ2[b]);
+                const float bsq = bs * bs;
+                const float tA = bsq > troubleBandRms[b] ? cTroubleAtk : cTroubleRel;
+                troubleBandRms[b] = tA * troubleBandRms[b] + (1.0f - tA) * bsq;
+                const float bandEnv  = std::sqrt(troubleBandRms[b] + 1.0e-12f);
+                const float ratioDb  = 20.0f * std::log10(bandEnv / refEnv + 1.0e-12f);
+                const float excessDb = std::max(0.0f, ratioDb - troubleThresh[b]);
+                const float drive    = juce::jlimit(0.0f, 1.0f, excessDb / troubleRange);
+                const float cutDb    = -troubleMaxCut[b] * troubleAmt * drive * smoothCtx;
+                troubleCoeffs[b]     = makePeakingEq(sr, troubleCenters[b], troubleQVals[b], cutDb);
+                bandCutSum += troubleMaxCut[b] * troubleAmt * drive;
+            }
+            troubleDbSample = bandCutSum / 6.0f;
+            troubleAcc += troubleDbSample;
+        }
 
         plosiveMonoLp = a180 * plosiveMonoLp + (1.0f - a180) * monoAbs;
         const float lowAbs = std::abs(plosiveMonoLp);
@@ -323,8 +424,8 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         const float deEssDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(deEssGain, 1.0e-6f), -120.0f));
         const float plosiveDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(plosiveGain, 1.0e-6f), -120.0f));
         const float compDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(compGain, 1.0e-6f), -120.0f));
-        const float troubleDb = 2.25f * troubleAmt;
-        reductionAcc += 0.20f * (deMudDb + deEssDb + plosiveDb + compDb + troubleDb);
+        compAcc += juce::jlimit(0.0f, 1.0f, compDb / 8.0f);
+        reductionAcc += 0.20f * (deMudDb + deEssDb + plosiveDb + compDb + troubleDbSample);
 
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* d = buffer.getWritePointer(ch);
@@ -370,6 +471,8 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
     deMudActivity = deMudAcc / static_cast<float>(numSamples);
     deEssActivity = deEssAcc / static_cast<float>(numSamples);
     plosiveActivity = plosiveAcc / static_cast<float>(numSamples);
+    compActivity = compAcc / static_cast<float>(numSamples);
+    troubleActivity = juce::jlimit(0.0f, 1.0f, (troubleAcc / static_cast<float>(numSamples)) / 4.0f);
 }
 
 void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
@@ -381,6 +484,7 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
     const float recoveryAmt = juce::jlimit(0.0f, 1.0f, params.recovery);
     if (recoveryAmt <= 1.0e-5f) {
         recoveryLiftDb = 0.0f;
+        recoveryActivity = 0.0f;
         return;
     }
 
@@ -396,6 +500,7 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
         recoveryAmt * (0.35f + 0.65f * voicePreserve) * (0.45f + 0.55f * denoiseAmt) * (1.0f - 0.60f * artifactRisk));
     if (strength <= 1.0e-5f) {
         recoveryLiftDb = 0.0f;
+        recoveryActivity = 0.0f;
         return;
     }
 
@@ -530,6 +635,7 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
         }
     }
     recoveryLiftDb = liftAccDb / static_cast<float>(numSamples);
+    recoveryActivity = juce::jlimit(0.0f, 1.0f, recoveryLiftDb / 6.0f);
 }
 
 void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
@@ -540,8 +646,10 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
 
     const float limitAmt = juce::jlimit(0.0f, 1.0f, params.limit);
     limiterReductionDb = 0.0f;
-    if (limitAmt <= 1.0e-6f)
+    if (limitAmt <= 1.0e-6f) {
+        limiterActivity = 0.0f;
         return;
+    }
 
     const bool voiceMode = params.contentMode == 0;
     const float limiterAttackA = std::exp(-1.0f / ((0.0012f - 0.0008f * limitAmt) * static_cast<float>(sr)));
@@ -569,6 +677,20 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
         }
     }
     limiterReductionDb = limiterAcc / static_cast<float>(numSamples);
+    limiterActivity = juce::jlimit(0.0f, 1.0f, limiterReductionDb / 6.0f);
+
+    // High-shelf cut — gentle air taming applied after all gain processing
+    if (params.hiShelfOn) {
+        for (int ch = 0; ch < numChannels; ++ch) {
+            auto* buf = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                const float x = buf[i];
+                const float y = hiShelfB0 * x + hiShelfZ1[static_cast<size_t>(ch)];
+                hiShelfZ1[static_cast<size_t>(ch)] = hiShelfB1 * x - hiShelfA1 * y;
+                buf[i] = y;
+            }
+        }
+    }
 }
 
 } // namespace vxsuite::polish
