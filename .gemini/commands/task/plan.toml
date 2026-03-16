@@ -1,0 +1,13 @@
+description = "Plan a task step-by-step without implementing anything."
+prompt = """
+Task: {{args}}
+
+Produce a numbered implementation plan:
+1. List every file that needs to change and why.
+2. For each file, describe what changes are needed — no code yet.
+3. Flag risks, unknowns, edge cases, dependencies.
+4. Estimate complexity: trivial / small / medium / large.
+
+Do NOT write any code or make any file changes.
+Wait for the user to confirm before proceeding.
+"""

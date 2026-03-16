@@ -1,0 +1,13 @@
+# Project-level Codex CLI config — overrides ~/.codex/config.toml for this project.
+tool_output_token_limit = 3000
+project_doc_max_bytes   = 8192
+sandbox_mode            = "workspace-write"
+
+[profiles.build]
+model_reasoning_effort  = "high"
+tool_output_token_limit = 8000
+
+[profiles.review]
+approval_policy         = "untrusted"
+sandbox_mode            = "read-only"
+model_reasoning_effort  = "low"

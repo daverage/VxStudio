@@ -1,0 +1,14 @@
+description = "Review current context for bugs, security issues, and improvements."
+prompt = """
+Review all code in the current context.
+
+Check for:
+1. Bugs and logic errors
+2. Unhandled edge cases
+3. Security issues (injection, overflow, untrusted input, secrets in code)
+4. Performance problems
+5. Missing error handling
+
+For each issue: state file/line, describe the problem, suggest a fix.
+Rank each: critical / major / minor / suggestion.
+"""

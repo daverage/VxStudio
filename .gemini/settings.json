@@ -1,0 +1,13 @@
+{
+  "chatCompression": { "contextPercentageThreshold": 0.5 },
+  "model": {
+    "summarizeToolOutput": {
+      "run_shell_command": { "tokenBudget": 500 },
+      "read_file":         { "tokenBudget": 2000 },
+      "list_directory":    { "tokenBudget": 300 }
+    }
+  },
+  "fileFiltering":  { "respectGitIgnore": true },
+  "checkpointing":  { "enabled": true },
+  "autoAccept": false
+}

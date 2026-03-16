@@ -1,0 +1,6 @@
+.DS_Store
+build/
+Source/vxsuite/vst/*.vst3
+Source/vxsuite/vst/.DS_Store
+*.swp
+*.swo

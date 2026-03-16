@@ -1,0 +1,33 @@
+{
+  "_note": "Windows version — hooks use PowerShell. This file is auto-activated by install.ps1.",
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{ "type": "command", "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/session-start.ps1" }]
+    }],
+    "PreToolUse": [
+      { "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/pre-bash.ps1" }] },
+      { "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{ "type": "command", "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/pre-write.ps1" }] }
+    ],
+    "PostToolUse": [{
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [{ "type": "command", "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/post-write.ps1" }]
+    }],
+    "PostToolUseFailure": [{
+      "hooks": [{ "type": "command", "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/post-failure.ps1" }]
+    }],
+    "Stop": [{
+      "hooks": [{ "type": "command", "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/on-stop.ps1" }]
+    }]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /)", "Bash(rm -rf ~)", "Bash(git push --force*)",
+      "Read(**/.env)", "Edit(**/.env)"
+    ],
+    "allow": [
+      "Bash(git status)", "Bash(git diff*)", "Bash(git log*)"
+    ]
+  }
+}

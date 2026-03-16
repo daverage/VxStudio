@@ -1,0 +1,10 @@
+description = "Generate a CHANGELOG.md entry from recent commits."
+prompt = """
+Recent commits:
+!{git log --oneline -30}
+
+Generate a CHANGELOG.md entry (Keep a Changelog format).
+## [{{args}}] - !{date +%Y-%m-%d}
+Sections: Added / Changed / Fixed / Removed
+Omit chore/ci/docs unless user-visible. Plain language, no hashes.
+"""
