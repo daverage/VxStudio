@@ -36,6 +36,10 @@ struct ProductIdentity {
     std::string_view secondaryHint;
     std::string_view tertiaryHint;
     std::string_view quaternaryHint;
+    float primaryDefaultValue = 0.5f;
+    float secondaryDefaultValue = 0.5f;
+    float tertiaryDefaultValue = 0.5f;
+    float quaternaryDefaultValue = 0.5f;
     std::string_view selectorLabel = "Mode";
     std::array<std::string_view, 2> selectorChoiceLabels {};
     std::string_view learnParamId;

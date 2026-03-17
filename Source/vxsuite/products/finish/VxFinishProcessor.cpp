@@ -13,16 +13,6 @@ constexpr std::string_view kGainParam = "gain";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
 
-float clamp01(const float value) {
-    return juce::jlimit(0.0f, 1.0f, value);
-}
-
-float blockBlendAlpha(const double sampleRate, const int numSamples, const float timeSeconds) {
-    if (sampleRate <= 1000.0 || numSamples <= 0 || timeSeconds <= 0.0f)
-        return 1.0f;
-    return 1.0f - std::exp(-static_cast<float>(numSamples) / (timeSeconds * static_cast<float>(sampleRate)));
-}
-
 } // namespace
 
 VXFinishAudioProcessor::VXFinishAudioProcessor()
@@ -123,43 +113,27 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         smoothedGain = gainTarget;
         controlsPrimed = true;
     } else {
-        smoothedFinish += blockBlendAlpha(currentSampleRateHz, numSamples, 0.050f) * (finishTarget - smoothedFinish);
-        smoothedBody += blockBlendAlpha(currentSampleRateHz, numSamples, 0.090f) * (bodyTarget - smoothedBody);
-        smoothedGain += blockBlendAlpha(currentSampleRateHz, numSamples, 0.080f) * (gainTarget - smoothedGain);
+        smoothedFinish = vxsuite::smoothBlockValue(smoothedFinish, finishTarget, currentSampleRateHz, numSamples, 0.050f);
+        smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget, currentSampleRateHz, numSamples, 0.090f);
+        smoothedGain = vxsuite::smoothBlockValue(smoothedGain, gainTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto& modePolicy = currentModePolicy();
     const auto analysis = getVoiceAnalysisSnapshot();
-    const float finish = clamp01(smoothedFinish);
-    const float body = clamp01(smoothedBody);
-    const float gain = clamp01(smoothedGain);
+    const float finish = vxsuite::clamp01(smoothedFinish);
+    const float body = vxsuite::clamp01(smoothedBody);
+    const float gain = vxsuite::clamp01(smoothedGain);
 
     vxsuite::polish::updateTonalAnalysis(tonalAnalysis, buffer, currentSampleRateHz, numSamples);
 
-    const float inputEnv = std::max(tonalAnalysis.inputEnv, 1.0e-6f);
-    const float lowMidRatio = juce::jlimit(0.0f, 1.5f, tonalAnalysis.lowMidEnv / inputEnv);
-    const float presenceRatio = juce::jlimit(0.0f, 1.5f, tonalAnalysis.presenceEnv / inputEnv);
-    const float airRatio = juce::jlimit(0.0f, 1.5f, tonalAnalysis.airEnv / inputEnv);
-    const float mudExcess = juce::jlimit(0.0f, 1.0f, (lowMidRatio - 0.20f) / 0.22f);
-    const float harshExcess = juce::jlimit(0.0f, 1.0f, (presenceRatio - 0.16f) / 0.20f);
-    const float sizzleExcess = juce::jlimit(0.0f, 1.0f, (airRatio - 0.08f) / 0.16f);
-    const float speechConfidence = juce::jlimit(0.0f, 1.0f,
-                                                0.45f * analysis.speechPresence
-                                              + 0.25f * analysis.speechStability
-                                              + 0.30f * analysis.protectVoice);
-    const float artifactRisk = juce::jlimit(0.0f, 1.0f,
-                                            0.50f * analysis.transientRisk
-                                          + 0.25f * analysis.tailLikelihood
-                                          + 0.25f * (1.0f - analysis.speechStability));
-    const float highTrouble = juce::jlimit(0.0f, 1.0f,
-                                           0.55f * harshExcess + 0.45f * sizzleExcess);
-    const float finishDrive = finish * (0.72f + 0.28f * juce::jmax(mudExcess, highTrouble));
+    const auto evidence = vxsuite::polish::deriveAnalysisEvidence(tonalAnalysis, analysis);
+    const float finishDrive = finish * (0.72f + 0.28f * juce::jmax(evidence.mudExcess, evidence.highTrouble));
     const float recoveryNeed = juce::jlimit(0.0f, 1.0f,
-                                            0.28f + 0.34f * analysis.protectVoice + 0.24f * mudExcess + 0.14f * highTrouble);
+                                            0.28f + 0.34f * analysis.protectVoice + 0.24f * evidence.mudExcess + 0.14f * evidence.highTrouble);
     const float protectBias = voiceMode ? modePolicy.sourceProtect : 0.45f * modePolicy.sourceProtect;
 
-    vxsuite::polish::Dsp::Params params {};
+    vxsuite::finish::Dsp::Params params {};
     params.contentMode = voiceMode ? 0 : 1;
     params.deMud = 0.0f;
     params.deEss = 0.0f;
@@ -174,14 +148,13 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     params.recovery = body * recoveryNeed * juce::jlimit(0.0f, 1.0f, 0.30f + 0.70f * finishDrive);
     params.smartGain = gain;
     params.voicePreserve = juce::jlimit(0.0f, 1.0f, 0.42f + 0.58f * protectBias);
-    params.denoiseAmount = juce::jlimit(0.0f, 1.0f, 0.30f + 0.45f * finishDrive + 0.25f * highTrouble);
-    params.artifactRisk = artifactRisk;
+    params.denoiseAmount = juce::jlimit(0.0f, 1.0f, 0.30f + 0.45f * finishDrive + 0.25f * evidence.highTrouble);
+    params.artifactRisk = evidence.artifactRisk;
     params.compSidechainBoostDb = juce::jlimit(0.5f, 5.5f, 1.0f + 3.0f * analysis.speechPresence);
-    params.sourcePreset = 0;
-    params.speechLoudnessDb = juce::Decibels::gainToDecibels(inputEnv, -120.0f);
-    params.proximityContext = juce::jlimit(0.0f, 1.0f, 0.55f + 0.25f * (1.0f - analysis.directness));
-    params.speechPresence = speechConfidence;
-    params.noiseFloorDb = juce::jlimit(-96.0f, -36.0f, tonalAnalysis.noiseFloorDb);
+    params.speechLoudnessDb = evidence.speechLoudnessDb;
+    params.proximityContext = evidence.proximityContext;
+    params.speechPresence = evidence.speechConfidence;
+    params.noiseFloorDb = evidence.noiseFloorDb;
     params.hpfOn = false;
     params.hiShelfOn = false;
 
@@ -209,13 +182,12 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         const float smartMakeup = juce::jlimit(0.0f, 1.0f, 0.22f + 0.78f * gain);
         const float weightedTargetDb = juce::jlimit(0.0f, 14.0f, targetMakeupDb * (0.70f + 0.80f * smartMakeup));
         const float alpha = targetMakeupDb > smoothedMakeupDb
-            ? blockBlendAlpha(currentSampleRateHz, numSamples, 0.180f)
-            : blockBlendAlpha(currentSampleRateHz, numSamples, 0.320f);
+            ? vxsuite::blockBlendAlpha(currentSampleRateHz, numSamples, 0.180f)
+            : vxsuite::blockBlendAlpha(currentSampleRateHz, numSamples, 0.320f);
         smoothedMakeupDb += alpha * (weightedTargetDb - smoothedMakeupDb);
 
-        const float signalDb = juce::Decibels::gainToDecibels(tonalAnalysis.inputEnv + 1.0e-6f, -120.0f);
         const float noiseGuard = juce::jlimit(0.0f, 1.0f,
-            (signalDb - (tonalAnalysis.noiseFloorDb + 7.0f)) / 13.0f);
+            (evidence.speechLoudnessDb - (evidence.noiseFloorDb + 7.0f)) / 13.0f);
         const float makeupGain = juce::Decibels::decibelsToGain(smoothedMakeupDb * noiseGuard);
         if (makeupGain > 1.001f)
             buffer.applyGain(makeupGain);
@@ -225,6 +197,8 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     polishChain.processLimiter(buffer);
 }
 
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXFinishAudioProcessor();
 }
+#endif

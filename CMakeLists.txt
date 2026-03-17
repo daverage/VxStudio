@@ -224,7 +224,8 @@ target_compile_definitions(VXCleanup PRIVATE
 juce_generate_juce_header(VXCleanup)
 target_sources(VXCleanup PRIVATE
   Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp
-  Source/vxsuite/products/polish/dsp/VxPolishDsp.cpp
+  Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXCleanup PRIVATE Source)
 target_link_libraries(VXCleanup PRIVATE VxSuiteFramework juce::juce_dsp)
@@ -251,7 +252,8 @@ target_compile_definitions(VXFinish PRIVATE
 juce_generate_juce_header(VXFinish)
 target_sources(VXFinish PRIVATE
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
-  Source/vxsuite/products/polish/dsp/VxPolishDsp.cpp
+  Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXFinish PRIVATE Source)
 target_link_libraries(VXFinish PRIVATE VxSuiteFramework juce::juce_dsp)
@@ -402,3 +404,21 @@ target_link_libraries(VxSuiteVoiceAnalysisTests PRIVATE
   VxSuiteFramework
   juce::juce_audio_basics
 )
+
+add_executable(VXSuitePluginRegressionTests
+  tests/VXSuitePluginRegressionTests.cpp
+  Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp
+  Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxsuite/products/finish/VxFinishProcessor.cpp
+  Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
+  Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
+  Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
+)
+target_include_directories(VXSuitePluginRegressionTests PRIVATE Source tests)
+target_link_libraries(VXSuitePluginRegressionTests PRIVATE
+  VxSuiteFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+)
+target_compile_definitions(VXSuitePluginRegressionTests PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)

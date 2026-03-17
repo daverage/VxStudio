@@ -6,6 +6,7 @@
 
 #include "../../../framework/VxSuiteAudioProcessStage.h"
 #include "../../../framework/VxSuiteFft.h"
+#include "../../../framework/VxSuiteSpectralHelpers.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -86,13 +87,7 @@ private:
     int minStatsD = 8;
     int minStatsL = 6;
 
-    struct MinStatsBin {
-        float smoothPow = 1.0e-8f, subWinMin = 1.0e-8f, globalMin = 1.0e-8f;
-        int   frameCount = 0, subWinIdx = 0;
-        std::vector<float> subWindows;
-    };
-
-    std::vector<MinStatsBin> msState;
+    std::vector<vxsuite::spectral::MinStatsBin> msState;
     std::vector<float>       noisePowBlind;
 
     // OM-LSA

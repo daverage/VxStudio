@@ -28,11 +28,7 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     olaAccumSize   = safeBlock + kFftSize * 2;
 
     // ── sqrt-Hann analysis/synthesis window (periodic) ───────────────────────
-    window.resize(kFftSize);
-    for (int n = 0; n < kFftSize; ++n)
-        window[n] = std::sqrt(0.5f - 0.5f * std::cos(
-            2.0f * juce::MathConstants<float>::pi
-            * static_cast<float>(n) / static_cast<float>(kFftSize)));
+    spectral::prepareSqrtHannWindow(window, kFftSize);
 
     fft.prepare(kFftOrder);
     olaAcc     .assign(olaAccumSize, 0.0f);
@@ -43,22 +39,11 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
 
     // ── Per-bin lookup tables ─────────────────────────────────────────────────
     const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
-    binToBark   .resize(kBins);
-    phaseAdv    .resize(kBins);
+    spectral::prepareBarkScaleLayout<int>(sr, kFftSize, binToBark, phaseAdv, barkBins);
     erbKernelHW .resize(kBins);
     lfStab      .resize(kBins);
-    for (auto& b : barkBins) b.clear();
-
     for (int k = 0; k < kBins; ++k) {
         const float hz   = static_cast<float>(k) * binHz;
-        const int   bark = juce::jlimit(0, 23, static_cast<int>(std::floor(spectral::hzToBark(hz))));
-        binToBark[k] = bark;
-        barkBins[static_cast<size_t>(bark)].push_back(k);
-
-        phaseAdv[k] = 2.0f * juce::MathConstants<float>::pi
-                    * static_cast<float>(kHop) * static_cast<float>(k)
-                    / static_cast<float>(kFftSize);
-
         // Moore & Glasberg (1990) ERB — drives smoother half-width
         const float erb = 24.7f * (4.37f * hz / 1000.0f + 1.0f);
         erbKernelHW[k] = juce::jlimit(1.0f, 10.0f, erb / binHz);
@@ -91,12 +76,7 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
 
     suppressCount.assign(kBins, 0);
 
-    msState.resize(kBins);
-    for (auto& ms : msState) {
-        ms.smoothPow = ms.subWinMin = ms.globalMin = kEps;
-        ms.frameCount = ms.subWinIdx = 0;
-        ms.subWindows.assign(static_cast<size_t>(msD), kEps);
-    }
+    spectral::prepareMinStats(msState, kBins, msD, kEps);
 
     // ── Stereo delay lines ────────────────────────────────────────────────────
     sideDelaySize    = latencySamples + safeBlock + 16;
@@ -138,11 +118,7 @@ void DenoiserDsp::reset() {
     std::fill(cleanPowPrev  .begin(), cleanPowPrev  .end(), kEps);
     std::fill(suppressCount .begin(), suppressCount .end(), 0);
 
-    for (auto& ms : msState) {
-        ms.smoothPow = ms.subWinMin = ms.globalMin = kEps;
-        ms.frameCount = ms.subWinIdx = 0;
-        std::fill(ms.subWindows.begin(), ms.subWindows.end(), kEps);
-    }
+    spectral::resetMinStats(msState, kEps);
 
     barkFluxAvg.fill(0.0f);
     barkHold   .fill(0);
@@ -184,33 +160,7 @@ void DenoiserDsp::reset() {
 
 void DenoiserDsp::updateMinStats(const int k, const float p,
                                  const float presence) noexcept {
-    MinStatsBin& ms = msState[static_cast<size_t>(k)];
-
-    // IMCRA-style: use slower smoothing when signal is likely present
-    const float alpha = (presence > 0.55f) ? 0.96f : kMsAlpha;
-    ms.smoothPow = alpha * ms.smoothPow + (1.0f - alpha) * p;
-
-    // Per-bin first-signal seed: pre-fill sub-windows so noisePow is valid
-    // immediately rather than underestimating for the first D*L frames.
-    if (!ms.subWindows.empty()
-        && ms.subWindows[0] <= 1.0e-7f
-        && ms.smoothPow > 1.0e-7f) {
-        std::fill(ms.subWindows.begin(), ms.subWindows.end(), ms.smoothPow);
-        ms.globalMin = ms.smoothPow;
-        ms.subWinMin = ms.smoothPow;
-        noisePow[k]  = kBmin * ms.smoothPow;
-    }
-
-    ms.subWinMin = std::min(ms.subWinMin, ms.smoothPow);
-    if (++ms.frameCount >= msL) {
-        ms.subWindows[static_cast<size_t>(ms.subWinIdx)] = ms.subWinMin;
-        ms.subWinIdx  = (ms.subWinIdx + 1) % msD;
-        ms.subWinMin  = ms.smoothPow;
-        ms.frameCount = 0;
-        ms.globalMin  = *std::min_element(ms.subWindows.begin(),
-                                          ms.subWindows.end());
-    }
-    noisePow[k] = kBmin * std::max(kEps, ms.globalMin);
+    noisePow[k] = spectral::updateMinStats(msState[static_cast<size_t>(k)], p, presence, msL, msD, kMsAlpha, kBmin, kEps);
 }
 
 // ── processInPlace ────────────────────────────────────────────────────────────

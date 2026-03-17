@@ -1,10 +1,13 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteFft.h"
+#include "../../framework/VxSuiteSpectralHelpers.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../polish/VxPolishAnalysisEvidence.h"
 #include "../polish/VxPolishTonalAnalysis.h"
-#include "../polish/dsp/VxPolishDsp.h"
+#include "dsp/VxCleanupDsp.h"
 
 #include <vector>
 
@@ -30,7 +33,7 @@ protected:
 private:
     static vxsuite::ProductIdentity makeIdentity();
 
-    vxsuite::polish::Dsp polishChain;
+    vxsuite::cleanup::Dsp polishChain;
     vxsuite::polish::TonalAnalysisState tonalAnalysis;
     vxsuite::RealFft spectralFft;
     std::vector<float> spectralFifo;

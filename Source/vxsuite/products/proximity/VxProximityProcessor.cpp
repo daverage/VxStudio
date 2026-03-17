@@ -12,12 +12,10 @@ constexpr std::string_view kAirParam     = "air";
 constexpr std::string_view kModeParam    = "mode";
 constexpr std::string_view kListenParam  = "listen";
 
-float clamp01(const float v) { return juce::jlimit(0.f, 1.f, v); }
-
 } // namespace
 
 VXProximityAudioProcessor::VXProximityAudioProcessor()
-    : ProcessorBase(makeIdentity(), makeLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
 
 vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
@@ -38,36 +36,9 @@ vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     identity.theme.backgroundRgb  = { 0.06f, 0.05f, 0.04f };
     identity.theme.panelRgb       = { 0.10f, 0.09f, 0.07f };
     identity.theme.textRgb        = { 0.95f, 0.90f, 0.80f };
+    identity.primaryDefaultValue = 0.5f;
+    identity.secondaryDefaultValue = 0.0f;
     return identity;
-}
-
-juce::AudioProcessorValueTreeState::ParameterLayout VXProximityAudioProcessor::makeLayout(
-    const vxsuite::ProductIdentity& identity) {
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { identity.primaryParamId.data(), 1 },
-        vxsuite::toJuceString(identity.primaryLabel),
-        juce::NormalisableRange<float> { 0.f, 1.f, 0.001f },
-        0.5f,
-        juce::AudioParameterFloatAttributes().withLabel(identity.primaryLabel.data())));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { identity.secondaryParamId.data(), 1 },
-        vxsuite::toJuceString(identity.secondaryLabel),
-        juce::NormalisableRange<float> { 0.f, 1.f, 0.001f },
-        0.0f,
-        juce::AudioParameterFloatAttributes().withLabel(identity.secondaryLabel.data())));
-    layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID { kModeParam.data(), 1 },
-        "Mode",
-        vxsuite::makeModeChoiceLabels(),
-        static_cast<int>(identity.defaultMode),
-        vxsuite::makeChoiceAttributes("Mode")));
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID { kListenParam.data(), 1 },
-        "Listen",
-        false,
-        vxsuite::makeListenAttributes()));
-    return layout;
 }
 
 const juce::String VXProximityAudioProcessor::getName() const {
@@ -118,18 +89,15 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         smoothedAir    = airTarget;
         controlsPrimed = true;
     } else {
-        const float sr       = static_cast<float>(currentSampleRateHz);
-        const float blendC   = 1.f - std::exp(-static_cast<float>(numSamples) / (0.060f * sr));
-        const float blendA   = 1.f - std::exp(-static_cast<float>(numSamples) / (0.090f * sr));
-        smoothedCloser += blendC * (closerTarget - smoothedCloser);
-        smoothedAir    += blendA * (airTarget    - smoothedAir);
+        smoothedCloser = vxsuite::smoothBlockValue(smoothedCloser, closerTarget, currentSampleRateHz, numSamples, 0.060f);
+        smoothedAir = vxsuite::smoothBlockValue(smoothedAir, airTarget, currentSampleRateHz, numSamples, 0.090f);
     }
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
 
     proximityDsp.processInPlace(buffer, numSamples,
-                                clamp01(smoothedCloser),
-                                clamp01(smoothedAir),
+                                vxsuite::clamp01(smoothedCloser),
+                                vxsuite::clamp01(smoothedAir),
                                 isVoice);
 }
 

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
+#include "../../framework/VxSuiteLatencyAlignedListen.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxDeverbSpectralProcessor.h"
 
@@ -34,23 +36,16 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
-    static juce::AudioProcessorValueTreeState::ParameterLayout
-           makeLayout(const vxsuite::ProductIdentity& identity);
 
     void ensureScratchCapacity(int channels, int samples);
-    void ensureDelayCapacity(int channels, int samples);
-    void fillAlignedDryScratch(const juce::AudioBuffer<float>& dryBuffer, int numSamples);
     void applyBodyRestore(const juce::AudioBuffer<float>& dryBuffer,
                           juce::AudioBuffer<float>& wetBuffer,
                           float bodyAmount,
                           bool isFirstBlock);
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
-    juce::AudioBuffer<float> dryScratch;
-    juce::AudioBuffer<float> alignedDryScratch;
+    vxsuite::LatencyAlignedListenBuffer latencyListen;
     juce::AudioBuffer<float> wetScratch;
-    std::vector<std::vector<float>> dryDelayLines;
-    std::vector<int> dryDelayWritePos;
     std::vector<float> dryLowpassState;
     std::vector<float> wetLowpassState;
     float smoothedReduce = 0.45f;

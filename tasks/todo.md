@@ -354,3 +354,164 @@ Active VX Suite spectral products still own `juce::dsp::FFT` locally, which dupl
 - Verified with:
   - `cmake --build build --target VXCleanup -j4`
   - `cmake --build build -j4`
+
+---
+
+# VX Suite shared-component review — 2026-03-17
+
+## Problem
+Review the VX Suite products for duplicate or near-duplicate processor/DSP/helper code that should be pulled into the framework or shared product components, and identify the strongest refactor opportunities without changing code yet.
+
+## Plan
+- [x] Inventory the current product modules and existing framework/shared helpers.
+- [x] Compare processors, DSP shells, and helper patterns across products for duplication.
+- [x] Identify the strongest 3-6 shared-component opportunities with file references and rationale.
+- [x] Record the review result in this task log.
+
+## Review
+- [P1] Latency-aligned dry/listen scratch handling is duplicated across four products and should become a shared framework utility. `VXDenoiser`, `VXDeepFilterNet`, `VXDeverb`, and `VXSubtract` each own nearly the same `dryScratch` / `alignedDryScratch` / delay-line allocation, fill, and `renderListenOutput()` logic. See `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp`, `Source/vxsuite/products/deepfilternet/VxDeepFilterNetProcessor.cpp`, `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp`, and `Source/vxsuite/products/subtract/VxSubtractProcessor.cpp`. This is the strongest shared-component candidate because the repetition is structural, latency-bearing, and easy to drift out of sync.
+- [P1] The spectral denoiser core is still split across two very similar product-local DSP implementations and should be factored into a shared spectral-cleanup core. `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.*` and `Source/vxsuite/products/subtract/dsp/VxSubtractDsp.*` both carry overlapping STFT/min-stats/OM-LSA/bark-transient/harmonic-floor/phase-continuity machinery. `VXSubtract` adds learned-profile behavior on top, but the underlying blind denoise/scaffold is still clearly shared. This is a high-value extraction target, but it should be done carefully as a common spectral engine plus product-specific wrappers, not by forcing the products back together.
+- [P2] Control smoothing helpers are duplicated in multiple processors and should be centralized in the framework. `blockBlendAlpha(...)` or equivalent inline exponential smoothing math appears in `VXCleanup`, `VXFinish`, `VXProximity`, `VXDenoiser`, `VXDeepFilterNet`, `VXSubtract`, and `VXDeverb`. See `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp`, `Source/vxsuite/products/finish/VxFinishProcessor.cpp`, `Source/vxsuite/products/proximity/VxProximityProcessor.cpp`, `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp`, `Source/vxsuite/products/deepfilternet/VxDeepFilterNetProcessor.cpp`, `Source/vxsuite/products/subtract/VxSubtractProcessor.cpp`, and `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp`. A small shared smoother/helper would remove repeated `exp()` math and keep time constants expressed consistently.
+- [P2] The “Polish-derived analysis context” used by `VXCleanup` and `VXFinish` should probably be shared as a product-family helper rather than rebuilt ad hoc in each processor. Both compute tonal ratios from `VxPolishTonalAnalysis`, derive `speechConfidence` / `artifactRisk`, and then map those into `polish::Dsp::Params`. See `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp` and `Source/vxsuite/products/finish/VxFinishProcessor.cpp`. This should likely live under `Source/vxsuite/products/polish/` or a framework analysis helper used by the cleanup/finish family, not necessarily the global framework unless a third product needs the same contract.
+- [P3] Simple parameter-layout construction is still reimplemented in a few processors even though the framework already has `createSimpleParameterLayout(...)`. `VXDenoiser` and `VXProximity` manually build what is effectively the standard two-float + mode + listen layout, and `VXDeverb` only diverges by control defaults/labels. See `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp`, `Source/vxsuite/products/proximity/VxProximityProcessor.cpp`, `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp`, and `Source/vxsuite/framework/VxSuiteParameters.h`. This is worth centralizing by making the framework helper support per-control defaults, but it is lower priority than the latency/listen and spectral-core duplication above.
+
+---
+
+# Cross-plugin shared-component review — 2026-03-17
+
+## Problem
+Review all current VX Suite plugins for duplicate or near-duplicate code and identify where multiple products should share a framework component instead of keeping separate local implementations.
+
+## Plan
+- [x] Inventory product modules and current framework/shared helpers.
+- [x] Compare processors and DSP shells for repeated patterns that should become shared components.
+- [x] Capture the strongest refactor opportunities with code references and risk notes.
+
+## Review
+- The strongest shared-component opportunity is latency-aligned listen support for latency-bearing products. `VXDenoiser`, `VXDeepFilterNet`, `VXSubtract`, and `VXDeverb` each keep their own dry scratch buffers, per-channel delay lines, aligned-dry builders, and custom `renderListenOutput()` paths even though they are all implementing the same core contract: aligned dry minus wet for removed-content audition. This should move into `ProcessorBase` as an optional latency-aligned listen helper rather than staying duplicated per product.
+- Control smoothing is duplicated across most processors in slightly different local forms. `VxCleanupProcessor.cpp`, `VxFinishProcessor.cpp`, `VxDenoiserProcessor.cpp`, `VxDeepFilterNetProcessor.cpp`, `VxSubtractProcessor.cpp`, `VxProximityProcessor.cpp`, and `VxDeverbProcessor.cpp` all do some version of “prime on first block, then exponential block smoothing per control.” The exact time constants differ, but the state machine is mostly the same and should be a shared block-smoothing helper.
+- `VxDenoiserDsp` and `VxSubtractDsp` still share a large spectral-core shape: min-stats noise tracking, OM-LSA presence probability, Bark transient hold, tonalness-driven protection, harmonic comb protection, frequency smoothing, and phase-continuity resynthesis. They should not be fully merged, but they are now close enough that a shared spectral engine/state/helper layer would reduce drift and make bug fixes land once.
+- `VxCleanupProcessor.cpp` and `VxFinishProcessor.cpp` both rebuild the same high-level analysis fusion from `VxPolishTonalAnalysis` + `VoiceAnalysisSnapshot` before mapping into `polish::Dsp::Params`. This is product-specific enough that the final mapping should stay local, but the common “analysis evidence pack” wants a shared helper struct/function so the two products do not drift.
+- Several products still duplicate custom parameter layouts that are very close to `createSimpleParameterLayout(...)`. `VxDenoiserProcessor.cpp`, `VxDeverbProcessor.cpp`, and `VxProximityProcessor.cpp` each hand-roll near-template layouts with the same mode/listen wiring and mostly standard float params. A more configurable shared layout builder would reduce repetition without forcing every product into the exact same defaults.
+
+---
+
+# Cross-plugin DRY refactor — 2026-03-17
+
+## Problem
+Reduce duplicated framework-shaped code that does not need to be product-local, especially where duplicated audio-path plumbing risks correctness drift across plugins.
+
+## Plan
+- [x] Add a shared framework helper for latency-aligned listen buffering/delta rendering.
+- [x] Add a shared framework helper for block-rate smoothing/clamp math.
+- [x] Migrate the duplicated latency-bearing processors to the shared helpers.
+- [x] Migrate the simpler control-smoothing sites to the shared helper where it fits cleanly.
+- [x] Build affected targets and the full repo, then document the result.
+- [x] Extract the remaining shared Polish-family analysis evidence for Cleanup/Finish.
+- [x] Expand the shared parameter-layout helper and migrate the near-template products.
+- [x] Extract the denoiser/subtract spectral-core helpers that are still duplicated, then rebuild.
+
+## Review
+- Added `Source/vxsuite/framework/VxSuiteLatencyAlignedListen.h`, a shared helper that owns dry capture, aligned-dry buffering, per-channel delay lines, and removed-delta listen rendering for latency-bearing processors.
+- Added `Source/vxsuite/framework/VxSuiteBlockSmoothing.h`, which centralizes `blockBlendAlpha`, block-rate one-time smoothing, attack/release smoothing, and shared `clamp01`.
+- Extended `Source/vxsuite/framework/VxSuiteParameters.h` + `Source/vxsuite/framework/VxSuiteProduct.h` so products can declare per-control default values in the shared layout builder instead of hand-rolling near-template parameter layouts.
+- Added `Source/vxsuite/products/polish/VxPolishAnalysisEvidence.h`, which centralizes the shared `TonalAnalysisState + VoiceAnalysisSnapshot` evidence pack used by both `VXCleanup` and `VXFinish`.
+- Expanded `Source/vxsuite/framework/VxSuiteSpectralHelpers.h` with shared spectral setup helpers and a reusable Martin minimum-statistics state/update path used by both `VxDenoiserDsp` and `VxSubtractDsp`.
+- Migrated the duplicated latency-aligned listen plumbing in:
+  - `Source/vxsuite/products/denoiser/VxDenoiserProcessor.*`
+  - `Source/vxsuite/products/deepfilternet/VxDeepFilterNetProcessor.*`
+  - `Source/vxsuite/products/subtract/VxSubtractProcessor.*`
+  - `Source/vxsuite/products/deverb/VxDeverbProcessor.*`
+- Migrated the repeated local smoothing math in:
+  - `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp`
+  - `Source/vxsuite/products/finish/VxFinishProcessor.cpp`
+  - `Source/vxsuite/products/proximity/VxProximityProcessor.cpp`
+  - plus the latency-bearing processors above
+- Removed the remaining near-template parameter-layout duplication from:
+  - `Source/vxsuite/products/denoiser/VxDenoiserProcessor.*`
+  - `Source/vxsuite/products/deverb/VxDeverbProcessor.*`
+  - `Source/vxsuite/products/proximity/VxProximityProcessor.*`
+- Migrated the shared Polish-family evidence derivation in:
+  - `Source/vxsuite/products/cleanup/VxCleanupProcessor.*`
+  - `Source/vxsuite/products/finish/VxFinishProcessor.*`
+- Migrated shared spectral-core setup/min-stats helpers in:
+  - `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.*`
+  - `Source/vxsuite/products/subtract/dsp/VxSubtractDsp.*`
+- This removes the repeated per-product implementations of:
+  - dry/aligned scratch allocation
+  - per-channel latency delay lines
+  - aligned dry reconstruction
+  - removed-content listen delta rendering
+  - duplicated block-rate smoothing formulas
+- It also removes duplicated:
+  - near-template mode/listen/float parameter layouts
+  - Cleanup/Finish analysis-evidence formulas
+  - denoiser/subtract sqrt-Hann prep, Bark-bin setup, and Martin minimum-statistics update/reset logic
+- Verified with:
+  - `cmake --build build --target VXDenoiser VXSubtract VXCleanup VXFinish VXDeverb VXProximity -j4`
+  - `cmake --build build -j4`
+
+---
+
+# Legacy file removal pass — 2026-03-17
+
+## Problem
+Remove any remaining legacy or obsolete files left in the repo after the framework and DSP migrations, while keeping the active build tree intact.
+
+## Plan
+- [x] Audit the repo for remaining legacy/obsolete files and confirm whether they are referenced.
+- [x] Delete unreferenced legacy files that are no longer part of the active suite.
+- [x] Build the full repo and document the final state.
+
+## Review
+- Confirmed there are no remaining live `Source/dsp/`-style legacy code paths or backup/reject files in the repo.
+- Confirmed the only remaining obsolete file under `Source/` was `Source/vxsuite/products/deverb/vx_deverb_phases_1_3_agent_guide.md`, an unreferenced agent-planning markdown artifact rather than active source.
+- Deleted that stale deverb guide so `Source/` now contains active code/assets only.
+- Verified with `cmake --build build -j4`.
+
+---
+
+# Polish DSP split — 2026-03-17
+
+## Problem
+`products/polish/dsp/VxPolishDsp.*` is still a monolithic leftover from when Polish behaved like a broader single product. Cleanup and Finish now own different jobs, so split the DSP by product responsibility and remove the old file.
+
+## Plan
+- [x] Identify the safe split boundary between shared corrective code and Finish-only recovery/limiter code.
+- [x] Move Cleanup and Finish onto product-owned DSP entrypoints and delete the old `VxPolishDsp.*` file.
+- [x] Build affected targets and the full repo, then document the result.
+
+## Review
+- Split the old monolithic `Source/vxsuite/products/polish/dsp/VxPolishDsp.*` into product-owned DSP entrypoints:
+  - `Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.*`
+  - `Source/vxsuite/products/finish/dsp/VxFinishDsp.*`
+- Kept only genuinely shared corrective-stage code in:
+  - `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.*`
+  - `Source/vxsuite/products/polish/dsp/VxPolishDspCommon.h`
+  - `Source/vxsuite/products/polish/dsp/VxPolishSharedParams.h`
+- Updated `VXCleanup` and `VXFinish` processors and `CMakeLists.txt` to compile against their own DSP files instead of the old shared monolith.
+- Removed the obsolete `Source/vxsuite/products/polish/dsp/VxPolishDsp.h` and `Source/vxsuite/products/polish/dsp/VxPolishDsp.cpp` files entirely.
+- This also eliminated the stale `sourcePreset` branch that was always pinned to `0` in both wrappers.
+- Verified with:
+  - `cmake --build build --target VXCleanup VXFinish -j4`
+  - `cmake --build build -j4`
+
+---
+
+# Plugin regression harness — 2026-03-17
+
+## Problem
+Add a processor-level regression harness that checks the most failure-prone suite behaviors after the recent refactors: Subtract learn state/progress, listen-mode delta behavior, neutral cleanup behavior, and multi-plugin chain stability.
+
+## Plan
+- [x] Inspect the existing processor test pattern and choose the right harness structure.
+- [x] Add shared processor test utilities for fixture generation, block rendering, and latency-aware trimming.
+- [x] Implement an initial regression executable covering Cleanup identity, Subtract learn/listen behavior, and Subtract→Cleanup→Finish chain stability.
+- [x] Configure/build the new test target, run it, and document the result.
+
+## Review
+- Added a new standalone regression executable at `tests/VXSuitePluginRegressionTests.cpp` plus shared helpers in `tests/VxSuiteProcessorTestUtils.h`, following the same "real processor instance" pattern as the existing suite test targets instead of introducing a separate unit-test framework.
+- The first pass covers five high-value behaviors: `VXCleanup` identity at zero cleanup, `VXSubtract` learn lifecycle/progress monotonicity, `VXSubtract` listen-mode removed-content output, `VXSubtract -> VXCleanup -> VXFinish` chain stability, and silence preservation through the combined chain.
+- The render helper is latency-aware, so processors are exercised with their reported plugin latency rather than with unrealistic zero-latency assumptions.
+- The Subtract listen assertion was tuned to check steady-state recombination with a realistic tolerance after the initial alignment transient, which makes it useful as a regression guard without overfitting to startup buffer state.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4 && ./build/VXSuitePluginRegressionTests`, which completed successfully.

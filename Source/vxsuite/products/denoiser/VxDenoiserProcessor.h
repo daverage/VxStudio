@@ -1,10 +1,10 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
+#include "../../framework/VxSuiteLatencyAlignedListen.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxDenoiserDsp.h"
-
-#include <vector>
 
 class VXDenoiserAudioProcessor final : public vxsuite::ProcessorBase {
 public:
@@ -24,19 +24,9 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
-    static juce::AudioProcessorValueTreeState::ParameterLayout
-           makeLayout(const vxsuite::ProductIdentity& identity);
-
-    void ensureScratchCapacity(int channels, int samples);
-    void fillAlignedDryScratch(const juce::AudioBuffer<float>& dryBuffer, int numSamples);
 
     vxsuite::denoiser::DenoiserDsp denoiserDsp;
-
-    // Latency-aligned dry scratch — needed for listen mode and future wet blend
-    juce::AudioBuffer<float> dryScratch;
-    juce::AudioBuffer<float> alignedDryScratch;
-    std::vector<std::vector<float>> dryDelayLines;
-    std::vector<int>                dryDelayWritePos;
+    vxsuite::LatencyAlignedListenBuffer latencyListen;
 
     double currentSampleRateHz = 48000.0;
     float  smoothedClean       = 0.0f;

@@ -12,12 +12,10 @@ constexpr std::string_view kGuardParam   = "guard";
 constexpr std::string_view kModeParam    = "mode";
 constexpr std::string_view kListenParam  = "listen";
 
-float clamp01(const float v) { return juce::jlimit(0.f, 1.f, v); }
-
 } // namespace
 
 VXDenoiserAudioProcessor::VXDenoiserAudioProcessor()
-    : ProcessorBase(makeIdentity(), makeLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
 
 vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity id {};
@@ -39,41 +37,9 @@ vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
     id.theme.backgroundRgb = { 0.04f, 0.06f, 0.05f };
     id.theme.panelRgb      = { 0.07f, 0.10f, 0.08f };
     id.theme.textRgb       = { 0.85f, 0.95f, 0.88f };
+    id.primaryDefaultValue = 0.5f;
+    id.secondaryDefaultValue = 0.5f;
     return id;
-}
-
-juce::AudioProcessorValueTreeState::ParameterLayout
-VXDenoiserAudioProcessor::makeLayout(const vxsuite::ProductIdentity& id) {
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { kCleanParam.data(), 1 },
-        vxsuite::toJuceString(id.primaryLabel),
-        juce::NormalisableRange<float> { 0.f, 1.f, 0.001f },
-        0.5f,
-        juce::AudioParameterFloatAttributes().withLabel(id.primaryLabel.data())));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { kGuardParam.data(), 1 },
-        vxsuite::toJuceString(id.secondaryLabel),
-        juce::NormalisableRange<float> { 0.f, 1.f, 0.001f },
-        0.5f,
-        juce::AudioParameterFloatAttributes().withLabel(id.secondaryLabel.data())));
-
-    layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID { kModeParam.data(), 1 },
-        "Mode",
-        vxsuite::makeModeChoiceLabels(),
-        static_cast<int>(vxsuite::Mode::vocal),
-        vxsuite::makeChoiceAttributes("Mode")));
-
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID { kListenParam.data(), 1 },
-        "Listen",
-        false,
-        vxsuite::makeListenAttributes()));
-
-    return layout;
 }
 
 const juce::String VXDenoiserAudioProcessor::getName() const {
@@ -98,51 +64,16 @@ void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     denoiserDsp.prepare(currentSampleRateHz, samplesPerBlock);
     setLatencySamples(denoiserDsp.getLatencySamples());
-    ensureScratchCapacity(getTotalNumOutputChannels(), samplesPerBlock);
+    latencyListen.prepare(getTotalNumOutputChannels(), std::max(8192, samplesPerBlock), denoiserDsp.getLatencySamples());
     resetSuite();
 }
 
 void VXDenoiserAudioProcessor::resetSuite() {
     denoiserDsp.reset();
-    dryScratch.clear();
-    alignedDryScratch.clear();
-    for (auto& line : dryDelayLines)
-        std::fill(line.begin(), line.end(), 0.0f);
-    std::fill(dryDelayWritePos.begin(), dryDelayWritePos.end(), 0);
+    latencyListen.reset();
     smoothedClean  = 0.0f;
     smoothedGuard  = 0.5f;
     controlsPrimed = false;
-}
-
-void VXDenoiserAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {
-    const int ch  = std::max(1, channels);
-    const int smp = std::max(8192, samples);
-    dryScratch      .setSize(ch, smp, false, false, true);
-    alignedDryScratch.setSize(ch, smp, false, false, true);
-    const int latency     = std::max(0, denoiserDsp.getLatencySamples());
-    const int delayCapacity = std::max(1, latency + smp + 1);
-    dryDelayLines   .assign(static_cast<size_t>(ch),
-                            std::vector<float>(static_cast<size_t>(delayCapacity), 0.0f));
-    dryDelayWritePos.assign(static_cast<size_t>(ch), 0);
-}
-
-void VXDenoiserAudioProcessor::fillAlignedDryScratch(const juce::AudioBuffer<float>& dry,
-                                                      const int numSamples) {
-    const int latency = std::max(0, denoiserDsp.getLatencySamples());
-    for (int ch = 0; ch < dry.getNumChannels(); ++ch) {
-        const auto* src = dry.getReadPointer(ch);
-        auto*       dst = alignedDryScratch.getWritePointer(ch);
-        auto&       line = dryDelayLines[static_cast<size_t>(ch)];
-        const int   sz   = static_cast<int>(line.size());
-        int         wp   = dryDelayWritePos[static_cast<size_t>(ch)];
-        for (int i = 0; i < numSamples; ++i) {
-            line[static_cast<size_t>(wp)] = src[i];
-            const int rp = (wp + sz - latency) % sz;
-            dst[i] = line[static_cast<size_t>(rp)];
-            wp = (wp + 1) % sz;
-        }
-        dryDelayWritePos[static_cast<size_t>(ch)] = wp;
-    }
 }
 
 void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
@@ -160,18 +91,14 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         smoothedGuard  = guardTarget;
         controlsPrimed = true;
     } else {
-        const float sr  = static_cast<float>(currentSampleRateHz);
-        const float blC = 1.f - std::exp(-static_cast<float>(numSamples) / (0.060f * sr));
-        const float blG = 1.f - std::exp(-static_cast<float>(numSamples) / (0.080f * sr));
-        smoothedClean += blC * (cleanTarget - smoothedClean);
-        smoothedGuard += blG * (guardTarget - smoothedGuard);
+        smoothedClean = vxsuite::smoothBlockValue(smoothedClean, cleanTarget, currentSampleRateHz, numSamples, 0.060f);
+        smoothedGuard = vxsuite::smoothBlockValue(smoothedGuard, guardTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
     // Capture dry before processing — needed for latency-aligned listen output
     const int numCh = buffer.getNumChannels();
-    if (dryScratch.getNumChannels() >= numCh && dryScratch.getNumSamples() >= numSamples)
-        for (int ch = 0; ch < numCh; ++ch)
-            dryScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    if (latencyListen.canStore(numCh, numSamples))
+        latencyListen.captureDry(buffer, numSamples);
 
     const bool isVoice  = vxsuite::readMode(parameters, productIdentity)
                        == vxsuite::Mode::vocal;
@@ -179,20 +106,19 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     // Map user controls + ModePolicy onto ProcessOptions
     vxsuite::ProcessOptions opts;
-    const float effectiveClean = isVoice ? clamp01(0.58f * smoothedClean)
-                                         : clamp01(0.72f * smoothedClean);
+    const float effectiveClean = isVoice ? vxsuite::clamp01(0.58f * smoothedClean)
+                                         : vxsuite::clamp01(0.72f * smoothedClean);
     opts.isVoiceMode        = isVoice;
-    opts.sourceProtect      = clamp01(0.35f + 0.65f * smoothedGuard * policy.sourceProtect);
+    opts.sourceProtect      = vxsuite::clamp01(0.35f + 0.65f * smoothedGuard * policy.sourceProtect);
     opts.lateTailAggression = policy.lateTailAggression;
-    opts.guardStrictness    = clamp01(0.40f + 0.60f * smoothedGuard * policy.guardStrictness);
+    opts.guardStrictness    = vxsuite::clamp01(0.40f + 0.60f * smoothedGuard * policy.guardStrictness);
     opts.speechFocus        = isVoice ? juce::jmax(0.60f, policy.speechFocus) : policy.speechFocus;
 
     denoiserDsp.processInPlace(buffer, effectiveClean, opts);
 
     // Build latency-aligned dry scratch for listen output
-    if (alignedDryScratch.getNumChannels() >= numCh
-        && alignedDryScratch.getNumSamples() >= numSamples)
-        fillAlignedDryScratch(dryScratch, numSamples);
+    if (latencyListen.canStore(numCh, numSamples))
+        latencyListen.buildAlignedDry(numSamples, denoiserDsp.getLatencySamples());
 }
 
 void VXDenoiserAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
@@ -200,16 +126,7 @@ void VXDenoiserAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outp
     // Output aligned dry minus wet — auditions what was removed.
     // Uses alignedDryScratch (latency-compensated) rather than the base-class
     // undelayed inputBuffer, which would be misaligned by ~32 ms.
-    const int channels = std::min(outputBuffer.getNumChannels(),
-                                  alignedDryScratch.getNumChannels());
-    const int samples  = std::min(outputBuffer.getNumSamples(),
-                                  alignedDryScratch.getNumSamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        auto*       out = outputBuffer.getWritePointer(ch);
-        const auto* dry = alignedDryScratch.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = dry[i] - out[i];
-    }
+    latencyListen.renderRemovedDelta(outputBuffer);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {

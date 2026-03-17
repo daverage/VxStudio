@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxProximityDsp.h"
@@ -22,8 +23,6 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
-    static juce::AudioProcessorValueTreeState::ParameterLayout
-           makeLayout(const vxsuite::ProductIdentity& identity);
 
     vxsuite::proximity::ProximityDsp proximityDsp;
 

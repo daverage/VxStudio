@@ -1,9 +1,11 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../polish/VxPolishAnalysisEvidence.h"
 #include "../polish/VxPolishTonalAnalysis.h"
-#include "../polish/dsp/VxPolishDsp.h"
+#include "dsp/VxFinishDsp.h"
 
 class VXFinishAudioProcessor final : public vxsuite::ProcessorBase {
 public:
@@ -25,7 +27,7 @@ protected:
 private:
     static vxsuite::ProductIdentity makeIdentity();
 
-    vxsuite::polish::Dsp polishChain;
+    vxsuite::finish::Dsp polishChain;
     vxsuite::polish::TonalAnalysisState tonalAnalysis;
     double currentSampleRateHz = 48000.0;
     float smoothedFinish = 0.0f;

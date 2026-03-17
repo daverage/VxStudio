@@ -112,12 +112,7 @@ private:
     std::array<float, 2> humScores {};
 
     // ── Martin minimum statistics noise estimation ────────────────────────────
-    struct MinStatsBin {
-        float smoothPow = kEps, subWinMin = kEps, globalMin = kEps;
-        int   frameCount = 0, subWinIdx = 0;
-        std::vector<float> subWindows;
-    };
-    std::vector<MinStatsBin> msState;
+    std::vector<vxsuite::spectral::MinStatsBin> msState;
     std::vector<float>       noisePow;   // = Bmin * globalMin per bin
     int msD = 8, msL = 6;               // sub-window count / length (sr-scaled)
     bool firstFrame = true;

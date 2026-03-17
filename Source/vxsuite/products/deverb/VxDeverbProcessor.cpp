@@ -21,10 +21,6 @@ float safeValue(const float value) {
     return value;
 }
 
-float clamp01(const float value) {
-    return juce::jlimit(0.0f, 1.0f, value);
-}
-
 float onePoleAlpha(const double sampleRate, const float cutoffHz) {
     if (sampleRate <= 0.0 || cutoffHz <= 0.0f)
         return 0.0f;
@@ -34,7 +30,7 @@ float onePoleAlpha(const double sampleRate, const float cutoffHz) {
 } // namespace
 
 VXDeverbAudioProcessor::VXDeverbAudioProcessor()
-    : ProcessorBase(makeIdentity(), makeLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
 
 vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
@@ -55,36 +51,9 @@ vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     identity.theme.backgroundRgb = { 0.05f, 0.05f, 0.07f };
     identity.theme.panelRgb = { 0.09f, 0.09f, 0.12f };
     identity.theme.textRgb = { 0.86f, 0.91f, 1.00f };
+    identity.primaryDefaultValue = 0.5f;
+    identity.secondaryDefaultValue = 0.0f;
     return identity;
-}
-
-juce::AudioProcessorValueTreeState::ParameterLayout VXDeverbAudioProcessor::makeLayout(
-    const vxsuite::ProductIdentity& identity) {
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { identity.primaryParamId.data(), 1 },
-        vxsuite::toJuceString(identity.primaryLabel),
-        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-        0.5f,
-        juce::AudioParameterFloatAttributes().withLabel(identity.primaryLabel.data())));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { identity.secondaryParamId.data(), 1 },
-        vxsuite::toJuceString(identity.secondaryLabel),
-        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-        0.0f, // body restore off by default - avoids adding reverberant LF on fresh load
-        juce::AudioParameterFloatAttributes().withLabel(identity.secondaryLabel.data())));
-    layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID { kModeParam.data(), 1 },
-        "Mode",
-        vxsuite::makeModeChoiceLabels(),
-        static_cast<int>(identity.defaultMode),
-        vxsuite::makeChoiceAttributes("Mode")));
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID { kListenParam.data(), 1 },
-        "Listen",
-        false,
-        vxsuite::makeListenAttributes()));
-    return layout;
 }
 
 const juce::String VXDeverbAudioProcessor::getName() const {
@@ -104,18 +73,14 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
     deverbProcessor.prepare(currentSampleRateHz, preparedBlockSize);
     setLatencySamples(deverbProcessor.getLatencySamples());
     ensureScratchCapacity(getTotalNumOutputChannels(), preparedBlockSize);
-    ensureDelayCapacity(getTotalNumOutputChannels(), preparedBlockSize);
+    latencyListen.prepare(getTotalNumOutputChannels(), preparedBlockSize, deverbProcessor.getLatencySamples());
     resetSuite();
 }
 
 void VXDeverbAudioProcessor::resetSuite() {
     deverbProcessor.reset();
-    dryScratch.clear();
-    alignedDryScratch.clear();
+    latencyListen.reset();
     wetScratch.clear();
-    for (auto& line : dryDelayLines)
-        std::fill(line.begin(), line.end(), 0.0f);
-    std::fill(dryDelayWritePos.begin(), dryDelayWritePos.end(), 0);
     if (!dryLowpassState.empty())
         std::fill(dryLowpassState.begin(), dryLowpassState.end(), 0.0f);
     if (!wetLowpassState.empty())
@@ -176,15 +141,12 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0)
         return;
-    if (dryScratch.getNumChannels() < outputChannels || dryScratch.getNumSamples() < numSamples)
-        return;
-    if (alignedDryScratch.getNumChannels() < outputChannels || alignedDryScratch.getNumSamples() < numSamples)
+    if (!latencyListen.canStore(outputChannels, numSamples))
         return;
     if (wetScratch.getNumChannels() < outputChannels || wetScratch.getNumSamples() < numSamples)
         return;
 
-    for (int ch = 0; ch < outputChannels; ++ch)
-        dryScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    latencyListen.captureDry(buffer, numSamples);
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
@@ -194,15 +156,12 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         smoothedBody = bodyTarget;
         controlsPrimed = true;
     } else {
-        const float sr = static_cast<float>(currentSampleRateHz);
-        const float blendReduce = 1.0f - std::exp(-static_cast<float>(numSamples) / (0.060f * sr));
-        const float blendBody = 1.0f - std::exp(-static_cast<float>(numSamples) / (0.090f * sr));
-        smoothedReduce += blendReduce * (reduceTarget - smoothedReduce);
-        smoothedBody += blendBody * (bodyTarget - smoothedBody);
+        smoothedReduce = vxsuite::smoothBlockValue(smoothedReduce, reduceTarget, currentSampleRateHz, numSamples, 0.060f);
+        smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget, currentSampleRateHz, numSamples, 0.090f);
     }
 
     for (int ch = 0; ch < outputChannels; ++ch)
-        wetScratch.copyFrom(ch, 0, dryScratch, ch, 0, numSamples);
+        wetScratch.copyFrom(ch, 0, latencyListen.dryBuffer(), ch, 0, numSamples);
 
     vxsuite::ProcessOptions options {};
     options.isVoiceMode = false;
@@ -221,73 +180,35 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     // Pass reduce directly as the Wiener amount — at reduce=0, amount=0 so all
     // Wiener gains collapse to 1.0 (true bypass with no dry blend needed).
     // overSubtract still scales with reduce so depth ramps up with the knob.
-    const float reduce = clamp01(smoothedReduce);
+    const float reduce = vxsuite::clamp01(smoothedReduce);
     deverbProcessor.setOverSubtract(1.0f + 1.5f * reduce);
 
     {
         juce::AudioBuffer<float> wetView (wetScratch.getArrayOfWritePointers(), outputChannels, numSamples);
         deverbProcessor.processInPlace(wetView, reduce, options);
     }
-    fillAlignedDryScratch(dryScratch, numSamples);
+    latencyListen.buildAlignedDry(numSamples, deverbProcessor.getLatencySamples());
 
     for (int ch = 0; ch < outputChannels; ++ch)
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
     if (smoothedBody > 1.0e-4f)
-        applyBodyRestore(alignedDryScratch, buffer, smoothedBody, isFirstBlock);
+        applyBodyRestore(latencyListen.alignedDryBuffer(), buffer, smoothedBody, isFirstBlock);
 }
 
 void VXDeverbAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                                 const juce::AudioBuffer<float>& inputBuffer) {
     juce::ignoreUnused(inputBuffer);
 
-    const int channels = std::min(outputBuffer.getNumChannels(), alignedDryScratch.getNumChannels());
-    const int samples = std::min(outputBuffer.getNumSamples(), alignedDryScratch.getNumSamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        auto* out = outputBuffer.getWritePointer(ch);
-        const auto* dry = alignedDryScratch.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = dry[i] - out[i];
-    }
+    latencyListen.renderRemovedDelta(outputBuffer);
 }
 
 void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {
     const int safeChannels = std::max(1, channels);
     const int safeSamples = std::max(1, samples);
-    dryScratch.setSize(safeChannels, safeSamples, false, false, true);
-    alignedDryScratch.setSize(safeChannels, safeSamples, false, false, true);
     wetScratch.setSize(safeChannels, safeSamples, false, false, true);
     dryLowpassState.assign(static_cast<size_t>(safeChannels), 0.0f);
     wetLowpassState.assign(static_cast<size_t>(safeChannels), 0.0f);
-}
-
-void VXDeverbAudioProcessor::ensureDelayCapacity(const int channels, const int samples) {
-    const int safeChannels = std::max(1, channels);
-    const int delaySamples = std::max(0, deverbProcessor.getLatencySamples());
-    const int delayCapacity = std::max(1, delaySamples + std::max(1, samples) + 1);
-    dryDelayLines.assign(static_cast<size_t>(safeChannels),
-                         std::vector<float>(static_cast<size_t>(delayCapacity), 0.0f));
-    dryDelayWritePos.assign(static_cast<size_t>(safeChannels), 0);
-}
-
-void VXDeverbAudioProcessor::fillAlignedDryScratch(const juce::AudioBuffer<float>& dryBuffer,
-                                                   const int numSamples) {
-    const int channels = dryBuffer.getNumChannels();
-    const int latency = std::max(0, deverbProcessor.getLatencySamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        const auto* dry = dryBuffer.getReadPointer(ch);
-        auto* delayed = alignedDryScratch.getWritePointer(ch);
-        auto& line = dryDelayLines[static_cast<size_t>(ch)];
-        const int size = static_cast<int>(line.size());
-        int writePos = dryDelayWritePos[static_cast<size_t>(ch)];
-        for (int i = 0; i < numSamples; ++i) {
-            line[static_cast<size_t>(writePos)] = dry[i];
-            const int readPos = (writePos + size - latency) % size;
-            delayed[i] = line[static_cast<size_t>(readPos)];
-            writePos = (writePos + 1) % size;
-        }
-        dryDelayWritePos[static_cast<size_t>(ch)] = writePos;
-    }
 }
 
 void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dryBuffer,
@@ -300,7 +221,7 @@ void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dr
         return;
 
     const float alpha = onePoleAlpha(currentSampleRateHz, 180.0f);
-    const float restore = juce::jlimit(0.0f, 0.70f, 0.70f * std::pow(clamp01(bodyAmount), 0.9f));
+    const float restore = juce::jlimit(0.0f, 0.70f, 0.70f * std::pow(vxsuite::clamp01(bodyAmount), 0.9f));
     const float rampDuration = 2.0f * static_cast<float>(currentSampleRateHz) / 1000.0f;
 
     for (int ch = 0; ch < channels; ++ch) {

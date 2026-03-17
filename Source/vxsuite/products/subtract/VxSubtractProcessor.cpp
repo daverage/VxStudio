@@ -14,10 +14,6 @@ constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
 constexpr std::string_view kLearnParam = "learn";
 
-float clamp01(const float value) {
-    return juce::jlimit(0.0f, 1.0f, value);
-}
-
 } // namespace
 
 VXSubtractAudioProcessor::VXSubtractAudioProcessor()
@@ -102,17 +98,13 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
         learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
     }
     setLatencySamples(subtractDsp.getLatencySamples());
-    ensureScratchCapacity(getTotalNumOutputChannels(), samplesPerBlock);
+    latencyListen.prepare(getTotalNumOutputChannels(), samplesPerBlock, subtractDsp.getLatencySamples());
     resetSuite();
 }
 
 void VXSubtractAudioProcessor::resetSuite() {
     subtractDsp.resetStreamingState();
-    dryScratch.clear();
-    alignedDryScratch.clear();
-    for (auto& line : dryDelayLines)
-        std::fill(line.begin(), line.end(), 0.0f);
-    std::fill(dryDelayWritePos.begin(), dryDelayWritePos.end(), 0);
+    latencyListen.reset();
     smoothedSubtract = 0.0f;
     smoothedProtect = 0.5f;
     controlsPrimed = false;
@@ -120,37 +112,6 @@ void VXSubtractAudioProcessor::resetSuite() {
     learnActive.store(false, std::memory_order_relaxed);
     // learnReady / learnProgress / learnConfidence / learnObservedSeconds are
     // intentionally preserved — the learned noise profile survives playback stops.
-}
-
-void VXSubtractAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {
-    const int safeChannels = std::max(1, channels);
-    const int safeSamples = std::max(1, samples);
-    dryScratch.setSize(safeChannels, safeSamples, false, false, true);
-    alignedDryScratch.setSize(safeChannels, safeSamples, false, false, true);
-    const int latency = std::max(0, subtractDsp.getLatencySamples());
-    const int delayCapacity = std::max(1, latency + safeSamples + 1);
-    dryDelayLines.assign(static_cast<size_t>(safeChannels),
-                         std::vector<float>(static_cast<size_t>(delayCapacity), 0.0f));
-    dryDelayWritePos.assign(static_cast<size_t>(safeChannels), 0);
-}
-
-void VXSubtractAudioProcessor::fillAlignedDryScratch(const juce::AudioBuffer<float>& dryBuffer,
-                                                     const int numSamples) {
-    const int latency = std::max(0, subtractDsp.getLatencySamples());
-    for (int ch = 0; ch < dryBuffer.getNumChannels(); ++ch) {
-        const auto* dry = dryBuffer.getReadPointer(ch);
-        auto* delayed = alignedDryScratch.getWritePointer(ch);
-        auto& line = dryDelayLines[static_cast<size_t>(ch)];
-        const int size = static_cast<int>(line.size());
-        int writePos = dryDelayWritePos[static_cast<size_t>(ch)];
-        for (int i = 0; i < numSamples; ++i) {
-            line[static_cast<size_t>(writePos)] = dry[i];
-            const int readPos = (writePos + size - latency) % size;
-            delayed[i] = line[static_cast<size_t>(readPos)];
-            writePos = (writePos + 1) % size;
-        }
-        dryDelayWritePos[static_cast<size_t>(ch)] = writePos;
-    }
 }
 
 void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -169,16 +130,12 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         smoothedProtect = protectTarget;
         controlsPrimed = true;
     } else {
-        const float sr = static_cast<float>(currentSampleRateHz);
-        const float subtractAlpha = 1.0f - std::exp(-static_cast<float>(numSamples) / (0.045f * sr));
-        const float protectAlpha = 1.0f - std::exp(-static_cast<float>(numSamples) / (0.080f * sr));
-        smoothedSubtract += subtractAlpha * (subtractTarget - smoothedSubtract);
-        smoothedProtect += protectAlpha * (protectTarget - smoothedProtect);
+        smoothedSubtract = vxsuite::smoothBlockValue(smoothedSubtract, subtractTarget, currentSampleRateHz, numSamples, 0.045f);
+        smoothedProtect = vxsuite::smoothBlockValue(smoothedProtect, protectTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
-    if (dryScratch.getNumChannels() >= numChannels && dryScratch.getNumSamples() >= numSamples)
-        for (int ch = 0; ch < numChannels; ++ch)
-            dryScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    if (latencyListen.canStore(numChannels, numSamples))
+        latencyListen.captureDry(buffer, numSamples);
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const bool learnRequested = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
@@ -193,16 +150,16 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
 
     const bool learnedReady = subtractDsp.hasLearnedProfile();
     const bool learningActiveNow = subtractDsp.isLearning();
-    const float subtractStrength = clamp01(smoothedSubtract);
-    const float protectStrength = clamp01(smoothedProtect);
+    const float subtractStrength = vxsuite::clamp01(smoothedSubtract);
+    const float protectStrength = vxsuite::clamp01(smoothedProtect);
 
     vxsuite::ProcessOptions options {};
     options.isVoiceMode = isVoice;
-    options.sourceProtect = isVoice ? clamp01(0.55f + 0.45f * protectStrength)
-                                    : clamp01(0.12f + 0.38f * protectStrength);
-    options.guardStrictness = isVoice ? clamp01(0.75f * protectStrength)
-                                      : clamp01(0.30f * protectStrength);
-    options.speechFocus = isVoice ? clamp01(0.72f + 0.28f * protectStrength) : 0.12f;
+    options.sourceProtect = isVoice ? vxsuite::clamp01(0.55f + 0.45f * protectStrength)
+                                    : vxsuite::clamp01(0.12f + 0.38f * protectStrength);
+    options.guardStrictness = isVoice ? vxsuite::clamp01(0.75f * protectStrength)
+                                      : vxsuite::clamp01(0.30f * protectStrength);
+    options.speechFocus = isVoice ? vxsuite::clamp01(0.72f + 0.28f * protectStrength) : 0.12f;
     options.learningActive = learningActiveNow;
     options.subtract = isVoice ? (4.15f * subtractStrength)
                                : (5.00f * subtractStrength);
@@ -218,7 +175,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
 
     const float blindAmount = learningActiveNow ? 0.0f
                                                 : (learnedReady ? 0.0f
-                                                                : clamp01((isVoice ? 0.38f : 0.28f)
+                                                                : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
                                                                           * subtractStrength));
     subtractDsp.processInPlace(buffer, blindAmount, options);
 
@@ -229,23 +186,15 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     learnReady.store(subtractDsp.hasLearnedProfile(), std::memory_order_relaxed);
     learnToggleLatched = learnRequested;
 
-    if (alignedDryScratch.getNumChannels() >= numChannels
-        && alignedDryScratch.getNumSamples() >= numSamples)
-        fillAlignedDryScratch(dryScratch, numSamples);
+    if (latencyListen.canStore(numChannels, numSamples))
+        latencyListen.buildAlignedDry(numSamples, subtractDsp.getLatencySamples());
 }
 
 void VXSubtractAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                                   const juce::AudioBuffer<float>& inputBuffer) {
     juce::ignoreUnused(inputBuffer);
 
-    const int channels = std::min(outputBuffer.getNumChannels(), alignedDryScratch.getNumChannels());
-    const int samples = std::min(outputBuffer.getNumSamples(), alignedDryScratch.getNumSamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        auto* out = outputBuffer.getWritePointer(ch);
-        const auto* dry = alignedDryScratch.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = dry[i] - out[i];
-    }
+    latencyListen.renderRemovedDelta(outputBuffer);
 }
 
 void VXSubtractAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
@@ -300,6 +249,8 @@ void VXSubtractAudioProcessor::setStateInformation(const void* data, const int s
     }
 }
 
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXSubtractAudioProcessor();
 }
+#endif

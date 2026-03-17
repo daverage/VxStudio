@@ -28,34 +28,7 @@ float SubtractDsp::activeNoise(size_t k) const {
 }
 
 void SubtractDsp::updateMinStats(size_t k, float p, float presenceHint) {
-    MinStatsBin& ms = msState[k];
-
-    const float alphaIMCRA = presenceHint > 0.55f ? 0.96f : MS_alpha;
-    ms.smoothPow = alphaIMCRA * ms.smoothPow + (1.0f - alphaIMCRA) * p;
-
-    // Seed: on the first frame with a real signal, pre-fill the ring so
-    // noisePowBlind is a reasonable estimate immediately rather than after
-    // MS_D * MS_L frames of near-zero values causing zero suppression.
-    if (!ms.subWindows.empty()
-        && ms.subWindows[0] <= 1.0e-7f
-        && ms.smoothPow > 1.0e-7f) {
-        std::fill(ms.subWindows.begin(), ms.subWindows.end(), ms.smoothPow);
-        ms.globalMin = ms.smoothPow;
-        ms.subWinMin = ms.smoothPow;
-        noisePowBlind[k] = Bmin * ms.smoothPow;
-    }
-
-    ms.subWinMin = std::min(ms.subWinMin, ms.smoothPow);
-
-    if (++ms.frameCount >= minStatsL) {
-        ms.subWindows[ms.subWinIdx] = ms.subWinMin;
-        ms.subWinIdx  = (ms.subWinIdx + 1) % minStatsD;
-        ms.subWinMin  = ms.smoothPow;
-        ms.frameCount = 0;
-        ms.globalMin  = *std::min_element(ms.subWindows.begin(), ms.subWindows.end());
-    }
-
-    noisePowBlind[k] = Bmin * std::max(1.0e-12f, ms.globalMin);
+    noisePowBlind[k] = vxsuite::spectral::updateMinStats(msState[k], p, presenceHint, minStatsL, minStatsD, MS_alpha, Bmin, 1.0e-12f);
 }
 
 void SubtractDsp::setQueueSizes(int maxBlockSize) {
@@ -106,10 +79,7 @@ void SubtractDsp::prepare(double sampleRate, int maxBlockSize) {
     window     .assign(fftSize,      0.0f);
     olaAcc     .assign(fftSize,      0.0f);
 
-    for (size_t i = 0; i < fftSize; ++i)
-        window[i] = std::sqrt(0.5f - 0.5f * std::cos(2.0f * juce::MathConstants<float>::pi
-                                                     * static_cast<float>(i)
-                                                     / static_cast<float>(fftSize)));
+    vxsuite::spectral::prepareSqrtHannWindow(window, static_cast<int>(fftSize));
 
     currPow.assign(bins, 1.0e-8f);
     prevMag.assign(bins, 0.0f);
@@ -123,18 +93,11 @@ void SubtractDsp::prepare(double sampleRate, int maxBlockSize) {
     binToBark.assign(bins, 0);
     erbFloor.clear();
     erbFloor.reserve(bins);
-    for (auto& band : barkBandBins)
-        band.clear();
+    vxsuite::spectral::prepareBarkScaleLayout<size_t>(sr, static_cast<int>(fftSize), binToBark, phaseAdvance, barkBandBins);
 
     for (size_t k = 0; k < bins; ++k) {
         const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(fftSize);
-        const int bark = juce::jlimit(0, 23, static_cast<int>(std::floor(vxsuite::spectral::hzToBark(hz))));
-        binToBark[k] = bark;
-        barkBandBins[static_cast<size_t>(bark)].push_back(k);
         lowBandStability[k] = clamp01((700.0f - hz) / 450.0f);
-        phaseAdvance[k] = 2.0f * juce::MathConstants<float>::pi
-                        * static_cast<float>(hop) * static_cast<float>(k)
-                        / static_cast<float>(fftSize);
 
         float erbW = 1.0f;
         if      (hz < 200.0f)  erbW = 0.5f;
@@ -150,12 +113,7 @@ void SubtractDsp::prepare(double sampleRate, int maxBlockSize) {
     learnAccumSq.assign(bins, 0.0f);
     learnHistory.assign(bins, {});
 
-    msState.resize(bins);
-    for (auto& ms : msState) {
-        ms.smoothPow = ms.subWinMin = ms.globalMin = 1.0e-8f;
-        ms.frameCount = ms.subWinIdx = 0;
-        ms.subWindows.assign(static_cast<size_t>(minStatsD), 1.0e-8f);
-    }
+    vxsuite::spectral::prepareMinStats(msState, bins, minStatsD, 1.0e-8f);
     noisePowBlind.assign(bins, 1.0e-8f);
 
     xiDD        .assign(bins, 1.0f);
@@ -201,11 +159,7 @@ void SubtractDsp::reset() {
         history.clear();
     std::fill(noisePowBlind .begin(), noisePowBlind .end(), 1.0e-8f);
 
-    for (auto& ms : msState) {
-        ms.smoothPow = ms.subWinMin = ms.globalMin = 1.0e-8f;
-        ms.frameCount = ms.subWinIdx = 0;
-        ms.subWindows.assign(static_cast<size_t>(minStatsD), 1.0e-8f);
-    }
+    vxsuite::spectral::resetMinStats(msState, 1.0e-8f);
 
     std::fill(xiDD        .begin(), xiDD        .end(), 1.0f);
     std::fill(presenceProb.begin(), presenceProb.end(), 0.5f);
@@ -305,11 +259,7 @@ void SubtractDsp::resetStreamingState() {
     barkTransientHold.fill(0);
 
     std::fill(noisePowBlind.begin(), noisePowBlind.end(), 1.0e-8f);
-    for (auto& ms : msState) {
-        ms.smoothPow = ms.subWinMin = ms.globalMin = 1.0e-8f;
-        ms.frameCount = ms.subWinIdx = 0;
-        ms.subWindows.assign(static_cast<size_t>(minStatsD), 1.0e-8f);
-    }
+    vxsuite::spectral::resetMinStats(msState, 1.0e-8f);
 
     std::fill(xiDD.begin(), xiDD.end(), 1.0f);
     std::fill(presenceProb.begin(), presenceProb.end(), 0.5f);

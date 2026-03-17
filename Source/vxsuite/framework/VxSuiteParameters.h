@@ -96,20 +96,20 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
         juce::ParameterID { identity.primaryParamId.data(), 1 },
         toJuceString(identity.primaryLabel),
         juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-        0.5f,
+        identity.primaryDefaultValue,
         juce::AudioParameterFloatAttributes().withLabel(identity.primaryLabel.data())));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { identity.secondaryParamId.data(), 1 },
         toJuceString(identity.secondaryLabel),
         juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-        0.5f,
+        identity.secondaryDefaultValue,
         juce::AudioParameterFloatAttributes().withLabel(identity.secondaryLabel.data())));
     if (identity.supportsTertiaryControl()) {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { identity.tertiaryParamId.data(), 1 },
             toJuceString(identity.tertiaryLabel),
             juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-            0.5f,
+            identity.tertiaryDefaultValue,
             juce::AudioParameterFloatAttributes().withLabel(identity.tertiaryLabel.data())));
     }
     if (identity.supportsQuaternaryControl()) {
@@ -117,7 +117,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             juce::ParameterID { identity.quaternaryParamId.data(), 1 },
             toJuceString(identity.quaternaryLabel),
             juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-            0.5f,
+            identity.quaternaryDefaultValue,
             juce::AudioParameterFloatAttributes().withLabel(identity.quaternaryLabel.data())));
     }
     return layout;
