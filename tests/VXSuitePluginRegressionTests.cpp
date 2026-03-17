@@ -1,4 +1,5 @@
 #include "../Source/vxsuite/products/cleanup/VxCleanupProcessor.h"
+#include "../Source/vxsuite/products/deverb/VxDeverbProcessor.h"
 #include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
 #include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
@@ -153,6 +154,25 @@ bool testSubtractLearnLifecycleMakesSense() {
     return primeSubtractLearn(processor, sr);
 }
 
+bool testSubtractLearnStartsOnFirstPress() {
+    constexpr double sr = 48000.0;
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, 256);
+
+    auto noise = makeNoise(sr, 0.2f, 0.08f);
+    setParamNormalized(processor, "learn", 1.0f);
+    juce::AudioBuffer<float> firstBlock(2, 256);
+    for (int ch = 0; ch < 2; ++ch)
+        firstBlock.copyFrom(ch, 0, noise, ch, 0, 256);
+    processSingleBlock(processor, firstBlock);
+
+    if (!processor.isLearnActive()) {
+        std::cerr << "[VXSuitePluginRegression] Subtract learn did not start on the first press after prepare/reset\n";
+        return false;
+    }
+    return true;
+}
+
 bool testSubtractListenOutputsMeaningfulRemovedDelta() {
     constexpr double sr = 48000.0;
     VXSubtractAudioProcessor processor;
@@ -208,6 +228,40 @@ bool testCleanupFinishSubtractChainStaysStable() {
     const float corr = std::abs(speechBandCorrelation(speech, finalOut, sr));
     if (corr < 0.45f) {
         std::cerr << "[VXSuitePluginRegression] Combined chain damaged speech coherence too much: |corr|=" << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDeverbExtremeBlendStaysStable() {
+    constexpr double sr = 48000.0;
+    constexpr int tailSamples = static_cast<int>(sr * 0.35);
+
+    auto speech = makeSpeechLike(sr, 0.35f);
+    juce::AudioBuffer<float> input(2, speech.getNumSamples() + tailSamples);
+    input.clear();
+    for (int ch = 0; ch < std::min(2, speech.getNumChannels()); ++ch)
+        input.copyFrom(ch, 0, speech, ch, 0, speech.getNumSamples());
+
+    VXDeverbAudioProcessor deverb;
+    deverb.prepareToPlay(sr, 256);
+    setParamNormalized(deverb, "reduce", 1.0f);
+    setParamNormalized(deverb, "body", 1.0f);
+    auto out = render(deverb, input, 256);
+
+    const float outPeak = peakAbs(out);
+    if (!allFinite(out) || outPeak > 1.05f) {
+        std::cerr << "[VXSuitePluginRegression] Deverb extreme settings produced unstable output: finite="
+                  << allFinite(out) << " peak=" << outPeak << "\n";
+        return false;
+    }
+
+    juce::AudioBuffer<float> tail(2, tailSamples);
+    for (int ch = 0; ch < 2; ++ch)
+        tail.copyFrom(ch, 0, out, ch, out.getNumSamples() - tailSamples, tailSamples);
+    if (rms(tail) > 0.02f) {
+        std::cerr << "[VXSuitePluginRegression] Deverb extreme Blend left too much sustained tail / buzzing: rms="
+                  << rms(tail) << "\n";
         return false;
     }
     return true;
@@ -287,6 +341,98 @@ bool testCombinedChainKeepsSilenceSilent() {
 
     if (rms(finalOut) > 1.0e-5f) {
         std::cerr << "[VXSuitePluginRegression] Combined chain raised silence too far above zero: rms=" << rms(finalOut) << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testCleanupStrongSettingIsAudibleButBounded() {
+    constexpr double sr = 48000.0;
+    auto noisy = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.05f));
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 0.85f);
+    setParamNormalized(cleanup, "body", 0.35f);
+    setParamNormalized(cleanup, "focus", 0.72f);
+    auto out = render(cleanup, noisy, 256);
+
+    const float diff = maxAbsDiffSkip(noisy, out, 1024);
+    if (diff < 0.01f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup strong setting is still too subtle\n";
+        return false;
+    }
+    if (!allFinite(out) || peakAbs(out) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup strong setting clipped or became unstable\n";
+        return false;
+    }
+    return true;
+}
+
+bool testFinishStrongSettingsAreAudibleButBounded() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXFinishAudioProcessor finishLow;
+    finishLow.prepareToPlay(sr, 256);
+    setParamNormalized(finishLow, "finish", 0.15f);
+    setParamNormalized(finishLow, "body", 0.15f);
+    setParamNormalized(finishLow, "gain", 0.15f);
+    const auto lowOut = render(finishLow, input, 256);
+
+    VXFinishAudioProcessor finishHigh;
+    finishHigh.prepareToPlay(sr, 256);
+    setParamNormalized(finishHigh, "finish", 0.80f);
+    setParamNormalized(finishHigh, "body", 0.80f);
+    setParamNormalized(finishHigh, "gain", 0.70f);
+    const auto highOut = render(finishHigh, input, 256);
+
+    const float diff = maxAbsDiffSkip(lowOut, highOut, 512);
+    if (diff < 0.01f) {
+        std::cerr << "[VXSuitePluginRegression] Finish controls still do not move enough between low and high settings\n";
+        return false;
+    }
+    if (!allFinite(highOut) || peakAbs(highOut) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Finish strong settings clipped or became unstable\n";
+        return false;
+    }
+    return true;
+}
+
+bool testFinishGainIsBipolarAroundCenter() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXFinishAudioProcessor finishCut;
+    finishCut.prepareToPlay(sr, 256);
+    setParamNormalized(finishCut, "finish", 0.40f);
+    setParamNormalized(finishCut, "body", 0.35f);
+    setParamNormalized(finishCut, "gain", 0.20f);
+    const auto cutOut = render(finishCut, input, 256);
+
+    VXFinishAudioProcessor finishMid;
+    finishMid.prepareToPlay(sr, 256);
+    setParamNormalized(finishMid, "finish", 0.40f);
+    setParamNormalized(finishMid, "body", 0.35f);
+    setParamNormalized(finishMid, "gain", 0.50f);
+    const auto midOut = render(finishMid, input, 256);
+
+    VXFinishAudioProcessor finishBoost;
+    finishBoost.prepareToPlay(sr, 256);
+    setParamNormalized(finishBoost, "finish", 0.40f);
+    setParamNormalized(finishBoost, "body", 0.35f);
+    setParamNormalized(finishBoost, "gain", 0.80f);
+    const auto boostOut = render(finishBoost, input, 256);
+
+    const float cutRms = rms(cutOut);
+    const float midRms = rms(midOut);
+    const float boostRms = rms(boostOut);
+    if (!(cutRms + 1.0e-4f < midRms && midRms + 1.0e-4f < boostRms)) {
+        std::cerr << "[VXSuitePluginRegression] Finish gain is not behaving like a centered bipolar control\n";
+        return false;
+    }
+    if (!allFinite(boostOut) || peakAbs(boostOut) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Finish gain boost clipped or became unstable\n";
         return false;
     }
     return true;
@@ -511,9 +657,14 @@ void operator delete[](void* ptr, std::size_t) noexcept {
 int main() {
     bool ok = true;
     ok &= testCleanupZeroIsIdentity();
+    ok &= testSubtractLearnStartsOnFirstPress();
     ok &= testSubtractLearnLifecycleMakesSense();
     ok &= testSubtractListenOutputsMeaningfulRemovedDelta();
+    ok &= testDeverbExtremeBlendStaysStable();
     ok &= testCleanupFinishSubtractChainStaysStable();
+    ok &= testCleanupStrongSettingIsAudibleButBounded();
+    ok &= testFinishStrongSettingsAreAudibleButBounded();
+    ok &= testFinishGainIsBipolarAroundCenter();
     ok &= testCleanupBlockSizeInvariance();
     ok &= testFullChainBlockSizeInvariance();
     ok &= testLifecycleAndStateRestore();

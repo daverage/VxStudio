@@ -19,7 +19,7 @@ struct ProductTheme {
 };
 
 struct ProductIdentity {
-    std::string_view suiteName;
+    std::string_view suiteName = "VX Suite";
     std::string_view productName;
     std::string_view shortTag;
     std::string_view primaryParamId;

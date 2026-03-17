@@ -72,6 +72,9 @@ EditorBase::EditorBase(ProcessorBase& owner)
     learnButton.setWantsKeyboardFocus(true);
     if (identity.supportsLearnButton())
         addAndMakeVisible(learnButton);
+    learnButton.setTooltip("Capture pure background noise only for about 1 to 2 seconds, then press again to stop and lock the profile.");
+    learnMeterBar.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
+    learnMeterLabel.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
 
     configureKnob(primarySlider, primaryLabel, identity.primaryLabel, identity.primaryHint);
     configureKnob(secondarySlider, secondaryLabel, identity.secondaryLabel, identity.secondaryHint);
@@ -510,20 +513,35 @@ void EditorBase::updateLearnUi() {
     const float progress = juce::jlimit(0.0f, 1.0f, processor.getLearnProgress());
     const float confidence = juce::jlimit(0.0f, 1.0f, processor.getLearnConfidence());
     const float observedSeconds = juce::jmax(0.0f, processor.getLearnObservedSeconds());
+    const int confidencePct = juce::roundToInt(confidence * 100.0f);
 
     learnMeterUi = active ? static_cast<double>(progress) : static_cast<double>(confidence);
     learnMeterBar.setVisible(active || ready);
     if (active) {
-        learnMeterLabel.setText("Learning " + juce::String(juce::roundToInt(progress * 100.0f)) + "%  "
-                                + juce::String(observedSeconds, 1) + "s",
+        juce::String captureHint = "press Learn again to stop";
+        if (observedSeconds < 0.8f)
+            captureHint = "keep capturing a little longer, then press Learn again to stop";
+        else if (observedSeconds >= 1.4f)
+            captureHint = "good length, press Learn again to stop";
+
+        learnMeterLabel.setText("Capturing noise " + juce::String(juce::roundToInt(progress * 100.0f)) + "%  "
+                                + juce::String(observedSeconds, 1) + "s  " + captureHint,
                                 juce::dontSendNotification);
-        learnButton.setButtonText("Learning");
+        learnButton.setButtonText("Stop Learn");
     } else if (ready) {
-        learnMeterLabel.setText("Profile ready  " + juce::String(juce::roundToInt(confidence * 100.0f)) + "%",
+        juce::String qualityText = "usable noise-print quality";
+        if (confidencePct < 40)
+            qualityText = "low confidence, try a cleaner noise-only capture";
+        else if (confidencePct >= 75)
+            qualityText = "strong clean capture";
+
+        learnMeterLabel.setText("Profile ready  " + juce::String(confidencePct)
+                                + "% confidence  " + qualityText,
                                 juce::dontSendNotification);
         learnButton.setButtonText("Learn");
     } else {
-        learnMeterLabel.setText("Learn a representative noise print", juce::dontSendNotification);
+        learnMeterLabel.setText("Capture pure room noise for about 1 to 2 seconds, then press Learn again to stop and lock it",
+                                juce::dontSendNotification);
         learnButton.setButtonText("Learn");
     }
 }

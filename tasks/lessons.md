@@ -10,3 +10,6 @@
 - When multiple active products own the same low-level primitive like `juce::dsp::FFT`, centralize that ownership in `Source/vxsuite/framework/` before adding more product-local analysis code on top.
 - When centralizing latency-aware listen in the framework, update both the reported host latency and the internal aligned-dry buffer capacity together; otherwise the host PDC can be correct while listen auditioning is still misaligned.
 - Listen semantics are product-role dependent: removal tools should audition what was removed, while additive/finishing tools should audition the added delta instead of inheriting the default removed-signal path.
+- After large framework or DSP refactors, do a product-behavior pass for edge cases like Learn toggles, full-wet extreme settings, and output headroom; compile-success plus generic regression coverage is not enough.
+- In causal STFT processors, do not add the reported latency twice: if the analysis FIFO/windowing already creates the intended delay, pre-offsetting the overlap-add write cursor by the same amount will silently double the real latency and break identity/PDC behavior.
+- If a control is labeled `Gain`, do not let it secretly bias compressor/recovery policy upstream. Keep it semantically honest as a neutral-centered final gain stage unless the product explicitly says otherwise.

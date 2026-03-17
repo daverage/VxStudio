@@ -4,7 +4,6 @@
 
 namespace {
 
-constexpr std::string_view kSuiteName    = "VX Suite";
 constexpr std::string_view kProductName  = "Denoiser";
 constexpr std::string_view kShortTag     = "DN";
 constexpr std::string_view kCleanParam   = "clean";
@@ -15,11 +14,10 @@ constexpr std::string_view kListenParam  = "listen";
 } // namespace
 
 VXDenoiserAudioProcessor::VXDenoiserAudioProcessor()
-    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity()) {}
 
 vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity id {};
-    id.suiteName        = kSuiteName;
     id.productName      = kProductName;
     id.shortTag         = kShortTag;
     id.primaryParamId   = kCleanParam;
@@ -42,10 +40,6 @@ vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
     return id;
 }
 
-const juce::String VXDenoiserAudioProcessor::getName() const {
-    return "VX Denoiser";
-}
-
 juce::String VXDenoiserAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen - removed noise only";
@@ -53,10 +47,6 @@ juce::String VXDenoiserAudioProcessor::getStatusText() const {
                       == vxsuite::Mode::vocal;
     return isVoice ? "Vocal - OM-LSA denoiser with harmonic guard"
                    : "General - broadband spectral noise reduction";
-}
-
-juce::AudioProcessorEditor* VXDenoiserAudioProcessor::createEditor() {
-    return new vxsuite::EditorBase(*this);
 }
 
 void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,

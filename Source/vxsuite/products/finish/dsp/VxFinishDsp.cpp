@@ -4,6 +4,19 @@
 
 namespace vxsuite::finish {
 
+namespace {
+
+float softLimitSample(const float x) {
+    const float ax = std::abs(x);
+    if (ax <= 0.98f)
+        return x;
+
+    const float shaped = 0.98f + 0.10f * std::tanh((ax - 0.98f) / 0.10f);
+    return std::copysign(std::min(shaped, 1.0f), x);
+}
+
+} // namespace
+
 void Dsp::prepare(double sampleRate, int, int numChannels) {
     sr = sampleRate > 0.0 ? sampleRate : 44100.0;
     channels = std::max(1, numChannels);
@@ -17,8 +30,6 @@ void Dsp::prepare(double sampleRate, int, int numChannels) {
     cPresenceLoA = vxsuite::polish::detail::onePoleCoeff(sr, 1800.0f);
     cPresenceHiA = vxsuite::polish::detail::onePoleCoeff(sr, 5200.0f);
     cAirLoA = vxsuite::polish::detail::onePoleCoeff(sr, 6400.0f);
-    cLimiterGainSmooth = std::exp(-1.0f / (0.0020f * fsr));
-
     hiShelfZ1.assign(static_cast<size_t>(channels), 0.0f);
     recoveryLowCh.assign(static_cast<size_t>(channels), 0.0f);
     recoveryLowMidCh.assign(static_cast<size_t>(channels), 0.0f);
@@ -107,12 +118,12 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
     const float targetBodyRatioClamped = voiceMode ? 0.24f : 0.18f;
     const float targetPresenceRatioClamped = voiceMode ? 0.18f : 0.14f;
     const float targetAirRatioClamped = voiceMode ? 0.10f : 0.08f;
-    const float bodyMaxDbBase = voiceMode ? 6.2f : 4.5f;
-    const float presenceMaxDbBase = voiceMode ? 5.4f : 3.8f;
-    const float airMaxDbBase = voiceMode ? 3.2f : 2.4f;
-    const float smartBodyPush = voiceMode ? (0.35f + 0.35f * (1.0f - speechPresence)) : (0.55f + 0.20f * (1.0f - speechPresence));
-    const float smartPresencePush = voiceMode ? (0.55f + 0.20f * speechPresence) : (0.42f + 0.12f * speechPresence);
-    const float smartAirPush = voiceMode ? (0.50f + 0.25f * speechPresence) : (0.22f + 0.10f * speechPresence);
+    const float bodyMaxDbBase = voiceMode ? 7.6f : 5.6f;
+    const float presenceMaxDbBase = voiceMode ? 6.4f : 4.8f;
+    const float airMaxDbBase = voiceMode ? 3.8f : 2.8f;
+    const float smartBodyPush = voiceMode ? (0.45f + 0.42f * (1.0f - speechPresence)) : (0.68f + 0.24f * (1.0f - speechPresence));
+    const float smartPresencePush = voiceMode ? (0.68f + 0.26f * speechPresence) : (0.54f + 0.16f * speechPresence);
+    const float smartAirPush = voiceMode ? (0.58f + 0.28f * speechPresence) : (0.30f + 0.14f * speechPresence);
     const float bodyMaxDb = bodyMaxDbBase * strength * (1.0f + smartGainAmt * smartBodyPush);
     const float presenceMaxDb = presenceMaxDbBase * strength * (1.0f + smartGainAmt * smartPresencePush);
     const float airMaxDb = airMaxDbBase * strength * (0.65f + 0.35f * speechPresence) * (1.0f + smartGainAmt * smartAirPush);
@@ -207,9 +218,9 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
     }
 
     const bool voiceMode = params.contentMode == 0;
-    const float limiterAttackA = std::exp(-1.0f / ((0.0008f - 0.00045f * limitAmt) * static_cast<float>(sr)));
-    const float limiterReleaseA = std::exp(-1.0f / ((0.090f - 0.040f * limitAmt) * static_cast<float>(sr)));
-    const float limiterCeil = juce::Decibels::decibelsToGain(-(voiceMode ? 0.5f : 0.8f) - 7.2f * limitAmt);
+    const float limiterAttackA = std::exp(-1.0f / ((0.00028f + 0.00045f * (1.0f - limitAmt)) * static_cast<float>(sr)));
+    const float limiterReleaseA = std::exp(-1.0f / ((0.030f + 0.050f * (1.0f - limitAmt)) * static_cast<float>(sr)));
+    const float limiterCeil = juce::Decibels::decibelsToGain(voiceMode ? -0.95f : -1.10f);
 
     float limiterAcc = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
@@ -222,12 +233,15 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
         float limitTargetGain = 1.0f;
         if (limitEnv > limiterCeil)
             limitTargetGain = limiterCeil / (limitEnv + 1.0e-6f);
-        limitGain = cLimiterGainSmooth * limitGain + (1.0f - cLimiterGainSmooth) * limitTargetGain;
+        if (samplePeak > limiterCeil)
+            limitTargetGain = std::min(limitTargetGain, limiterCeil / (samplePeak + 1.0e-6f));
+        const float gainA = limitTargetGain < limitGain ? limiterAttackA : limiterReleaseA;
+        limitGain = gainA * limitGain + (1.0f - gainA) * limitTargetGain;
         limiterAcc += std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(limitGain, 1.0e-6f), -120.0f));
 
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* d = buffer.getWritePointer(ch);
-            d[i] = juce::jlimit(-1.0f, 1.0f, d[i] * limitGain);
+            d[i] = softLimitSample(d[i] * limitGain);
         }
     }
     limiterActivity = juce::jlimit(0.0f, 1.0f, (limiterAcc / static_cast<float>(numSamples)) / 6.0f);

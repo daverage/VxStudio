@@ -11,9 +11,7 @@ public:
     VXDenoiserAudioProcessor();
     ~VXDenoiserAudioProcessor() override = default;
 
-    const juce::String getName() const override;
-    juce::String       getStatusText() const override;
-    juce::AudioProcessorEditor* createEditor() override;
+    juce::String getStatusText() const override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;

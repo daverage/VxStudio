@@ -1,9 +1,12 @@
 # VX Suite
 
-> **Focused, realtime-safe audio processors for voice and vocal production.**  
+> **Focused, realtime-safe audio processors for voice and vocal production.**
 > Seven plugins. One shared framework. One job each.
 
-VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
+VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
+
+The underlying framework — `Source/vxsuite/framework/` — is designed to be reusable. If you want to build your own JUCE-based VST3 plugin, you can use it as a foundation: it handles parameter registration, UI layout, editor creation, block smoothing, and output safety so you only have to write the DSP. See [`Source/vxsuite/framework/README.md`](Source/vxsuite/framework/README.md) for a step-by-step guide and a worked example.
+
 I wanted simple to use, smart plugins that would all work well together to enable content creators to produce high-quality audio with minimal effort. My initial use case was to take audio from a video that was recorded on my phone, at a distance, then clean it up to the sound quality of a studio recording.
 This repo contains one of the few implementations of de-reverb or deverb / reverberation removal on Github as well!
  

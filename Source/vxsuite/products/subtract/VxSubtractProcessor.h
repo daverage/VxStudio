@@ -14,14 +14,12 @@ public:
     VXSubtractAudioProcessor();
     ~VXSubtractAudioProcessor() override = default;
 
-    const juce::String getName() const override;
     juce::String getStatusText() const override;
     float getLearnProgress() const noexcept override { return learnProgress.load(std::memory_order_relaxed); }
     float getLearnConfidence() const noexcept override { return learnConfidence.load(std::memory_order_relaxed); }
     float getLearnObservedSeconds() const noexcept override { return learnObservedSeconds.load(std::memory_order_relaxed); }
     bool isLearnActive() const noexcept override { return learnActive.load(std::memory_order_relaxed); }
     bool isLearnReady() const noexcept override { return learnReady.load(std::memory_order_relaxed); }
-    juce::AudioProcessorEditor* createEditor() override;
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
@@ -33,8 +31,6 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
-    static juce::AudioProcessorValueTreeState::ParameterLayout
-           makeLayout(const vxsuite::ProductIdentity& identity);
 
     vxsuite::subtract::SubtractDsp subtractDsp;
     vxsuite::StageChain<1> stageChain { subtractDsp };

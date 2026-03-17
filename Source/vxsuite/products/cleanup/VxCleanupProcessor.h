@@ -2,6 +2,7 @@
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteFft.h"
+#include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteSpectralHelpers.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
@@ -16,14 +17,12 @@ public:
     VXCleanupAudioProcessor();
     ~VXCleanupAudioProcessor() override = default;
 
-    const juce::String getName() const override;
     juce::String getStatusText() const override;
     float getLowShelfActivity() const noexcept override;
     float getHighShelfActivity() const noexcept override;
     int getActivityLightCount() const noexcept override;
     float getActivityLight(int index) const noexcept override;
     std::string_view getActivityLightLabel(int index) const noexcept override;
-    juce::AudioProcessorEditor* createEditor() override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -55,6 +54,7 @@ private:
     float plosiveEnv = 0.0f;
     float tonalMudEnv = 0.0f;
     float harshnessEnv = 0.0f;
+    vxsuite::OutputTrimmer outputTrimmer;
     bool classifiersPrimed = false;
     bool controlsPrimed = false;
 };

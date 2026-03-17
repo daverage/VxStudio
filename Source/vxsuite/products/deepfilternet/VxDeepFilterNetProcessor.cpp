@@ -4,7 +4,6 @@
 
 namespace {
 
-constexpr std::string_view kSuiteName = "VX Suite";
 constexpr std::string_view kProductName = "DeepFilterNet";
 constexpr std::string_view kShortTag = "DF";
 constexpr std::string_view kCleanParam = "clean";
@@ -29,7 +28,7 @@ juce::String describeVariant(const vxsuite::deepfilternet::DeepFilterService::Mo
 } // namespace
 
 VXDeepFilterNetAudioProcessor::VXDeepFilterNetAudioProcessor()
-    : ProcessorBase(makeIdentity(), makeLayout(makeIdentity())) {
+    : ProcessorBase(makeIdentity()) {
     startTimerHz(4);
 }
 
@@ -39,7 +38,6 @@ VXDeepFilterNetAudioProcessor::~VXDeepFilterNetAudioProcessor() {
 
 vxsuite::ProductIdentity VXDeepFilterNetAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
-    identity.suiteName = kSuiteName;
     identity.productName = kProductName;
     identity.shortTag = kShortTag;
     identity.primaryParamId = kCleanParam;
@@ -61,15 +59,6 @@ vxsuite::ProductIdentity VXDeepFilterNetAudioProcessor::makeIdentity() {
     return identity;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout
-VXDeepFilterNetAudioProcessor::makeLayout(const vxsuite::ProductIdentity& identity) {
-    return vxsuite::createSimpleParameterLayout(identity);
-}
-
-const juce::String VXDeepFilterNetAudioProcessor::getName() const {
-    return "VX DeepFilterNet";
-}
-
 juce::String VXDeepFilterNetAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen - removed voice noise only";
@@ -85,10 +74,6 @@ juce::String VXDeepFilterNetAudioProcessor::getStatusText() const {
     if (engine.isRealtimeReady())
         return describeVariant(variant) + " - realtime " + describeBackend(engine) + " voice denoise";
     return describeVariant(variant) + " - preparing realtime backend";
-}
-
-juce::AudioProcessorEditor* VXDeepFilterNetAudioProcessor::createEditor() {
-    return new vxsuite::EditorBase(*this);
 }
 
 void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {

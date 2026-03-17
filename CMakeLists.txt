@@ -168,7 +168,9 @@ target_compile_definitions(VXDeverb PRIVATE
 juce_generate_juce_header(VXDeverb)
 target_sources(VXDeverb PRIVATE
   Source/vxsuite/products/deverb/VxDeverbProcessor.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
 )
@@ -348,6 +350,32 @@ vxsuite_link_df_models(VXDeepFilterNet)
 add_custom_target(VXDeepFilterNetPlugin ALL DEPENDS VXDeepFilterNet_VST3)
 vxsuite_stage_vst3_bundle(VXDeepFilterNet_VST3 "VXDeepFilterNet")
 
+juce_add_plugin(VXTone
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxtone"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXTN"
+)
+target_compile_definitions(VXTone PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXTone)
+target_sources(VXTone PRIVATE
+  Source/vxsuite/products/tone/VxToneProcessor.cpp
+)
+target_include_directories(VXTone PRIVATE Source)
+target_link_libraries(VXTone PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
+vxsuite_stage_vst3_bundle(VXTone_VST3 "VXTone")
+
 add_custom_target(VXSuite_VST3
   DEPENDS
     VXDeverb_VST3
@@ -409,6 +437,10 @@ add_executable(VXSuitePluginRegressionTests
   tests/VXSuitePluginRegressionTests.cpp
   Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp
   Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxsuite/products/deverb/VxDeverbProcessor.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
   Source/vxsuite/products/proximity/VxProximityProcessor.cpp

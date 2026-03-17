@@ -13,9 +13,7 @@ public:
     VXDeverbAudioProcessor();
     ~VXDeverbAudioProcessor() override = default;
 
-    const juce::String getName() const override;
     juce::String getStatusText() const override;
-    juce::AudioProcessorEditor* createEditor() override;
     void setDebugRt60PresetSeconds(float rt60Seconds);
     void clearDebugRt60Preset();
     void setDebugDeterministicReset(bool shouldUseDefaultRt60);

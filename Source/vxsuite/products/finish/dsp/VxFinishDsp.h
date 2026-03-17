@@ -34,7 +34,6 @@ private:
     float cPresenceLoA = 0.0f;
     float cPresenceHiA = 0.0f;
     float cAirLoA = 0.0f;
-    float cLimiterGainSmooth = 0.0f;
 
     float hiShelfB0 = 1.0f, hiShelfB1 = 0.0f, hiShelfA1 = 0.0f;
     std::vector<float> hiShelfZ1;

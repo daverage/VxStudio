@@ -4,7 +4,6 @@
 
 namespace {
 
-constexpr std::string_view kSuiteName = "VX Suite";
 constexpr std::string_view kProductName = "Deverb";
 constexpr std::string_view kShortTag = "DVD";
 constexpr std::string_view kReduceParam = "reduce";
@@ -30,11 +29,10 @@ float onePoleAlpha(const double sampleRate, const float cutoffHz) {
 } // namespace
 
 VXDeverbAudioProcessor::VXDeverbAudioProcessor()
-    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity()) {}
 
 vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
-    identity.suiteName = kSuiteName;
     identity.productName = kProductName;
     identity.shortTag = kShortTag;
     identity.primaryParamId = kReduceParam;
@@ -56,10 +54,6 @@ vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     return identity;
 }
 
-const juce::String VXDeverbAudioProcessor::getName() const {
-    return "VX Deverb";
-}
-
 juce::String VXDeverbAudioProcessor::getStatusText() const {
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     return isVoice ? "Vocal - LRSV dereverberation with body restore"
@@ -70,8 +64,8 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     preparedBlockSize = std::max(kMinPreparedBlockSize, std::max(1, samplesPerBlock));
     deverbProcessor.setChannelCount(getTotalNumOutputChannels());
-    stageChain.prepare(currentSampleRateHz, preparedBlockSize);
-    setReportedLatencySamples(stageChain.totalLatencySamples());
+    deverbProcessor.prepare(currentSampleRateHz, preparedBlockSize);
+    setReportedLatencyFromStages(deverbProcessor);
     ensureScratchCapacity(getTotalNumOutputChannels(), preparedBlockSize);
     resetSuite();
 }
@@ -86,10 +80,6 @@ void VXDeverbAudioProcessor::resetSuite() {
     smoothedReduce = 0.0f;
     smoothedBody = 0.0f;
     controlsPrimed = false;
-}
-
-juce::AudioProcessorEditor* VXDeverbAudioProcessor::createEditor() {
-    return new vxsuite::EditorBase(*this);
 }
 
 void VXDeverbAudioProcessor::setDebugRt60PresetSeconds(const float rt60Seconds) {
@@ -208,7 +198,8 @@ void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dr
         return;
 
     const float alpha = onePoleAlpha(currentSampleRateHz, 180.0f);
-    const float restore = juce::jlimit(0.0f, 0.70f, 0.70f * std::pow(vxsuite::clamp01(bodyAmount), 0.9f));
+    const float restore = juce::jlimit(0.0f, 1.20f, 1.20f * std::pow(vxsuite::clamp01(bodyAmount), 0.7f));
+    const float support = 0.28f * vxsuite::clamp01(bodyAmount);
     const float rampDuration = 2.0f * static_cast<float>(currentSampleRateHz) / 1000.0f;
 
     for (int ch = 0; ch < channels; ++ch) {
@@ -229,7 +220,9 @@ void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dr
             const float ramp = isFirstBlock
                 ? std::min(1.0f, static_cast<float>(i + 1) / std::max(1.0f, rampDuration))
                 : 1.0f;
-            const float blendedLow = wetLp + (restore * ramp) * (dryLp - wetLp);
+            const float blendedLow = wetLp
+                + (restore * ramp) * (dryLp - wetLp)
+                + (support * ramp) * dryLp;
             wet[i] = safeValue(wetHigh + blendedLow);
         }
 

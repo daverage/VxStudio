@@ -4,7 +4,6 @@
 
 namespace {
 
-constexpr std::string_view kSuiteName    = "VX Suite";
 constexpr std::string_view kProductName  = "Proximity";
 constexpr std::string_view kShortTag     = "PRX";
 constexpr std::string_view kCloserParam  = "closer";
@@ -15,11 +14,10 @@ constexpr std::string_view kListenParam  = "listen";
 } // namespace
 
 VXProximityAudioProcessor::VXProximityAudioProcessor()
-    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity()) {}
 
 vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
-    identity.suiteName        = kSuiteName;
     identity.productName      = kProductName;
     identity.shortTag         = kShortTag;
     identity.primaryParamId   = kCloserParam;
@@ -41,10 +39,6 @@ vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     return identity;
 }
 
-const juce::String VXProximityAudioProcessor::getName() const {
-    return "VX Proximity";
-}
-
 juce::String VXProximityAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen - removed distance shaping only";
@@ -52,10 +46,6 @@ juce::String VXProximityAudioProcessor::getStatusText() const {
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     return isVoice ? "Vocal - low body + consonant presence"
                    : "General - full-range bass + upper air";
-}
-
-juce::AudioProcessorEditor* VXProximityAudioProcessor::createEditor() {
-    return new vxsuite::EditorBase(*this);
 }
 
 void VXProximityAudioProcessor::prepareSuite(const double sampleRate,

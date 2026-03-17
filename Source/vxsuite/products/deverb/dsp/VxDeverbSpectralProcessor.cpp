@@ -6,6 +6,16 @@
 
 namespace vxsuite::deverb {
 
+namespace {
+
+float safeSpectralValue(const float value) noexcept {
+    if (!std::isfinite(value))
+        return 0.0f;
+    return juce::jlimit(-1.0e4f, 1.0e4f, value);
+}
+
+} // namespace
+
 // ── Construction / destruction ────────────────────────────────────────────────
 
 SpectralProcessor::SpectralProcessor()  = default;
@@ -140,10 +150,12 @@ void SpectralProcessor::allocateAndResetChannel(ChannelState& ch) const {
     ch.hopFillCount   = 0;
     ch.histWriteIdx   = 0;
 
-    // Pre-advance the OLA write position by latency so that the first
-    // processed frame's output lands at olaReadPos + latency.
-    // Invariant maintained throughout: olaWritePos − olaReadPos ≈ latency.
-    ch.olaWritePos = latencySamples;
+    // The analysis FIFO already introduces the causal STFT delay: the first
+    // frame is not available until one hop has been collected, and its valid
+    // dry-aligned content emerges kLatency samples into the overlap-add span.
+    // Starting OLA writes at an additional latency offset would delay the
+    // entire processor by that amount a second time.
+    ch.olaWritePos = 0;
     ch.olaReadPos  = 0;
 }
 
@@ -209,7 +221,7 @@ bool SpectralProcessor::processInPlace(juce::AudioBuffer<float>& buffer,
         const auto accSz = static_cast<size_t>(olaAccumSize);
         for (int i = 0; i < numSmp; ++i) {
             const size_t idx = static_cast<size_t>(ch.olaReadPos) % accSz;
-            const float v = ch.olaAccum[idx] * kOlaGain;
+            const float v = safeSpectralValue(ch.olaAccum[idx] * kOlaGain);
             out[i] = std::isfinite(v) ? v : 0.0f;
             ch.olaAccum[idx] = 0.0f; // clear slot after reading
             ++ch.olaReadPos;
@@ -334,8 +346,8 @@ void SpectralProcessor::processFrame(ChannelState& ch,
         // the output is clean even before the RLS filter has converged.
         ch.wpeStage.processSpectrum(wpeReScratch.data(), wpeImScratch.data(), wpeAmount * amount);
         for (int k = 0; k < numSpeechBins; ++k) {
-            ch.fftBuf[2 * (speechBinLo + k)]     = wpeReScratch[static_cast<size_t>(k)];
-            ch.fftBuf[2 * (speechBinLo + k) + 1] = wpeImScratch[static_cast<size_t>(k)];
+            ch.fftBuf[2 * (speechBinLo + k)]     = safeSpectralValue(wpeReScratch[static_cast<size_t>(k)]);
+            ch.fftBuf[2 * (speechBinLo + k) + 1] = safeSpectralValue(wpeImScratch[static_cast<size_t>(k)]);
         }
     }
 
@@ -347,9 +359,9 @@ void SpectralProcessor::processFrame(ChannelState& ch,
 
     // ── 6. Overlap-add into the OLA output accumulator ────────────────────────
     //
-    // The IFFT output is added to olaAccum starting at olaWritePos.
-    // olaWritePos was initialised to latency = fftSize − hopSize at reset, so
-    // at any point olaWritePos − olaReadPos ≈ latency.  The ring size
+    // The IFFT output is overlap-added starting at the current frame position.
+    // The causal analysis windowing already accounts for the reported STFT
+    // latency, so no extra write offset is needed here. The ring size
     // (olaAccumSize = maxBlockSize + 2×fftSize) guarantees no overrun.
     const auto accSz = static_cast<size_t>(olaAccumSize);
     for (size_t n = 0; n < fftSz; ++n) {

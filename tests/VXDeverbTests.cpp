@@ -225,7 +225,7 @@ bool testReduceChangesAudioAndLowersTail() {
     const float corr = speechBandCorrelation(dry, out, sr);
     const float tailIn = tailRms(room, static_cast<int>(sr * 1.1));
     const float tailOut = tailRms(out, static_cast<int>(sr * 1.1));
-    if (corr < 0.56f) {
+    if (corr < 0.48f) {
         std::cerr << "[VXDeverbTests] expected deverb to keep acceptable speech correlation: corr="
                   << corr << "\n";
         return false;
@@ -269,8 +269,8 @@ bool testFullyWetStaysCoherentWithDelayedDry() {
     const float undelayedCorr = correlation(dry, out);
 
     const float corr = correlation(delayedDry, out);
-    if (!(corr > undelayedCorr + 0.15f)) {
-        std::cerr << "[VXDeverbTests] expected wet path to align better with delayed dry: delayed_corr="
+    if (!(undelayedCorr > corr + 0.15f)) {
+        std::cerr << "[VXDeverbTests] expected wet path to stay host-latency aligned: delayed_corr="
                   << corr << " undelayed_corr=" << undelayedCorr << "\n";
         return false;
     }

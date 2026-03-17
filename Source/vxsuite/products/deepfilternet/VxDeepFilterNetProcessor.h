@@ -11,9 +11,7 @@ public:
     VXDeepFilterNetAudioProcessor();
     ~VXDeepFilterNetAudioProcessor() override;
 
-    const juce::String getName() const override;
     juce::String getStatusText() const override;
-    juce::AudioProcessorEditor* createEditor() override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -22,8 +20,6 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
-    static juce::AudioProcessorValueTreeState::ParameterLayout
-           makeLayout(const vxsuite::ProductIdentity& identity);
 
     using ModelVariant = vxsuite::deepfilternet::DeepFilterService::ModelVariant;
 

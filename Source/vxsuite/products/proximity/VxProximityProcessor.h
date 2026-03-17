@@ -10,9 +10,7 @@ public:
     VXProximityAudioProcessor();
     ~VXProximityAudioProcessor() override = default;
 
-    const juce::String getName() const override;
     juce::String getStatusText() const override;
-    juce::AudioProcessorEditor* createEditor() override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;

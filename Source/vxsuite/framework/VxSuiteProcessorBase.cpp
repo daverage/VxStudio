@@ -1,6 +1,10 @@
 #include "VxSuiteProcessorBase.h"
+#include "VxSuiteEditorBase.h"
 
 namespace vxsuite {
+
+ProcessorBase::ProcessorBase(ProductIdentity identity)
+    : ProcessorBase(identity, createSimpleParameterLayout(identity)) {}
 
 ProcessorBase::ProcessorBase(ProductIdentity identity,
                              juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout)
@@ -8,6 +12,10 @@ ProcessorBase::ProcessorBase(ProductIdentity identity,
                                             .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       productIdentity(std::move(identity)),
       parameters(*this, nullptr, "STATE", std::move(parameterLayout)) {}
+
+juce::AudioProcessorEditor* ProcessorBase::createEditor() {
+    return new EditorBase(*this);
+}
 
 void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
@@ -38,7 +46,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (canRenderListen) {
         listenInputScratch.makeCopyOf(buffer, true);
     }
-    processCoordinator.beginBlock(buffer, canRenderListen);
+    processCoordinator.beginBlock(buffer, true);
     processProduct(buffer, midi);
     if (canRenderListen)
         renderListenOutput(buffer, listenInputScratch);

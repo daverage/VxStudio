@@ -5,7 +5,6 @@
 
 namespace {
 
-constexpr std::string_view kSuiteName = "VX Suite";
 constexpr std::string_view kProductName = "Subtract";
 constexpr std::string_view kShortTag = "SUB";
 constexpr std::string_view kSubtractParam = "subtract";
@@ -17,11 +16,10 @@ constexpr std::string_view kLearnParam = "learn";
 } // namespace
 
 VXSubtractAudioProcessor::VXSubtractAudioProcessor()
-    : ProcessorBase(makeIdentity(), makeLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity()) {}
 
 vxsuite::ProductIdentity VXSubtractAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
-    identity.suiteName = kSuiteName;
     identity.productName = kProductName;
     identity.shortTag = kShortTag;
     identity.primaryParamId = kSubtractParam;
@@ -43,40 +41,35 @@ vxsuite::ProductIdentity VXSubtractAudioProcessor::makeIdentity() {
     return identity;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout
-VXSubtractAudioProcessor::makeLayout(const vxsuite::ProductIdentity& identity) {
-    return vxsuite::createSimpleParameterLayout(identity);
-}
-
-const juce::String VXSubtractAudioProcessor::getName() const {
-    return "VX Subtract";
-}
-
 juce::String VXSubtractAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen - removed profile only";
 
+    const auto confidenceSummary = [&](const int confidencePct) -> juce::String {
+        if (confidencePct < 40)
+            return juce::String(confidencePct) + "% profile confidence - low, try a cleaner noise-only capture";
+        if (confidencePct < 75)
+            return juce::String(confidencePct) + "% profile confidence - usable capture quality";
+        return juce::String(confidencePct) + "% profile confidence - strong clean capture";
+    };
+
     if (isLearnActive()) {
         const int progressPct = juce::roundToInt(100.0f * getLearnProgress());
         const int confidencePct = juce::roundToInt(100.0f * getLearnConfidence());
-        return "Learning noise only - click Learn again to lock profile ("
+        return "Learning noise only - press Learn again to stop and lock this profile ("
              + juce::String(progressPct) + "%, "
-             + juce::String(confidencePct) + "% confidence)";
+             + confidenceSummary(confidencePct) + ")";
     }
 
     if (isLearnReady()) {
         const int confidencePct = juce::roundToInt(100.0f * getLearnConfidence());
         return "Profile learned - turn Subtract to remove it ("
-             + juce::String(confidencePct) + "% confidence)";
+             + confidenceSummary(confidencePct) + ")";
     }
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     return isVoice ? "Vocal - learn room noise, then remove it while protecting speech"
                    : "General - learn a profile, then remove it more aggressively";
-}
-
-juce::AudioProcessorEditor* VXSubtractAudioProcessor::createEditor() {
-    return new vxsuite::EditorBase(*this);
 }
 
 void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
@@ -106,7 +99,7 @@ void VXSubtractAudioProcessor::resetSuite() {
     smoothedSubtract = 0.0f;
     smoothedProtect = 0.5f;
     controlsPrimed = false;
-    learnToggleLatched = true;  // prevents false start-edge if Learn was left on
+    learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     learnActive.store(false, std::memory_order_relaxed);
     // learnReady / learnProgress / learnConfidence / learnObservedSeconds are
     // intentionally preserved — the learned noise profile survives playback stops.

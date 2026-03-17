@@ -10,11 +10,15 @@ namespace vxsuite {
 
 class ProcessorBase : public juce::AudioProcessor {
 public:
+    explicit ProcessorBase(ProductIdentity identity);
     ProcessorBase(ProductIdentity identity,
                   juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout);
     ~ProcessorBase() override = default;
 
     const ProductIdentity& getProductIdentity() const noexcept { return productIdentity; }
+    const juce::String getName() const override {
+        return "VX " + toJuceString(productIdentity.productName);
+    }
     juce::AudioProcessorValueTreeState& getValueTreeState() noexcept { return parameters; }
     const juce::AudioProcessorValueTreeState& getValueTreeState() const noexcept { return parameters; }
     virtual juce::String getStatusText() const { return {}; }
@@ -42,6 +46,7 @@ public:
     bool isMidiEffect() const override { return false; }
 
     bool hasEditor() const override { return true; }
+    juce::AudioProcessorEditor* createEditor() override;
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

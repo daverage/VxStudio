@@ -1,3 +1,20 @@
+# VX Spectrum scope review — 2026-03-17
+
+## Problem
+Assess whether VX Suite can support a standalone realtime analyzer that shows the dry spectrum, final wet spectrum, and per-plugin spectral influence for VX-family processors in one place, with optional waveform views and per-plugin visibility toggles, while keeping all analysis outside the critical audio path.
+
+## Plan
+- [x] Review VX Suite framework rules, research notes, and project lessons related to analysis, FFT ownership, and realtime/UI separation.
+- [x] Inspect the current framework and processor architecture for shared FFT, stage-chain, and chain-visibility hooks.
+- [x] Write a feasibility recommendation that distinguishes what is possible inside one plugin instance versus what requires explicit cross-plugin telemetry.
+
+## Review
+- The idea is technically possible, but not as a normal passive VST that can automatically "see" sibling VX plugins in an arbitrary DAW chain. This repo currently ships independent plugins, not a shared host graph, so a standalone analyzer would need an explicit telemetry channel from each participating VX plugin.
+- The existing framework is a good base for this because FFT ownership is already centralized under `Source/vxsuite/framework/`, and the `StageChain` / processor-base pattern gives a clean place to add optional stage taps without turning each product into a one-off analyzer.
+- To stay aligned with the VX Suite rules, this should not become a sprawling diagnostic panel inside every shipping product. The cleaner fit is a separate analyzer product or debug/companion product that consumes lightweight shared analysis snapshots.
+- The safest architecture is: each VX-family plugin publishes downsampled, latency-aware analysis snapshots from lock-free preallocated buffers; the analyzer plugin subscribes and renders dry/wet/final overlays plus per-plugin traces and visibility toggles entirely on the UI/message side.
+- Waveform overlays are also possible, but they should likely be a secondary tab or switchable layer. Trying to show dense multitrace spectrum plus waveform in one view would fight the suite's simplicity goals and reduce readability.
+
 # VX Cleanup architecture review — 2026-03-17
 
 ## Problem
@@ -218,6 +235,35 @@ Add a fourth `VXPolish` dial for smarter mode-aware gain lifting, surface a de-b
 - Reworded the product status text so the UI now explains the intended flow: capture noise, click again to lock, then use `Subtract` to remove the learned profile.
 - Rebalanced the learned subtract path in `HandmadePrimary` so profile removal is audibly stronger overall, with lower subtract floors and higher subtraction authority than before.
 - Split the mode behavior more intentionally: `Vocal` now keeps stronger protection and a slightly softer subtract curve, while `General` applies a more aggressive learned-profile removal with much lighter protection throttling.
+
+---
+
+# Learn / Deverb / Cleanup / Finish bug-fix pass — 2026-03-17
+
+## Problem
+- `VXSubtract` Learn button does not reliably start learning.
+- `VXDeverb` can produce humming / buzzing at extreme `Blend`.
+- `VXCleanup` can clip and its EQ-style cleanup moves feel too subtle.
+- `VXFinish` can clip, and `Finish` / `Body` / `Gain` are too weak in practice.
+
+## Plan
+- [x] Fix the Learn toggle edge handling and add regression coverage.
+- [x] Stabilize `VXDeverb` at extreme `Blend` / wet settings and add a focused regression test.
+- [x] Make `VXCleanup` more audible while adding output headroom protection.
+- [x] Make `VXFinish` more audible, separate loudness push from clipping, and strengthen limiting.
+- [x] Build the affected targets, run the regression harness, and document the final result.
+
+## Review
+- Fixed the `VXSubtract` Learn bug in `Source/vxsuite/products/subtract/VxSubtractProcessor.cpp` by latching the current Learn parameter state on reset instead of hard-forcing the toggle state, so the first press after prepare/reset now starts capture correctly.
+- Hardened `VXDeverb` in `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp` and `Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp` by reducing extreme oversubtraction/WPE drive, making body restore more conservative at high reduce settings, clamping unstable spectral values, and sanitizing the final output path so maxed settings no longer explode into buzzing or giant peaks.
+- Retuned `VXCleanup` in `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp` so `deMud`, `deEss`, `breath`, `plosive`, and HF smoothing all have more audible authority, while a fast output trim guard now prevents the cleanup stage from clipping the result.
+- Retuned `VXFinish` in `Source/vxsuite/products/finish/VxFinishProcessor.cpp` and `Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp` so `Finish`, `Body`, and `Gain` move more clearly, target makeup is less reckless, the limiter reacts faster with an instantaneous peak guard, and the old hard-clipping behavior is replaced with a softer final safety path.
+- Expanded the regression harness in `tests/VXSuitePluginRegressionTests.cpp` and `CMakeLists.txt` to cover first-press Learn startup, Deverb at extreme Blend settings, stronger Cleanup audibility without clipping, and stronger Finish control separation without clipping.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4`, `./build/VXSuitePluginRegressionTests`, and `cmake --build build -j4`.
+
+### Learn UX follow-up
+- Updated the shared Learn UI in `Source/vxsuite/framework/VxSuiteEditorBase.cpp` and the Subtract status copy in `Source/vxsuite/products/subtract/VxSubtractProcessor.cpp` to follow common capture UX patterns: explicit start/stop wording, guidance to capture pure background noise for roughly 1 to 2 seconds, and confidence text framed as noise-print quality rather than abstract certainty.
+- Verified with `cmake --build build --target VXSubtract VXSubtract_VST3 VXSuitePluginRegressionTests -j4`.
 - Increased the learn target window and reduced the variance padding applied when freezing the learned profile, making the result closer to an Audacity-style learned noise estimate instead of an overly padded conservative profile.
 - Verified with `cmake --build build --target VXSubtract -j4` and `cmake --build build -j4`.
 
@@ -587,3 +633,61 @@ Implement the next high-priority suite cleanup pass: centralize latency-aware li
 - Added `tests/VXSuiteProfile.cpp` as a profiling target for single-plugin and full-chain timing sweeps.
 - Increased the shared editor’s default/minimum sizes and text/layout spacing in `Source/vxsuite/framework/VxSuiteEditorBase.cpp` and `Source/vxsuite/framework/VxSuiteLookAndFeel.cpp` so status text, hints, and control labels have more breathing room and stay readable.
 - Added `docs/VX_SUITE_RELEASE_CHECKLIST.md` and `docs/VX_SUITE_CONTROL_SEMANTICS.md` so host validation and shared control meaning are now explicit project assets instead of only tribal knowledge.
+
+---
+
+# Deverb regression repair — 2026-03-17
+
+## Problem
+`VXDeverb` no longer behaves like the pre-refactor plugin. The dedicated tests show two hard regressions:
+- `reduce=0` is not a true identity path
+- speech correlation at meaningful `Reduce` settings collapses
+
+The user explicitly wants to keep WPE, because the old plugin with WPE worked well.
+
+## Plan
+- [x] Compare the current Deverb wrapper and spectral path against the older working version to isolate the remaining regression.
+- [x] Fix the underlying Deverb latency/processing mismatch without removing WPE or the good framework dry-capture fix.
+- [x] Run `VXDeverbTests`, `VXDeverbMeasure`, and the broader regression harness.
+- [x] Record the result and add a lesson if the root cause was introduced by the refactor.
+
+## Review
+- The biggest remaining regression was in the Deverb spectral stage timing: the STFT path was paying latency twice by both waiting for the causal analysis window and pre-advancing the OLA write cursor by the reported latency. Resetting `olaWritePos` to `0` in `Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp` restored true `reduce=0` identity and brought the processed output back into host-latency alignment.
+- I kept the good framework change from `Source/vxsuite/framework/VxSuiteProcessorBase.cpp`: aligned dry is still captured every block so body-restore and listen paths can rely on it even when Listen mode is off.
+- I compared the current Deverb files directly against commit `dc55d8c`, which confirmed that the wrapper was already close to the trusted behavior and that the real repair belonged in the spectral timing, not in removing WPE.
+- `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp` now gives `Body` a more meaningful low-band restoration path again by combining the original wet-to-dry low blend with a small bounded low-band support term.
+- `tests/VXDeverbTests.cpp` was updated to match the corrected latency contract: full-wet Deverb is now expected to stay aligned after host latency compensation rather than line up better with an extra delayed dry signal.
+- Verified with:
+  - `cmake --build build --target VXDeverbTests VXSuitePluginRegressionTests VXDeverb -j4`
+  - `./build/VXDeverbTests`
+  - `./build/VXSuitePluginRegressionTests`
+  - `./build/VXDeverbMeasure --reduce 0 --body 0 --render-seconds 0.9`
+  - `cmake --build build -j4`
+
+---
+
+# Finish gain/compressor rebalance — 2026-03-17
+
+## Problem
+`VXFinish` still feels wrong in use:
+- the compressor path can clip
+- the `Gain` control is not meaningfully useful
+- the middle of the `Gain` control should be neutral, with left reducing and right increasing
+
+## Plan
+- [x] Inspect the current Finish gain/compressor mapping and identify why the midpoint already adds level.
+- [x] Rework the Finish gain law so `0.5` is neutral and the control behaves bipolarly around center.
+- [x] Reduce compressor/makeup-driven clipping without making Finish feel lifeless.
+- [x] Run focused Finish verification and the suite regression harness.
+- [x] Record the result and any lesson from the fix.
+
+## Review
+- `Source/vxsuite/products/finish/VxFinishProcessor.cpp` no longer treats the `Gain` knob as a hidden driver for compression, recovery, limiter pressure, and target makeup. The midpoint is now truly neutral, with the knob interpreted as a bipolar final output trim around `0.5`.
+- `Gain` now happens at the end of the Finish path as a smoothed final output gain stage after limiting, with the existing trim guard still catching overs so the plugin does not clip just because the user pushes the right side.
+- Compression/makeup pressure was reduced at the processor mapping level so the compressor is less likely to overshoot into the limiter. `Finish` and `Body` still shape density/recovery, but `Gain` no longer quietly changes the compressor personality.
+- Updated the `Gain` hint text to describe the intended behavior directly: middle neutral, left reduce, right increase.
+- Added regression coverage in `tests/VXSuitePluginRegressionTests.cpp` so Finish now has an explicit test for bipolar `Gain` behavior around the centered midpoint.
+- Verified with:
+  - `cmake --build build --target VXSuitePluginRegressionTests VXFinish -j4`
+  - `./build/VXSuitePluginRegressionTests`
+  - `cmake --build build -j4`

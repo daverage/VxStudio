@@ -5,7 +5,6 @@
 
 namespace {
 
-constexpr std::string_view kSuiteName = "VX Suite";
 constexpr std::string_view kProductName = "Cleanup";
 constexpr std::string_view kShortTag = "CLN";
 constexpr std::string_view kCleanupParam = "cleanup";
@@ -32,11 +31,10 @@ struct SpectralFeatures {
 } // namespace
 
 VXCleanupAudioProcessor::VXCleanupAudioProcessor()
-    : ProcessorBase(makeIdentity(), vxsuite::createSimpleParameterLayout(makeIdentity())) {}
+    : ProcessorBase(makeIdentity()) {}
 
 vxsuite::ProductIdentity VXCleanupAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
-    identity.suiteName = kSuiteName;
     identity.productName = kProductName;
     identity.shortTag = kShortTag;
     identity.primaryParamId = kCleanupParam;
@@ -63,10 +61,6 @@ vxsuite::ProductIdentity VXCleanupAudioProcessor::makeIdentity() {
     identity.theme.panelRgb = { 0.09f, 0.12f, 0.10f };
     identity.theme.textRgb = { 0.90f, 0.97f, 0.93f };
     return identity;
-}
-
-const juce::String VXCleanupAudioProcessor::getName() const {
-    return "VX Cleanup";
 }
 
 juce::String VXCleanupAudioProcessor::getStatusText() const {
@@ -102,10 +96,6 @@ std::string_view VXCleanupAudioProcessor::getActivityLightLabel(int index) const
     }
 }
 
-juce::AudioProcessorEditor* VXCleanupAudioProcessor::createEditor() {
-    return new vxsuite::EditorBase(*this);
-}
-
 void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     spectralOrder = chooseSpectralOrder();
@@ -137,6 +127,7 @@ void VXCleanupAudioProcessor::resetSuite() {
     plosiveEnv = 0.0f;
     tonalMudEnv = 0.0f;
     harshnessEnv = 0.0f;
+    outputTrimmer.reset();
     classifiersPrimed = false;
     controlsPrimed = false;
 }
@@ -251,17 +242,20 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                                               1.0f + (voiceMode ? -0.12f : 0.08f) * body);
     const float spectralPeakiness = vxsuite::clamp01(1.0f - spectral.spectralFlatness);
     const float plosiveSpike = vxsuite::clamp01((blockPeak / evidence.inputEnv - 1.35f) / 1.65f);
-    const float speechGate = juce::jlimit(0.15f, 1.0f,
-                                          1.0f - 0.70f * evidence.speechConfidence + 0.15f * (1.0f - analysis.directness));
+    const float speechGate = juce::jlimit(0.05f, 1.0f,
+                                          1.0f - 0.82f * evidence.speechConfidence + 0.10f * (1.0f - analysis.directness));
     const float tonalMudTarget = juce::jlimit(0.0f, 1.0f,
                                               0.70f * evidence.mudExcess
                                             + 0.20f * (1.0f - analysis.directness)
                                             + 0.10f * spectral.spectralFlatness);
     const float harshnessTarget = evidence.highTrouble;
+    const float breathNoiseLike = vxsuite::clamp01((spectral.spectralFlatness - 0.42f) / 0.42f);
+    const float breathAir = vxsuite::clamp01((spectral.highFreqRatio - 0.10f) / 0.32f);
     const float breathTarget = juce::jlimit(0.0f, 1.0f,
-                                            0.50f * spectral.spectralFlatness
-                                          + 0.30f * (1.0f - spectral.harmonicity)
-                                          + 0.20f * spectral.highFreqRatio);
+                                            (0.56f * breathNoiseLike
+                                           + 0.28f * vxsuite::clamp01(1.0f - spectral.harmonicity)
+                                           + 0.16f * breathAir)
+                                          * (0.55f + 0.45f * breathAir));
     const float sibilanceTarget = juce::jlimit(0.0f, 1.0f,
                                                spectral.highBandEnergy * spectralPeakiness
                                              * (0.55f + 0.45f * harshnessTarget));
@@ -306,7 +300,8 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     const float breathWeight = juce::jlimit(0.0f, 1.0f,
                                            breathEnv
                                           * speechGate
-                                          * (1.0f - 0.45f * sibilanceEnv));
+                                          * (1.0f - 0.55f * sibilanceEnv)
+                                          * (0.45f + 0.55f * breathAir));
     const float plosiveWeight = juce::jlimit(0.0f, 1.0f,
                                              plosiveEnv
                                            * (0.65f + 0.35f * lowBias)
@@ -320,19 +315,19 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     vxsuite::cleanup::Dsp::Params params {};
     params.contentMode = voiceMode ? 0 : 1;
     params.deMud = vxsuite::clamp01(cleanup * correctiveLean * tonalMudWeight
-                           * (0.55f + 0.45f * lowBias)
-                           * (1.0f - 0.35f * preserveBody));
+                           * (0.88f + 0.62f * lowBias)
+                           * (1.0f - 0.18f * preserveBody));
     params.deEss = vxsuite::clamp01(cleanup * sibilanceWeight
-                           * (voiceMode ? 1.0f : 1.08f));
+                           * (voiceMode ? 1.26f : 1.14f));
     params.breath = vxsuite::clamp01(cleanup * breathWeight
-                            * (voiceMode ? 1.0f : 0.60f));
+                            * (voiceMode ? 0.90f : 0.56f));
     params.plosive = vxsuite::clamp01(cleanup * plosiveWeight
-                             * (voiceMode ? 0.95f : 0.72f)
-                             * (1.0f - 0.25f * preserveBody));
+                             * (voiceMode ? 1.08f : 0.86f)
+                             * (1.0f - 0.15f * preserveBody));
     params.compress = 0.0f;
     params.troubleSmooth = vxsuite::clamp01(cleanup * harshWeight
-                                   * (0.30f + 0.70f * highBias)
-                                   * (voiceMode ? 0.90f : 1.06f));
+                                   * (0.56f + 0.94f * highBias)
+                                   * (voiceMode ? 1.22f : 1.10f));
     params.limit = 0.0f;
     params.recovery = 0.0f;
     params.smartGain = 0.0f;
@@ -362,6 +357,8 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
 
     polishChain.setParams(params);
     polishChain.processCorrective(buffer);
+
+    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
