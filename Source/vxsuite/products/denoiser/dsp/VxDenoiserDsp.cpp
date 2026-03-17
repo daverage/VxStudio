@@ -152,6 +152,18 @@ void DenoiserDsp::reset() {
     std::fill(midDryDelayBuf.begin(), midDryDelayBuf.end(), 0.0f);
     sideDelayWrite = sideDelayRead = sideDelayCount = 0;
     midDryDelayWrite = midDryDelayRead = midDryDelayCount = 0;
+
+    // Pre-warm stereo delay lines with silence equal to the plugin's latency so
+    // the drain conditions are met from sample 0, eliminating the warmup period
+    // where stereo collapses to mono before the side-delay buffer fills.
+    if (sideDelaySize > latencySamples && midDryDelaySize > latencySamples) {
+        sideDelayWrite    = 0;
+        sideDelayRead     = sideDelaySize - latencySamples;
+        sideDelayCount    = latencySamples;
+        midDryDelayWrite  = 0;
+        midDryDelayRead   = midDryDelaySize - latencySamples;
+        midDryDelayCount  = latencySamples;
+    }
     smoothedSideRatio = 1.0f;
     prevSideScale     = 1.0f;
     stftFrameCount    = 0;

@@ -50,7 +50,6 @@ private:
     float smoothedProtect = 0.5f;
     bool controlsPrimed = false;
     bool learnToggleLatched = false;
-    float learnSilentSeconds = 0.0f;
     std::vector<float> savedLearnProfile;
     float savedLearnConfidence = 0.0f;
     std::atomic<float> learnProgress { 0.0f };

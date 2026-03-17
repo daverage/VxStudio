@@ -31,6 +31,7 @@ private:
     void timerCallback() override;
     int scaled(int value) const;
     juce::String footerText() const;
+    void showTransientStatus(const juce::String& text);
     void updateActivityIndicators();
     void updateLearnUi();
 
@@ -51,15 +52,19 @@ private:
     juce::Slider primarySlider;
     juce::Slider secondarySlider;
     juce::Slider tertiarySlider;
+    juce::Slider quaternarySlider;
     juce::Label primaryLabel;
     juce::Label secondaryLabel;
     juce::Label tertiaryLabel;
+    juce::Label quaternaryLabel;
     juce::Label primaryHint;
     juce::Label secondaryHint;
     juce::Label tertiaryHint;
+    juce::Label quaternaryHint;
     std::unique_ptr<SliderAttachment> primaryAttachment;
     std::unique_ptr<SliderAttachment> secondaryAttachment;
     std::unique_ptr<SliderAttachment> tertiaryAttachment;
+    std::unique_ptr<SliderAttachment> quaternaryAttachment;
     std::unique_ptr<ComboAttachment> modeAttachment;
     std::unique_ptr<ButtonAttachment> listenAttachment;
     std::unique_ptr<ButtonAttachment> learnAttachment;
@@ -69,6 +74,8 @@ private:
     juce::Rectangle<int> highShelfIconBounds;
     bool lastLowShelfOn  = false;
     bool lastHighShelfOn = false;
+    juce::String transientStatusText;
+    int transientStatusTicks = 0;
 };
 
 } // namespace vxsuite

@@ -88,6 +88,10 @@ void Dsp::prepare(double sampleRate, int, int numChannels) {
     cAEssGeneral = onePoleCoeff(sr, 6200.0f);
     cDeEssAtk = std::exp(-1.0f / (0.004f * fsr));
     cDeEssRel = std::exp(-1.0f / (0.075f * fsr));
+    cABreathVoice = onePoleCoeff(sr, 2800.0f);
+    cABreathGeneral = onePoleCoeff(sr, 3400.0f);
+    cBreathAtk = std::exp(-1.0f / (0.012f * fsr));
+    cBreathRel = std::exp(-1.0f / (0.120f * fsr));
     cPlosiveFastA = std::exp(-1.0f / (0.003f * fsr));
     cPlosiveSlowA = std::exp(-1.0f / (0.080f * fsr));
     cPlosiveAtkA = std::exp(-1.0f / (0.002f * fsr));
@@ -128,6 +132,7 @@ void Dsp::prepare(double sampleRate, int, int numChannels) {
     deMudEqZ1.assign(static_cast<size_t>(channels), 0.0f);
     deMudEqZ2.assign(static_cast<size_t>(channels), 0.0f);
     deEssLpCh.assign(static_cast<size_t>(channels), 0.0f);
+    breathLpCh.assign(static_cast<size_t>(channels), 0.0f);
     for (size_t b = 0; b < troubleEqZ1.size(); ++b) {
         troubleEqZ1[b].assign(static_cast<size_t>(channels), 0.0f);
         troubleEqZ2[b].assign(static_cast<size_t>(channels), 0.0f);
@@ -193,7 +198,10 @@ void Dsp::reset() {
 
     deEssEnv = 0.0f;
     deEssMonoLp = 0.0f;
+    breathEnv = 0.0f;
+    breathMonoLp = 0.0f;
     std::fill(deEssLpCh.begin(), deEssLpCh.end(), 0.0f);
+    std::fill(breathLpCh.begin(), breathLpCh.end(), 0.0f);
 
     plosiveEnv = 0.0f;
     plosiveFast = 0.0f;
@@ -225,6 +233,7 @@ void Dsp::reset() {
     limiterReductionDb = 0.0f;
     deMudActivity = 0.0f;
     deEssActivity = 0.0f;
+    breathActivity = 0.0f;
     plosiveActivity = 0.0f;
     compActivity = 0.0f;
     troubleActivity = 0.0f;
@@ -254,6 +263,7 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
 
     const float deMudAmt = juce::jlimit(0.0f, 1.0f, params.deMud);
     const float deEssAmt = juce::jlimit(0.0f, 1.0f, params.deEss);
+    const float breathAmt = juce::jlimit(0.0f, 1.0f, params.breath);
     const float plosiveAmt = juce::jlimit(0.0f, 1.0f, params.plosive);
     const float compAmt = juce::jlimit(0.0f, 1.0f, params.compress);
     const float troubleAmt = juce::jlimit(0.0f, 1.0f, params.troubleSmooth);
@@ -277,10 +287,11 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
     correctiveReductionDb = 0.0f;
     deMudActivity = 0.0f;
     deEssActivity = 0.0f;
+    breathActivity = 0.0f;
     plosiveActivity = 0.0f;
     compActivity = 0.0f;
     troubleActivity = 0.0f;
-    if (deMudAmt <= 1.0e-6f && deEssAmt <= 1.0e-6f && plosiveAmt <= 1.0e-6f
+    if (deMudAmt <= 1.0e-6f && deEssAmt <= 1.0e-6f && breathAmt <= 1.0e-6f && plosiveAmt <= 1.0e-6f
         && compAmt <= 1.0e-6f && troubleAmt <= 1.0e-6f)
         return;
     activeThisBlock = true;
@@ -315,26 +326,35 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
 
     const float deEssAtk = cDeEssAtk;
     const float deEssRel = cDeEssRel;
-    const float deEssThreshold = juce::jlimit(0.16f, 0.42f, (voiceMode ? 0.22f : 0.28f) + 0.08f * loudNorm - 0.06f * proxCtx);
-    const float deEssMaxCutDb = (voiceMode ? 10.0f : 7.5f) * deEssAmt;
+    const float deEssThreshold = juce::jlimit(0.18f, 0.46f, (voiceMode ? 0.21f : 0.31f) + 0.08f * loudNorm - 0.05f * proxCtx);
+    const float deEssMaxCutDb = (voiceMode ? 11.0f : 5.5f) * deEssAmt;
+    const float aBreath = voiceMode ? cABreathVoice : cABreathGeneral;
+    const float breathAtk = cBreathAtk;
+    const float breathRel = cBreathRel;
+    const float breathThreshold = juce::jlimit(0.22f, 0.55f, (voiceMode ? 0.30f : 0.40f) + 0.06f * loudNorm);
+    const float breathCeil = juce::jlimit(0.42f, 0.75f, breathThreshold + (voiceMode ? 0.18f : 0.14f));
+    const float breathLevelFloor = juce::Decibels::decibelsToGain(params.noiseFloorDb + (voiceMode ? 8.0f : 10.0f));
+    const float breathLevelCeil = voiceMode ? 0.14f : 0.10f;
+    const float breathMaxCutDb = (voiceMode ? 7.0f : 2.8f) * breathAmt * (0.85f + 0.15f * (1.0f - speechPresence));
 
     const float plosiveFastLocal = cPlosiveFastA;
     const float plosiveSlowLocal = cPlosiveSlowA;
     const float plosiveAtk = cPlosiveAtkA;
     const float plosiveRel = cPlosiveRelA;
-    const float plosiveMaxCutDb = (voiceMode ? 8.0f : 6.0f) * plosiveAmt * (0.85f + 0.35f * proxCtx);
+    const float plosiveMaxCutDb = (voiceMode ? 8.5f : 4.4f) * plosiveAmt * (0.82f + 0.28f * proxCtx);
 
-    const float compAtk = std::exp(-1.0f / ((0.030f - 0.014f * compAmt) * static_cast<float>(sr)));
-    const float compRel = std::exp(-1.0f / ((0.320f - 0.140f * compAmt) * static_cast<float>(sr)));
-    const float compThresholdDb = -14.0f - 6.0f * compAmt;
-    const float compRatio = 1.0f + 2.2f * compAmt;
-    const float compMakeupDb = 0.7f * compAmt;
+    const float compAtk = std::exp(-1.0f / ((0.022f - 0.010f * compAmt) * static_cast<float>(sr)));
+    const float compRel = std::exp(-1.0f / ((0.220f - 0.090f * compAmt) * static_cast<float>(sr)));
+    const float compThresholdDb = -20.0f - 8.0f * compAmt;
+    const float compRatio = 1.6f + 4.0f * compAmt;
+    const float compMakeupDb = 1.0f * compAmt;
     const float compGainSmooth = cCompGainSmooth;
     const float compSidechainBoost = juce::Decibels::decibelsToGain(juce::jlimit(0.0f, 18.0f, params.compSidechainBoostDb));
 
     float reductionAcc = 0.0f;
     float deMudAcc = 0.0f;
     float deEssAcc = 0.0f;
+    float breathAcc = 0.0f;
     float plosiveAcc = 0.0f;
     float compAcc = 0.0f;
     float troubleAcc = 0.0f;
@@ -407,8 +427,21 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         const float deEssA = deEssTarget > deEssEnv ? deEssAtk : deEssRel;
         deEssEnv = deEssA * deEssEnv + (1.0f - deEssA) * deEssTarget;
         const float deEssGain = juce::Decibels::decibelsToGain(-deEssMaxCutDb * deEssEnv);
+
+        breathMonoLp = aBreath * breathMonoLp + (1.0f - aBreath) * monoAbs;
+        const float monoBreathBand = monoAbs - breathMonoLp;
+        const float breathRatio = std::abs(monoBreathBand) / (monoAbs + 1.0e-6f);
+        const float breathNorm = (breathRatio - breathThreshold) / (breathCeil - breathThreshold);
+        const float breathLevelNorm = juce::jlimit(0.0f, 1.0f,
+                                                   (breathLevelCeil - monoAbs) / (breathLevelCeil - breathLevelFloor + 1.0e-6f));
+        const float breathSpeechGuard = juce::jlimit(0.15f, 1.0f, 1.0f - (voiceMode ? 0.45f : 0.65f) * speechPresence);
+        const float breathTarget = juce::jlimit(0.0f, 1.0f, breathNorm) * breathLevelNorm * breathSpeechGuard * breathAmt;
+        const float breathA = breathTarget > breathEnv ? breathAtk : breathRel;
+        breathEnv = breathA * breathEnv + (1.0f - breathA) * breathTarget;
+        const float breathGain = juce::Decibels::decibelsToGain(-breathMaxCutDb * breathEnv);
         deMudAcc += deMudEnv;
         deEssAcc += deEssEnv;
+        breathAcc += breathEnv;
         plosiveAcc += plosiveEnv;
 
         const float compIn = std::abs(monoAbs) * compSidechainBoost;
@@ -422,10 +455,11 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         compGain = compGainSmooth * compGain + (1.0f - compGainSmooth) * compTargetGain;
         const float deMudDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(deMudGain, 1.0e-6f), -120.0f));
         const float deEssDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(deEssGain, 1.0e-6f), -120.0f));
+        const float breathDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(breathGain, 1.0e-6f), -120.0f));
         const float plosiveDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(plosiveGain, 1.0e-6f), -120.0f));
         const float compDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(compGain, 1.0e-6f), -120.0f));
         compAcc += juce::jlimit(0.0f, 1.0f, compDb / 8.0f);
-        reductionAcc += 0.20f * (deMudDb + deEssDb + plosiveDb + compDb + troubleDbSample);
+        reductionAcc += 0.18f * (deMudDb + deEssDb + breathDb + plosiveDb + compDb + troubleDbSample);
 
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* d = buffer.getWritePointer(ch);
@@ -453,7 +487,12 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
             essLp = aEss * essLp + (1.0f - aEss) * x;
             deEssLpCh[static_cast<size_t>(ch)] = essLp;
             const float highBand = x - essLp;
+            float breathLp = breathLpCh[static_cast<size_t>(ch)];
+            breathLp = aBreath * breathLp + (1.0f - aBreath) * x;
+            breathLpCh[static_cast<size_t>(ch)] = breathLp;
+            const float breathBand = x - breathLp;
             x = essLp + highBand * deEssGain;
+            x -= breathBand * (1.0f - breathGain);
 
             x *= compGain;
             if (troubleAmt > 1.0e-6f) {
@@ -470,6 +509,7 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
     correctiveReductionDb = reductionAcc / static_cast<float>(numSamples);
     deMudActivity = deMudAcc / static_cast<float>(numSamples);
     deEssActivity = deEssAcc / static_cast<float>(numSamples);
+    breathActivity = breathAcc / static_cast<float>(numSamples);
     plosiveActivity = plosiveAcc / static_cast<float>(numSamples);
     compActivity = compAcc / static_cast<float>(numSamples);
     troubleActivity = juce::jlimit(0.0f, 1.0f, (troubleAcc / static_cast<float>(numSamples)) / 4.0f);
@@ -482,6 +522,7 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
         return;
 
     const float recoveryAmt = juce::jlimit(0.0f, 1.0f, params.recovery);
+    const float smartGainAmt = juce::jlimit(0.0f, 1.0f, params.smartGain);
     if (recoveryAmt <= 1.0e-5f) {
         recoveryLiftDb = 0.0f;
         recoveryActivity = 0.0f;
@@ -551,9 +592,12 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
     const float targetBodyRatioClamped = juce::jlimit(0.14f, 0.34f, targetBodyRatio);
     const float targetPresenceRatioClamped = juce::jlimit(0.10f, 0.28f, targetPresenceRatio);
     const float targetAirRatioClamped = juce::jlimit(0.05f, 0.16f, targetAirRatio);
-    const float bodyMaxDb = bodyMaxDbBase * strength;
-    const float presenceMaxDb = presenceMaxDbBase * strength;
-    const float airMaxDb = airMaxDbBase * strength * (0.65f + 0.35f * speechPresence);
+    const float smartBodyPush = voiceMode ? (0.35f + 0.35f * (1.0f - speechPresence)) : (0.55f + 0.20f * (1.0f - speechPresence));
+    const float smartPresencePush = voiceMode ? (0.55f + 0.20f * speechPresence) : (0.42f + 0.12f * speechPresence);
+    const float smartAirPush = voiceMode ? (0.50f + 0.25f * speechPresence) : (0.22f + 0.10f * speechPresence);
+    const float bodyMaxDb = bodyMaxDbBase * strength * (1.0f + smartGainAmt * smartBodyPush);
+    const float presenceMaxDb = presenceMaxDbBase * strength * (1.0f + smartGainAmt * smartPresencePush);
+    const float airMaxDb = airMaxDbBase * strength * (0.65f + 0.35f * speechPresence) * (1.0f + smartGainAmt * smartAirPush);
 
     float liftAccDb = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
@@ -594,7 +638,7 @@ void Dsp::processRecovery(juce::AudioBuffer<float>& buffer) {
         const float presenceNeed = juce::jlimit(0.0f, 1.0f, (targetPresenceRatioClamped - presenceRatio) / targetPresenceRatioClamped);
         const float airNeed = juce::jlimit(0.0f, 1.0f, (targetAirRatioClamped - airRatio) / targetAirRatioClamped);
 
-        const float loudGuard = juce::jlimit(0.35f, 1.0f, 1.0f - 0.55f * loudNorm);
+        const float loudGuard = juce::jlimit(0.35f, 1.0f, 1.0f - (0.55f - 0.12f * smartGainAmt) * loudNorm);
         const float bodyGain = juce::Decibels::decibelsToGain(bodyMaxDb * bodyNeed * loudGuard * noiseGuard);
         const float presenceGain = juce::Decibels::decibelsToGain(presenceMaxDb * presenceNeed * (0.7f + 0.3f * speechPresence) * noiseGuard);
         const float airGain = juce::Decibels::decibelsToGain(airMaxDb * airNeed * (0.8f + 0.2f * speechPresence) * loudGuard * noiseGuard);
@@ -652,10 +696,10 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
     }
 
     const bool voiceMode = params.contentMode == 0;
-    const float limiterAttackA = std::exp(-1.0f / ((0.0012f - 0.0008f * limitAmt) * static_cast<float>(sr)));
-    const float limiterReleaseA = std::exp(-1.0f / ((0.120f - 0.070f * limitAmt) * static_cast<float>(sr)));
+    const float limiterAttackA = std::exp(-1.0f / ((0.0008f - 0.00045f * limitAmt) * static_cast<float>(sr)));
+    const float limiterReleaseA = std::exp(-1.0f / ((0.090f - 0.040f * limitAmt) * static_cast<float>(sr)));
     const float limiterGainSmoothA = cLimiterGainSmooth;
-    const float limiterCeil = juce::Decibels::decibelsToGain(-(voiceMode ? 0.6f : 0.9f) - 5.4f * limitAmt);
+    const float limiterCeil = juce::Decibels::decibelsToGain(-(voiceMode ? 0.5f : 0.8f) - 7.2f * limitAmt);
 
     float limiterAcc = 0.0f;
     for (int i = 0; i < numSamples; ++i) {

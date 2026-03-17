@@ -13,8 +13,12 @@ EditorBase::EditorBase(ProcessorBase& owner)
     setLookAndFeel(&lookAndFeel);
     setResizable(true, false);
     const bool hasTertiary = owner.getProductIdentity().supportsTertiaryControl();
-    setResizeLimits(hasTertiary ? 680 : 520, hasTertiary ? 430 : 420, 980, 680);
-    setSize(hasTertiary ? 840 : 620, 440);
+    const bool hasQuaternary = owner.getProductIdentity().supportsQuaternaryControl();
+    setResizeLimits(hasQuaternary ? 760 : (hasTertiary ? 680 : 520),
+                    hasQuaternary ? 500 : (hasTertiary ? 430 : 420),
+                    1120,
+                    760);
+    setSize(hasQuaternary ? 980 : (hasTertiary ? 840 : 620), hasQuaternary ? 520 : 440);
 
     const auto& identity = processor.getProductIdentity();
 
@@ -73,10 +77,14 @@ EditorBase::EditorBase(ProcessorBase& owner)
     configureKnob(secondarySlider, secondaryLabel, identity.secondaryLabel, identity.secondaryHint);
     if (identity.supportsTertiaryControl())
         configureKnob(tertiarySlider, tertiaryLabel, identity.tertiaryLabel, identity.tertiaryHint);
+    if (identity.supportsQuaternaryControl())
+        configureKnob(quaternarySlider, quaternaryLabel, identity.quaternaryLabel, identity.quaternaryHint);
     addAndMakeVisible(primaryHint);
     addAndMakeVisible(secondaryHint);
     if (identity.supportsTertiaryControl())
         addAndMakeVisible(tertiaryHint);
+    if (identity.supportsQuaternaryControl())
+        addAndMakeVisible(quaternaryHint);
 
     auto& state = processor.getValueTreeState();
     if (identity.supportsModeSwitch())
@@ -89,6 +97,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
     secondaryAttachment = std::make_unique<SliderAttachment>(state, identity.secondaryParamId.data(), secondarySlider);
     if (identity.supportsTertiaryControl())
         tertiaryAttachment = std::make_unique<SliderAttachment>(state, identity.tertiaryParamId.data(), tertiarySlider);
+    if (identity.supportsQuaternaryControl())
+        quaternaryAttachment = std::make_unique<SliderAttachment>(state, identity.quaternaryParamId.data(), quaternarySlider);
 
     timerCallback();
     startTimerHz(12);
@@ -241,6 +251,7 @@ void EditorBase::resized() {
     }
 
     const bool hasTertiary = processor.getProductIdentity().supportsTertiaryControl();
+    const bool hasQuaternary = processor.getProductIdentity().supportsQuaternaryControl();
     statusLabel.setBounds(modeRow);
     if (processor.getProductIdentity().supportsLearnButton()) {
         header.removeFromTop(scaled(6));
@@ -250,7 +261,7 @@ void EditorBase::resized() {
         learnMeterBar.setBounds(learnRow.removeFromLeft(scaled(180)));
     }
 
-    const bool stacked = body.getWidth() < scaled(hasTertiary ? 760 : 560);
+    const bool stacked = body.getWidth() < scaled(hasQuaternary ? 900 : (hasTertiary ? 760 : 560));
     activityLightCount = processor.getActivityLightCount();
     activityStripBounds = {};
     if (activityLightCount > 0) {
@@ -279,7 +290,7 @@ void EditorBase::resized() {
     }
     if (stacked) {
         body.removeFromBottom(scaled(34));
-        const int rows = hasTertiary ? 3 : 2;
+        const int rows = hasQuaternary ? 4 : (hasTertiary ? 3 : 2);
         const int rowHeight = body.getHeight() / rows;
         auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
             auto section = area.reduced(scaled(26), scaled(20));
@@ -293,7 +304,11 @@ void EditorBase::resized() {
         };
 
         layoutKnob(body.removeFromTop(rowHeight), primarySlider, primaryLabel, primaryHint);
-        if (hasTertiary) {
+        if (hasQuaternary) {
+            layoutKnob(body.removeFromTop(rowHeight), secondarySlider, secondaryLabel, secondaryHint);
+            layoutKnob(body.removeFromTop(rowHeight), tertiarySlider, tertiaryLabel, tertiaryHint);
+            layoutKnob(body, quaternarySlider, quaternaryLabel, quaternaryHint);
+        } else if (hasTertiary) {
             layoutKnob(body.removeFromTop(rowHeight), secondarySlider, secondaryLabel, secondaryHint);
             layoutKnob(body, tertiarySlider, tertiaryLabel, tertiaryHint);
         } else {
@@ -303,6 +318,29 @@ void EditorBase::resized() {
     }
 
     body.removeFromBottom(scaled(34));
+    if (hasQuaternary) {
+        auto c1 = body.removeFromLeft(body.getWidth() / 4).reduced(scaled(14), scaled(24));
+        auto c2 = body.removeFromLeft(body.getWidth() / 3).reduced(scaled(14), scaled(24));
+        auto c3 = body.removeFromLeft(body.getWidth() / 2).reduced(scaled(14), scaled(24));
+        auto c4 = body.reduced(scaled(14), scaled(24));
+        const int dialSize = std::min({ c1.getWidth(), c2.getWidth(), c3.getWidth(), c4.getWidth(), scaled(122) });
+
+        auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
+            label.setBounds(area.removeFromTop(scaled(28)));
+            area.removeFromTop(scaled(8));
+            auto dialRow = area.removeFromTop(dialSize);
+            slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
+            area.removeFromTop(scaled(12));
+            hint.setBounds(area.removeFromTop(scaled(56)));
+        };
+
+        layoutKnob(c1, primarySlider, primaryLabel, primaryHint);
+        layoutKnob(c2, secondarySlider, secondaryLabel, secondaryHint);
+        layoutKnob(c3, tertiarySlider, tertiaryLabel, tertiaryHint);
+        layoutKnob(c4, quaternarySlider, quaternaryLabel, quaternaryHint);
+        return;
+    }
+
     if (hasTertiary) {
         auto left = body.removeFromLeft(body.getWidth() / 3).reduced(scaled(18), scaled(24));
         auto center = body.removeFromLeft(body.getWidth() / 2).reduced(scaled(18), scaled(24));
@@ -374,6 +412,8 @@ void EditorBase::configureKnob(juce::Slider& slider,
         hintLabel = &primaryHint;
     else if (&label == &tertiaryLabel)
         hintLabel = &tertiaryHint;
+    else if (&label == &quaternaryLabel)
+        hintLabel = &quaternaryHint;
     hintLabel->setText(toJuceString(hint), juce::dontSendNotification);
     hintLabel->setJustificationType(juce::Justification::centredLeft);
     hintLabel->setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(12))));
@@ -388,6 +428,12 @@ int EditorBase::scaled(const int value) const {
     return juce::roundToInt(static_cast<float>(value) * uiScale);
 }
 
+void EditorBase::showTransientStatus(const juce::String& text) {
+    transientStatusText = text;
+    transientStatusTicks = 24;
+    statusLabel.setText(transientStatusText, juce::dontSendNotification);
+}
+
 void EditorBase::mouseDown(const juce::MouseEvent& e) {
     if (e.eventComponent != this)
         return;
@@ -396,25 +442,37 @@ void EditorBase::mouseDown(const juce::MouseEvent& e) {
     auto& state     = processor.getValueTreeState();
     const auto pos  = e.getPosition();
 
-    auto toggleParam = [&](std::string_view paramId) {
+    auto toggleParam = [&](std::string_view paramId, const juce::String& onText, const juce::String& offText) {
         if (auto* param = state.getParameter(paramId.data())) {
+            const bool turnOn = param->getValue() < 0.5f;
             param->beginChangeGesture();
-            param->setValueNotifyingHost(param->getValue() < 0.5f ? 1.0f : 0.0f);
+            param->setValueNotifyingHost(turnOn ? 1.0f : 0.0f);
             param->endChangeGesture();
+            showTransientStatus(turnOn ? onText : offText);
             repaint();
         }
     };
 
     if (!id.lowShelfParamId.empty()  && lowShelfIconBounds.contains(pos))
-        toggleParam(id.lowShelfParamId);
+        toggleParam(id.lowShelfParamId,
+                    "Low slope on - tighter low-end cleanup before processing",
+                    "Low slope off - low-end cleanup bypassed");
     else if (!id.highShelfParamId.empty() && highShelfIconBounds.contains(pos))
-        toggleParam(id.highShelfParamId);
+        toggleParam(id.highShelfParamId,
+                    "High slope on - gentler top-end trim after processing",
+                    "High slope off - top-end trim bypassed");
     else
         juce::AudioProcessorEditor::mouseDown(e);
 }
 
 void EditorBase::timerCallback() {
-    statusLabel.setText(processor.getStatusText(), juce::dontSendNotification);
+    if (transientStatusTicks > 0) {
+        --transientStatusTicks;
+        statusLabel.setText(transientStatusText, juce::dontSendNotification);
+    } else {
+        transientStatusText.clear();
+        statusLabel.setText(processor.getStatusText(), juce::dontSendNotification);
+    }
     updateActivityIndicators();
     updateLearnUi();
 

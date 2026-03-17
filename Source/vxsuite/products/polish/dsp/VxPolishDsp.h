@@ -11,11 +11,13 @@ public:
     struct Params {
         float deMud = 0.0f;
         float deEss = 0.0f;
+        float breath = 0.0f;
         float plosive = 0.0f;
         float compress = 0.0f;
         float troubleSmooth = 0.0f;
         float limit = 0.0f;
         float recovery = 0.0f;
+        float smartGain = 0.5f;
         float voicePreserve = 0.75f;
         float denoiseAmount = 0.0f;
         float artifactRisk = 0.0f;
@@ -44,6 +46,7 @@ public:
     float getTotalReductionDb() const noexcept { return correctiveReductionDb + limiterReductionDb - recoveryLiftDb; }
     float getDeMudActivity() const noexcept { return deMudActivity; }
     float getDeEssActivity() const noexcept { return deEssActivity; }
+    float getBreathActivity() const noexcept { return breathActivity; }
     float getPlosiveActivity() const noexcept { return plosiveActivity; }
     float getCompActivity() const noexcept { return compActivity; }
     float getTroubleActivity() const noexcept { return troubleActivity; }
@@ -63,6 +66,10 @@ private:
     float cAEssGeneral = 0.0f;
     float cDeEssAtk = 0.0f;
     float cDeEssRel = 0.0f;
+    float cABreathVoice = 0.0f;
+    float cABreathGeneral = 0.0f;
+    float cBreathAtk = 0.0f;
+    float cBreathRel = 0.0f;
     float cPlosiveFastA = 0.0f;
     float cPlosiveSlowA = 0.0f;
     float cPlosiveAtkA = 0.0f;
@@ -115,7 +122,10 @@ private:
 
     float deEssEnv = 0.0f;
     float deEssMonoLp = 0.0f;
+    float breathEnv = 0.0f;
+    float breathMonoLp = 0.0f;
     std::vector<float> deEssLpCh;
+    std::vector<float> breathLpCh;
     std::array<std::vector<float>, 6> troubleEqZ1;
     std::array<std::vector<float>, 6> troubleEqZ2;
 
@@ -151,6 +161,7 @@ private:
     float limiterReductionDb = 0.0f;
     float deMudActivity = 0.0f;
     float deEssActivity = 0.0f;
+    float breathActivity = 0.0f;
     float plosiveActivity = 0.0f;
     float compActivity = 0.0f;
     float troubleActivity = 0.0f;

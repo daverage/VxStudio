@@ -112,6 +112,14 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             0.5f,
             juce::AudioParameterFloatAttributes().withLabel(identity.tertiaryLabel.data())));
     }
+    if (identity.supportsQuaternaryControl()) {
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { identity.quaternaryParamId.data(), 1 },
+            toJuceString(identity.quaternaryLabel),
+            juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
+            0.5f,
+            juce::AudioParameterFloatAttributes().withLabel(identity.quaternaryLabel.data())));
+    }
     return layout;
 }
 

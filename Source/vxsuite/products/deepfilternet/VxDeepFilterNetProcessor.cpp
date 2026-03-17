@@ -18,7 +18,6 @@ float clamp01(const float v) {
 
 juce::String describeBackend(const vxsuite::deepfilternet::DeepFilterService& engine) {
     switch (engine.realtimeBackend()) {
-        case vxsuite::deepfilternet::DeepFilterService::RealtimeBackend::gpu: return "GPU";
         case vxsuite::deepfilternet::DeepFilterService::RealtimeBackend::cpu: return "CPU";
         case vxsuite::deepfilternet::DeepFilterService::RealtimeBackend::none: break;
     }
@@ -81,12 +80,12 @@ juce::String VXDeepFilterNetAudioProcessor::getStatusText() const {
 
     const auto variant = selectedModelVariant();
     const auto status = engine.lastStatus();
-    if (status.startsWith("rt_bundle_only"))
-        return describeVariant(variant) + " selected - realtime bundle backend not wired yet";
     if (status.startsWith("rt_missing_model"))
         return describeVariant(variant) + " selected - model not found";
-    if (status == "rt_backend_disabled")
-        return "ONNX Runtime unavailable - DeepFilter realtime disabled";
+    if (status == "rt_init_failed")
+        return describeVariant(variant) + " - runtime init failed";
+    if (status == "rt_process_failed")
+        return describeVariant(variant) + " - processing fallback";
     if (engine.isRealtimeReady())
         return describeVariant(variant) + " - realtime " + describeBackend(engine) + " voice denoise";
     return describeVariant(variant) + " - preparing realtime backend";

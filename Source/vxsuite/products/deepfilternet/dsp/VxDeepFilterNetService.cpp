@@ -1,1081 +1,418 @@
 #include "VxDeepFilterNetService.h"
 
+#include <BinaryData.h>
+
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
-#include <mutex>
-#include <numeric>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 #include <juce_core/juce_core.h>
-#if JUCE_MAC || JUCE_LINUX
-#include <dlfcn.h>
-#endif
-#if JUCE_WINDOWS
-#include <windows.h>
-#endif
-#if defined(VXC_HAS_ORT_COREML_FACTORY) && VXC_HAS_ORT_COREML_FACTORY
-#define VXC_COREML_EP_ENABLED 1
-#else
-#define VXC_COREML_EP_ENABLED 0
-#endif
-#if defined(VXC_HAS_ORT_DML_FACTORY) && VXC_HAS_ORT_DML_FACTORY
-#define VXC_DML_EP_ENABLED 1
-#else
-#define VXC_DML_EP_ENABLED 0
-#endif
-#if defined(VXC_HAS_ONNXRUNTIME) && VXC_HAS_ONNXRUNTIME
-#include <onnxruntime_cxx_api.h>
-#endif
-#if defined(VXC_HAS_EMBEDDED_DF_MODELS) && VXC_HAS_EMBEDDED_DF_MODELS
-#include <BinaryData.h>
-#endif
 
 namespace vxsuite::deepfilternet {
 
 namespace {
-uint64_t fnv1a64Update(uint64_t h, const void* data, const size_t bytes) {
-    const auto* p = static_cast<const uint8_t*>(data);
-    for (size_t i = 0; i < bytes; ++i) {
-        h ^= static_cast<uint64_t>(p[i]);
-        h *= 1099511628211ull;
-    }
-    return h;
+
+constexpr double kEngineSampleRate = 48000.0;
+constexpr int kDefaultFrameLength = 480;
+constexpr int kFifoCapacity48k = 48000;
+constexpr int kDfn3Latency48k = 1920;
+constexpr int kDfn2LowLatency48k = 480;
+
+float clamp01(const float value) {
+    return juce::jlimit(0.0f, 1.0f, value);
 }
 
-std::vector<float> downmixToMono(const juce::AudioBuffer<float>& buffer) {
-    const int channels = std::max(1, buffer.getNumChannels());
-    const int samples = std::max(0, buffer.getNumSamples());
-    std::vector<float> mono(static_cast<size_t>(samples), 0.0f);
-    const float inv = 1.0f / static_cast<float>(channels);
-    for (int ch = 0; ch < channels; ++ch) {
-        const float* src = buffer.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            mono[static_cast<size_t>(i)] += src[i] * inv;
-    }
-    return mono;
-}
-
-std::vector<float> resampleLinear(const std::vector<float>& in, double inSr, double outSr) {
-    if (in.empty() || inSr <= 1000.0 || outSr <= 1000.0)
-        return in;
-    const double ratio = outSr / inSr;
-    const size_t outLen = static_cast<size_t>(std::max(1.0, std::round(static_cast<double>(in.size()) * ratio)));
-    std::vector<float> out(outLen, 0.0f);
-    const double invRatio = inSr / outSr;
-    for (size_t i = 0; i < outLen; ++i) {
-        const double srcPos = static_cast<double>(i) * invRatio;
-        const size_t i0 = static_cast<size_t>(std::floor(srcPos));
-        const size_t i1 = std::min(i0 + 1, in.size() - 1);
-        const float t = static_cast<float>(srcPos - static_cast<double>(i0));
-        const float a = in[i0];
-        const float b = in[i1];
-        out[i] = a + (b - a) * t;
-    }
-    return out;
-}
-
-inline float safeValue(float x) {
-    if (!std::isfinite(x)) return 0.0f;
-    if (std::fpclassify(x) == FP_SUBNORMAL) return 0.0f;
-    return x;
-}
 } // namespace
 
-static vxsuite::deepfilternet::DeepFilterService::ModelVariant resolveModelVariantFromEnv(
-    vxsuite::deepfilternet::DeepFilterService::ModelVariant fallback) {
-    if (const char* env = std::getenv("VXC_DEEPFILTER_VARIANT"); env != nullptr && *env != '\0') {
-        std::string s(env);
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (s == "dfn2" || s == "deepfilternet2" || s == "2")
-            return vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2;
-        if (s == "dfn3" || s == "deepfilternet3" || s == "3")
-            return vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn3;
-    }
-    return fallback;
+void DeepFilterService::SampleFifo::reset(const int capacity) {
+    buffer.assign(static_cast<size_t>(std::max(1, capacity)), 0.0f);
+    clear();
 }
 
-static juce::File findAggressiveModel(vxsuite::deepfilternet::DeepFilterService::ModelVariant variant);
-static juce::File findOfficialModelBundle(vxsuite::deepfilternet::DeepFilterService::ModelVariant variant);
+void DeepFilterService::SampleFifo::clear() {
+    writePos = 0;
+    readPos = 0;
+    available = 0;
+}
 
-static juce::File extractEmbeddedModel(vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
-#if defined(VXC_HAS_EMBEDDED_DF_MODELS) && VXC_HAS_EMBEDDED_DF_MODELS
-    const auto chosen = resolveModelVariantFromEnv(variant);
-    const char* variantCandidates[] = {
-        (chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) ? "dfn2.onnx" : "dfn3.onnx",
-        (chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) ? "deepfilternet2.onnx" : "deepfilternet3.onnx",
-        (chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) ? "model_1.onnx" : "model_2.onnx"
-    };
-    const char* dfn3Aliases[] = { "aggressive.onnx", "model_2.onnx" };
+void DeepFilterService::SampleFifo::push(const float* data, const int count) {
+    if (buffer.empty() || data == nullptr || count <= 0)
+        return;
 
-    int dataSize = 0;
-    const char* bytes = nullptr;
-    juce::String chosenName;
-    for (const auto* name : variantCandidates) {
-        dataSize = 0;
-        bytes = BinaryData::getNamedResource(name, dataSize);
-        if (bytes != nullptr && dataSize > 0) {
-            chosenName = name;
-            break;
+    const int capacity = static_cast<int>(buffer.size());
+    for (int i = 0; i < count; ++i) {
+        buffer[static_cast<size_t>(writePos)] = data[i];
+        writePos = (writePos + 1) % capacity;
+        if (available < capacity) {
+            ++available;
+        } else {
+            readPos = (readPos + 1) % capacity;
         }
     }
-    if ((bytes == nullptr || dataSize <= 0)
-        && chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn3) {
-        for (const auto* name : dfn3Aliases) {
-            dataSize = 0;
-            bytes = BinaryData::getNamedResource(name, dataSize);
-            if (bytes != nullptr && dataSize > 0) {
-                chosenName = name;
-                break;
-            }
+}
+
+void DeepFilterService::SampleFifo::pop(float* dest, const int count) {
+    if (buffer.empty() || dest == nullptr || count <= 0)
+        return;
+
+    const int capacity = static_cast<int>(buffer.size());
+    for (int i = 0; i < count; ++i) {
+        if (available > 0) {
+            dest[i] = buffer[static_cast<size_t>(readPos)];
+            readPos = (readPos + 1) % capacity;
+            --available;
+        } else {
+            dest[i] = 0.0f;
         }
     }
-    if (bytes == nullptr || dataSize <= 0)
-        return {};
-
-    static std::mutex writeMutex;
-    const std::lock_guard<std::mutex> lock(writeMutex);
-
-    const juce::File modelDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                    .getChildFile("vxsuite_deepfilternet_models");
-    if (!modelDir.createDirectory())
-        return {};
-    const juce::File outFile = modelDir.getChildFile(chosenName);
-    if (outFile.existsAsFile() && outFile.getSize() == static_cast<int64_t>(dataSize))
-        return outFile;
-
-    if (auto stream = std::unique_ptr<juce::FileOutputStream>(outFile.createOutputStream())) {
-        stream->setPosition(0);
-        stream->truncate();
-        stream->write(bytes, static_cast<size_t>(dataSize));
-        stream->flush();
-        if (outFile.getSize() == static_cast<int64_t>(dataSize))
-            return outFile;
-    }
-    return {};
-#else
-    juce::ignoreUnused(variant);
-    return {};
-#endif
 }
 
 DeepFilterService::~DeepFilterService() {
-    stopRealtimeWorker();
+    releaseRuntime();
 }
 
 juce::String DeepFilterService::lastStatus() const {
     switch (statusCode.load(std::memory_order_relaxed)) {
         case StatusCode::idle: return "idle";
-        case StatusCode::rtBackendDisabled: return "rt_backend_disabled";
-        case StatusCode::rtMissingModelDfn2: return "rt_missing_model:dfn2";
-        case StatusCode::rtMissingModelDfn3: return "rt_missing_model:dfn3";
-        case StatusCode::rtBundleOnlyDfn2: return "rt_bundle_only:dfn2";
-        case StatusCode::rtBundleOnlyDfn3: return "rt_bundle_only:dfn3";
+        case StatusCode::rtPreparing: return "rt_preparing";
         case StatusCode::rtReady: return "rt_ready";
+        case StatusCode::rtMissingModel: return "rt_missing_model";
         case StatusCode::rtInitFailed: return "rt_init_failed";
-        case StatusCode::rtInferFailed: return "rt_infer_failed";
-        case StatusCode::rtResultOverflow: return "rt_result_overflow";
-        case StatusCode::rtOutOverflow: return "rt_out_overflow";
-        case StatusCode::rtInOverflow: return "rt_in_overflow";
-        case StatusCode::rtDryOverflow: return "rt_dry_overflow";
-        case StatusCode::rtJobOverflow: return "rt_job_overflow";
-        case StatusCode::okRt: return "ok:rt";
+        case StatusCode::rtProcessFailed: return "rt_process_failed";
         case StatusCode::rtReprepareNeeded: return "rt_reprepare_needed";
     }
     return "idle";
 }
 
+DeepFilterService::RuntimeApi DeepFilterService::selectedRuntimeApi() const noexcept {
+    return modelVariant == ModelVariant::dfn2 ? RuntimeApi::dfn2 : RuntimeApi::dfn3;
+}
+
+int DeepFilterService::latencySamplesForCurrentVariant() const noexcept {
+    const int latency48k = modelVariant == ModelVariant::dfn2 ? kDfn2LowLatency48k : kDfn3Latency48k;
+    return juce::roundToInt(static_cast<double>(latency48k) * rtSampleRate / kEngineSampleRate);
+}
+
 bool DeepFilterService::needsRealtimePrepare(const double sampleRate, const int maxBlockSize) const {
     if (sampleRate <= 1000.0 || maxBlockSize <= 0)
         return false;
-    if (modelVariant != rtPreparedVariant)
+    if (!rtReady)
         return true;
-    if (std::abs(sampleRate - rtSampleRate) > 1.0)
+    if (rtPreparedVariant != modelVariant)
         return true;
-    const size_t needed = static_cast<size_t>(maxBlockSize);
-    return rtInScratch[0].size() < needed;
+    if (std::abs(rtSampleRate - sampleRate) > 1.0)
+        return true;
+    return rtBlockSize < maxBlockSize;
 }
 
-bool DeepFilterService::hasQueuedRealtimeJobs() const {
-    return rtJobRead.load(std::memory_order_acquire) != rtJobWrite.load(std::memory_order_acquire);
+void DeepFilterService::releaseRuntime() {
+    for (auto& channel : channels) {
+        if (channel.runtime != nullptr) {
+            destroyRuntime(channel.runtime);
+            channel.runtime = nullptr;
+        }
+        channel.resampler.reset();
+        channel.inputFifo.clear();
+        channel.outputFifo.clear();
+        std::fill(channel.frameIn.begin(), channel.frameIn.end(), 0.0f);
+        std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
+    }
+    extractedModelFile = juce::File();
+    rtReady = false;
+    rtCapability = RealtimeCapability::unavailable;
+    rtBackend = RealtimeBackend::none;
+    rtBackendTag = "none";
+    rtRuntimeApi = RuntimeApi::none;
 }
 
-void DeepFilterService::stopRealtimeWorker() {
-    rtWorkerExit.store(true, std::memory_order_release);
-    rtWorkerCv.notify_all();
-    if (rtWorker.joinable())
-        rtWorker.join();
-    rtWorkerReady.store(false, std::memory_order_release);
+void* DeepFilterService::createRuntime(const juce::String& modelPath, const float attenuationLimitDb) const {
+    switch (selectedRuntimeApi()) {
+        case RuntimeApi::dfn2:
+            return df2_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
+        case RuntimeApi::dfn3:
+            return df_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
+        case RuntimeApi::none:
+            break;
+    }
+    return nullptr;
 }
 
-void DeepFilterService::startRealtimeWorker() {
-    stopRealtimeWorker();
-    rtJobRead.store(0, std::memory_order_release);
-    rtJobWrite.store(0, std::memory_order_release);
-    rtResultRead.store(0, std::memory_order_release);
-    rtResultWrite.store(0, std::memory_order_release);
-    rtWorkerExit.store(false, std::memory_order_release);
-    if (!rtModelLoaded || rtBackend == RealtimeBackend::none)
+void DeepFilterService::destroyRuntime(void* runtime) const {
+    if (runtime == nullptr)
         return;
 
-    rtWorker = std::thread([this]() {
-        while (!rtWorkerExit.load(std::memory_order_acquire)) {
-            const size_t read = rtJobRead.load(std::memory_order_acquire);
-            const size_t write = rtJobWrite.load(std::memory_order_acquire);
-            if (read == write) {
-                std::unique_lock<std::mutex> lock(rtWorkerMutex);
-                rtWorkerCv.wait_for(lock,
-                                    std::chrono::milliseconds(2),
-                                    [this]() {
-                                        return rtWorkerExit.load(std::memory_order_acquire)
-                                            || hasQueuedRealtimeJobs();
-                                    });
-                continue;
-            }
-
-            const RtFrameSlot& slot = rtJobQueue[read % rtQueueCapacity];
-            const int ch = juce::jlimit(0, rtMaxChannels - 1, slot.channel);
-            auto& outFrame = rtFrameOut[static_cast<size_t>(ch)];
-            if (outFrame.size() != rtFrameSamples)
-                outFrame.assign(rtFrameSamples, 0.0f);
-
-            bool ok = false;
-            if (slot.frame.size() >= rtFrameSamples) {
-                ok = runRealtimeModelFrame(slot.frame.data(),
-                                           outFrame.data(),
-                                           slot.attenLimDb,
-                                           rtStates[static_cast<size_t>(ch)]);
-            }
-            if (!ok) {
-                setStatus(StatusCode::rtInferFailed);
-                std::copy_n(slot.frame.data(),
-                            std::min(slot.frame.size(), outFrame.size()),
-                            outFrame.data());
-            }
-
-            const size_t resultWrite = rtResultWrite.load(std::memory_order_relaxed);
-            const size_t resultRead = rtResultRead.load(std::memory_order_acquire);
-            if (resultWrite - resultRead < rtQueueCapacity) {
-                RtFrameSlot& resultSlot = rtResultQueue[resultWrite % rtQueueCapacity];
-                resultSlot.channel = ch;
-                resultSlot.attenLimDb = slot.attenLimDb;
-                if (resultSlot.frame.size() != rtFrameSamples)
-                    resultSlot.frame.assign(rtFrameSamples, 0.0f);
-                std::copy_n(outFrame.data(), rtFrameSamples, resultSlot.frame.data());
-                rtResultWrite.store(resultWrite + 1, std::memory_order_release);
-            } else {
-                setStatus(StatusCode::rtResultOverflow);
-            }
-
-            rtJobRead.store(read + 1, std::memory_order_release);
-        }
-    });
-    rtWorkerReady.store(true, std::memory_order_release);
-}
-
-bool DeepFilterService::enqueueRealtimeJob(const int channel, const float* inputFrame, const float attenLimDb) {
-    const size_t write = rtJobWrite.load(std::memory_order_relaxed);
-    const size_t read = rtJobRead.load(std::memory_order_acquire);
-    if (write - read >= rtQueueCapacity)
-        return false;
-
-    RtFrameSlot& slot = rtJobQueue[write % rtQueueCapacity];
-    slot.channel = channel;
-    slot.attenLimDb = attenLimDb;
-    if (slot.frame.size() != rtFrameSamples)
-        slot.frame.assign(rtFrameSamples, 0.0f);
-    std::copy_n(inputFrame, rtFrameSamples, slot.frame.data());
-    rtJobWrite.store(write + 1, std::memory_order_release);
-    rtWorkerCv.notify_one();
-    return true;
-}
-
-void DeepFilterService::drainRealtimeResults() {
-    size_t read = rtResultRead.load(std::memory_order_acquire);
-    const size_t write = rtResultWrite.load(std::memory_order_acquire);
-    while (read != write) {
-        const RtFrameSlot& slot = rtResultQueue[read % rtQueueCapacity];
-        const int ch = juce::jlimit(0, rtMaxChannels - 1, slot.channel);
-        auto& outQ = rtOutQueue48[static_cast<size_t>(ch)];
-        for (size_t i = 0; i < std::min(rtFrameSamples, slot.frame.size()); ++i) {
-            if (!outQ.push(slot.frame[i]))
-                setStatus(StatusCode::rtOutOverflow);
-        }
-        ++read;
-    }
-    rtResultRead.store(read, std::memory_order_release);
-}
-
-void DeepFilterService::RtFifo::reset(const size_t cap) {
-    data.assign(std::max<size_t>(1, cap), 0.0f);
-    readPos = 0;
-    writePos = 0;
-    available = 0;
-}
-
-void DeepFilterService::RtFifo::clear() {
-    readPos = 0;
-    writePos = 0;
-    available = 0;
-}
-
-bool DeepFilterService::RtFifo::push(const float v) {
-    if (available >= data.size())
-        return false;
-    data[writePos] = v;
-    writePos = (writePos + 1) % data.size();
-    ++available;
-    return true;
-}
-
-bool DeepFilterService::RtFifo::pop(float& out) {
-    if (available == 0)
-        return false;
-    out = data[readPos];
-    readPos = (readPos + 1) % data.size();
-    --available;
-    return true;
-}
-
-void DeepFilterService::selectRealtimeBackend() {
-    if (const char* env = std::getenv("VXC_RT_BACKEND"); env != nullptr && *env != '\0') {
-        std::string s(env);
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (s == "none" || s == "off") {
-            rtBackend = RealtimeBackend::none;
-            rtBackendTag = "none";
+    switch (rtRuntimeApi) {
+        case RuntimeApi::dfn2:
+            df2_free(static_cast<DF2State*>(runtime));
             return;
-        }
+        case RuntimeApi::dfn3:
+            df_free(static_cast<DFState*>(runtime));
+            return;
+        case RuntimeApi::none:
+            break;
     }
-#if defined(VXC_HAS_ONNXRUNTIME) && VXC_HAS_ONNXRUNTIME
-    rtBackend = RealtimeBackend::cpu;
-    rtBackendTag = "onnx:auto";
-#else
-    rtBackend = RealtimeBackend::none;
-    rtBackendTag = "disabled";
-#endif
 }
 
-static juce::File findBundledDeepFilterBinary(vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
-    const auto chosen = resolveModelVariantFromEnv(variant);
+int DeepFilterService::runtimeFrameLength(void* runtime) const {
+    if (runtime == nullptr)
+        return 0;
 
-    if (chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
-        if (const char* envBin = std::getenv("VXC_DEEPFILTER_BIN_DFN2"); envBin != nullptr && *envBin != '\0') {
-            juce::File f{ juce::String(envBin) };
-            if (f.existsAsFile())
-                return f;
-        }
-    } else {
-        if (const char* envBin = std::getenv("VXC_DEEPFILTER_BIN_DFN3"); envBin != nullptr && *envBin != '\0') {
-            juce::File f{ juce::String(envBin) };
-            if (f.existsAsFile())
-                return f;
-        }
+    switch (rtRuntimeApi) {
+        case RuntimeApi::dfn2:
+            return static_cast<int>(df2_get_frame_length(static_cast<DF2State*>(runtime)));
+        case RuntimeApi::dfn3:
+            return static_cast<int>(df_get_frame_length(static_cast<DFState*>(runtime)));
+        case RuntimeApi::none:
+            break;
     }
+    return 0;
+}
 
-    if (const char* envBin = std::getenv("VXC_DEEPFILTER_BIN"); envBin != nullptr && *envBin != '\0') {
-        juce::File f{ juce::String(envBin) };
-        if (f.existsAsFile())
-            return f;
+void DeepFilterService::setRuntimeAttenuation(void* runtime, const float attenuationLimitDb) const {
+    if (runtime == nullptr)
+        return;
+
+    switch (rtRuntimeApi) {
+        case RuntimeApi::dfn2:
+            df2_set_atten_lim(static_cast<DF2State*>(runtime), attenuationLimitDb);
+            return;
+        case RuntimeApi::dfn3:
+            df_set_atten_lim(static_cast<DFState*>(runtime), attenuationLimitDb);
+            return;
+        case RuntimeApi::none:
+            break;
     }
+}
 
-#if JUCE_MAC || JUCE_LINUX
-    Dl_info info {};
-    if (dladdr(reinterpret_cast<const void*>(&findBundledDeepFilterBinary), &info) != 0
-        && info.dli_fname != nullptr) {
-        juce::File module(juce::String(info.dli_fname));
-        const juce::File candidates[] = {
-            module.getSiblingFile("../Resources/deep-filter"),
-            module.getSiblingFile("../Resources/deep-filter-mac"),
-            module.getSiblingFile("../Resources/deep-filter.exe"),
-            module.getSiblingFile("../Resources/deepfilter/mac/deep-filter"),
-            module.getSiblingFile("../Resources/deepfilter/win/deep-filter.exe")
-        };
-        for (const auto& c : candidates) {
-            if (c.existsAsFile())
-                return c;
-        }
+float DeepFilterService::processRuntimeFrame(void* runtime, float* input, float* output) const {
+    if (runtime == nullptr || input == nullptr || output == nullptr)
+        return 0.0f;
+
+    switch (rtRuntimeApi) {
+        case RuntimeApi::dfn2:
+            return df2_process_frame(static_cast<DF2State*>(runtime), input, output);
+        case RuntimeApi::dfn3:
+            return df_process_frame(static_cast<DFState*>(runtime), input, output);
+        case RuntimeApi::none:
+            break;
     }
-#endif
+    return 0.0f;
+}
 
-#if JUCE_WINDOWS
-    HMODULE hm = nullptr;
-    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCSTR>(&findBundledDeepFilterBinary),
-                           &hm)) {
-        char path[MAX_PATH] = {0};
-        if (GetModuleFileNameA(hm, path, MAX_PATH) > 0) {
-            juce::File module(juce::String(path));
+juce::File DeepFilterService::modelAssetForVariant(const ModelVariant variant) const {
+    const auto currentWorkingDirectory = juce::File::getCurrentWorkingDirectory();
+    if (variant == ModelVariant::dfn2) {
+        const juce::String dfn2Names[] = { "DeepFilterNet2_onnx_ll.tar.gz", "DeepFilterNet2_onnx.tar.gz" };
+        for (const auto& fileName : dfn2Names) {
             const juce::File candidates[] = {
-                module.getSiblingFile("../Resources/deep-filter.exe"),
-                module.getSiblingFile("../Resources/deep-filter-windows.exe"),
-                module.getSiblingFile("../Resources/deep-filter"),
-                module.getSiblingFile("../Resources/deepfilter/win/deep-filter.exe"),
-                module.getSiblingFile("../Resources/deepfilter/mac/deep-filter")
+                currentWorkingDirectory.getChildFile("assets/deepfilternet/models/" + fileName),
+                currentWorkingDirectory.getChildFile("../assets/deepfilternet/models/" + fileName)
             };
-            for (const auto& c : candidates) {
-                if (c.existsAsFile())
-                    return c;
+            for (const auto& candidate : candidates) {
+                if (candidate.existsAsFile())
+                    return candidate;
             }
         }
-    }
-#endif
-
-    // Development fallback: allow running harness/tools from repo root without a packaged VST3.
-    {
-        const juce::File cwd = juce::File::getCurrentWorkingDirectory();
-        const juce::File candidates[] = {
-            cwd.getChildFile("assets/deepfilter/deep-filter-mac"),
-            cwd.getChildFile("assets/deepfilter/deep-filter"),
-            cwd.getChildFile("assets/deepfilter/deep-filter-windows.exe"),
-            cwd.getChildFile("../assets/deepfilter/deep-filter-mac"),
-            cwd.getChildFile("../assets/deepfilter/deep-filter"),
-            cwd.getChildFile("../assets/deepfilter/deep-filter-windows.exe")
-        };
-        for (const auto& c : candidates) {
-            if (c.existsAsFile())
-                return c;
-        }
+        return {};
     }
 
-    return {};
-}
-
-static juce::File findAggressiveModel(vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
-    const auto chosen = resolveModelVariantFromEnv(variant);
-    if (chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
-        if (const char* envModel = std::getenv("VXC_DEEPFILTER_MODEL_DFN2"); envModel != nullptr && *envModel != '\0') {
-            juce::File f{ juce::String(envModel) };
-            if (f.existsAsFile())
-                return f;
-        }
-    } else {
-        if (const char* envModel = std::getenv("VXC_DEEPFILTER_MODEL_DFN3"); envModel != nullptr && *envModel != '\0') {
-            juce::File f{ juce::String(envModel) };
-            if (f.existsAsFile())
-                return f;
-        }
-    }
-
-    if (const char* envModel = std::getenv("VXC_AGGRESSIVE_MODEL"); envModel != nullptr && *envModel != '\0') {
-        juce::File f{ juce::String(envModel) };
-        if (f.existsAsFile())
-            return f;
-    }
-
-    if (const auto embedded = extractEmbeddedModel(chosen); embedded.existsAsFile())
-        return embedded;
-
-#if JUCE_MAC || JUCE_LINUX
-    Dl_info info {};
-    if (dladdr(reinterpret_cast<const void*>(&findBundledDeepFilterBinary), &info) != 0
-        && info.dli_fname != nullptr) {
-        juce::File module(juce::String(info.dli_fname));
-        const juce::File candidates[] = {
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-                ? module.getSiblingFile("../Resources/models/dfn2.onnx")
-                : module.getSiblingFile("../Resources/models/dfn3.onnx"),
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-                ? module.getSiblingFile("../Resources/models/deepfilternet2.onnx")
-                : module.getSiblingFile("../Resources/models/dfn3.onnx"),
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn3
-                ? module.getSiblingFile("../Resources/models/aggressive.onnx")
-                : juce::File{}
-        };
-        for (const auto& c : candidates) {
-            if (c != juce::File{} && c.existsAsFile())
-                return c;
-        }
-    }
-#endif
-
-    // Development fallback for local harness/tools execution.
-    {
-        const juce::File cwd = juce::File::getCurrentWorkingDirectory();
-        const juce::File candidates[] = {
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-                ? cwd.getChildFile("assets/deepfilternet/models/dfn2.onnx")
-                : cwd.getChildFile("assets/deepfilternet/models/dfn3.onnx"),
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-                ? cwd.getChildFile("assets/deepfilternet/models/deepfilternet2.onnx")
-                : cwd.getChildFile("assets/deepfilternet/models/dfn3.onnx"),
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn3
-                ? cwd.getChildFile("assets/deepfilternet/models/aggressive.onnx")
-                : juce::File{},
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-                ? cwd.getChildFile("../assets/deepfilternet/models/dfn2.onnx")
-                : cwd.getChildFile("../assets/deepfilternet/models/dfn3.onnx"),
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-                ? cwd.getChildFile("../assets/deepfilternet/models/deepfilternet2.onnx")
-                : cwd.getChildFile("../assets/deepfilternet/models/dfn3.onnx"),
-            chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn3
-                ? cwd.getChildFile("../assets/deepfilternet/models/aggressive.onnx")
-                : juce::File{}
-        };
-        for (const auto& c : candidates) {
-            if (c != juce::File{} && c.existsAsFile())
-                return c;
-        }
-    }
-    return {};
-}
-
-static juce::File findOfficialModelBundle(vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
-    const auto chosen = resolveModelVariantFromEnv(variant);
-    const juce::String bundleName = chosen == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2 ? "dfn2" : "dfn3";
-
-#if JUCE_MAC || JUCE_LINUX
-    Dl_info info {};
-    if (dladdr(reinterpret_cast<const void*>(&findBundledDeepFilterBinary), &info) != 0
-        && info.dli_fname != nullptr) {
-        juce::File module(juce::String(info.dli_fname));
-        const juce::File bundle = module.getSiblingFile("../Resources/models/" + bundleName);
-        if (bundle.isDirectory())
-            return bundle;
-    }
-#endif
-
-    const juce::File cwd = juce::File::getCurrentWorkingDirectory();
+    const juce::String fileName = "DeepFilterNet3_onnx.tar.gz";
     const juce::File candidates[] = {
-        cwd.getChildFile("assets/deepfilternet/models/" + bundleName),
-        cwd.getChildFile("../assets/deepfilternet/models/" + bundleName)
+        currentWorkingDirectory.getChildFile("assets/deepfilternet/models/" + fileName),
+        currentWorkingDirectory.getChildFile("../assets/deepfilternet/models/" + fileName)
     };
     for (const auto& candidate : candidates) {
-        if (candidate.isDirectory())
+        if (candidate.existsAsFile())
             return candidate;
     }
     return {};
 }
 
+juce::String DeepFilterService::binaryDataNameForVariant(const ModelVariant variant) const {
+    return variant == ModelVariant::dfn2
+        ? "DeepFilterNet2_onnx_ll_tar_gz"
+        : "DeepFilterNet3_onnx_tar_gz";
+}
+
+bool DeepFilterService::extractEmbeddedModel(const juce::File& destination) {
+    int dataSize = 0;
+    const auto resourceName = binaryDataNameForVariant(modelVariant);
+    const char* bytes = BinaryData::getNamedResource(resourceName.toRawUTF8(), dataSize);
+    if (bytes == nullptr || dataSize <= 0)
+        return false;
+
+    if (auto stream = std::unique_ptr<juce::FileOutputStream>(destination.createOutputStream())) {
+        stream->setPosition(0);
+        stream->truncate();
+        stream->write(bytes, static_cast<size_t>(dataSize));
+        stream->flush();
+        return destination.getSize() == static_cast<int64_t>(dataSize);
+    }
+    return false;
+}
+
+bool DeepFilterService::prepareModelFile() {
+    auto modelFile = modelAssetForVariant(modelVariant);
+    if (modelFile.existsAsFile()) {
+        extractedModelFile = modelFile;
+        return true;
+    }
+
+    const auto tempDirectory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                   .getChildFile("vxsuite_deepfilternet_models");
+    if (!tempDirectory.createDirectory())
+        return false;
+
+    const auto tempModel = tempDirectory.getChildFile(modelVariant == ModelVariant::dfn2
+        ? "DeepFilterNet2_onnx_ll.tar.gz"
+        : "DeepFilterNet3_onnx.tar.gz");
+    if (!tempModel.existsAsFile() && !extractEmbeddedModel(tempModel))
+        return false;
+
+    extractedModelFile = tempModel;
+    return extractedModelFile.existsAsFile();
+}
+
+bool DeepFilterService::prepareChannel(ChannelState& channel, const int maxBlockSize) {
+    if (!prepareModelFile())
+        return false;
+
+    channel.runtime = createRuntime(extractedModelFile.getFullPathName(), 24.0f);
+    if (channel.runtime == nullptr)
+        return false;
+
+    channel.resampler = std::make_unique<Resampler<1, 1>>(rtSampleRate, kEngineSampleRate);
+    channel.inputFifo.reset(kFifoCapacity48k);
+    channel.outputFifo.reset(kFifoCapacity48k);
+
+    const int frameLength = runtimeFrameLength(channel.runtime);
+    rtFrameLength = std::max(1, frameLength);
+    channel.frameIn.assign(static_cast<size_t>(rtFrameLength), 0.0f);
+    channel.frameOut.assign(static_cast<size_t>(rtFrameLength), 0.0f);
+
+    const auto maxRatio = std::max(1.0, kEngineSampleRate / rtSampleRate);
+    const auto maxResampledSize = std::max(rtFrameLength, static_cast<int>(std::ceil(maxBlockSize * maxRatio)) + 128);
+    channel.resampleIn.assign(static_cast<size_t>(maxResampledSize), 0.0f);
+    channel.resampleOut.assign(static_cast<size_t>(maxResampledSize), 0.0f);
+    return true;
+}
+
 void DeepFilterService::prepareRealtime(const double sampleRate, const int maxBlockSize) {
-    stopRealtimeWorker();
-    selectRealtimeBackend();
+    setStatus(StatusCode::rtPreparing);
+    releaseRuntime();
+
+    rtSampleRate = sampleRate > 1000.0 ? sampleRate : kEngineSampleRate;
+    rtBlockSize = std::max(1, maxBlockSize);
+    rtRuntimeApi = selectedRuntimeApi();
     rtPreparedVariant = modelVariant;
-    rtCapability = RealtimeCapability::unavailable;
-    rtSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    const size_t cap = static_cast<size_t>(std::max(1, maxBlockSize));
-    const size_t cap48 = std::max<size_t>(16, static_cast<size_t>(std::round(cap * (48000.0 / rtSampleRate))) + 32);
-    const size_t queueCap48 = std::max<size_t>(8192, cap48 * 16);
-    for (int ch = 0; ch < rtMaxChannels; ++ch) {
-        rtInScratch[static_cast<size_t>(ch)].assign(cap, 0.0f);
-        rtOutScratch[static_cast<size_t>(ch)].assign(cap, 0.0f);
-        rtDryLp[static_cast<size_t>(ch)].assign(cap, 0.0f);
-        rt48In[static_cast<size_t>(ch)].assign(cap48, 0.0f);
-        rt48Out[static_cast<size_t>(ch)].assign(cap48, 0.0f);
-        rt48Dry[static_cast<size_t>(ch)].assign(cap48, 0.0f);
-        rtInQueue48[static_cast<size_t>(ch)].reset(queueCap48);
-        rtOutQueue48[static_cast<size_t>(ch)].reset(queueCap48);
-        rtDryQueue48[static_cast<size_t>(ch)].reset(queueCap48);
-        rtDownsampler[static_cast<size_t>(ch)].reset();
-        rtUpsampler[static_cast<size_t>(ch)].reset();
-        rtUpsamplerDry[static_cast<size_t>(ch)].reset();
-        rtFrameIn[static_cast<size_t>(ch)].assign(rtFrameSamples, 0.0f);
-        rtFrameOut[static_cast<size_t>(ch)].assign(rtFrameSamples, 0.0f);
-    }
-    const size_t nativeLatency = static_cast<size_t>(std::round(480.0 * rtSampleRate / 48000.0));
-    for (auto& ed : rtExtraChannelDelays) {
-        ed.buffer.assign(nativeLatency + cap + 32, 0.0f);
-        ed.readPos = ed.writePos = ed.available = 0;
-    }
-    rtModelLoaded = false;
-#if defined(VXC_HAS_ONNXRUNTIME) && VXC_HAS_ONNXRUNTIME
-    if (rtBackend == RealtimeBackend::none) {
-        setStatus(StatusCode::rtBackendDisabled);
-        return;
-    }
-    const auto modelFile = findAggressiveModel(modelVariant);
-    if (!modelFile.existsAsFile()) {
-        const auto officialBundle = findOfficialModelBundle(modelVariant);
-        if (officialBundle.isDirectory()) {
-            rtCapability = RealtimeCapability::officialBundleOnly;
-            setStatus(modelVariant == ModelVariant::dfn2
-                ? StatusCode::rtBundleOnlyDfn2
-                : StatusCode::rtBundleOnlyDfn3);
-        } else {
-            setStatus(modelVariant == ModelVariant::dfn2 ? StatusCode::rtMissingModelDfn2 : StatusCode::rtMissingModelDfn3);
+    rtFrameLength = kDefaultFrameLength;
+    latencySamples = latencySamplesForCurrentVariant();
+
+    for (auto& channel : channels) {
+        if (!prepareChannel(channel, rtBlockSize)) {
+            releaseRuntime();
+            setStatus(extractedModelFile.existsAsFile() ? StatusCode::rtInitFailed : StatusCode::rtMissingModel);
+            return;
         }
-        return;
     }
 
-    auto normalizedShape = [](std::vector<int64_t> shape, const size_t required) {
-        if (shape.empty())
-            shape = { static_cast<int64_t>(required) };
-        for (auto& d : shape) {
-            if (d <= 0)
-                d = 1;
-        }
-        size_t product = 1;
-        for (const auto d : shape)
-            product *= static_cast<size_t>(d);
-        if (product == required)
-            return shape;
-        shape.clear();
-        shape.push_back(static_cast<int64_t>(required));
-        return shape;
-    };
-
-    try {
-        if (!rtEnv)
-            rtEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "VxDeepFilterNetRt");
-
-        rtOpts = Ort::SessionOptions{};
-        rtOpts.SetIntraOpNumThreads(1);
-        rtOpts.SetInterOpNumThreads(1);
-        rtOpts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_DISABLE_ALL);
-        rtOpts.DisableCpuMemArena();
-        rtOpts.DisableMemPattern();
-
-        std::string pref = "auto";
-        if (const char* env = std::getenv("VXC_RT_BACKEND"); env != nullptr && *env != '\0') {
-            pref = env;
-            std::transform(pref.begin(), pref.end(), pref.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        }
-        const bool forceCpu = (pref == "cpu");
-        const bool requestGpu = !forceCpu;
-        bool gpuEnabled = false;
-        juce::String selectedProvider = "cpu";
-
-        auto tryAppendProvider = [&](const std::string& providerName,
-                                     const std::unordered_map<std::string, std::string>& options = {}) -> bool {
-            try {
-                rtOpts.AppendExecutionProvider(providerName, options);
-                selectedProvider = juce::String(providerName);
-                return true;
-            } catch (...) {
-                return false;
-            }
-        };
-
-        if (requestGpu) {
-#if JUCE_MAC
-            if (VXC_COREML_EP_ENABLED && (pref == "auto" || pref == "gpu" || pref == "coreml"))
-                gpuEnabled = tryAppendProvider("CoreML");
-#elif JUCE_WINDOWS
-            if (VXC_DML_EP_ENABLED && (pref == "auto" || pref == "gpu" || pref == "dml"))
-                gpuEnabled = tryAppendProvider("DML") || tryAppendProvider("Dml");
-            if (!gpuEnabled && (pref == "auto" || pref == "gpu" || pref == "cuda"))
-                gpuEnabled = tryAppendProvider("CUDA") || tryAppendProvider("CUDAExecutionProvider");
-#else
-            if (pref == "auto" || pref == "gpu" || pref == "cuda")
-                gpuEnabled = tryAppendProvider("CUDA") || tryAppendProvider("CUDAExecutionProvider");
-#endif
-        }
-        if (!gpuEnabled) {
-            // CPU EP is available as the default fallback even when provider factory helpers
-            // are not exposed in this ORT build.
-            selectedProvider = "cpu";
-            rtBackend = RealtimeBackend::cpu;
-        } else {
-            rtBackend = RealtimeBackend::gpu;
-        }
-        rtBackendTag = "onnx:" + selectedProvider;
-        rtCapability = RealtimeCapability::monolithicSession;
-
-        rtSession = std::make_unique<Ort::Session>(*rtEnv, modelFile.getFullPathName().toRawUTF8(), rtOpts);
-
-        Ort::AllocatorWithDefaultOptions allocator;
-        const int inCount = static_cast<int>(rtSession->GetInputCount());
-        const int outCount = static_cast<int>(rtSession->GetOutputCount());
-        int frameInIdx = -1;
-        int stateInIdx = -1;
-        int attenInIdx = -1;
-        auto lowerName = [](std::string value) {
-            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            return value;
-        };
-        for (int i = 0; i < inCount; ++i) {
-            const auto allocatedName = rtSession->GetInputNameAllocated(i, allocator);
-            const std::string inputName = lowerName(allocatedName.get() != nullptr ? allocatedName.get() : "");
-            const auto typeInfo = rtSession->GetInputTypeInfo(i);
-            const auto info = typeInfo.GetTensorTypeAndShapeInfo();
-            const auto shape = info.GetShape();
-            size_t count = 1;
-            for (auto d : shape)
-                count *= static_cast<size_t>(d > 0 ? d : 1);
-            if (inputName.find("state") != std::string::npos)
-                stateInIdx = i;
-            else if (inputName.find("atten") != std::string::npos || inputName.find("db") != std::string::npos)
-                attenInIdx = i;
-            else if (inputName.find("frame") != std::string::npos
-                     || inputName.find("audio") != std::string::npos
-                     || inputName.find("input") != std::string::npos)
-                frameInIdx = i;
-            else if (count == 480)
-                frameInIdx = i;
-            else if (count >= 4096)
-                stateInIdx = i;
-            else
-                attenInIdx = i;
-        }
-        if (frameInIdx < 0) frameInIdx = 0;
-        if (stateInIdx < 0) stateInIdx = 1;
-        if (attenInIdx < 0) attenInIdx = std::min(2, inCount - 1);
-
-        int frameOutIdx = -1;
-        int stateOutIdx = -1;
-        for (int i = 0; i < outCount; ++i) {
-            const auto allocatedName = rtSession->GetOutputNameAllocated(i, allocator);
-            const std::string outputName = lowerName(allocatedName.get() != nullptr ? allocatedName.get() : "");
-            const auto typeInfo = rtSession->GetOutputTypeInfo(i);
-            const auto info = typeInfo.GetTensorTypeAndShapeInfo();
-            const auto shape = info.GetShape();
-            size_t count = 1;
-            for (auto d : shape)
-                count *= static_cast<size_t>(d > 0 ? d : 1);
-            if (outputName.find("state") != std::string::npos)
-                stateOutIdx = i;
-            else if (outputName.find("frame") != std::string::npos
-                     || outputName.find("audio") != std::string::npos
-                     || outputName.find("output") != std::string::npos
-                     || outputName.find("enh") != std::string::npos)
-                frameOutIdx = i;
-            else if (count == 480)
-                frameOutIdx = i;
-            else if (count >= 4096)
-                stateOutIdx = i;
-        }
-        if (frameOutIdx < 0) frameOutIdx = 0;
-        if (stateOutIdx < 0) stateOutIdx = std::min(1, outCount - 1);
-
-        {
-            auto n = rtSession->GetInputNameAllocated(frameInIdx, allocator);
-            rtInputFrameName = n.get();
-            auto s = rtSession->GetInputNameAllocated(stateInIdx, allocator);
-            rtInputStateName = s.get();
-            auto a = rtSession->GetInputNameAllocated(attenInIdx, allocator);
-            rtInputAttenName = a.get();
-            auto o0 = rtSession->GetOutputNameAllocated(frameOutIdx, allocator);
-            rtOutputFrameName = o0.get();
-            auto o1 = rtSession->GetOutputNameAllocated(stateOutIdx, allocator);
-            rtOutputStateName = o1.get();
-        }
-
-        const auto frameTypeInfo = rtSession->GetInputTypeInfo(frameInIdx);
-        const auto stateTypeInfo = rtSession->GetInputTypeInfo(stateInIdx);
-        const auto attenTypeInfo = rtSession->GetInputTypeInfo(attenInIdx);
-        const auto rawFrameShape = frameTypeInfo.GetTensorTypeAndShapeInfo().GetShape();
-        size_t frameElements = 1;
-        for (const auto d : rawFrameShape)
-            frameElements *= static_cast<size_t>(d > 0 ? d : 1);
-        frameElements = std::max<size_t>(1, frameElements);
-        rtFrameShape = normalizedShape(rawFrameShape, frameElements);
-        rtFrameSamples = 1;
-        for (const auto d : rtFrameShape)
-            rtFrameSamples *= static_cast<size_t>(d > 0 ? d : 1);
-        rtFrameSamples = std::max<size_t>(1, rtFrameSamples);
-        rtModelLatency48 = std::max<size_t>(rtFrameSamples * 2, 960);
-        rtStateShape = stateTypeInfo.GetTensorTypeAndShapeInfo().GetShape();
-        rtAttenShape = attenTypeInfo.GetTensorTypeAndShapeInfo().GetShape();
-        if (rtStateShape.empty())
-            rtStateShape = { 45304 };
-        for (auto& d : rtStateShape) {
-            if (d <= 0)
-                d = 1;
-        }
-        size_t stateCount = 1;
-        for (const auto d : rtStateShape)
-            stateCount *= static_cast<size_t>(d);
-        for (int ch = 0; ch < rtMaxChannels; ++ch) {
-            rtFrameIn[static_cast<size_t>(ch)].assign(rtFrameSamples, 0.0f);
-            rtFrameOut[static_cast<size_t>(ch)].assign(rtFrameSamples, 0.0f);
-            rtStates[static_cast<size_t>(ch)].assign(std::max<size_t>(1, stateCount), 0.0f);
-        }
-        rtQueueCapacity = std::max<size_t>(32, std::min<size_t>(128, cap48 / std::max<size_t>(1, rtFrameSamples / 4) + 24));
-        rtJobQueue.assign(rtQueueCapacity, RtFrameSlot{});
-        rtResultQueue.assign(rtQueueCapacity, RtFrameSlot{});
-        for (auto& slot : rtJobQueue)
-            slot.frame.assign(rtFrameSamples, 0.0f);
-        for (auto& slot : rtResultQueue)
-            slot.frame.assign(rtFrameSamples, 0.0f);
-        rtModelLoaded = true;
-        setStatus(StatusCode::rtReady);
-    } catch (const Ort::Exception& e) {
-        rtModelLoaded = false;
-        juce::ignoreUnused(e);
-        setStatus(StatusCode::rtInitFailed);
-    } catch (const std::exception& e) {
-        rtModelLoaded = false;
-        juce::ignoreUnused(e);
-        setStatus(StatusCode::rtInitFailed);
-    } catch (...) {
-        rtModelLoaded = false;
-        setStatus(StatusCode::rtInitFailed);
-    }
-#else
-    juce::ignoreUnused(maxBlockSize);
-    setStatus(StatusCode::rtBackendDisabled);
-#endif
-    if (rtModelLoaded)
-        startRealtimeWorker();
+    rtReady = true;
+    rtCapability = RealtimeCapability::embeddedRuntime;
+    rtBackend = RealtimeBackend::cpu;
+    rtBackendTag = rtRuntimeApi == RuntimeApi::dfn2 ? "libdf031:cpu" : "libdf:cpu";
+    setStatus(StatusCode::rtReady);
 }
 
 void DeepFilterService::resetRealtime() {
-    for (int ch = 0; ch < rtMaxChannels; ++ch) {
-        rtInQueue48[static_cast<size_t>(ch)].clear();
-        rtOutQueue48[static_cast<size_t>(ch)].clear();
-        rtDryQueue48[static_cast<size_t>(ch)].clear();
-        rtDownsampler[static_cast<size_t>(ch)].reset();
-        rtUpsampler[static_cast<size_t>(ch)].reset();
-        rtUpsamplerDry[static_cast<size_t>(ch)].reset();
-        std::fill(rtFrameIn[static_cast<size_t>(ch)].begin(), rtFrameIn[static_cast<size_t>(ch)].end(), 0.0f);
-        std::fill(rtFrameOut[static_cast<size_t>(ch)].begin(), rtFrameOut[static_cast<size_t>(ch)].end(), 0.0f);
+    for (auto& channel : channels) {
+        if (channel.runtime != nullptr) {
+            destroyRuntime(channel.runtime);
+            channel.runtime = createRuntime(extractedModelFile.getFullPathName(), 24.0f);
+        }
+        if (channel.runtime != nullptr)
+            setRuntimeAttenuation(channel.runtime, 24.0f);
+        if (channel.resampler != nullptr)
+            channel.resampler = std::make_unique<Resampler<1, 1>>(rtSampleRate, kEngineSampleRate);
+        channel.inputFifo.clear();
+        channel.outputFifo.clear();
+        std::fill(channel.frameIn.begin(), channel.frameIn.end(), 0.0f);
+        std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
     }
-    rtJobRead.store(0, std::memory_order_release);
-    rtJobWrite.store(0, std::memory_order_release);
-    rtResultRead.store(0, std::memory_order_release);
-    rtResultWrite.store(0, std::memory_order_release);
-    for (auto& ed : rtExtraChannelDelays) {
-        std::fill(ed.buffer.begin(), ed.buffer.end(), 0.0f);
-        ed.readPos = ed.writePos = ed.available = 0;
-    }
-#if defined(VXC_HAS_ONNXRUNTIME) && VXC_HAS_ONNXRUNTIME
-    for (int ch = 0; ch < rtMaxChannels; ++ch)
-        std::fill(rtStates[static_cast<size_t>(ch)].begin(), rtStates[static_cast<size_t>(ch)].end(), 0.0f);
-#endif
+    tailPrior = 0.0f;
 }
 
-bool DeepFilterService::runRealtimeModelFrame(const float* input480,
-                                              float* output480,
-                                              const float attenLimDb,
-                                              std::vector<float>& state) {
-#if defined(VXC_HAS_ONNXRUNTIME) && VXC_HAS_ONNXRUNTIME
-    if (!rtModelLoaded || !rtSession)
-        return false;
-
-    try {
-        auto mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        float atten = attenLimDb;
-        auto frameTensor = Ort::Value::CreateTensor<float>(mem,
-                                                            const_cast<float*>(input480),
-                                                            rtFrameSamples,
-                                                            rtFrameShape.data(),
-                                                            rtFrameShape.size());
-        auto stateTensor = Ort::Value::CreateTensor<float>(mem,
-                                                            state.data(),
-                                                            state.size(),
-                                                            rtStateShape.data(),
-                                                            rtStateShape.size());
-        const int64_t scalarDims[1] = { 1 };
-        const int64_t* attenDims = rtAttenShape.empty() ? scalarDims : rtAttenShape.data();
-        const size_t attenRank = rtAttenShape.empty() ? 0 : rtAttenShape.size();
-        auto attenTensor = Ort::Value::CreateTensor<float>(mem,
-                                                            &atten,
-                                                            1,
-                                                            attenDims,
-                                                            attenRank);
-
-        const char* inNames[] = {
-            rtInputFrameName.c_str(),
-            rtInputStateName.c_str(),
-            rtInputAttenName.c_str()
-        };
-        const char* outNames[] = {
-            rtOutputFrameName.c_str(),
-            rtOutputStateName.c_str()
-        };
-        std::array<Ort::Value, 3> inputs{
-            std::move(frameTensor),
-            std::move(stateTensor),
-            std::move(attenTensor)
-        };
-        auto outputs = rtSession->Run(Ort::RunOptions{nullptr},
-                                            inNames,
-                                            inputs.data(),
-                                            inputs.size(),
-                                            outNames,
-                                            2);
-        if (outputs.size() != 2 || !outputs[0].IsTensor() || !outputs[1].IsTensor())
-            return false;
-
-        const float* frameOut = outputs[0].GetTensorData<float>();
-        const size_t frameCount = static_cast<size_t>(outputs[0].GetTensorTypeAndShapeInfo().GetElementCount());
-        if (frameOut == nullptr || frameCount == 0)
-            return false;
-        const size_t frameCopy = std::min(rtFrameSamples, frameCount);
-        std::fill(output480, output480 + rtFrameSamples, 0.0f);
-        std::copy_n(frameOut, frameCopy, output480);
-
-        const float* stateOut = outputs[1].GetTensorData<float>();
-        const size_t stateCount = static_cast<size_t>(outputs[1].GetTensorTypeAndShapeInfo().GetElementCount());
-        if (stateOut != nullptr && stateCount > 0) {
-            const size_t copyCount = std::min(stateCount, state.size());
-            std::copy_n(stateOut, copyCount, state.begin());
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
-#else
-    juce::ignoreUnused(input480, output480, attenLimDb);
-    return false;
-#endif
+float DeepFilterService::attenuationLimitForStrength(const float strength) const noexcept {
+    return 6.0f + 54.0f * clamp01(strength);
 }
 
 bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                                         const double sampleRate,
                                         const float strength,
                                         const uint64_t key) {
-    juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused(key);
-    if (buffer.getNumChannels() <= 0 || buffer.getNumSamples() <= 0)
+
+    if (!rtReady || !hasRealtimeBackend())
         return false;
-    const float wet = juce::jlimit(0.0f, 1.0f, strength);
-    if (wet <= 1.0e-4f)
-        return false;
-    if (!rtModelLoaded || rtCapability != RealtimeCapability::monolithicSession) {
-        if (needsRealtimePrepare(sampleRate, buffer.getNumSamples()))
-            setStatus(StatusCode::rtReprepareNeeded);
-        return false;
-    }
     if (needsRealtimePrepare(sampleRate, buffer.getNumSamples())) {
         setStatus(StatusCode::rtReprepareNeeded);
         return false;
     }
 
-    const int channels = buffer.getNumChannels();
-    const int samples = buffer.getNumSamples();
-    const int processChannels = std::min(channels, rtMaxChannels);
-    for (int ch = 0; ch < processChannels; ++ch) {
-        auto& scratch = rtInScratch[static_cast<size_t>(ch)];
-        const float* src = buffer.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            scratch[static_cast<size_t>(i)] = src[i];
-    }
+    const int numChannels = std::min(buffer.getNumChannels(), rtMaxChannels);
+    const int numSamples = buffer.getNumSamples();
+    if (numChannels <= 0 || numSamples <= 0)
+        return false;
 
-    const int out48Count = std::max(1, juce::roundToInt(static_cast<double>(samples) * 48000.0 / rtSampleRate));
-    for (int ch = 0; ch < processChannels; ++ch) {
-        auto& ch48In = rt48In[static_cast<size_t>(ch)];
-        auto& ch48Out = rt48Out[static_cast<size_t>(ch)];
-        auto& ch48Dry = rt48Dry[static_cast<size_t>(ch)];
-        if (ch48In.size() < static_cast<size_t>(out48Count + 8))
+    const auto attenuationLimitDb = attenuationLimitForStrength(strength);
+    const float wet = clamp01(strength);
+
+    for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+        auto& channel = channels[static_cast<size_t>(channelIndex)];
+        if (channel.runtime == nullptr || channel.resampler == nullptr)
             return false;
-    }
-    const double downRatio = rtSampleRate / 48000.0;
-    for (int ch = 0; ch < processChannels; ++ch) {
-        auto& chIn = rtInScratch[static_cast<size_t>(ch)];
-        auto& ch48In = rt48In[static_cast<size_t>(ch)];
-        rtDownsampler[static_cast<size_t>(ch)].process(downRatio, chIn.data(), ch48In.data(), out48Count);
-    }
 
-    for (int ch = 0; ch < processChannels; ++ch) {
-        auto& q = rtInQueue48[static_cast<size_t>(ch)];
-        auto& dq = rtDryQueue48[static_cast<size_t>(ch)];
-        auto& ch48In = rt48In[static_cast<size_t>(ch)];
-        for (int i = 0; i < out48Count; ++i) {
-            const float s = ch48In[static_cast<size_t>(i)];
-            if (!q.push(s))
-                setStatus(StatusCode::rtInOverflow);
-            if (!dq.push(s))
-                setStatus(StatusCode::rtDryOverflow);
-        }
-    }
+        setRuntimeAttenuation(channel.runtime, attenuationLimitDb);
 
-    // Match offline attenuation mapping to avoid over-gating in realtime.
-    const float attenDb = juce::jlimit(0.0f, 20.0f, 3.0f + 17.0f * wet);
-    auto hasFrame = [&](const int ch) -> bool {
-        return rtInQueue48[static_cast<size_t>(ch)].available >= rtFrameSamples;
-    };
-    while (hasFrame(0) && (processChannels < 2 || hasFrame(1))) {
-        for (int ch = 0; ch < processChannels; ++ch) {
-            auto& q = rtInQueue48[static_cast<size_t>(ch)];
-            auto& frameIn = rtFrameIn[static_cast<size_t>(ch)];
-            for (size_t i = 0; i < rtFrameSamples; ++i) {
-                q.pop(frameIn[static_cast<size_t>(i)]);
-            }
-        }
-        for (int ch = 0; ch < processChannels; ++ch) {
-            auto& frameIn = rtFrameIn[static_cast<size_t>(ch)];
-            if (!enqueueRealtimeJob(ch, frameIn.data(), attenDb))
-                setStatus(StatusCode::rtJobOverflow);
-        }
-    }
-    drainRealtimeResults();
+        float* sourceInput[] = { buffer.getWritePointer(channelIndex) };
+        float* sourceOutput[] = { buffer.getWritePointer(channelIndex) };
+        float* targetInput[] = { channel.resampleIn.data() };
+        float* targetOutput[] = { channel.resampleOut.data() };
 
-    for (int ch = 0; ch < processChannels; ++ch) {
-        auto& outQ = rtOutQueue48[static_cast<size_t>(ch)];
-        auto& dryQ = rtDryQueue48[static_cast<size_t>(ch)];
-        auto& ch48Out = rt48Out[static_cast<size_t>(ch)];
-        auto& ch48Dry = rt48Dry[static_cast<size_t>(ch)];
-        for (int i = 0; i < out48Count; ++i) {
-            if (outQ.available > 0) {
-                outQ.pop(ch48Out[static_cast<size_t>(i)]);
-                if (dryQ.available > 0)
-                    dryQ.pop(ch48Dry[static_cast<size_t>(i)]);
-            } else {
-                // Not enough processed samples; keep dry sync for this sample.
-                if (dryQ.available > 0) {
-                    float dry = 0.0f;
-                    dryQ.pop(dry);
-                    ch48Out[static_cast<size_t>(i)] = dry;
-                    ch48Dry[static_cast<size_t>(i)] = dry;
-                } else {
-                    ch48Out[static_cast<size_t>(i)] = 0.0f;
-                    ch48Dry[static_cast<size_t>(i)] = 0.0f;
+        channel.resampler->process(
+            sourceInput,
+            sourceOutput,
+            targetInput,
+            targetOutput,
+            numSamples,
+            [&](float* const* inputBuffers, float* const* outputBuffers, int sampleCount48k) {
+                auto* input48k = inputBuffers[0];
+                auto* output48k = outputBuffers[0];
+
+                channel.inputFifo.push(input48k, sampleCount48k);
+
+                while (channel.inputFifo.available >= rtFrameLength) {
+                    channel.inputFifo.pop(channel.frameIn.data(), rtFrameLength);
+                    processRuntimeFrame(channel.runtime, channel.frameIn.data(), channel.frameOut.data());
+                    channel.outputFifo.push(channel.frameOut.data(), rtFrameLength);
                 }
-            }
-        }
+
+                const int outputCount = std::min(channel.outputFifo.available, sampleCount48k);
+                channel.outputFifo.pop(output48k, outputCount);
+                if (outputCount < sampleCount48k)
+                    juce::FloatVectorOperations::clear(output48k + outputCount, sampleCount48k - outputCount);
+            });
     }
 
-    const double upRatio = 48000.0 / rtSampleRate;
-    for (int ch = 0; ch < processChannels; ++ch) {
-        auto& ch48Out = rt48Out[static_cast<size_t>(ch)];
-        auto& ch48Dry = rt48Dry[static_cast<size_t>(ch)];
-        auto& outScratch = rtOutScratch[static_cast<size_t>(ch)];
-        auto& dryLp = rtDryLp[static_cast<size_t>(ch)];
-        rtUpsampler[static_cast<size_t>(ch)].process(upRatio, ch48Out.data(), outScratch.data(), samples);
-        rtUpsamplerDry[static_cast<size_t>(ch)].process(upRatio, ch48Dry.data(), dryLp.data(), samples);
-
-        float* d = buffer.getWritePointer(ch);
-        for (int i = 0; i < samples; ++i) {
-            const float diff = (outScratch[static_cast<size_t>(i)] - dryLp[static_cast<size_t>(i)]) * wet;
-            d[i] = d[i] + diff;
-        }
+    for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+        auto* samples = buffer.getWritePointer(channelIndex);
+        for (int i = 0; i < numSamples; ++i)
+            samples[i] *= wet;
     }
 
-    const size_t nativeLatency = static_cast<size_t>(std::round(static_cast<double>(rtModelLatency48) * rtSampleRate / 48000.0));
-    for (int ch = processChannels; ch < channels; ++ch) {
-        const int ecIdx = ch - processChannels;
-        if (ecIdx < rtMaxExtraChannels) {
-            auto& ed = rtExtraChannelDelays[static_cast<size_t>(ecIdx)];
-            float* d = buffer.getWritePointer(ch);
-            for (int i = 0; i < samples; ++i) {
-                const float dry = d[i];
-                ed.buffer[ed.writePos] = safeValue(dry);
-                ed.writePos = (ed.writePos + 1) % ed.buffer.size();
-                if (ed.available < ed.buffer.size()) ++ed.available;
-                else ed.readPos = (ed.readPos + 1) % ed.buffer.size();
+    if (buffer.getNumChannels() > 1 && numChannels == 1)
+        buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
 
-                if (ed.available > nativeLatency) {
-                    d[i] = ed.buffer[ed.readPos];
-                    ed.readPos = (ed.readPos + 1) % ed.buffer.size();
-                    --ed.available;
-                } else {
-                    d[i] = 0.0f;
-                }
-            }
-        }
-    }
-
-    float dryAccum = 1.0e-12f;
-    float outAccum = 1.0e-12f;
-    for (int ch = 0; ch < processChannels; ++ch) {
-        const auto& inScratch = rtInScratch[static_cast<size_t>(ch)];
-        const auto& outScratch = rtOutScratch[static_cast<size_t>(ch)];
-        dryAccum += std::inner_product(inScratch.begin(), inScratch.begin() + samples, inScratch.begin(), 0.0f);
-        outAccum += std::inner_product(outScratch.begin(), outScratch.begin() + samples, outScratch.begin(), 0.0f);
-    }
-    const float norm = static_cast<float>(std::max(1, processChannels * samples));
-    const float dryRms = std::sqrt(dryAccum / norm);
-    const float outRms = std::sqrt(outAccum / norm);
-    const float prior = juce::jlimit(0.0f, 1.0f, std::abs(dryRms - outRms) / std::max(1.0e-6f, dryRms));
-    tailPrior = 0.85f * tailPrior + 0.15f * prior;
-    setStatus(StatusCode::okRt);
+    tailPrior = 0.92f * tailPrior + 0.08f * wet;
+    setStatus(StatusCode::rtReady);
     return true;
 }
 

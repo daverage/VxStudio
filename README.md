@@ -1,16 +1,17 @@
 # VX Suite
 
-> **Focused, realtime-safe audio processors for voice and vocal production.**
-> Five plugins. One shared framework. One job each.
+> **Focused, realtime-safe audio processors for voice and vocal production.**  
+> Six plugins. One shared framework. One job each.
 
 VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
 
 ---
 
-## Plugins at a Glance
+## 🚀 Plugins at a Glance
 
 | Plugin | Job | Controls | Best For |
 |---|---|---|---|
+| **VXDeepFilterNet** | ML-powered voice isolation | `Clean` · `Guard` | Heavy noise, street sounds, non-steady interference |
 | **VXDenoiser** | Broadband noise reduction | `Clean` · `Guard` | Hiss, fan noise, room tone, HVAC |
 | **VXSubtract** | Profile-guided subtractive denoise | `Subtract` · `Protect` · `Learn` | Learnable noise beds, hum, machine noise |
 | **VXDeverb** | Room tail and reverb removal | `Reduce` · `Blend` | Echoey rooms, distant speech, reverberant dialogue |
@@ -19,12 +20,12 @@ VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ fr
 
 ---
 
-## Recommended Signal Chain
+## 🛠 Recommended Signal Chain
 
 VX Suite is designed around composability. Each plugin complements the others without duplicating them. When a recording has multiple problems, this order works best:
 
 ```
-VXDenoiser / VXSubtract  →  VXDeverb  →  VXProximity  →  VXPolish
+VXDeepFilterNet / VXDenoiser / VXSubtract  →  VXDeverb  →  VXProximity  →  VXPolish
 ```
 
 **Why this order:**
@@ -37,8 +38,8 @@ VXDenoiser / VXSubtract  →  VXDeverb  →  VXProximity  →  VXPolish
 ### Practical Examples
 
 ```
-Noisy voiceover, reflective room:
-  VXDenoiser → VXDeverb → VXPolish
+Heavy street noise, reflective room:
+  VXDeepFilterNet → VXDeverb → VXPolish
 
 HVAC noise, thin and distant vocal:
   VXSubtract → VXDeverb → VXProximity → VXPolish
@@ -48,213 +49,141 @@ HVAC noise, thin and distant vocal:
 
 | Situation | Recommended |
 |---|---|
-| General steady broadband noise | **VXDenoiser** |
+| Heavy, non-stationary, or complex noise | **VXDeepFilterNet** |
+| General steady broadband noise (hiss, fans) | **VXDenoiser** |
 | Noise with a learnable spectral fingerprint | **VXSubtract** |
-| Both present | Both at moderate settings — avoid pushing both hard simultaneously |
+| Both present | Use ML isolation first, then target remaining steady beds |
 
 ---
 
-## Design Philosophy
+## 💎 Design Philosophy
 
 Every VX Suite plugin follows the same contract:
 
 - **One main job.** Each processor is designed around a single outcome. Scope boundaries are intentional.
 - **Minimal controls.** One or two headline controls, with an optional third only when it materially improves the result.
 - **Vocal and General modes.** Where the DSP genuinely benefits from different tuning, both modes are provided. Mode differences are always substantive, not cosmetic.
-- **Listen mode.** All five plugins output the removed material rather than the processed result when Listen is engaged — useful for checking whether processing is targeting the right content.
+- **Listen mode.** All plugins output the removed material rather than the processed result when Listen is engaged — useful for checking whether processing is targeting the right content.
 - **Realtime-safe.** No heap allocation or blocking work on the audio thread.
 - **Stable parameter contracts.** Parameter IDs and latency behaviour are designed to be deterministic and host-friendly.
 
 ---
 
-## Shared Behaviours
+## 🔌 Shared Behaviours
 
-### Vocal vs General
+### Vocal vs General (or Model Select)
 
-Most products expose a `Vocal / General` mode switch. This is not a simple preset selector — the DSP tuning changes in each product based on mode:
+Most products expose a `Vocal / General` mode switch. This is not a simple preset selector — the DSP tuning changes in each product based on mode.
 
 - **Vocal** is speech-aware. It uses more conservative source protection, formant-friendly behaviour, and less aggressive cleanup. It biases processing toward what a voice-aware engineer would do by hand.
 - **General** is less constrained. It allows broader cleanup, deeper cuts, and full-range shaping without speech-protective bias.
 
-The shared mode policy lives in `Source/vxsuite/framework/VxSuiteModePolicy.h`.
+**Note:** `VXDeepFilterNet` uses this selector to switch between **DeepFilterNet 3** and **DeepFilterNet 2** models instead of Vocal/General modes.
 
 ### Listen
 
-All five plugins support `Listen`. Enabling it routes the removed content — not the processed output — to your monitors or DAW track. This is useful for:
+All plugins support `Listen`. Enabling it routes the removed content — not the processed output — to your monitors or DAW track. This is useful for:
 
-- Verifying that processing targets noise, reverb, mud, or harshness rather than the wanted source
-- Checking at what amount the plugin starts removing too much useful signal
-- Dialing in just enough processing before switching back to normal output
-
-For latency-bearing products (`VXDenoiser`, `VXDeverb`), the framework aligns the dry reference internally so the Listen signal remains temporally meaningful.
+- Verifying that processing targets noise, reverb, mud, or harshness rather than the wanted source.
+- Checking at what amount the plugin starts removing too much useful signal.
+- Dialing in just enough processing before switching back to normal output.
 
 ### Shared Voice Analysis
 
 The framework runs block-rate signal evidence in `VxSuiteVoiceAnalysis` and exposes:
 
-- Speech presence and stability
-- Directness vs. late-tail likelihood
-- Transient and artifact risk
-- A composite voice-protection recommendation
-
-Products like `VXPolish` consume this evidence to steer multiple internal stages adaptively — without requiring the user to configure them separately.
+- Speech presence and stability.
+- Directness vs. late-tail likelihood.
+- Transient and artifact risk.
+- A composite voice-protection recommendation.
 
 ---
 
-## Plugin Details
+## 🔍 Plugin Details
+
+### VXDeepFilterNet
+
+State-of-the-art ML-powered voice isolation. Uses DeepFilterNet models (v2 and v3) to separate speech from complex background noise. Highly effective at removing non-stationary noise that traditional spectral denoisers cannot touch.
+
+**Controls:**
+
+`Clean` — ML denoise amount. Higher values push the DeepFilter model harder to isolate the voice.
+
+`Guard` — Speech protection. Pulls back some dry detail if the model starts sounding too assertive or "processed."
+
+**Model differences:**
+- `DeepFilterNet 3`: Latest model, generally superior for complex noise and transients.
+- `DeepFilterNet 2`: Earlier model, sometimes preferred for specific noise textures.
+
+---
 
 ### VXDenoiser
 
 STFT-based spectral denoiser for steady background noise. Internally uses noise-floor tracking, Bark-band masking, gain smoothing, and stereo reconstruction that preserves side information.
 
-**What it does:**
-- Converts the signal to a short-time spectral representation
-- Tracks and estimates the noise floor over time
-- Applies frequency-bin gain reduction weighted by speech-protection policy
-- Smooths gains in time and frequency to suppress musical noise and chattering
-- Reconstructs the output and reintroduces side information in a controlled way
-
 **Controls:**
 
-`Clean` — Main denoising amount. Higher values push spectral reduction harder. Think of it as "remove more background," not "make it brighter."
+`Clean` — Main denoising amount. Higher values push spectral reduction harder.
 
-`Guard` — Artifact protection. Higher values preserve harmonics, transients, and source detail. Raise this when the noise reduction sounds phasey, watery, or lispy.
+`Guard` — Artifact protection. Higher values preserve harmonics, transients, and source detail.
 
-**Mode differences:**
-- `Vocal`: biases toward speech safety; increases harmonic guard strictness
-- `General`: behaves as a broader spectral cleaner; allows deeper cleanup
-
-**Best for:** air conditioning, computer fans, preamp hiss, steady room noise under speech
-**Not for:** room tails, plosives, tonal EQ — use `VXDeverb` or `VXPolish`
+**Best for:** air conditioning, computer fans, preamp hiss, steady room noise under speech.
 
 ---
 
 ### VXSubtract
 
-Profile-guided subtractive denoiser. Designed for cases where a learned noise print provides enough information to go further than a blind denoiser — while still applying speech and transient protection that a naive subtract would miss.
-
-**What it does:**
-- Captures a representative noise profile via `Learn`
-- Measures capture progress and confidence during the learning pass
-- Freezes a learned spectral estimate when capture completes
-- Subtracts that profile with layered protection for speech, tonality, and transients
-- Uses `Protect` to trade removal aggressiveness for source preservation
+Profile-guided subtractive denoiser. Designed for cases where a learned noise print provides enough information to go further than a blind denoiser — while still applying speech and transient protection.
 
 **Controls:**
 
-`Subtract` — Main subtractive amount. Higher values remove more of the learned profile and adaptive background estimate.
+`Subtract` — Main subtractive amount. Higher values remove more of the learned profile.
 
-`Protect` — Speech and detail protection. Raise this when the cleanup sounds correct but the voice becomes hollow, chirpy, or over-scooped.
+`Protect` — Speech and detail protection. Raise this when the cleanup sounds correct but the voice becomes hollow or over-scooped.
 
-`Learn` — Arms guided profile capture. Play the representative noise, let the confidence meter build, then stop. The profile locks when sufficient valid material has been observed.
-
-**Best for:** consistent learnable noise beds, HVAC with a stable fingerprint, machine hum, hiss that can be isolated before the wanted audio
-**Not for:** room size changes, EQ, one-pass vocal finishing — use `VXDeverb`, `VXProximity`, `VXPolish`
+`Learn` — Arms guided profile capture. Play the representative noise to build the profile.
 
 ---
 
 ### VXDeverb
 
-Dereverberation processor built on spectral late-reverberant suppression (LRSV). Introduces latency; compensates internally and reports it to the host. In `Vocal` mode, it additionally runs a full per-bin online WPE (Weighted Prediction Error) dereverberation stage — a statistically principled algorithm for separating direct speech from reverberant components that has very few open-source real-time implementations.
-
-**What it does:**
-- Estimates room decay characteristics using a shared RT60 tracker
-- Performs STFT-domain late-tail suppression using delayed spectral history
-- Scales over-subtraction with the `Reduce` amount
-- In `Vocal` mode: applies per-bin online WPE with RLS adaptation — builds a K-tap complex prediction filter per frequency bin, updated each frame using a rank-1 inverse correlation update (O(K²) per bin), with a PSD variance estimate to weight the adaptation and a numerical stability guard for silence resilience
-- Reconstructs with reported host latency
-- Restores low-frequency weight post-dereverberation via `Blend`
+Dereverberation processor built on spectral late-reverberant suppression (LRSV). In `Vocal` mode, it additionally runs a full per-bin online WPE (Weighted Prediction Error) dereverberation stage.
 
 **Controls:**
 
-`Reduce` — Dereverb authority. Controls the mix between dry-aligned and fully processed output, and scales internal over-subtraction. Low values are gentle; high values push hard.
+`Reduce` — Dereverb authority. Controls the mix between dry-aligned and fully processed output.
 
-`Blend` — Low-body restoration after dereverberation. Reintroduces low-end toward the dry-aligned reference. Useful when the room cleanup makes the voice feel lean or over-dried.
-
-**Mode differences:**
-- `Vocal`: preserves direct speech more aggressively; includes full per-bin online WPE
-- `General`: allows deeper tail reduction across the full range
-
-**Listen:** outputs the removed room contribution using a latency-aligned dry reference.
-
-**Best for:** untreated room recordings, distant narration, podcast tracks in reflective spaces
-**Not for:** constant broadband hiss, close-mic tonal enhancement — use `VXDenoiser`, `VXProximity`
+`Blend` — Low-body restoration. Reintroduces low-end weight post-dereverberation.
 
 ---
 
 ### VXProximity
 
-Lightweight close-mic tone shaper. Simulates the tonal effect of moving a microphone closer to the source using shelf filters — no convolution or physical modelling. Intentionally simple, cheap, and predictable.
-
-**What it does:**
-- Shapes low-end body and warmth with a mode-dependent low shelf
-- Adds upper presence or air with a high shelf
-- Different shelf frequencies and tuning between `Vocal` and `General`
+Lightweight close-mic tone shaper. Simulates the tonal effect of moving a microphone closer to the source using shelf filters.
 
 **Controls:**
 
-`Closer` — Main proximity control. Increases low-shelf gain and shifts the shelf region as the effect intensifies. Makes the source feel physically nearer to the mic.
+`Closer` — Main proximity control. Increases low-shelf gain and shifts the shelf region.
 
-`Air` — Upper clarity and openness. Prevents the result from becoming too thick or chesty as `Closer` increases.
-
-**Mode differences:**
-- `Vocal`: low shelf tuned ~80–200 Hz, high shelf for presence; best for narration and vocals
-- `General`: low shelf sits higher and behaves more broadly; high shelf reaches further into full-range material
-
-**Best for:** making a voice feel more intimate, restoring closeness in distant recordings, sweetening before `VXPolish`
-**Not for:** noise, reverb, dynamic correction
+`Air` — Upper clarity and openness. Prevents the result from becoming too thick.
 
 ---
 
 ### VXPolish
 
-The suite's finishing processor. A macro-style front end that drives a multi-stage corrective and recovery DSP chain internally. Rather than doing one thing extremely deeply, `VXPolish` smooths multiple common voice problems in a single pass.
-
-**Corrective stages:**
-- Low-mid mud detection and reduction (content-adaptive, ratio-based)
-- De-essing (high-frequency ratio detection, mode-aware threshold)
-- Plosive taming (burst detection with fast/slow envelope comparison)
-- Gentle compression (auto-makeup, sidechain-aware)
-- Multi-band dynamic trouble smoothing (six peaking bands, 1.4–10.5 kHz, detection-driven — only cuts where content genuinely exceeds reference)
-- Body recovery (frequency-band lift toward target spectral ratios)
-- Output limiter
-
-**Slope filters (clickable icons in the UI):**
-- Low-cut (HPF): 2nd-order Butterworth — 80 Hz in `Vocal`, 40 Hz in `General`
-- High-shelf cut: 1st-order — 12 kHz / −4 dB in `Vocal`, 16 kHz / −3 dB in `General`
+The suite's finishing processor. A macro-style front end driving a multi-stage corrective and recovery DSP chain: mud reduction, de-essing, plosive taming, gentle compression, and trouble smoothing.
 
 **Controls:**
 
-`Polish` — Main corrective amount. Drives overall cleanup intensity across mud reduction, de-essing, trouble smoothing, compression, and finishing.
+`Polish` — Main corrective amount. Drives overall cleanup intensity.
 
-`Body` — Recovery amount. Restores useful spectral weight after corrective stages. Works as a content-aware recovery lift, not a static low boost.
+`Body` — Recovery amount. Restores useful spectral weight after corrective stages.
 
-`Focus` — Steers the correction target. Lower settings emphasise low-mid cleanup and warmth management; higher settings emphasise upper-mid and top-end smoothing.
-
-**Mode differences** — Vocal and General tuning differs across every internal stage: thresholds, max cut depths, shelf frequencies, detection sensitivity.
-
-**Listen:** outputs the removed content — mud, harshness, sibilance, plosive energy, and roughness — rather than the polished result.
-
-**Best for:** final cleanup on voiceover and podcast, one-pass corrective finishing, reducing small spectral problems without a long manual chain
-**Not for:** heavy broadband denoising, true dereverberation, intentional character EQ
+`Focus` — Steers the correction target (low-mid warmth vs. upper-mid smoothing).
 
 ---
 
-## Decision Guide
-
-Not sure where to start? Use this:
-
-| Problem | Start Here |
-|---|---|
-| Constant noise under the whole recording | **VXDenoiser** |
-| Repeating, learnable noise bed | **VXSubtract** |
-| Room wash, echo, or reverberant speech | **VXDeverb** |
-| Clean recording that feels distant or thin | **VXProximity** |
-| Needs finishing, smoothing, corrective polish | **VXPolish** |
-
----
-
-## Build
+## 🏗 Build
 
 The project uses CMake and JUCE. A pre-configured JUCE submodule is included.
 
@@ -266,34 +195,27 @@ cmake -S . -B build
 cmake --build build -j$(nproc)
 ```
 
-Built VST3 bundles are staged into:
-
-```
-Source/vxsuite/vst/
-```
-
 ### Targets
 
 | Target | Description |
 |---|---|
-| `VXPolish_VST3` | Polish plugin VST3 bundle |
-| `VXDenoiser_VST3` | Denoiser plugin VST3 bundle |
-| `VXSubtract_VST3` | Subtract plugin VST3 bundle |
-| `VXDeverb_VST3` | Deverb plugin VST3 bundle |
-| `VXProximity_VST3` | Proximity plugin VST3 bundle |
-| `VXDeverbTests` | Focused deverb test binary |
-| `VXDeverbMeasure` | Deverb measurement harness |
-| `VxSuiteVoiceAnalysisTests` | Shared voice-analysis tests |
+| `VXDeepFilterNet_VST3` | DeepFilterNet isolation plugin |
+| `VXDenoiser_VST3` | Denoiser plugin |
+| `VXSubtract_VST3` | Subtract plugin |
+| `VXDeverb_VST3` | Deverb plugin |
+| `VXProximity_VST3` | Proximity plugin |
+| `VXPolish_VST3` | Polish plugin |
 
 ---
 
-## Repository Layout
+## 📂 Repository Layout
 
 ```
 Source/
   vxsuite/
     framework/        Shared processor · editor · parameters · mode · voice analysis
     products/
+      deepfilternet/  VXDeepFilterNet processor + ML service
       denoiser/       VXDenoiser processor + DSP
       subtract/       VXSubtract processor + DSP
       deverb/         VXDeverb processor + DSP
@@ -305,20 +227,8 @@ cmake/                Project CMake helpers
 docs/                 Framework and product reference
 ```
 
-### Key Source Files
-
-| File | Purpose |
-|---|---|
-| `framework/VxSuiteProcessorBase.*` | Shared processor lifecycle, mode, and listen behaviour |
-| `framework/VxSuiteEditorBase.*` | Shared editor layout, knobs, activity indicators, shelf icons |
-| `framework/VxSuiteModePolicy.h` | `Vocal` / `General` tuning contract |
-| `framework/VxSuiteProduct.h` | `ProductIdentity` struct — per-plugin configuration |
-| `framework/VxSuiteVoiceAnalysis.*` | Block-rate speech and voice evidence |
-| `framework/VxSuiteParameters.h` | Shared APVTS parameter layout helpers |
-| `products/polish/dsp/VxPolishDsp.*` | Polish multi-stage corrective DSP |
-
 ---
 
-## Status
+## 🚥 Status
 
-VST3 on macOS. All five plugins build, stage, and present a consistent VX Suite framework contract. Test coverage is strongest for the dereverberation and voice analysis paths.
+VST3 on macOS. All six plugins build, stage, and present a consistent VX Suite framework contract. VXDeepFilterNet requires ONNX Runtime and valid model files in the `assets/` directory.

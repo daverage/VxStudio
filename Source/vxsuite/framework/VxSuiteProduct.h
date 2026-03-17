@@ -25,14 +25,17 @@ struct ProductIdentity {
     std::string_view primaryParamId;
     std::string_view secondaryParamId;
     std::string_view tertiaryParamId;
+    std::string_view quaternaryParamId;
     std::string_view modeParamId;
     std::string_view listenParamId;
     std::string_view primaryLabel;
     std::string_view secondaryLabel;
     std::string_view tertiaryLabel;
+    std::string_view quaternaryLabel;
     std::string_view primaryHint;
     std::string_view secondaryHint;
     std::string_view tertiaryHint;
+    std::string_view quaternaryHint;
     std::string_view selectorLabel = "Mode";
     std::array<std::string_view, 2> selectorChoiceLabels {};
     std::string_view learnParamId;
@@ -59,6 +62,10 @@ struct ProductIdentity {
 
     bool supportsTertiaryControl() const noexcept {
         return !tertiaryParamId.empty();
+    }
+
+    bool supportsQuaternaryControl() const noexcept {
+        return !quaternaryParamId.empty();
     }
 
     bool supportsLearnButton() const noexcept {

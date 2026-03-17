@@ -451,6 +451,9 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
     learnedSensitivity = sensitivity;
     const float subMixGlobal = clamp01(subtract / 5.0f);
     const bool labRaw = options.labRawMode;
+    // How much of the DSP-derived protect mask to apply (0 = bypass, 1 = full).
+    // options.guardStrictness = 0 when user sets Protect=0.
+    const float guardStrictness = juce::jlimit(0.0f, 1.0f, options.guardStrictness);
     const float wetCore  = labRaw ? wet : juce::jlimit(0.0f, 1.0f, wet * (1.0f - 0.10f * wet));
     const bool subtractEnabled = subMixGlobal > 1.0e-4f && learnedProfileReady;
     // Allow one transition block when learning just stopped so the frozen
@@ -627,10 +630,11 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                 if (subtractEnabled) {
                     const float mag = std::sqrt(std::max(kEps, p));
                     const float noiseMag = std::sqrt(std::max(kEps, noisePowFrozen[k]));
-                    const float protectMask = juce::jlimit(0.0f, 1.0f,
-                                                           0.52f * presenceProb[k]
-                                                         + 0.28f * tonalnessByBin[k]
-                                                         + 0.20f * (binInTransient ? 1.0f : 0.0f));
+                    // guardStrictness=0 (Protect=0) bypasses DSP-derived protection entirely.
+                    const float rawMask = 0.52f * presenceProb[k]
+                                        + 0.28f * tonalnessByBin[k]
+                                        + 0.20f * (binInTransient ? 1.0f : 0.0f);
+                    const float protectMask = juce::jlimit(0.0f, 1.0f, guardStrictness * rawMask);
                     const float effectiveAlpha = subtractAlpha * (1.0f - 0.72f * protectMask);
                     const float effectiveFloor = juce::jlimit(1.0e-4f, 0.12f,
                                                               lerp(1.0e-4f, subtractFloor, protectMask));
@@ -666,16 +670,22 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                 const float noiseLike = clamp01((spectralFlatness - 0.12f) / 0.38f);
                 const float steady = clamp01(1.0f - std::abs(std::log(std::max(0.25f, std::min(4.0f, energyRatio)))) / 1.2f);
                 const float quietSpeech = 1.0f - clamp01(signalPresenceAvg);
+                // Reduce noiseLike weight: colored real-world noise has low spectral
+                // flatness and should not be penalised — steadiness and absence of
+                // speech matter more for a reliable learned profile.
                 const float quality = juce::jlimit(0.0f, 1.0f,
-                                                   0.50f * noiseLike
-                                                 + 0.30f * steady
-                                                 + 0.20f * quietSpeech
+                                                   0.15f * noiseLike
+                                                 + 0.45f * steady
+                                                 + 0.40f * quietSpeech
                                                  - (energyRatio > 1.38f ? 0.12f : 0.0f));
                 learnQualityAccum += quality;
                 ++learnQualityFrames;
+                // Use cumulative average for a stable, monotonically-improving display.
+                const float cumulativeQuality = learnQualityAccum
+                                              / static_cast<float>(learnQualityFrames);
                 learnedProfileConfidence = juce::jlimit(0.0f, 1.0f,
                                                         0.55f * getLearnProgress()
-                                                      + 0.45f * quality);
+                                                      + 0.45f * cumulativeQuality);
             }
 
             // Frequency smoothing

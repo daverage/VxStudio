@@ -10,6 +10,7 @@ constexpr std::string_view kShortTag = "PLS";
 constexpr std::string_view kPolishParam   = "polish";
 constexpr std::string_view kBodyParam     = "body";
 constexpr std::string_view kFocusParam    = "focus";
+constexpr std::string_view kGainParam     = "gain";
 constexpr std::string_view kModeParam     = "mode";
 constexpr std::string_view kListenParam   = "listen";
 constexpr std::string_view kDeMudOnParam  = "demud_on";
@@ -46,15 +47,18 @@ vxsuite::ProductIdentity VXPolishAudioProcessor::makeIdentity() {
     identity.primaryParamId = kPolishParam;
     identity.secondaryParamId = kBodyParam;
     identity.tertiaryParamId = kFocusParam;
+    identity.quaternaryParamId = kGainParam;
     identity.modeParamId = kModeParam;
     identity.listenParamId = kListenParam;
     identity.defaultMode = vxsuite::Mode::vocal;
     identity.primaryLabel = "Polish";
     identity.secondaryLabel = "Body";
     identity.tertiaryLabel = "Focus";
+    identity.quaternaryLabel = "Gain";
     identity.primaryHint = "Smooth mud, boxiness, harshness, and fizz with one smart macro.";
     identity.secondaryHint = "Restore useful low and low-mid weight after smoothing so the voice stays natural.";
     identity.tertiaryHint = "Steer correction from low-mid cleanup toward upper-mid and top-end smoothing.";
+    identity.quaternaryHint = "Smart gain. Pushes the mode-aware recovery and auto-gain harder without just turning everything up.";
     identity.showLowShelfIcon  = true;
     identity.showHighShelfIcon = true;
     identity.lowShelfParamId   = kHpfOnParam;
@@ -84,22 +88,24 @@ juce::String VXPolishAudioProcessor::getStatusText() const {
 
 float VXPolishAudioProcessor::getLowShelfActivity()  const noexcept { return polishChain.getDeMudActivity(); }
 float VXPolishAudioProcessor::getHighShelfActivity() const noexcept { return polishChain.getDeEssActivity(); }
-int VXPolishAudioProcessor::getActivityLightCount() const noexcept { return 4; }
+int VXPolishAudioProcessor::getActivityLightCount() const noexcept { return 5; }
 float VXPolishAudioProcessor::getActivityLight(int index) const noexcept {
     switch (index) {
-        case 0: return polishChain.getDeEssActivity();
-        case 1: return polishChain.getPlosiveActivity();
-        case 2: return polishChain.getCompActivity();
-        case 3: return polishChain.getLimiterActivity();
+        case 0: return polishChain.getBreathActivity();
+        case 1: return polishChain.getDeEssActivity();
+        case 2: return polishChain.getPlosiveActivity();
+        case 3: return polishChain.getCompActivity();
+        case 4: return polishChain.getLimiterActivity();
         default: return 0.0f;
     }
 }
 std::string_view VXPolishAudioProcessor::getActivityLightLabel(int index) const noexcept {
     switch (index) {
-        case 0: return "De-ess";
-        case 1: return "Plosive";
-        case 2: return "Comp";
-        case 3: return "Limit";
+        case 0: return "De-breath";
+        case 1: return "De-ess";
+        case 2: return "Plosive";
+        case 3: return "Comp";
+        case 4: return "Limit";
         default: return {};
     }
 }
@@ -186,16 +192,19 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const float detroubleTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     const float focusTarget = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId, 0.5f);
+    const float gainTarget = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.5f);
 
     if (!controlsPrimed) {
         smoothedDetrouble = detroubleTarget;
         smoothedBody = bodyTarget;
         smoothedFocus = focusTarget;
+        smoothedGain = gainTarget;
         controlsPrimed = true;
     } else {
         smoothedDetrouble += blockBlendAlpha(currentSampleRateHz, numSamples, 0.050f) * (detroubleTarget - smoothedDetrouble);
         smoothedBody += blockBlendAlpha(currentSampleRateHz, numSamples, 0.090f) * (bodyTarget - smoothedBody);
         smoothedFocus += blockBlendAlpha(currentSampleRateHz, numSamples, 0.070f) * (focusTarget - smoothedFocus);
+        smoothedGain += blockBlendAlpha(currentSampleRateHz, numSamples, 0.080f) * (gainTarget - smoothedGain);
     }
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
@@ -204,6 +213,7 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const float detrouble = clamp01(smoothedDetrouble);
     const float body = clamp01(smoothedBody);
     const float focus = clamp01(smoothedFocus);
+    const float gain = clamp01(smoothedGain);
     const float lowBias = 1.0f - focus;
     const float highBias = focus;
 
@@ -240,24 +250,31 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
 
     vxsuite::polish::Dsp::Params params {};
     params.contentMode = voiceMode ? 0 : 1;
-    params.deMud = deMudOn ? polishDrive * juce::jlimit(0.0f, 1.0f, (0.25f + 0.55f * lowBias) * (0.45f + 0.55f * lowTrouble)) : 0.0f;
+    params.deMud = deMudOn ? polishDrive * juce::jlimit(0.0f, 1.0f, (0.36f + 0.58f * lowBias) * (0.58f + 0.62f * lowTrouble)) : 0.0f;
     params.deEss = deEssOn ? polishDrive * juce::jlimit(0.0f, 1.0f, (0.15f + 0.75f * highBias) * (0.35f + 0.65f * highTrouble)) : 0.0f;
+    params.breath = polishDrive * juce::jlimit(0.0f, 1.0f,
+                                               (voiceMode ? 0.10f : 0.03f)
+                                             + (voiceMode ? 0.22f : 0.08f) * highTrouble
+                                             + (voiceMode ? 0.16f : 0.05f) * highBias
+                                             + 0.08f * (1.0f - analysis.directness));
     params.plosive = polishDrive * juce::jlimit(0.0f, 1.0f,
-                                                (voiceMode ? 0.10f : 0.06f)
-                                              + 0.24f * analysis.transientRisk
-                                              + 0.10f * lowBias);
+                                                (voiceMode ? 0.12f : 0.04f)
+                                              + (voiceMode ? 0.28f : 0.14f) * analysis.transientRisk
+                                              + (voiceMode ? 0.10f : 0.05f) * lowBias);
     params.compress = polishDrive * juce::jlimit(0.0f, 1.0f,
-                                                 (voiceMode ? 0.10f : 0.14f)
-                                               + 0.18f * (1.0f - analysis.speechStability));
+                                                 (voiceMode ? 0.22f : 0.20f)
+                                               + 0.30f * (1.0f - analysis.speechStability)
+                                               + 0.08f * analysis.speechPresence);
     params.troubleSmooth = deEssOn ? polishDrive * juce::jlimit(0.0f, 1.0f,
-                                                      0.20f + 0.55f * highBias + 0.25f * highTrouble) : 0.0f;
-    params.limit = juce::jlimit(0.12f, 0.58f,
-                                0.16f + 0.20f * polishDrive + 0.12f * body + 0.10f * analysis.transientRisk);
+                                                      0.32f + 0.62f * highBias + 0.36f * highTrouble) : 0.0f;
+    params.limit = juce::jlimit(0.18f, 0.78f,
+                                0.24f + 0.34f * polishDrive + 0.16f * body + 0.14f * analysis.transientRisk);
     params.recovery = body * recoveryNeed * juce::jlimit(0.0f, 1.0f, 0.25f + 0.75f * polishDrive);
+    params.smartGain = gain;
     params.voicePreserve = juce::jlimit(0.0f, 1.0f, 0.45f + 0.55f * protectBias);
     params.denoiseAmount = juce::jlimit(0.0f, 1.0f, 0.50f * polishDrive + 0.50f * highTrouble);
     params.artifactRisk = artifactRisk;
-    params.compSidechainBoostDb = juce::jlimit(0.0f, 3.0f, 0.50f + 2.0f * analysis.speechPresence);
+    params.compSidechainBoostDb = juce::jlimit(0.5f, 5.5f, 1.2f + 3.4f * analysis.speechPresence);
     params.sourcePreset = 0;
     params.speechLoudnessDb = juce::Decibels::gainToDecibels(inputEnv, -120.0f);
     params.proximityContext = juce::jlimit(0.0f, 1.0f, 0.55f * lowBias + 0.45f * (1.0f - analysis.directness));
@@ -289,10 +306,12 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         const float reductionDb = juce::Decibels::gainToDecibels(preRms + 1.0e-6f)
                                 - juce::Decibels::gainToDecibels(postRms + 1.0e-6f);
         const float targetMakeupDb = juce::jlimit(0.0f, 12.0f, reductionDb);
+        const float smartMakeup = juce::jlimit(0.0f, 1.0f, 0.25f + 0.75f * gain);
+        const float gainWeightedTargetDb = juce::jlimit(0.0f, 16.0f, targetMakeupDb * (0.80f + 0.70f * smartMakeup));
         const float alpha = targetMakeupDb > smoothedMakeupDb
             ? blockBlendAlpha(currentSampleRateHz, numSamples, 0.800f)  // slow attack
             : blockBlendAlpha(currentSampleRateHz, numSamples, 0.300f); // moderate release
-        smoothedMakeupDb += alpha * (targetMakeupDb - smoothedMakeupDb);
+        smoothedMakeupDb += alpha * (gainWeightedTargetDb - smoothedMakeupDb);
 
         // Noise guard: fade out when signal approaches estimated noise floor
         const float signalDb = juce::Decibels::gainToDecibels(tonalInputEnv + 1.0e-6f, -120.0f);

@@ -32,6 +32,7 @@ private:
     float smoothedDetrouble = 0.0f;
     float smoothedBody = 0.0f;
     float smoothedFocus = 0.5f;
+    float smoothedGain = 0.5f;
     float tonalLowLp = 0.0f;
     float tonalLowMidLp = 0.0f;
     float tonalPresenceLoLp = 0.0f;
