@@ -252,9 +252,10 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     params.contentMode = voiceMode ? 0 : 1;
     params.deMud = deMudOn ? polishDrive * juce::jlimit(0.0f, 1.0f, (0.36f + 0.58f * lowBias) * (0.58f + 0.62f * lowTrouble)) : 0.0f;
     params.deEss = deEssOn ? polishDrive * juce::jlimit(0.0f, 1.0f, (0.15f + 0.75f * highBias) * (0.35f + 0.65f * highTrouble)) : 0.0f;
+    // No constant base: breath only fires when high-frequency trouble or
+    // focus bias is present — prevents the indicator being permanently lit.
     params.breath = polishDrive * juce::jlimit(0.0f, 1.0f,
-                                               (voiceMode ? 0.10f : 0.03f)
-                                             + (voiceMode ? 0.22f : 0.08f) * highTrouble
+                                               (voiceMode ? 0.22f : 0.08f) * highTrouble
                                              + (voiceMode ? 0.16f : 0.05f) * highBias
                                              + 0.08f * (1.0f - analysis.directness));
     params.plosive = polishDrive * juce::jlimit(0.0f, 1.0f,
@@ -269,7 +270,7 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
                                                       0.32f + 0.62f * highBias + 0.36f * highTrouble) : 0.0f;
     params.limit = juce::jlimit(0.18f, 0.78f,
                                 0.24f + 0.34f * polishDrive + 0.16f * body + 0.14f * analysis.transientRisk);
-    params.recovery = body * recoveryNeed * juce::jlimit(0.0f, 1.0f, 0.25f + 0.75f * polishDrive);
+    params.recovery = body * recoveryNeed * juce::jlimit(0.0f, 1.0f, 0.50f + 0.50f * polishDrive);
     params.smartGain = gain;
     params.voicePreserve = juce::jlimit(0.0f, 1.0f, 0.45f + 0.55f * protectBias);
     params.denoiseAmount = juce::jlimit(0.0f, 1.0f, 0.50f * polishDrive + 0.50f * highTrouble);
@@ -309,8 +310,8 @@ void VXPolishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         const float smartMakeup = juce::jlimit(0.0f, 1.0f, 0.25f + 0.75f * gain);
         const float gainWeightedTargetDb = juce::jlimit(0.0f, 16.0f, targetMakeupDb * (0.80f + 0.70f * smartMakeup));
         const float alpha = targetMakeupDb > smoothedMakeupDb
-            ? blockBlendAlpha(currentSampleRateHz, numSamples, 0.800f)  // slow attack
-            : blockBlendAlpha(currentSampleRateHz, numSamples, 0.300f); // moderate release
+            ? blockBlendAlpha(currentSampleRateHz, numSamples, 0.200f)  // attack
+            : blockBlendAlpha(currentSampleRateHz, numSamples, 0.300f); // release
         smoothedMakeupDb += alpha * (gainWeightedTargetDb - smoothedMakeupDb);
 
         // Noise guard: fade out when signal approaches estimated noise floor

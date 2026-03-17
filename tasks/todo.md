@@ -200,3 +200,24 @@ Add a fourth `VXPolish` dial for smarter mode-aware gain lifting, surface a de-b
 - Split the mode behavior more intentionally: `Vocal` now keeps stronger protection and a slightly softer subtract curve, while `General` applies a more aggressive learned-profile removal with much lighter protection throttling.
 - Increased the learn target window and reduced the variance padding applied when freezing the learned profile, making the result closer to an Audacity-style learned noise estimate instead of an overly padded conservative profile.
 - Verified with `cmake --build build --target VXSubtract -j4` and `cmake --build build -j4`.
+
+---
+
+# Denoiser latency + DFN2 guard pass — 2026-03-17
+
+## Problem
+The standard denoiser feels echoey on the wet path, and `VXDeepFilterNet` `DFN2` becomes robotic when `Guard` is raised. Both issues point to protection/latency behavior that sounds wrong in realtime use.
+
+## Plan
+- [x] Inspect the standard denoiser latency path and reduce the perceived delay without breaking the realtime-safe design.
+- [x] Rework `DFN2` guard handling so protection no longer relies on a strong dry reblend that causes combing/robotic tone.
+- [x] Build the affected targets and the full repo.
+- [x] Document the final behavior and verification result.
+
+## Review
+- Reduced the standard denoiser STFT size from `2048/512` to `1024/256`, cutting the algorithmic latency from about `32 ms` to about `16 ms` while keeping the same overlap/WOLA structure and realtime-safe processing model.
+- This does not make the spectral denoiser zero-latency, but it materially reduces the delayed-wet feel that could present as an echo on monitored material.
+- Reworked `VXDeepFilterNet` guard behavior so `DFN2` no longer uses post-model dry/wet recovery, which was causing comb-filter/robotic artifacts when protection was raised.
+- `DFN2` guard now mainly backs off the effective denoise drive before inference, while `DFN3` keeps only a light dry-detail recovery blend.
+- Updated the DeepFilterNet guard hint text so the UI better matches the actual behavior.
+- Verified with `cmake --build build --target VXDenoiser VXDeepFilterNet -j4` and `cmake --build build -j4`.

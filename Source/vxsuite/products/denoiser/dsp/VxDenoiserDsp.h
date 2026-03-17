@@ -29,10 +29,10 @@ namespace vxsuite::denoiser {
  * pumping artifacts.
  *
  * ── STFT ─────────────────────────────────────────────────────────────────────
- *   FFT:      2048 points
- *   Hop:       512 samples (75 % overlap)
+ *   FFT:      1024 points
+ *   Hop:       256 samples (75 % overlap)
  *   Window:   sqrt-Hann (WOLA — applied at both analysis and synthesis)
- *   Latency:  fftSize − hop = 1536 samples ≈ 32 ms @ 48 kHz
+ *   Latency:  fftSize − hop = 768 samples ≈ 16 ms @ 48 kHz
  *
  * ── ProcessOptions wiring ────────────────────────────────────────────────────
  *   isVoiceMode       → enables harmonic comb protection + LF stability
@@ -56,10 +56,10 @@ public:
 
 private:
     // ── STFT constants ────────────────────────────────────────────────────────
-    static constexpr int kFftOrder = 11;
-    static constexpr int kFftSize  = 1 << kFftOrder;    // 2048
-    static constexpr int kHop      = kFftSize / 4;      // 512 (75 % overlap)
-    static constexpr int kBins     = kFftSize / 2 + 1;  // 1025
+    static constexpr int kFftOrder = 10;
+    static constexpr int kFftSize  = 1 << kFftOrder;    // 1024
+    static constexpr int kHop      = kFftSize / 4;      // 256 (75 % overlap)
+    static constexpr int kBins     = kFftSize / 2 + 1;  // 513
 
     // ── Algorithm constants ───────────────────────────────────────────────────
     static constexpr float kEps      = 1.0e-12f;

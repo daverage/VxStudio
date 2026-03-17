@@ -53,7 +53,7 @@ vxsuite::ProductIdentity VXDeepFilterNetAudioProcessor::makeIdentity() {
     identity.primaryLabel = "Clean";
     identity.secondaryLabel = "Guard";
     identity.primaryHint = "Voice-only ML denoise amount. Push higher for stronger DeepFilter cleanup.";
-    identity.secondaryHint = "Speech protection. Pulls some dry detail back if the model starts sounding too assertive.";
+    identity.secondaryHint = "Speech protection. Backs the model off and, where safe, restores a little dry detail.";
     identity.selectorLabel = "Model";
     identity.selectorChoiceLabels = { "DeepFilterNet 3", "DeepFilterNet 2" };
     identity.defaultMode = vxsuite::Mode::vocal;
@@ -194,13 +194,21 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
         for (int ch = 0; ch < numChannels; ++ch)
             dryScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
 
-    const float effectiveClean = clamp01(0.10f + 0.90f * smoothedClean);
+    const auto variant = selectedModelVariant();
+    float effectiveClean = clamp01(0.10f + 0.90f * smoothedClean);
+    if (variant == ModelVariant::dfn2) {
+        // DFN2 reacts badly to post dry/wet recombination, so Guard should
+        // mainly back off the model drive rather than reintroduce dry signal.
+        effectiveClean = clamp01(effectiveClean * (1.0f - 0.42f * smoothedGuard));
+    }
     const bool processed = engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
 
     if (processed && alignedDryScratch.getNumChannels() >= numChannels
         && alignedDryScratch.getNumSamples() >= numSamples) {
         fillAlignedDryScratch(dryScratch, numSamples);
-        const float guardRecovery = clamp01(0.70f * smoothedGuard);
+        const float guardRecovery = variant == ModelVariant::dfn2
+            ? 0.0f
+            : clamp01(0.18f * smoothedGuard);
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* wet = buffer.getWritePointer(ch);
             const auto* dry = alignedDryScratch.getReadPointer(ch);
