@@ -4,7 +4,7 @@
 > Six plugins. One shared framework. One job each.
 
 VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
-
+ 
 ---
 
 ## 🚀 Plugins at a Glance

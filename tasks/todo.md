@@ -187,7 +187,16 @@ Add a fourth `VXPolish` dial for smarter mode-aware gain lifting, surface a de-b
 `VXSubtract` does not behave like a clear Audacity-style "learn profile, then remove profile" tool. Learn is destructive and auto-stops on hidden silence detection, while the subtract path is conservative enough that users can complete a learn and still hear too little removal.
 
 ## Plan
-- [ ] Make Learn non-destructive and explicit: keep the previous learned profile active until a new learn is completed successfully, and remove the hidden silence auto-stop behavior.
-- [ ] Rebalance `Subtract` so the learned profile removal is more audible, with `General` mode removing more aggressively and `Vocal` mode preserving speech/harmonics more intentionally.
-- [ ] Update status text and related processor state so the learn/remove workflow is understandable from the UI.
-- [ ] Build `VXSubtract` and the full repo, then document the final behavior and verification result.
+- [x] Make Learn non-destructive and explicit: keep the previous learned profile active until a new learn is completed successfully, and remove the hidden silence auto-stop behavior.
+- [x] Rebalance `Subtract` so the learned profile removal is more audible, with `General` mode removing more aggressively and `Vocal` mode preserving speech/harmonics more intentionally.
+- [x] Update status text and related processor state so the learn/remove workflow is understandable from the UI.
+- [x] Build `VXSubtract` and the full repo, then document the final behavior and verification result.
+
+## Review
+- `VXSubtract` now behaves like an explicit profile-capture tool: `Learn` starts capturing noise and only locks the replacement profile when the user turns `Learn` off. The old profile stays intact during capture instead of being destroyed at learn start.
+- Removed the hidden silence-driven auto-stop behavior in the processor, so learn no longer ends unexpectedly on short gaps or room-tone dips.
+- Reworded the product status text so the UI now explains the intended flow: capture noise, click again to lock, then use `Subtract` to remove the learned profile.
+- Rebalanced the learned subtract path in `HandmadePrimary` so profile removal is audibly stronger overall, with lower subtract floors and higher subtraction authority than before.
+- Split the mode behavior more intentionally: `Vocal` now keeps stronger protection and a slightly softer subtract curve, while `General` applies a more aggressive learned-profile removal with much lighter protection throttling.
+- Increased the learn target window and reduced the variance padding applied when freezing the learned profile, making the result closer to an Audacity-style learned noise estimate instead of an overly padded conservative profile.
+- Verified with `cmake --build build --target VXSubtract -j4` and `cmake --build build -j4`.
