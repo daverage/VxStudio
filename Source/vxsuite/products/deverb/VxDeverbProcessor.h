@@ -3,6 +3,7 @@
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../../framework/VxSuiteStageChain.h"
 #include "dsp/VxDeverbSpectralProcessor.h"
 
 #include <vector>
@@ -41,6 +42,7 @@ private:
                           bool isFirstBlock);
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
+    vxsuite::StageChain<1> stageChain { deverbProcessor };
     juce::AudioBuffer<float> wetScratch;
     std::vector<float> dryLowpassState;
     std::vector<float> wetLowpassState;

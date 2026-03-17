@@ -9,7 +9,6 @@ namespace vxsuite::subtract {
 
 namespace {
 constexpr float kEps = 1.0e-12f;
-inline float clamp01(float x) { return juce::jlimit(0.0f, 1.0f, x); }
 inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
 }
 
@@ -97,7 +96,7 @@ void SubtractDsp::prepare(double sampleRate, int maxBlockSize) {
 
     for (size_t k = 0; k < bins; ++k) {
         const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(fftSize);
-        lowBandStability[k] = clamp01((700.0f - hz) / 450.0f);
+        lowBandStability[k] = vxsuite::clamp01((700.0f - hz) / 450.0f);
 
         float erbW = 1.0f;
         if      (hz < 200.0f)  erbW = 0.5f;
@@ -327,9 +326,9 @@ bool SubtractDsp::finalizeLearnedProfile() {
     // confidence cap at ~59% even for perfect looped noise.
     const float progress = getLearnProgress();
     const float quality = learnQualityFrames > 0
-        ? juce::jlimit(0.0f, 1.0f, learnQualityAccum / static_cast<float>(learnQualityFrames))
+        ? vxsuite::clamp01(learnQualityAccum / static_cast<float>(learnQualityFrames))
         : 0.0f;
-    learnedProfileConfidence = juce::jlimit(0.0f, 1.0f, 0.55f * progress + 0.45f * quality);
+    learnedProfileConfidence = vxsuite::clamp01(0.55f * progress + 0.45f * quality);
     learningPrev = learning;
     return true;
 }
@@ -337,7 +336,7 @@ bool SubtractDsp::finalizeLearnedProfile() {
 float SubtractDsp::getLearnProgress() const {
     if (learnTargetFrames <= 0)
         return 0.0f;
-    return juce::jlimit(0.0f, 1.0f, static_cast<float>(learnFrames) / static_cast<float>(learnTargetFrames));
+    return vxsuite::clamp01(static_cast<float>(learnFrames) / static_cast<float>(learnTargetFrames));
 }
 
 float SubtractDsp::getLearnObservedSeconds() const {
@@ -384,7 +383,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const int samples  = buffer.getNumSamples();
     if (channels <= 0 || samples <= 0) return false;
 
-    const float wet = clamp01(amount);
+    const float wet = vxsuite::clamp01(amount);
 
     // User semantics:
     // - amount (wet) controls primary denoise intensity
@@ -393,13 +392,13 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float subtract = juce::jlimit(0.0f, 5.0f, options.subtract);
     const float sensitivity = juce::jlimit(0.0f, 2.0f, options.sensitivity);
     learnedSensitivity = sensitivity;
-    const float subMixGlobal = clamp01(subtract / 5.0f);
+    const float subMixGlobal = vxsuite::clamp01(subtract / 5.0f);
     const bool labRaw = options.labRawMode;
     // How much of the DSP-derived protect mask to apply (0 = bypass, 1 = full).
     // options.guardStrictness = 0 when user sets Protect=0.
     const float guardStrictness = juce::jlimit(0.0f, 1.0f, options.guardStrictness);
     const bool voiceMode = options.isVoiceMode;
-    const float wetCore  = labRaw ? wet : juce::jlimit(0.0f, 1.0f, wet * (1.0f - 0.10f * wet));
+    const float wetCore  = labRaw ? wet : vxsuite::clamp01(wet * (1.0f - 0.10f * wet));
     const bool subtractEnabled = subMixGlobal > 1.0e-4f && learnedProfileReady;
     // Allow one transition block when learning just stopped so the frozen
     // profile can finalize even if wet amount is zero (subtract-only workflows).
@@ -496,7 +495,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                               ? 1.0e-4f
                                               : juce::jlimit(0.015f, 0.14f,
                                                    lerp(0.05f, 0.015f, wetCore) * 0.85f);
-            const float subtractMix = subtractEnabled ? juce::jlimit(0.0f, 1.0f, subMixGlobal) : 0.0f;
+            const float subtractMix = subtractEnabled ? vxsuite::clamp01(subMixGlobal) : 0.0f;
             const float profileAuthority = subtractEnabled
                                              ? juce::jlimit(voiceMode ? 0.58f : 0.70f,
                                                             1.0f,
@@ -563,13 +562,13 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 if (!labRaw && binInTransient)
                     g = lerp(g, 1.0f, 0.40f);
 
-                const float maskHead = clamp01(std::log10(std::max(1.0f, Gamma)) / 3.5f);
+                const float maskHead = vxsuite::clamp01(std::log10(std::max(1.0f, Gamma)) / 3.5f);
                 const float minGain  = labRaw
                                           ? juce::jlimit(1.0e-4f, 0.10f, lerp(1.0e-3f, 0.05f, maskHead))
                                           : juce::jlimit(0.015f, 0.18f,
                                                lerp(0.03f, 0.11f, maskHead) * 0.85f);
                 const float binFloor = globalFloor * erbFloor[k];
-                g = std::max(std::max(minGain, binFloor), clamp01(g));
+                g = std::max(std::max(minGain, binFloor), vxsuite::clamp01(g));
 
                 if (g <= minGain + 0.05f)
                     binSuppressCount[k] = std::min(binSuppressCount[k] + 1, 24);
@@ -577,7 +576,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                     binSuppressCount[k] = std::max(0, binSuppressCount[k] - 1);
 
                 if (g > gainSmooth[k]) {
-                    const float conf = clamp01(binSuppressCount[k] / 8.0f);
+                    const float conf = vxsuite::clamp01(binSuppressCount[k] / 8.0f);
                     g = lerp(g, gainSmooth[k], 0.55f * conf);
                 }
 
@@ -602,7 +601,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                     g = std::max(g * gSub, effectiveFloor);
                 }
 
-                gainTarget[k] = clamp01(g);
+                gainTarget[k] = vxsuite::clamp01(g);
                 cleanPowPrev[k] = std::max(1.0e-10f, p * gainTarget[k] * gainTarget[k]);
             }
 
@@ -625,9 +624,9 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
             if (learning) {
                 ++learnFrames;
-                const float noiseLike = clamp01((spectralFlatness - 0.12f) / 0.38f);
-                const float steady = clamp01(1.0f - std::abs(std::log(std::max(0.25f, std::min(4.0f, energyRatio)))) / 1.2f);
-                const float quietSpeech = 1.0f - clamp01(signalPresenceAvg);
+                const float noiseLike = vxsuite::clamp01((spectralFlatness - 0.12f) / 0.38f);
+                const float steady = vxsuite::clamp01(1.0f - std::abs(std::log(std::max(0.25f, std::min(4.0f, energyRatio)))) / 1.2f);
+                const float quietSpeech = 1.0f - vxsuite::clamp01(signalPresenceAvg);
                 // Reduce noiseLike weight: colored real-world noise has low spectral
                 // flatness and should not be penalised — steadiness and absence of
                 // speech matter more for a reliable learned profile.
@@ -641,7 +640,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 // Use cumulative average for a stable, monotonically-improving display.
                 const float cumulativeQuality = learnQualityAccum
                                               / static_cast<float>(learnQualityFrames);
-                learnedProfileConfidence = juce::jlimit(0.0f, 1.0f,
+                learnedProfileConfidence = vxsuite::clamp01(
                                                         0.55f * getLearnProgress()
                                                       + 0.45f * cumulativeQuality);
             }
@@ -649,7 +648,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
             // Frequency smoothing
             for (size_t k = 0; k < bins; ++k) {
                 const float localGamma = currPow[k] / std::max(kEps, activeNoise(k));
-                const float snrWeight = clamp01((localGamma - 1.0f) / 15.0f);
+                const float snrWeight = vxsuite::clamp01((localGamma - 1.0f) / 15.0f);
                 const float wCenter = lerp(0.50f, 0.90f, snrWeight);
                 const float wSide = 0.5f * (1.0f - wCenter);
                 const size_t km = (k > 0u) ? (k - 1u) : k;

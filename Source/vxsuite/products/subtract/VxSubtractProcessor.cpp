@@ -90,14 +90,14 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
             savedLearnConfidence = liveConfidence;
         }
     }
-    subtractDsp.prepare(currentSampleRateHz, samplesPerBlock);
+    stageChain.prepare(currentSampleRateHz, samplesPerBlock);
     // prepare() clears the learned profile — restore it if we have one saved
     if (!savedLearnProfile.empty()) {
         subtractDsp.restoreLearnedProfile(savedLearnProfile, savedLearnConfidence);
         learnReady.store(true, std::memory_order_relaxed);
         learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
     }
-    setReportedLatencyFromStages(subtractDsp);
+    setReportedLatencySamples(stageChain.totalLatencySamples());
     resetSuite();
 }
 
@@ -172,7 +172,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                                 : (learnedReady ? 0.0f
                                                                 : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
                                                                           * subtractStrength));
-    subtractDsp.processInPlace(buffer, blindAmount, options);
+    stageChain.processInPlace(buffer, { blindAmount }, options);
 
     learnProgress.store(subtractDsp.getLearnProgress(), std::memory_order_relaxed);
     learnConfidence.store(subtractDsp.getLearnConfidence(), std::memory_order_relaxed);

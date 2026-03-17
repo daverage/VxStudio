@@ -534,3 +534,56 @@ Implement the next high-priority suite cleanup pass: centralize latency-aware li
 - `VXFinish` now behaves more like a finishing stage: its control mapping no longer rises from cleanup-style trouble metrics, recovery is driven by tonal deficit plus speech clarity, and makeup is target-driven from intended output loudness instead of being a direct reaction to pre/post RMS reduction inside the block.
 - Expanded the regression harness to cover `Subtract -> Cleanup -> Proximity -> Finish` as an explicit suite chain and added block-size invariance checks so the current release bar now includes host-buffer consistency, not just single-block correctness.
 - Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4 && ./build/VXSuitePluginRegressionTests` and `cmake --build build -j4`.
+
+# Suite master checklist — 2026-03-17
+
+## Framework
+- [x] Move latency-aligned Listen into `ProcessorBase` so every plugin uses the same removed-signal path.
+- [x] Add a small stage-chain manager to own process order, total latency, and stage reset/prepare.
+- [x] Report total latency to the host consistently from the framework.
+- [x] Standardise on shared helpers like `VxSuiteBlockSmoothing.h` and remove duplicate local smoothing/clamp code.
+- [x] Keep raw voice analysis separate from derived protection logic for easier tuning and debugging.
+
+## Realtime / DAW safety
+- [x] Test every plugin and the full chain at `64`, `128`, `256`, and `512` sample buffers.
+- [x] Test at `44.1`, `48`, and `96` kHz.
+- [~] Check transport stop/start, bypass, reset, state restore, and sample-rate changes in a DAW.
+- [x] Verify no heap allocation, locks, or hidden vector growth happen on the audio thread.
+- [x] Confirm behaviour stays consistent between mono and stereo paths.
+
+## Plugin interaction
+- [x] Tighten plugin role boundaries so each plugin does one job only.
+- [x] Make sure later plugins never reintroduce problems earlier plugins removed.
+- [x] Validate the full recommended chain, not just plugins in isolation.
+- [x] Check that Listen mode behaves consistently across all plugins in the chain.
+
+## VXCleanup
+- [x] Keep pushing explicit event classification for breath, sibilance, plosive, and harshness.
+- [x] Reduce dependence on current host block size for spectral/event detection.
+- [x] Validate Cleanup across different DAW block sizes so detection feels stable.
+
+## VXFinish
+- [x] Remove or hard-cap any denoise/corrective behaviour.
+- [x] Redefine `Gain` as a loudness target or finish bias, not reactive makeup.
+- [x] Separate compressor role from limiter role more clearly.
+- [x] Replace RMS-reactive makeup logic with a more stable target-driven approach.
+
+## Consistency / product polish
+- [x] Make shared controls like `Body`, `Gain`, and `Guard` feel consistent across plugins.
+- [x] Keep UI and control behaviour coherent across the suite.
+- [x] Add CPU profiling targets for single plugins and full-chain use.
+- [x] Build a release checklist for host compatibility, latency, CPU, and chain behaviour.
+- [x] Make the UI window larger than you think you need so all text is visible.
+- [x] Ensure all text has enough space and is readable, with roughly `10–12 pt` minimum where possible.
+
+## Notes
+- `[x]` means completed in the current refactor pass.
+- `[~]` means partially addressed in code or tests, but still needs deliberate follow-up or broader verification.
+- The only remaining non-automated item is an actual interactive DAW host pass for transport/bypass/session-restore behaviour. The code now has automated coverage for lifecycle, sample-rate, block-size, mono/stereo, listen semantics, chain stability, and steady-state allocation safety, plus a profiling target and release checklist to drive the final manual host check.
+
+## Final Review
+- Added `Source/vxsuite/framework/VxSuiteStageChain.h` so stage latency / prepare / reset can be coordinated explicitly instead of by repeated convention in each processor shell.
+- Expanded `tests/VXSuitePluginRegressionTests.cpp` into a broader lifecycle and safety harness: block-size invariance, multi-sample-rate coverage, mono/stereo consistency, Subtract state restore, listen-semantic checks, and a steady-state audio-thread allocation guard.
+- Added `tests/VXSuiteProfile.cpp` as a profiling target for single-plugin and full-chain timing sweeps.
+- Increased the shared editor’s default/minimum sizes and text/layout spacing in `Source/vxsuite/framework/VxSuiteEditorBase.cpp` and `Source/vxsuite/framework/VxSuiteLookAndFeel.cpp` so status text, hints, and control labels have more breathing room and stay readable.
+- Added `docs/VX_SUITE_RELEASE_CHECKLIST.md` and `docs/VX_SUITE_CONTROL_SEMANTICS.md` so host validation and shared control meaning are now explicit project assets instead of only tribal knowledge.

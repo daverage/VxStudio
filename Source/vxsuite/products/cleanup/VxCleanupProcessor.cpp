@@ -16,15 +16,9 @@ constexpr std::string_view kListenParam = "listen";
 constexpr std::string_view kHpfOnParam = "hpf_on";
 constexpr std::string_view kHiShelfOnParam = "hishelf_on";
 
-int chooseSpectralOrder(const int samplesPerBlock) {
-    int size = 256;
-    const int target = juce::jlimit(256, 1024, std::max(256, samplesPerBlock));
-    int order = 8;
-    while (size < target && order < 10) {
-        ++order;
-        size <<= 1;
-    }
-    return order;
+int chooseSpectralOrder() {
+    // Keep Cleanup's event-classifier window host-buffer invariant.
+    return 10; // 1024-point analysis
 }
 
 struct SpectralFeatures {
@@ -114,7 +108,7 @@ juce::AudioProcessorEditor* VXCleanupAudioProcessor::createEditor() {
 
 void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    spectralOrder = chooseSpectralOrder(samplesPerBlock);
+    spectralOrder = chooseSpectralOrder();
     spectralFft.prepare(spectralOrder);
     spectralSize = spectralFft.size();
     spectralFifo.assign(static_cast<size_t>(spectralSize), 0.0f);

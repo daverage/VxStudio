@@ -424,3 +424,23 @@ target_link_libraries(VXSuitePluginRegressionTests PRIVATE
   juce::juce_audio_processors
 )
 target_compile_definitions(VXSuitePluginRegressionTests PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+
+add_executable(VXSuiteProfile
+  tests/VXSuiteProfile.cpp
+  Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp
+  Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxsuite/products/finish/VxFinishProcessor.cpp
+  Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/proximity/VxProximityProcessor.cpp
+  Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
+  Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
+  Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
+  Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
+)
+target_include_directories(VXSuiteProfile PRIVATE Source tests)
+target_link_libraries(VXSuiteProfile PRIVATE
+  VxSuiteFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+)
+target_compile_definitions(VXSuiteProfile PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)

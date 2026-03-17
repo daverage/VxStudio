@@ -195,6 +195,18 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     polishChain.processLimiter(buffer);
 }
 
+void VXFinishAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                                                const juce::AudioBuffer<float>& inputBuffer) {
+    const int channels = std::min(outputBuffer.getNumChannels(), inputBuffer.getNumChannels());
+    const int samples = std::min(outputBuffer.getNumSamples(), inputBuffer.getNumSamples());
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* out = outputBuffer.getWritePointer(ch);
+        const auto* in = inputBuffer.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i)
+            out[i] = out[i] - in[i];
+    }
+}
+
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXFinishAudioProcessor();

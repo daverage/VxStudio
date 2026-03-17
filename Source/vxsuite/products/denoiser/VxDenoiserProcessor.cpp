@@ -62,13 +62,13 @@ juce::AudioProcessorEditor* VXDenoiserAudioProcessor::createEditor() {
 void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
                                              const int    samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    denoiserDsp.prepare(currentSampleRateHz, samplesPerBlock);
-    setReportedLatencyFromStages(denoiserDsp);
+    stageChain.prepare(currentSampleRateHz, samplesPerBlock);
+    setReportedLatencySamples(stageChain.totalLatencySamples());
     resetSuite();
 }
 
 void VXDenoiserAudioProcessor::resetSuite() {
-    denoiserDsp.reset();
+    stageChain.reset();
     smoothedClean  = 0.0f;
     smoothedGuard  = 0.5f;
     controlsPrimed = false;
@@ -107,7 +107,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     opts.guardStrictness    = vxsuite::clamp01(0.40f + 0.60f * smoothedGuard * policy.guardStrictness);
     opts.speechFocus        = isVoice ? juce::jmax(0.60f, policy.speechFocus) : policy.speechFocus;
 
-    denoiserDsp.processInPlace(buffer, effectiveClean, opts);
+    stageChain.processInPlace(buffer, { effectiveClean }, opts);
 
     ensureLatencyAlignedListenDry(numSamples);
 }

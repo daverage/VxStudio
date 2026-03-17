@@ -3,6 +3,7 @@
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../../framework/VxSuiteStageChain.h"
 #include "dsp/VxDenoiserDsp.h"
 
 class VXDenoiserAudioProcessor final : public vxsuite::ProcessorBase {
@@ -23,6 +24,7 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::denoiser::DenoiserDsp denoiserDsp;
+    vxsuite::StageChain<1> stageChain { denoiserDsp };
 
     double currentSampleRateHz = 48000.0;
     float  smoothedClean       = 0.0f;

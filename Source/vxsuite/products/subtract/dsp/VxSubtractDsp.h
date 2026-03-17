@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../../../framework/VxSuiteAudioProcessStage.h"
+#include "../../../framework/VxSuiteBlockSmoothing.h"
 #include "../../../framework/VxSuiteFft.h"
 #include "../../../framework/VxSuiteSpectralHelpers.h"
 

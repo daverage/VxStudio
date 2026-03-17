@@ -4,11 +4,31 @@
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
 #include "VxSuiteProcessorTestUtils.h"
 
+#include <atomic>
+#include <array>
+#include <cstdlib>
 #include <iostream>
+#include <new>
 
 namespace {
 
 using namespace vxsuite::test;
+
+std::atomic<bool> gAllocationTrackingEnabled { false };
+std::atomic<int> gTrackedAllocations { 0 };
+
+struct AllocationScope {
+    AllocationScope() {
+        gTrackedAllocations.store(0, std::memory_order_relaxed);
+        gAllocationTrackingEnabled.store(true, std::memory_order_relaxed);
+    }
+    ~AllocationScope() {
+        gAllocationTrackingEnabled.store(false, std::memory_order_relaxed);
+    }
+    [[nodiscard]] int allocations() const noexcept {
+        return gTrackedAllocations.load(std::memory_order_relaxed);
+    }
+};
 
 bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr);
 
@@ -42,6 +62,15 @@ juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double 
     setParamNormalized(finish, "body", 0.32f);
     setParamNormalized(finish, "gain", 0.28f);
     return render(finish, afterProximity, blockSize);
+}
+
+juce::AudioBuffer<float> makeMonoBuffer(const juce::AudioBuffer<float>& stereo) {
+    juce::AudioBuffer<float> mono(1, stereo.getNumSamples());
+    for (int i = 0; i < stereo.getNumSamples(); ++i) {
+        const float sample = 0.5f * (stereo.getSample(0, i) + stereo.getSample(std::min(1, stereo.getNumChannels() - 1), i));
+        mono.setSample(0, i, sample);
+    }
+    return mono;
 }
 
 bool testCleanupZeroIsIdentity() {
@@ -263,7 +292,221 @@ bool testCombinedChainKeepsSilenceSilent() {
     return true;
 }
 
+bool testLifecycleAndStateRestore() {
+    constexpr double srA = 48000.0;
+    constexpr double srB = 44100.0;
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(srA, 256);
+    if (!primeSubtractLearn(subtract, srA))
+        return false;
+
+    juce::MemoryBlock state;
+    subtract.getStateInformation(state);
+    const float savedConfidence = subtract.getLearnConfidence();
+
+    VXSubtractAudioProcessor restored;
+    restored.prepareToPlay(srA, 256);
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    if (!restored.isLearnReady()) {
+        std::cerr << "[VXSuitePluginRegression] Restored subtract state lost learned profile readiness\n";
+        return false;
+    }
+    if (std::abs(restored.getLearnConfidence() - savedConfidence) > 0.08f) {
+        std::cerr << "[VXSuitePluginRegression] Restored subtract confidence drifted too far\n";
+        return false;
+    }
+
+    auto input = addBuffers(makeSpeechLike(srA, 0.7f), makeNoise(srA, 0.7f, 0.05f));
+    auto first = render(restored, input, 128);
+    restored.reset();
+    auto second = render(restored, input, 128);
+    if (!allFinite(first) || !allFinite(second)) {
+        std::cerr << "[VXSuitePluginRegression] Reset lifecycle produced non-finite output\n";
+        return false;
+    }
+
+    restored.prepareToPlay(srB, 512);
+    auto third = render(restored, addBuffers(makeSpeechLike(srB, 0.7f), makeNoise(srB, 0.7f, 0.05f)), 512);
+    if (!allFinite(third)) {
+        std::cerr << "[VXSuitePluginRegression] Sample-rate reprepare produced non-finite output\n";
+        return false;
+    }
+    return true;
+}
+
+bool testListenSemanticsAcrossPlugins() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 0.9f);
+    auto noise = makeNoise(sr, 0.9f, 0.06f);
+    auto noisy = addBuffers(speech, noise);
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 0.60f);
+    setParamNormalized(cleanup, "body", 0.42f);
+    setParamNormalized(cleanup, "focus", 0.55f);
+    setParamNormalized(cleanup, "listen", 0.0f);
+    const auto cleanupWet = render(cleanup, noisy);
+    cleanup.reset();
+    setParamNormalized(cleanup, "cleanup", 0.60f);
+    setParamNormalized(cleanup, "body", 0.42f);
+    setParamNormalized(cleanup, "focus", 0.55f);
+    setParamNormalized(cleanup, "listen", 1.0f);
+    const auto cleanupListen = render(cleanup, noisy);
+    if (maxAbsDiffSkip(noisy, addBuffers(cleanupWet, cleanupListen), 2048) > 0.08f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup listen no longer behaves like removed-content audition\n";
+        return false;
+    }
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    setParamNormalized(proximity, "closer", 0.30f);
+    setParamNormalized(proximity, "air", 0.22f);
+    setParamNormalized(proximity, "listen", 0.0f);
+    const auto proxWet = render(proximity, speech);
+    proximity.reset();
+    setParamNormalized(proximity, "closer", 0.30f);
+    setParamNormalized(proximity, "air", 0.22f);
+    setParamNormalized(proximity, "listen", 1.0f);
+    const auto proxListen = render(proximity, speech);
+    if (maxAbsDiffSkip(proxWet, addBuffers(speech, proxListen), 128) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity listen no longer behaves like additive delta audition\n";
+        return false;
+    }
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    setParamNormalized(finish, "finish", 0.45f);
+    setParamNormalized(finish, "body", 0.28f);
+    setParamNormalized(finish, "gain", 0.35f);
+    setParamNormalized(finish, "listen", 0.0f);
+    const auto finishWet = render(finish, speech);
+    finish.reset();
+    setParamNormalized(finish, "finish", 0.45f);
+    setParamNormalized(finish, "body", 0.28f);
+    setParamNormalized(finish, "gain", 0.35f);
+    setParamNormalized(finish, "listen", 1.0f);
+    const auto finishListen = render(finish, speech);
+    if (maxAbsDiffSkip(finishWet, addBuffers(speech, finishListen), 128) > 1.0e-3f) {
+        std::cerr << "[VXSuitePluginRegression] Finish listen no longer behaves like finish-delta audition\n";
+        return false;
+    }
+    return true;
+}
+
+bool testMultiRateAndBufferCoverage() {
+    constexpr std::array<double, 3> sampleRates { 44100.0, 48000.0, 96000.0 };
+    constexpr std::array<int, 4> blockSizes { 64, 128, 256, 512 };
+
+    for (const double sr : sampleRates) {
+        auto speech = makeSpeechLike(sr, 0.9f);
+        auto noise = makeNoise(sr, 0.9f, 0.06f);
+        auto noisy = addBuffers(speech, noise);
+        for (const int blockSize : blockSizes) {
+            auto out = renderSubtractCleanupProximityFinishChain(sr, blockSize, noisy);
+            if (out.getNumSamples() <= 0 || !allFinite(out) || peakAbs(out) > 1.10f) {
+                std::cerr << "[VXSuitePluginRegression] Chain failed sample-rate/buffer coverage at sr="
+                          << sr << " block=" << blockSize << "\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool testMonoStereoConsistency() {
+    constexpr double sr = 48000.0;
+    auto stereoInput = makeSpeechLike(sr, 1.0f);
+    auto monoInput = makeMonoBuffer(stereoInput);
+
+    VXCleanupAudioProcessor cleanupStereo;
+    cleanupStereo.prepareToPlay(sr, 256);
+    setParamNormalized(cleanupStereo, "cleanup", 0.56f);
+    setParamNormalized(cleanupStereo, "body", 0.46f);
+    setParamNormalized(cleanupStereo, "focus", 0.58f);
+    const auto stereoOut = render(cleanupStereo, stereoInput, 256);
+
+    VXCleanupAudioProcessor cleanupMono;
+    cleanupMono.prepareToPlay(sr, 256);
+    setParamNormalized(cleanupMono, "cleanup", 0.56f);
+    setParamNormalized(cleanupMono, "body", 0.46f);
+    setParamNormalized(cleanupMono, "focus", 0.58f);
+    const auto monoOut = render(cleanupMono, monoInput, 256);
+
+    juce::AudioBuffer<float> stereoMid(1, stereoOut.getNumSamples());
+    for (int i = 0; i < stereoOut.getNumSamples(); ++i)
+        stereoMid.setSample(0, i, 0.5f * (stereoOut.getSample(0, i) + stereoOut.getSample(1, i)));
+
+    const float corr = bufferCorrelationSkip(monoOut, stereoMid, 1024);
+    if (corr < 0.98f) {
+        std::cerr << "[VXSuitePluginRegression] Mono/stereo cleanup paths diverged too far: corr=" << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testNoSteadyStateAllocationsOnAudioThread() {
+    constexpr double sr = 48000.0;
+    auto noisy = addBuffers(makeSpeechLike(sr, 0.4f), makeNoise(sr, 0.4f, 0.05f));
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 0.55f);
+    setParamNormalized(cleanup, "body", 0.45f);
+    setParamNormalized(cleanup, "focus", 0.55f);
+
+    {
+        auto warmup = noisy;
+        juce::MidiBuffer midi;
+        cleanup.processBlock(warmup, midi);
+    }
+
+    auto testBlock = noisy;
+    juce::MidiBuffer midi;
+    AllocationScope allocationScope;
+    cleanup.processBlock(testBlock, midi);
+    if (allocationScope.allocations() != 0) {
+        std::cerr << "[VXSuitePluginRegression] Audio-thread allocation detected during steady-state cleanup processing: count="
+                  << allocationScope.allocations() << "\n";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
+
+void* operator new(std::size_t size) {
+    if (gAllocationTrackingEnabled.load(std::memory_order_relaxed))
+        gTrackedAllocations.fetch_add(1, std::memory_order_relaxed);
+    if (void* ptr = std::malloc(size))
+        return ptr;
+    throw std::bad_alloc();
+}
+
+void operator delete(void* ptr) noexcept {
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::size_t) noexcept {
+    std::free(ptr);
+}
+
+void* operator new[](std::size_t size) {
+    if (gAllocationTrackingEnabled.load(std::memory_order_relaxed))
+        gTrackedAllocations.fetch_add(1, std::memory_order_relaxed);
+    if (void* ptr = std::malloc(size))
+        return ptr;
+    throw std::bad_alloc();
+}
+
+void operator delete[](void* ptr) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr, std::size_t) noexcept {
+    std::free(ptr);
+}
 
 int main() {
     bool ok = true;
@@ -273,6 +516,11 @@ int main() {
     ok &= testCleanupFinishSubtractChainStaysStable();
     ok &= testCleanupBlockSizeInvariance();
     ok &= testFullChainBlockSizeInvariance();
+    ok &= testLifecycleAndStateRestore();
+    ok &= testListenSemanticsAcrossPlugins();
+    ok &= testMultiRateAndBufferCoverage();
+    ok &= testMonoStereoConsistency();
+    ok &= testNoSteadyStateAllocationsOnAudioThread();
     ok &= testCombinedChainKeepsSilenceSilent();
     return ok ? 0 : 1;
 }

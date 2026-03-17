@@ -3,6 +3,7 @@
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../../framework/VxSuiteStageChain.h"
 #include "dsp/VxSubtractDsp.h"
 
 #include <atomic>
@@ -36,6 +37,7 @@ private:
            makeLayout(const vxsuite::ProductIdentity& identity);
 
     vxsuite::subtract::SubtractDsp subtractDsp;
+    vxsuite::StageChain<1> stageChain { subtractDsp };
 
     double currentSampleRateHz = 48000.0;
     float smoothedSubtract = 0.0f;

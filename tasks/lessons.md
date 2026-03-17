@@ -9,3 +9,4 @@
 - De-breath is not a generic HF smoother; gate it away from strong sibilant/transient moments so it follows real breathy exhales rather than bright consonants.
 - When multiple active products own the same low-level primitive like `juce::dsp::FFT`, centralize that ownership in `Source/vxsuite/framework/` before adding more product-local analysis code on top.
 - When centralizing latency-aware listen in the framework, update both the reported host latency and the internal aligned-dry buffer capacity together; otherwise the host PDC can be correct while listen auditioning is still misaligned.
+- Listen semantics are product-role dependent: removal tools should audition what was removed, while additive/finishing tools should audition the added delta instead of inheriting the default removed-signal path.

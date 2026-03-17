@@ -1,5 +1,7 @@
 #include "VxDeepFilterNetService.h"
 
+#include "../../../framework/VxSuiteBlockSmoothing.h"
+
 #include <BinaryData.h>
 
 #include <algorithm>
@@ -16,10 +18,6 @@ constexpr int kDefaultFrameLength = 480;
 constexpr int kFifoCapacity48k = 48000;
 constexpr int kDfn3Latency48k = 1920;
 constexpr int kDfn2LowLatency48k = 480;
-
-float clamp01(const float value) {
-    return juce::jlimit(0.0f, 1.0f, value);
-}
 
 } // namespace
 
@@ -341,7 +339,7 @@ void DeepFilterService::resetRealtime() {
 }
 
 float DeepFilterService::attenuationLimitForStrength(const float strength) const noexcept {
-    return 6.0f + 54.0f * clamp01(strength);
+    return 6.0f + 54.0f * vxsuite::clamp01(strength);
 }
 
 bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
@@ -363,7 +361,7 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
         return false;
 
     const auto attenuationLimitDb = attenuationLimitForStrength(strength);
-    const float wet = clamp01(strength);
+    const float wet = vxsuite::clamp01(strength);
 
     for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
         auto& channel = channels[static_cast<size_t>(channelIndex)];

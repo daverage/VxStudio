@@ -140,7 +140,7 @@ void SuiteLookAndFeel::drawComboBox(juce::Graphics& g,
 }
 
 juce::Font SuiteLookAndFeel::getComboBoxFont(juce::ComboBox&) {
-    return juce::FontOptions().withHeight(15.0f);
+    return juce::FontOptions().withHeight(16.0f);
 }
 
 } // namespace vxsuite

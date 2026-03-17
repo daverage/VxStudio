@@ -70,8 +70,8 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     preparedBlockSize = std::max(kMinPreparedBlockSize, std::max(1, samplesPerBlock));
     deverbProcessor.setChannelCount(getTotalNumOutputChannels());
-    deverbProcessor.prepare(currentSampleRateHz, preparedBlockSize);
-    setReportedLatencyFromStages(deverbProcessor);
+    stageChain.prepare(currentSampleRateHz, preparedBlockSize);
+    setReportedLatencySamples(stageChain.totalLatencySamples());
     ensureScratchCapacity(getTotalNumOutputChannels(), preparedBlockSize);
     resetSuite();
 }
