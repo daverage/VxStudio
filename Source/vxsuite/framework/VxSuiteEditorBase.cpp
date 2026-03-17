@@ -28,7 +28,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
     productLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(productLabel);
 
-    modeLabel.setText("Mode", juce::dontSendNotification);
+    modeLabel.setText(toJuceString(identity.selectorLabel.empty() ? "Mode" : identity.selectorLabel),
+                      juce::dontSendNotification);
     modeLabel.setFont(juce::FontOptions().withHeight(13.0f).withKerningFactor(0.08f));
     if (identity.supportsModeSwitch())
         addAndMakeVisible(modeLabel);
@@ -49,8 +50,9 @@ EditorBase::EditorBase(ProcessorBase& owner)
         addAndMakeVisible(learnMeterBar);
     }
 
-    modeBox.addItem("Vocal", 1);
-    modeBox.addItem("General", 2);
+    const auto selectorChoices = makeSelectorChoiceLabels(identity);
+    for (int i = 0; i < selectorChoices.size(); ++i)
+        modeBox.addItem(selectorChoices[i], i + 1);
     modeBox.setWantsKeyboardFocus(true);
     if (identity.supportsModeSwitch())
         addAndMakeVisible(modeBox);

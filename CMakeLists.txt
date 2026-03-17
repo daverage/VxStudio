@@ -39,6 +39,63 @@ if(NOT TARGET Eigen3::Eigen)
   find_package(Eigen3 REQUIRED)
 endif()
 
+option(VXSUITE_ENABLE_ONNX_RUNTIME "Enable ONNX Runtime for VX DeepFilterNet realtime inference" ON)
+option(VXSUITE_ENABLE_COREML "Enable CoreML execution provider for ONNX Runtime" OFF)
+option(VXSUITE_ENABLE_DIRECTML "Enable DirectML execution provider for ONNX Runtime" OFF)
+set(ORT_DIR "" CACHE PATH "Root directory of an ONNX Runtime installation")
+
+set(VXSUITE_HAS_ONNXRUNTIME FALSE)
+
+if(VXSUITE_ENABLE_ONNX_RUNTIME)
+  if(NOT ONNXRUNTIME_INCLUDE_DIR)
+    find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
+      PATHS
+        ${ORT_DIR}/include/onnxruntime
+        $ENV{ORT_ROOT}/include/onnxruntime
+        /opt/homebrew/include/onnxruntime
+        /usr/local/include/onnxruntime
+        C:/onnxruntime/include/onnxruntime
+    )
+  endif()
+  if(NOT ONNXRUNTIME_LIBRARY)
+    find_library(ONNXRUNTIME_LIBRARY onnxruntime
+      PATHS
+        ${ORT_DIR}/lib
+        $ENV{ORT_ROOT}/lib
+        /opt/homebrew/lib
+        /usr/local/lib
+        C:/onnxruntime/lib
+    )
+  endif()
+  if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIBRARY)
+    set(VXSUITE_HAS_ONNXRUNTIME TRUE)
+    message(STATUS "ONNX Runtime enabled for VX DeepFilterNet: ${ONNXRUNTIME_LIBRARY}")
+  else()
+    message(WARNING "ONNX Runtime not found; VX DeepFilterNet will build with realtime inference disabled.")
+  endif()
+endif()
+
+set(VXSUITE_ORT_COMPILE_DEFS
+  VXC_HAS_ONNXRUNTIME=$<BOOL:${VXSUITE_HAS_ONNXRUNTIME}>
+  VXC_HAS_ORT_COREML_FACTORY=$<BOOL:${VXSUITE_ENABLE_COREML}>
+  VXC_HAS_ORT_DML_FACTORY=$<BOOL:${VXSUITE_ENABLE_DIRECTML}>
+)
+
+set(VXSUITE_DF_EMBED_MODEL_FILES "")
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/aggressive.onnx")
+  list(APPEND VXSUITE_DF_EMBED_MODEL_FILES "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/aggressive.onnx")
+endif()
+if(VXSUITE_DF_EMBED_MODEL_FILES)
+  juce_add_binary_data(VxDeepFilterNetModels SOURCES ${VXSUITE_DF_EMBED_MODEL_FILES})
+endif()
+
+function(vxsuite_link_df_models target_name)
+  if(TARGET VxDeepFilterNetModels)
+    target_link_libraries(${target_name} PRIVATE VxDeepFilterNetModels)
+    target_compile_definitions(${target_name} PRIVATE VXC_HAS_EMBEDDED_DF_MODELS=1)
+  endif()
+endfunction()
+
 vxsuite_add_framework(VxSuiteFramework)
 
 juce_add_plugin(VXDeverb
@@ -178,6 +235,86 @@ target_link_libraries(VXDenoiser PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXDenoiserPlugin ALL DEPENDS VXDenoiser_VST3)
 vxsuite_stage_vst3_bundle(VXDenoiser_VST3 "VXDenoiser")
 
+juce_add_plugin(VXDeepFilterNet
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxdeepfilternet"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXDF"
+)
+target_compile_definitions(VXDeepFilterNet PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+  ${VXSUITE_ORT_COMPILE_DEFS}
+)
+juce_generate_juce_header(VXDeepFilterNet)
+target_sources(VXDeepFilterNet PRIVATE
+  Source/vxsuite/products/deepfilternet/VxDeepFilterNetProcessor.cpp
+  Source/vxsuite/products/deepfilternet/dsp/VxDeepFilterNetService.cpp
+)
+target_include_directories(VXDeepFilterNet PRIVATE Source)
+if(VXSUITE_HAS_ONNXRUNTIME)
+  target_include_directories(VXDeepFilterNet PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+endif()
+target_link_libraries(VXDeepFilterNet PRIVATE VxSuiteFramework juce::juce_dsp)
+if(VXSUITE_HAS_ONNXRUNTIME)
+  target_link_libraries(VXDeepFilterNet PRIVATE ${ONNXRUNTIME_LIBRARY})
+endif()
+vxsuite_link_df_models(VXDeepFilterNet)
+add_custom_target(VXDeepFilterNetPlugin ALL DEPENDS VXDeepFilterNet_VST3)
+add_custom_command(TARGET VXDeepFilterNet_VST3 POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn2"
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn3"
+  COMMENT "Ensuring VXDeepFilterNet model resource directories exist")
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/aggressive.onnx")
+  add_custom_command(TARGET VXDeepFilterNet_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/aggressive.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/aggressive.onnx"
+    COMMENT "Bundling VXDeepFilterNet monolithic realtime model")
+endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn2/config.ini")
+  add_custom_command(TARGET VXDeepFilterNet_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn2/config.ini"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn2/config.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn2/enc.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn2/enc.onnx"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn2/erb_dec.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn2/erb_dec.onnx"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn2/df_dec.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn2/df_dec.onnx"
+    COMMENT "Bundling VXDeepFilterNet 2 model bundle")
+endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn3/config.ini")
+  add_custom_command(TARGET VXDeepFilterNet_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn3/config.ini"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn3/config.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn3/enc.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn3/enc.onnx"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn3/erb_dec.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn3/erb_dec.onnx"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/dfn3/df_dec.onnx"
+            "$<TARGET_FILE_DIR:VXDeepFilterNet_VST3>/../Resources/models/dfn3/df_dec.onnx"
+    COMMENT "Bundling VXDeepFilterNet 3 model bundle")
+endif()
+vxsuite_stage_vst3_bundle(VXDeepFilterNet_VST3 "VXDeepFilterNet")
+
 add_custom_target(VXSuite_VST3
   DEPENDS
     VXDeverb_VST3
@@ -185,11 +322,13 @@ add_custom_target(VXSuite_VST3
     VXPolish_VST3
     VXSubtract_VST3
     VXDenoiser_VST3
+    VXDeepFilterNet_VST3
     VXDeverbStage
     VXProximityStage
     VXPolishStage
     VXSubtractStage
     VXDenoiserStage
+    VXDeepFilterNetStage
   COMMENT "Building all VX Suite VST3 products")
 
 add_executable(VXDeverbTests

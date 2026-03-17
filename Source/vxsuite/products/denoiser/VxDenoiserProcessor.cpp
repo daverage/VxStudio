@@ -65,7 +65,7 @@ VXDenoiserAudioProcessor::makeLayout(const vxsuite::ProductIdentity& id) {
         "Mode",
         vxsuite::makeModeChoiceLabels(),
         static_cast<int>(vxsuite::Mode::vocal),
-        vxsuite::makeModeAttributes()));
+        vxsuite::makeChoiceAttributes("Mode")));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { kListenParam.data(), 1 },

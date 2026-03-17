@@ -33,6 +33,8 @@ struct ProductIdentity {
     std::string_view primaryHint;
     std::string_view secondaryHint;
     std::string_view tertiaryHint;
+    std::string_view selectorLabel = "Mode";
+    std::array<std::string_view, 2> selectorChoiceLabels {};
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
     // Decorative filter-curve icons drawn above the knobs (no interactivity).
@@ -61,6 +63,10 @@ struct ProductIdentity {
 
     bool supportsLearnButton() const noexcept {
         return !learnParamId.empty();
+    }
+
+    std::string_view selectorChoiceLabel(const size_t index) const noexcept {
+        return index < selectorChoiceLabels.size() ? selectorChoiceLabels[index] : std::string_view{};
     }
 
 };

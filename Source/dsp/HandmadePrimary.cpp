@@ -231,6 +231,28 @@ void HandmadePrimary::reset() {
     learnFrames = learnTargetFrames = 0;
 
     updateSmoothingCoeffs();
+
+    // Pre-warm: seed delay lines with silence equal to the plugin's latency so
+    // the drain conditions are met from sample 0, eliminating the warmup period
+    // where stereo collapses to mono before the side-delay buffer fills.
+    if (outQueueCap > 0 && sideDelayCap > 0) {
+        const size_t preLatency = fftSize - hop;
+        for (size_t i = 0; i < preLatency; ++i)
+            pushOutputSample(0.0f);
+        sideDelayWrite   = 0;
+        sideDelayRead    = (sideDelayCap - preLatency) % sideDelayCap;
+        sideDelayCount   = preLatency;
+        midDryDelayWrite = 0;
+        midDryDelayRead  = (midDryDelayCap - preLatency) % midDryDelayCap;
+        midDryDelayCount = preLatency;
+        for (auto& ed : extraChannelDelays) {
+            if (!ed.buffer.empty()) {
+                ed.writePos  = 0;
+                ed.readPos   = ed.buffer.size() - preLatency;
+                ed.available = preLatency;
+            }
+        }
+    }
 }
 
 void HandmadePrimary::clearLearnedProfile() {
@@ -311,6 +333,25 @@ void HandmadePrimary::resetStreamingState() {
     phaseHistoryReady = false;
     learningPrev = learning;
     updateSmoothingCoeffs();
+
+    if (outQueueCap > 0 && sideDelayCap > 0) {
+        const size_t preLatency = fftSize - hop;
+        for (size_t i = 0; i < preLatency; ++i)
+            pushOutputSample(0.0f);
+        sideDelayWrite   = 0;
+        sideDelayRead    = (sideDelayCap - preLatency) % sideDelayCap;
+        sideDelayCount   = preLatency;
+        midDryDelayWrite = 0;
+        midDryDelayRead  = (midDryDelayCap - preLatency) % midDryDelayCap;
+        midDryDelayCount = preLatency;
+        for (auto& ed : extraChannelDelays) {
+            if (!ed.buffer.empty()) {
+                ed.writePos  = 0;
+                ed.readPos   = ed.buffer.size() - preLatency;
+                ed.available = preLatency;
+            }
+        }
+    }
 }
 
 bool HandmadePrimary::finalizeLearnedProfile() {
@@ -688,12 +729,17 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                 gainSmoothedFreq[k] = std::max(gainSmoothedFreq[k], harmonicFloor[k]);
 
             // Temporal smoothing
+            // When a learned profile drives subtract, trust that profile at low frequencies
+            // instead of throttling gain response — the learned floor is more reliable than
+            // min-stats estimation, so the stability limiter would only slow suppression.
             for (size_t k = 0; k < bins; ++k) {
                 float coeff = (gainSmoothedFreq[k] < gainSmooth[k]) ? attackCoeff
                                                                      : releaseCoeff;
-                const float lfStab = lowBandStability[k];
-                if (lfStab > 0.0f)
-                    coeff = std::max(coeff, lerp(0.93f, 0.992f, lfStab));
+                if (!subtractEnabled) {
+                    const float lfStab = lowBandStability[k];
+                    if (lfStab > 0.0f)
+                        coeff = std::max(coeff, lerp(0.93f, 0.992f, lfStab));
+                }
                 gainSmooth[k] = coeff * gainSmooth[k] + (1.0f - coeff) * gainSmoothedFreq[k];
             }
 

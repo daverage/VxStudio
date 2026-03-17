@@ -78,7 +78,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXDeverbAudioProcessor::make
         "Mode",
         vxsuite::makeModeChoiceLabels(),
         static_cast<int>(identity.defaultMode),
-        vxsuite::makeModeAttributes()));
+        vxsuite::makeChoiceAttributes("Mode")));
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { kListenParam.data(), 1 },
         "Listen",

@@ -13,9 +13,9 @@ constexpr std::string_view kProtectParam = "protect";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
 constexpr std::string_view kLearnParam = "learn";
-constexpr float kLearnMinSeconds = 0.45f;
+constexpr float kLearnMinSeconds = 0.80f;
 constexpr float kLearnQuietStopSeconds = 0.24f;
-constexpr float kLearnQuietThresholdDb = -48.0f;
+constexpr float kLearnQuietThresholdDb = -54.0f;
 
 float clamp01(const float value) {
     return juce::jlimit(0.0f, 1.0f, value);
@@ -238,7 +238,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     options.sensitivity = 1.1f * clamp01(1.0f - smoothedProtect);
     options.labRawMode = false;
 
-    const float blindAmount = learnedReady ? 0.0f
+    const float blindAmount = learnedReady ? clamp01(0.28f * smoothedSubtract)
                                            : clamp01(0.55f * smoothedSubtract);
     subtractDsp.processInPlace(buffer, blindAmount, options);
 

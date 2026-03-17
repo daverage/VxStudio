@@ -11,9 +11,9 @@ inline juce::String toJuceString(std::string_view text) {
     return juce::String(text.data(), static_cast<int>(text.size()));
 }
 
-inline juce::AudioParameterChoiceAttributes makeModeAttributes() {
+inline juce::AudioParameterChoiceAttributes makeChoiceAttributes(std::string_view label = "Mode") {
     juce::AudioParameterChoiceAttributes attrs;
-    attrs = attrs.withLabel("Mode");
+    attrs = attrs.withLabel(label.data());
     return attrs;
 }
 
@@ -42,15 +42,27 @@ inline juce::StringArray makeModeChoiceLabels() {
     };
 }
 
+inline juce::StringArray makeSelectorChoiceLabels(const ProductIdentity& identity) {
+    const auto first = identity.selectorChoiceLabel(0);
+    const auto second = identity.selectorChoiceLabel(1);
+    if (!first.empty() && !second.empty()) {
+        return juce::StringArray {
+            toJuceString(first),
+            toJuceString(second)
+        };
+    }
+    return makeModeChoiceLabels();
+}
+
 inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameterLayout(const ProductIdentity& identity) {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     if (identity.supportsModeSwitch()) {
         layout.add(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID { identity.modeParamId.data(), 1 },
-            "Mode",
-            makeModeChoiceLabels(),
+            toJuceString(identity.selectorLabel.empty() ? "Mode" : identity.selectorLabel),
+            makeSelectorChoiceLabels(identity),
             static_cast<int>(identity.defaultMode),
-            makeModeAttributes()));
+            makeChoiceAttributes(identity.selectorLabel.empty() ? "Mode" : identity.selectorLabel)));
     }
     if (identity.supportsListenMode()) {
         layout.add(std::make_unique<juce::AudioParameterBool>(

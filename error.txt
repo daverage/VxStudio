@@ -1,0 +1,1072 @@
+-------------------------------------
+Translated Report (Full Report Below)
+-------------------------------------
+
+Process:               REAPER [10372]
+Path:                  /Applications/REAPER.app/Contents/MacOS/REAPER
+Identifier:            com.cockos.reaper
+Version:               7.59.0_ae874bau (7.59.0_ae874bau)
+Code Type:             ARM-64 (Native)
+Parent Process:        launchd [1]
+User ID:               501
+
+Date/Time:             2026-03-17 08:21:12.7627 +0000
+OS Version:            macOS 15.7.4 (24G517)
+Report Version:        12
+Anonymous UUID:        E0BD5223-E9BC-C5C1-9472-CA9CE2EFDEC5
+
+Sleep/Wake UUID:       8C7099D9-13A1-459D-8855-E540A9775989
+
+Time Awake Since Boot: 130000 seconds
+Time Since Wake:       7904 seconds
+
+System Integrity Protection: enabled
+
+Crashed Thread:        0  reaper  Dispatch queue: com.apple.main-thread
+
+Exception Type:        EXC_BAD_ACCESS (SIGSEGV)
+Exception Codes:       KERN_INVALID_ADDRESS at 0x0000000000000050
+Exception Codes:       0x0000000000000001, 0x0000000000000050
+
+Termination Reason:    Namespace SIGNAL, Code 11 Segmentation fault: 11
+Terminating Process:   exc handler [10372]
+
+VM Region Info: 0x50 is not in any region.  Bytes before following region: 4372070320
+      REGION TYPE                    START - END         [ VSIZE] PRT/MAX SHRMOD  REGION DETAIL
+      UNUSED SPACE AT START
+--->
+      __TEXT                      104988000-10535c000    [  9.8M] r-x/r-x SM=COW  /Applications/REAPER.app/Contents/MacOS/REAPER
+
+Thread 0 Crashed:: reaper Dispatch queue: com.apple.main-thread
+0   VXDeepFilterNet               	       0x30dd4e4f4 Ort::SessionOptions::SessionOptions() + 40
+1   VXDeepFilterNet               	       0x30dd4dc7c Ort::SessionOptions::SessionOptions() + 28
+2   VXDeepFilterNet               	       0x30dd4d8b4 vxsuite::deepfilternet::DeepFilterService::DeepFilterService() + 528
+3   VXDeepFilterNet               	       0x30dd4a5d4 vxsuite::deepfilternet::DeepFilterService::DeepFilterService() + 28
+4   VXDeepFilterNet               	       0x30dd4a018 VXDeepFilterNetAudioProcessor::VXDeepFilterNetAudioProcessor() + 148
+5   VXDeepFilterNet               	       0x30dd4a680 VXDeepFilterNetAudioProcessor::VXDeepFilterNetAudioProcessor() + 28
+6   VXDeepFilterNet               	       0x30dd4ce2c createPluginFilter() + 28
+7   VXDeepFilterNet               	       0x30dcee9d8 juce::createPluginFilterOfType(juce::AudioProcessor::WrapperType) + 72
+8   VXDeepFilterNet               	       0x30dcee6c8 juce::JuceVST3Component::JuceVST3Component(juce::VSTComSmartPtr<Steinberg::Vst::IHostApplication> const&, juce::RunLoop const&) + 224
+9   VXDeepFilterNet               	       0x30dcee59c juce::JuceVST3Component::JuceVST3Component(juce::VSTComSmartPtr<Steinberg::Vst::IHostApplication> const&, juce::RunLoop const&) + 44
+10  VXDeepFilterNet               	       0x30dcebfd8 juce::JucePluginFactory::createInstance(juce::JucePluginFactoryBase::ClassEntry const&) + 100
+11  VXDeepFilterNet               	       0x30dcec314 juce::JucePluginFactoryBase::createInstance(char const*, char const*, void**) + 364
+12  VXDeepFilterNet               	       0x30dcebd98 juce::JucePluginFactory::createInstance(char const*, char const*, void**) + 68
+13  REAPER                        	       0x104eeff5c VST_HostedPlugin::VST3_Init(int, char const*, WDL_FastString*) + 1436
+14  REAPER                        	       0x104d155d4 VST_HostedPlugin::OpenFromUID(char const*, int, char const*, WDL_FastString*, bool, int) + 4512
+15  REAPER                        	       0x104d2e218 FxDsp::FxDsp(int, char const*, char const*, void*, int) + 1300
+16  REAPER                        	       0x104d5f820 FxChain::addDspToChain(int, char const*, char const*, void*, int, bool) + 152
+17  REAPER                        	       0x104d7f3a8 fxadd_add_recs_to_chain(FxAddDef**, int, FxChain*, int, int, int, bool, bool) + 704
+18  REAPER                        	       0x104d8ec04 add_to_chain(HWND__*, FxChain*, int, int, int, bool, int, bool) + 496
+19  REAPER                        	       0x104d8e434 do_insert(HWND__*, bool) + 232
+20  REAPER                        	       0x104d83590 addDialogProc(HWND__*, unsigned int, unsigned long, long) + 15340
+21  REAPER                        	       0x104e9634c SwellDialogDefaultWindowProc(HWND__*, unsigned int, unsigned long, long) + 444
+22  REAPER                        	       0x104d83190 addDialogProc(HWND__*, unsigned int, unsigned long, long) + 14316
+23  REAPER                        	       0x104e9634c SwellDialogDefaultWindowProc(HWND__*, unsigned int, unsigned long, long) + 444
+24  REAPER                        	       0x104e94704 -[REAPERSwell_hwnd swellOnControlDoubleClick:] + 320
+25  AppKit                        	       0x1a0508fb0 -[NSApplication(NSResponder) sendAction:to:from:] + 560
+26  AppKit                        	       0x1a0508d50 -[NSControl sendAction:to:] + 72
+27  AppKit                        	       0x1a0607d64 -[NSTableView _sendAction:to:row:column:] + 112
+28  AppKit                        	       0x1a06065d8 -[NSTableView mouseDown:] + 4040
+29  REAPER                        	       0x104eb1224 -[REAPERSwell_listview mouseUp:] + 244
+30  AppKit                        	       0x1a0f2dfe0 _routeMouseUpEvent + 132
+31  AppKit                        	       0x1a048fc20 -[NSWindow(NSEventRouting) _reallySendEvent:isDelayedEvent:] + 440
+32  AppKit                        	       0x1a048f8a0 -[NSWindow(NSEventRouting) sendEvent:] + 288
+33  AppKit                        	       0x1a0d0734c -[NSApplication(NSEventRouting) sendEvent:] + 1504
+34  REAPER                        	       0x104ce70c0 -[REAPERapp sendEvent:] + 3392
+35  AppKit                        	       0x1a090642c -[NSApplication _handleEvent:] + 60
+36  AppKit                        	       0x1a035cc0c -[NSApplication run] + 520
+37  AppKit                        	       0x1a03332dc NSApplicationMain + 880
+38  dyld                          	       0x19bfbeb98 start + 6076
+
+Thread 1:
+0   libsystem_pthread.dylib       	       0x19c35ab6c start_wqthread + 0
+
+Thread 2:
+0   libsystem_pthread.dylib       	       0x19c35ab6c start_wqthread + 0
+
+Thread 3:
+0   libsystem_pthread.dylib       	       0x19c35ab6c start_wqthread + 0
+
+Thread 4:: com.apple.NSEventThread
+0   libsystem_kernel.dylib        	       0x19c31dc34 mach_msg2_trap + 8
+1   libsystem_kernel.dylib        	       0x19c330338 mach_msg2_internal + 76
+2   libsystem_kernel.dylib        	       0x19c326764 mach_msg_overwrite + 484
+3   libsystem_kernel.dylib        	       0x19c31dfa8 mach_msg + 24
+4   CoreFoundation                	       0x19c44ac0c __CFRunLoopServiceMachPort + 160
+5   CoreFoundation                	       0x19c449528 __CFRunLoopRun + 1208
+6   CoreFoundation                	       0x19c4489e8 CFRunLoopRunSpecific + 572
+7   AppKit                        	       0x1a048d78c _NSEventThread + 140
+8   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+9   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 5:
+0   libsystem_kernel.dylib        	       0x19c31dc34 mach_msg2_trap + 8
+1   libsystem_kernel.dylib        	       0x19c330338 mach_msg2_internal + 76
+2   libsystem_kernel.dylib        	       0x19c326764 mach_msg_overwrite + 484
+3   libsystem_kernel.dylib        	       0x19c31dfa8 mach_msg + 24
+4   CoreMIDI                      	       0x1b89eaeac XServerMachPort::ReceiveMessage(int&, void*, int&) + 104
+5   CoreMIDI                      	       0x1b8a0c740 MIDIProcess::MIDIInPortThread::Run() + 148
+6   CoreMIDI                      	       0x1b8a0176c CADeprecated::XThread::RunHelper(void*) + 48
+7   CoreMIDI                      	       0x1b8a0be44 CADeprecated::CAPThread::Entry(CADeprecated::CAPThread*) + 96
+8   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+9   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 6:: caulk.messenger.shared:17
+0   libsystem_kernel.dylib        	       0x19c31dbb0 semaphore_wait_trap + 8
+1   caulk                         	       0x1a79d1cc8 caulk::semaphore::timed_wait(double) + 224
+2   caulk                         	       0x1a79d1b70 caulk::concurrent::details::worker_thread::run() + 32
+3   caulk                         	       0x1a79d1844 void* caulk::thread_proxy<std::__1::tuple<caulk::thread::attributes, void (caulk::concurrent::details::worker_thread::*)(), std::__1::tuple<caulk::concurrent::details::worker_thread*>>>(void*) + 96
+4   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+5   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 7:: caulk.messenger.shared:high
+0   libsystem_kernel.dylib        	       0x19c31dbb0 semaphore_wait_trap + 8
+1   caulk                         	       0x1a79d1cc8 caulk::semaphore::timed_wait(double) + 224
+2   caulk                         	       0x1a79d1b70 caulk::concurrent::details::worker_thread::run() + 32
+3   caulk                         	       0x1a79d1844 void* caulk::thread_proxy<std::__1::tuple<caulk::thread::attributes, void (caulk::concurrent::details::worker_thread::*)(), std::__1::tuple<caulk::concurrent::details::worker_thread*>>>(void*) + 96
+4   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+5   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 8:: */video
+0   libsystem_kernel.dylib        	       0x19c3211c8 __semwait_signal + 8
+1   libsystem_c.dylib             	       0x19c1fd6f4 nanosleep + 220
+2   libsystem_c.dylib             	       0x19c1fd60c usleep + 68
+3   reaper_video.dylib            	       0x12350d424 videoDecodeThread(void*) + 1300
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 9:: JUCE v8.0.12: Timer
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c36009c _pthread_cond_wait + 984
+2   libc++.1.dylib                	       0x19c290300 std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+3   VXSubtract                    	       0x14090598c std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&) + 384
+4   VXSubtract                    	       0x140905600 void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+5   VXSubtract                    	       0x1409225a4 std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&) + 156
+6   VXSubtract                    	       0x140922438 bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1) + 72
+7   VXSubtract                    	       0x1408cada0 bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1) + 100
+8   VXSubtract                    	       0x14089c7e0 juce::WaitableEvent::wait(double) const + 188
+9   VXSubtract                    	       0x1408413c4 juce::Timer::TimerThread::run() + 340
+10  VXSubtract                    	       0x14089d328 juce::Thread::threadEntryPoint() + 244
+11  VXSubtract                    	       0x14089d61c juce::juce_threadEntryPoint(void*) + 24
+12  VXSubtract                    	       0x1408f79c0 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const + 148
+13  VXSubtract                    	       0x1408f7920 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*) + 28
+14  libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+15  libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 10:: JUCE v8.0.12: Timer
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c36009c _pthread_cond_wait + 984
+2   libc++.1.dylib                	       0x19c290300 std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+3   VXDenoiser                    	       0x142802770 std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&) + 384
+4   VXDenoiser                    	       0x1428023e4 void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+5   VXDenoiser                    	       0x14281f388 std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&) + 156
+6   VXDenoiser                    	       0x14281f21c bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1) + 72
+7   VXDenoiser                    	       0x1427c7b84 bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1) + 100
+8   VXDenoiser                    	       0x1427995c4 juce::WaitableEvent::wait(double) const + 188
+9   VXDenoiser                    	       0x14279b030 juce::Thread::wait(double) const + 36
+10  VXDenoiser                    	       0x14273e1f8 juce::Timer::TimerThread::run() + 420
+11  VXDenoiser                    	       0x14279a10c juce::Thread::threadEntryPoint() + 244
+12  VXDenoiser                    	       0x14279a400 juce::juce_threadEntryPoint(void*) + 24
+13  VXDenoiser                    	       0x1427f47a4 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const + 148
+14  VXDenoiser                    	       0x1427f4704 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*) + 28
+15  libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+16  libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 11:: JUCE v8.0.12: Timer
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c36009c _pthread_cond_wait + 984
+2   libc++.1.dylib                	       0x19c290300 std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+3   VXProximity                   	       0x126b3a3ec std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&) + 384
+4   VXProximity                   	       0x126b3a060 void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+5   VXProximity                   	       0x126b57004 std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&) + 156
+6   VXProximity                   	       0x126b56e98 bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1) + 72
+7   VXProximity                   	       0x126aff800 bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1) + 100
+8   VXProximity                   	       0x126ad1240 juce::WaitableEvent::wait(double) const + 188
+9   VXProximity                   	       0x126ad2cac juce::Thread::wait(double) const + 36
+10  VXProximity                   	       0x126a75e74 juce::Timer::TimerThread::run() + 420
+11  VXProximity                   	       0x126ad1d88 juce::Thread::threadEntryPoint() + 244
+12  VXProximity                   	       0x126ad207c juce::juce_threadEntryPoint(void*) + 24
+13  VXProximity                   	       0x126b2c420 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const + 148
+14  VXProximity                   	       0x126b2c380 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*) + 28
+15  libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+16  libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 12:: JUCE v8.0.12: Timer
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c36009c _pthread_cond_wait + 984
+2   libc++.1.dylib                	       0x19c290300 std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+3   VXDeverb                      	       0x145f8f134 std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&) + 384
+4   VXDeverb                      	       0x145f8eda8 void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+5   VXDeverb                      	       0x145fabd4c std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&) + 156
+6   VXDeverb                      	       0x145fabbe0 bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1) + 72
+7   VXDeverb                      	       0x145f54548 bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1) + 100
+8   VXDeverb                      	       0x145f25f88 juce::WaitableEvent::wait(double) const + 188
+9   VXDeverb                      	       0x145f279f4 juce::Thread::wait(double) const + 36
+10  VXDeverb                      	       0x145ecabbc juce::Timer::TimerThread::run() + 420
+11  VXDeverb                      	       0x145f26ad0 juce::Thread::threadEntryPoint() + 244
+12  VXDeverb                      	       0x145f26dc4 juce::juce_threadEntryPoint(void*) + 24
+13  VXDeverb                      	       0x145f81168 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const + 148
+14  VXDeverb                      	       0x145f810c8 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*) + 28
+15  libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+16  libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 13:: JUCE v8.0.12: Timer
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c36009c _pthread_cond_wait + 984
+2   libc++.1.dylib                	       0x19c290300 std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+3   VXPolish                      	       0x1443c34a0 std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&) + 384
+4   VXPolish                      	       0x1443c3114 void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+5   VXPolish                      	       0x1443e00b8 std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&) + 156
+6   VXPolish                      	       0x1443dff4c bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1) + 72
+7   VXPolish                      	       0x1443888b4 bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1) + 100
+8   VXPolish                      	       0x14435a2f4 juce::WaitableEvent::wait(double) const + 188
+9   VXPolish                      	       0x1442feed8 juce::Timer::TimerThread::run() + 340
+10  VXPolish                      	       0x14435ae3c juce::Thread::threadEntryPoint() + 244
+11  VXPolish                      	       0x14435b130 juce::juce_threadEntryPoint(void*) + 24
+12  VXPolish                      	       0x1443b54d4 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const + 148
+13  VXPolish                      	       0x1443b5434 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*) + 28
+14  libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+15  libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 14:: caulk::deferred_logger
+0   libsystem_kernel.dylib        	       0x19c31dbb0 semaphore_wait_trap + 8
+1   caulk                         	       0x1a79d1cc8 caulk::semaphore::timed_wait(double) + 224
+2   caulk                         	       0x1a79d1b70 caulk::concurrent::details::worker_thread::run() + 32
+3   caulk                         	       0x1a79d1844 void* caulk::thread_proxy<std::__1::tuple<caulk::thread::attributes, void (caulk::concurrent::details::worker_thread::*)(), std::__1::tuple<caulk::concurrent::details::worker_thread*>>>(void*) + 96
+4   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+5   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 15:
+0   libsystem_pthread.dylib       	       0x19c35ab6c start_wqthread + 0
+
+Thread 16:
+0   libsystem_pthread.dylib       	       0x19c35ab6c start_wqthread + 0
+
+Thread 17:
+0   libsystem_pthread.dylib       	       0x19c35ab6c start_wqthread + 0
+
+Thread 18:: com.apple.audio.IOThread.client
+0   libsystem_kernel.dylib        	       0x19c31dbbc semaphore_wait_signal_trap + 8
+1   caulk                         	       0x1a79ee2f8 caulk::mach::semaphore::wait_signal_or_error(caulk::mach::semaphore&) + 36
+2   CoreAudio                     	       0x19f24f69c HALC_ProxyIOContext::IOWorkLoop() + 5276
+3   CoreAudio                     	       0x19f24daec invocation function for block in HALC_ProxyIOContext::HALC_ProxyIOContext(unsigned int, unsigned int) + 172
+4   CoreAudio                     	       0x19f3f7fb0 HALC_IOThread::Entry(void*) + 88
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 19:: com.apple.audio.IOThread.client
+0   libsystem_kernel.dylib        	       0x19c31dbbc semaphore_wait_signal_trap + 8
+1   caulk                         	       0x1a79ee2f8 caulk::mach::semaphore::wait_signal_or_error(caulk::mach::semaphore&) + 36
+2   CoreAudio                     	       0x19f24f69c HALC_ProxyIOContext::IOWorkLoop() + 5276
+3   CoreAudio                     	       0x19f24daec invocation function for block in HALC_ProxyIOContext::HALC_ProxyIOContext(unsigned int, unsigned int) + 172
+4   CoreAudio                     	       0x19f3f7fb0 HALC_IOThread::Entry(void*) + 88
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 20:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 21:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 22:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 23:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 24:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 25:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 26:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 27:: */mediaafx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9a2c WorkerThreadInst::threadProc(void*) + 2304
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 28:: */livefx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9d6c WorkerThreadInst::threadProc(void*) + 3136
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 29:: */livefx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9d6c WorkerThreadInst::threadProc(void*) + 3136
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 30:: */livefx
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   REAPER                        	       0x104ec5ee0 WaitForSingleObject(void*, unsigned int) + 668
+3   REAPER                        	       0x104ac9d6c WorkerThreadInst::threadProc(void*) + 3136
+4   REAPER                        	       0x104ec60c8 __threadproc(void*) + 32
+5   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+6   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 31:: CVDisplayLink
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   CoreVideo                     	       0x1a5cff1f4 CVDisplayLink::waitUntil(unsigned long long) + 336
+3   CoreVideo                     	       0x1a5cfe2dc CVDisplayLink::runIOThread() + 500
+4   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+5   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 32:: CVDisplayLink
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c3600c8 _pthread_cond_wait + 1028
+2   CoreVideo                     	       0x1a5cff1f4 CVDisplayLink::waitUntil(unsigned long long) + 336
+3   CoreVideo                     	       0x1a5cfe2dc CVDisplayLink::runIOThread() + 500
+4   libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+5   libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+Thread 33:: JUCE v8.0.12: Timer
+0   libsystem_kernel.dylib        	       0x19c3213cc __psynch_cvwait + 8
+1   libsystem_pthread.dylib       	       0x19c36009c _pthread_cond_wait + 984
+2   libc++.1.dylib                	       0x19c290300 std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+3   VXDeepFilterNet               	       0x30dd68af4 std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&) + 384
+4   VXDeepFilterNet               	       0x30dd68768 void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>) + 104
+5   VXDeepFilterNet               	       0x30e5add3c std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&) + 156
+6   VXDeepFilterNet               	       0x30e5adbd0 bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1) + 72
+7   VXDeepFilterNet               	       0x30e557178 bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1) + 100
+8   VXDeepFilterNet               	       0x30e528bb8 juce::WaitableEvent::wait(double) const + 188
+9   VXDeepFilterNet               	       0x30e52a624 juce::Thread::wait(double) const + 36
+10  VXDeepFilterNet               	       0x30e4cd844 juce::Timer::TimerThread::run() + 420
+11  VXDeepFilterNet               	       0x30e529700 juce::Thread::threadEntryPoint() + 244
+12  VXDeepFilterNet               	       0x30e5299f4 juce::juce_threadEntryPoint(void*) + 24
+13  VXDeepFilterNet               	       0x30e583d74 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const + 148
+14  VXDeepFilterNet               	       0x30e583cd4 juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*) + 28
+15  libsystem_pthread.dylib       	       0x19c35fbc8 _pthread_start + 136
+16  libsystem_pthread.dylib       	       0x19c35ab80 thread_start + 8
+
+
+Thread 0 crashed with ARM Thread State (64-bit):
+    x0: 0x00000001552f2bc0   x1: 0x0000000000000000   x2: 0x00000000000120a8   x3: 0x000000016b46a0cf
+    x4: 0x0000000000000000   x5: 0x000000016b46a5a0   x6: 0x000000000000000a   x7: 0x000000019c3173e8
+    x8: 0x0000000000000000   x9: 0x0000000000000002  x10: 0x0000000000000000  x11: 0x0000000000000002
+   x12: 0x0000000000000000  x13: 0x0000000000000000  x14: 0x0000000000000000  x15: 0x0000000000000000
+   x16: 0x000000019c35a8a4  x17: 0x000000020b353a88  x18: 0x0000000000000000  x19: 0x000000016b46ae00
+   x20: 0x0000000000000000  x21: 0x0000000000000002  x22: 0x000000016b46ae7a  x23: 0x0000000105300f03
+   x24: 0x0000000000000002  x25: 0x0000000156043798  x26: 0x616c4320656c7564  x27: 0x0000000001000193
+   x28: 0x000000016b46afc0   fp: 0x000000016b46a630   lr: 0x000000030dd4e4ec
+    sp: 0x000000016b46a610   pc: 0x000000030dd4e4f4 cpsr: 0x60001000
+   far: 0x0000000000000050  esr: 0x92000006 (Data Abort) byte read Translation fault
+
+Binary Images:
+       0x104988000 -        0x10535bfff com.cockos.reaper (7.59.0_ae874bau) <1071dc3f-6c50-3365-839b-2eef7a6f2455> /Applications/REAPER.app/Contents/MacOS/REAPER
+       0x111ef4000 -        0x111efffff libobjc-trampolines.dylib (*) <9a87f143-aa9d-3c46-b2e8-b3fb9215e33e> /usr/lib/libobjc-trampolines.dylib
+       0x113a00000 -        0x114133fff com.apple.AGXMetalG15G-C0 (329.2) <c0944dee-3f71-3677-b9a0-1e21a80c1060> /System/Library/Extensions/AGXMetalG15G_C0.bundle/Contents/MacOS/AGXMetalG15G_C0
+       0x121098000 -        0x1210c7fff elastique3.dylib (*) <fdeee20a-415a-3c11-b3e0-2f7a3d2ffb81> /Applications/REAPER.app/Contents/Plugins/elastique3.dylib
+       0x121028000 -        0x12102ffff soundtouch.dylib (*) <b467a3bf-d8d5-30c0-a58e-945a0ce2c239> /Applications/REAPER.app/Contents/Plugins/soundtouch.dylib
+       0x120ff4000 -        0x12100ffff rubberband.dylib (*) <e8b80eeb-df32-3f3f-99d5-8c869d457618> /Applications/REAPER.app/Contents/Plugins/rubberband.dylib
+       0x1211e0000 -        0x121237fff jsfx.dylib (*) <0f4fd3f6-a815-3cb7-9612-75340f1f7d7f> /Applications/REAPER.app/Contents/Plugins/jsfx.dylib
+       0x1139bc000 -        0x1139dffff reaper_wave.dylib (*) <37e06b13-9097-3c81-8fd9-b8edb1f53804> /Applications/REAPER.app/Contents/Plugins/reaper_wave.dylib
+       0x122c88000 -        0x122caffff reaper_mp3dec.dylib (*) <c981fd70-a1dd-3baa-aaf1-4d19784cb2e3> /Applications/REAPER.app/Contents/Plugins/reaper_mp3dec.dylib
+       0x122da4000 -        0x122debfff libmp3lame.dylib (*) <22134e04-d839-3b7c-a8ee-3aa135952a89> /Applications/REAPER.app/Contents/Plugins/libmp3lame.dylib
+       0x123138000 -        0x123263fff reaper_midi.dylib (*) <e4dd3c06-cc65-3a5f-b068-575e24b9bc7f> /Applications/REAPER.app/Contents/Plugins/reaper_midi.dylib
+       0x121db0000 -        0x121ddffff reaper_wavpack.dylib (*) <a5c9b1f4-6ec5-3eef-bbb3-5875273b92e7> /Applications/REAPER.app/Contents/Plugins/reaper_wavpack.dylib
+       0x122ce8000 -        0x122d57fff reaper_opus.dylib (*) <a554ed63-656a-3ba2-a9a7-d0cec4ed0c4b> /Applications/REAPER.app/Contents/Plugins/reaper_opus.dylib
+       0x122c00000 -        0x122c2bfff reaper_flac.dylib (*) <eb404d5e-25df-3c2d-b07c-516f9f7d43a2> /Applications/REAPER.app/Contents/Plugins/reaper_flac.dylib
+       0x11778c000 -        0x11779bfff reaper_rex.dylib (*) <c1db6c56-0bbf-313b-8d8e-63e0ffbc9136> /Applications/REAPER.app/Contents/Plugins/reaper_rex.dylib
+       0x120cf4000 -        0x120cfffff reaper_ddp.dylib (*) <21cde6bf-6e4c-330c-87ce-fdb19b18312a> /Applications/REAPER.app/Contents/Plugins/reaper_ddp.dylib
+       0x122f10000 -        0x122f5bfff reaper_explorer.dylib (*) <1dc187a4-fdcb-3f64-8841-79e0714faf03> /Applications/REAPER.app/Contents/Plugins/reaper_explorer.dylib
+       0x1212c4000 -        0x1212cffff reaper_cd.dylib (*) <995c5b99-6593-3876-ae7c-76f5a983e926> /Applications/REAPER.app/Contents/Plugins/reaper_cd.dylib
+       0x122f80000 -        0x123027fff reaper_ogg.dylib (*) <739b30b5-6223-32f5-9e31-c3e4133c4e50> /Applications/REAPER.app/Contents/Plugins/reaper_ogg.dylib
+       0x123074000 -        0x1230b3fff reaper_csurf.dylib (*) <5fd19d6c-bde8-39a9-a12f-99b8b64a75b6> /Applications/REAPER.app/Contents/Plugins/reaper_csurf.dylib
+       0x1234f8000 -        0x1235d3fff reaper_video.dylib (*) <8b9d28ce-95ff-3af1-92bc-f6e9f3c82592> /Applications/REAPER.app/Contents/Plugins/reaper_video.dylib
+       0x1212e4000 -        0x1212ebfff reap_osx_modern.dylib (*) <792b9e19-3e4d-3050-b35f-e1be85e314a2> /Applications/REAPER.app/Contents/Plugins/reap_osx_modern.dylib
+       0x123ea0000 -        0x124117fff FFmpeg.dylib (*) <ef881429-ddb1-3acb-b347-1a0cd41d7123> /Applications/REAPER.app/Contents/Plugins/FFmpeg.dylib
+       0x140000000 -        0x140cc7fff com.vxsuite.vxsubtract (0.1.0) <4a345334-2e66-34b7-a28a-243fdebddbe2> /Library/Audio/Plug-Ins/VST3/VXSubtract.vst3/Contents/MacOS/VXSubtract
+       0x141f00000 -        0x142bc3fff com.vxsuite.vxdenoiser (0.1.0) <d7ad9b7b-9e17-322a-85ba-8062b0f69fb0> /Library/Audio/Plug-Ins/VST3/VXDenoiser.vst3/Contents/MacOS/VXDenoiser
+       0x126240000 -        0x126d4ffff com.vxsuite.vxproximity (0.1.0) <ab8765fc-ee4e-32f2-b387-4dbab2abf4af> /Library/Audio/Plug-Ins/VST3/VXProximity.vst3/Contents/MacOS/VXProximity
+       0x14568c000 -        0x14634ffff com.vxsuite.vxdeverb (0.1.0) <acdb446e-e3ff-33e3-8336-82a4525f9f11> /Library/Audio/Plug-Ins/VST3/VXDeverb.vst3/Contents/MacOS/VXDeverb
+       0x143ac4000 -        0x1445d7fff com.vxsuite.vxpolish (0.1.0) <617a9719-b01f-3f48-97bd-ea9aebb4e5dc> /Library/Audio/Plug-Ins/VST3/VXPolish.vst3/Contents/MacOS/VXPolish
+       0x123430000 -        0x123443fff reaeq.vst.dylib (*) <38f106ce-df8a-3321-8bd5-2c32a755356d> /Applications/REAPER.app/Contents/Plugins/FX/reaeq.vst.dylib
+       0x1259a4000 -        0x1260ebfff com.voxengo.audio-plugins.VST3.SPAN (3.23) <3aa1dc06-f953-34a7-82d9-9fb75dc2b173> /Library/Audio/Plug-Ins/VST3/SPAN.vst3/Contents/MacOS/SPAN
+       0x116c00000 -        0x116d3bfff com.apple.audio.units.Components (1.14) <917d6875-01f4-33f6-a9f0-bc16669a67bb> /System/Library/Components/CoreAudio.component/Contents/MacOS/CoreAudio
+       0x30dc84000 -        0x30f703fff com.vxsuite.vxdeepfilternet (0.1.0) <0926d0fa-5dd1-3b93-8f51-f2a1fcbe5246> /Library/Audio/Plug-Ins/VST3/VXDeepFilterNet.vst3/Contents/MacOS/VXDeepFilterNet
+       0x31052c000 -        0x3111cffff libonnxruntime.1.16.0.dylib (*) <3c6471a9-24b2-3276-a121-b4d1e2f644ae> /Users/USER/*/libonnxruntime.1.16.0.dylib
+       0x1a032f000 -        0x1a17bf75f com.apple.AppKit (6.9) <13f235c2-6acb-3fb1-b165-a05f83ee09cb> /System/Library/Frameworks/AppKit.framework/Versions/C/AppKit
+       0x19bfb8000 -        0x19c05357b dyld (*) <057e5157-4105-3787-b549-e605eb246448> /usr/lib/dyld
+               0x0 - 0xffffffffffffffff ??? (*) <00000000-0000-0000-0000-000000000000> ???
+       0x19c2ff000 -        0x19c31cfff libc++abi.dylib (*) <bc670272-bf32-38ac-ae3f-f06eda80be30> /usr/lib/libc++abi.dylib
+       0x19c359000 -        0x19c365a77 libsystem_pthread.dylib (*) <c0519bf8-8fc4-3222-a4a7-d98af817277c> /usr/lib/system/libsystem_pthread.dylib
+       0x19c31d000 -        0x19c3585f3 libsystem_kernel.dylib (*) <85034943-c8b6-3c69-8b4b-039cd25ef16d> /usr/lib/system/libsystem_kernel.dylib
+       0x19c3ce000 -        0x19c90cfff com.apple.CoreFoundation (6.9) <a62a694c-6a33-3d79-81ce-37440d549d08> /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation
+       0x1b89ac000 -        0x1b8a66d1f com.apple.audio.midi.CoreMIDI (2.0) <9fb89e2e-e907-39cd-811c-17fb6cd4104d> /System/Library/Frameworks/CoreMIDI.framework/Versions/A/CoreMIDI
+       0x1a79d0000 -        0x1a79f7ddf com.apple.audio.caulk (1.0) <fa67137d-9735-3dce-8716-ab20f8cd6e24> /System/Library/PrivateFrameworks/caulk.framework/Versions/A/caulk
+       0x19c1f0000 -        0x19c2711f7 libsystem_c.dylib (*) <e098cb59-2c56-395c-ade1-6ef590e61199> /usr/lib/system/libsystem_c.dylib
+       0x19c272000 -        0x19c2feff7 libc++.1.dylib (*) <eb94c9fe-91da-3e9f-9c45-7b476feaaeae> /usr/lib/libc++.1.dylib
+       0x19f05c000 -        0x19f78e0bf com.apple.audio.CoreAudio (5.0) <9c4d070a-49c7-3e2b-a3ce-aa64875b5c70> /System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio
+       0x1a5cfc000 -        0x1a5d5cd5f com.apple.CoreVideo (1.8) <07221a5f-3241-388c-835e-5c7177fa0b23> /System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo
+
+External Modification Summary:
+  Calls made by other processes targeting this process:
+    task_for_pid: 0
+    thread_create: 0
+    thread_set_state: 0
+  Calls made by this process:
+    task_for_pid: 0
+    thread_create: 0
+    thread_set_state: 0
+  Calls made by all processes on this machine:
+    task_for_pid: 0
+    thread_create: 0
+    thread_set_state: 0
+
+VM Region Summary:
+ReadOnly portion of Libraries: Total=1.9G resident=0K(0%) swapped_out_or_unallocated=1.9G(100%)
+Writable regions: Total=1.7G written=1956K(0%) resident=948K(0%) swapped_out=1008K(0%) unallocated=1.7G(100%)
+
+                                VIRTUAL   REGION
+REGION TYPE                        SIZE    COUNT (non-coalesced)
+===========                     =======  =======
+Accelerate framework               384K        3
+Activity Tracing                   256K        1
+CG image                          1024K       43
+ColorSync                          640K       34
+CoreAnimation                     7824K      165
+CoreGraphics                        96K        6
+CoreImage                           48K        3
+CoreUI image data                 4864K       46
+Foundation                          16K        1
+Image IO                           320K       20
+Kernel Alloc Once                   32K        1
+MALLOC                             1.6G       74
+MALLOC guard page                  288K       18
+STACK GUARD                       56.5M       34
+Stack                             25.5M       34
+VM_ALLOCATE                        864K       35
+VM_ALLOCATE (reserved)              32K        1         reserved VM address space (unallocated)
+__AUTH                            5384K      688
+__AUTH_CONST                      76.1M      928
+__CTF                               824        1
+__DATA                            28.3M      947
+__DATA_CONST                      29.9M      967
+__DATA_DIRTY                      2764K      336
+__FONT_DATA                        2352        1
+__INFO_FILTER                         8        1
+__LINKEDIT                       714.9M       34
+__OBJC_RO                         61.4M        1
+__OBJC_RW                         2397K        1
+__TEXT                             1.2G      988
+__TPRO_CONST                       128K        2
+mapped file                      501.9M       47
+page table in kernel               948K        1
+shared memory                     1056K       18
+===========                     =======  =======
+TOTAL                              4.3G     5480
+TOTAL, minus reserved VM space     4.3G     5480
+
+
+
+-----------
+Full Report
+-----------
+
+{"app_name":"REAPER","timestamp":"2026-03-17 08:21:19.00 +0000","app_version":"7.59.0_ae874bau","slice_uuid":"1071dc3f-6c50-3365-839b-2eef7a6f2455","build_version":"7.59.0_ae874bau","platform":1,"bundleID":"com.cockos.reaper","share_with_app_devs":0,"is_first_party":0,"bug_type":"309","os_version":"macOS 15.7.4 (24G517)","roots_installed":0,"name":"REAPER","incident_id":"F02139D6-70A4-4FE6-958F-5C997A4AEC5A"}
+{
+  "uptime" : 130000,
+  "procRole" : "Foreground",
+  "version" : 2,
+  "userID" : 501,
+  "deployVersion" : 210,
+  "modelCode" : "Mac15,12",
+  "coalitionID" : 3288,
+  "osVersion" : {
+    "train" : "macOS 15.7.4",
+    "build" : "24G517",
+    "releaseType" : "User"
+  },
+  "captureTime" : "2026-03-17 08:21:12.7627 +0000",
+  "codeSigningMonitor" : 1,
+  "incident" : "F02139D6-70A4-4FE6-958F-5C997A4AEC5A",
+  "pid" : 10372,
+  "translated" : false,
+  "cpuType" : "ARM-64",
+  "roots_installed" : 0,
+  "bug_type" : "309",
+  "procLaunch" : "2026-03-17 08:15:00.0545 +0000",
+  "procStartAbsTime" : 3239930120868,
+  "procExitAbsTime" : 3248874822542,
+  "procName" : "REAPER",
+  "procPath" : "\/Applications\/REAPER.app\/Contents\/MacOS\/REAPER",
+  "bundleInfo" : {"CFBundleShortVersionString":"7.59.0_ae874bau","CFBundleVersion":"7.59.0_ae874bau","CFBundleIdentifier":"com.cockos.reaper"},
+  "storeInfo" : {"deviceIdentifierForVendor":"46D26CE6-2CB3-5C02-B17D-73483A84F634","thirdParty":true},
+  "parentProc" : "launchd",
+  "parentPid" : 1,
+  "coalitionName" : "com.cockos.reaper",
+  "crashReporterKey" : "E0BD5223-E9BC-C5C1-9472-CA9CE2EFDEC5",
+  "appleIntelligenceStatus" : {"state":"available"},
+  "codeSigningID" : "com.cockos.reaper",
+  "codeSigningTeamID" : "Y3T58622SG",
+  "codeSigningFlags" : 570491653,
+  "codeSigningValidationCategory" : 6,
+  "codeSigningTrustLevel" : 4294967295,
+  "codeSigningAuxiliaryInfo" : 0,
+  "instructionByteStream" : {"beforePC":"\/8MA0f17Aqn9gwCRoIMf+KCDX\/jgAwD5FQAAlDsAAJToAwCq4ANA+Q==","atPC":"CClA+QABP9YaAACUAQAAFOADQPn9e0Kp\/8MAkcADX9boAwCq4ANA+Q=="},
+  "bootSessionUUID" : "DA9535C3-3630-4F5B-A1A8-D7B2C9454B31",
+  "wakeTime" : 7904,
+  "sleepWakeUUID" : "8C7099D9-13A1-459D-8855-E540A9775989",
+  "sip" : "enabled",
+  "vmRegionInfo" : "0x50 is not in any region.  Bytes before following region: 4372070320\n      REGION TYPE                    START - END         [ VSIZE] PRT\/MAX SHRMOD  REGION DETAIL\n      UNUSED SPACE AT START\n--->  \n      __TEXT                      104988000-10535c000    [  9.8M] r-x\/r-x SM=COW  \/Applications\/REAPER.app\/Contents\/MacOS\/REAPER",
+  "exception" : {"codes":"0x0000000000000001, 0x0000000000000050","rawCodes":[1,80],"type":"EXC_BAD_ACCESS","signal":"SIGSEGV","subtype":"KERN_INVALID_ADDRESS at 0x0000000000000050"},
+  "termination" : {"flags":0,"code":11,"namespace":"SIGNAL","indicator":"Segmentation fault: 11","byProc":"exc handler","byPid":10372},
+  "vmregioninfo" : "0x50 is not in any region.  Bytes before following region: 4372070320\n      REGION TYPE                    START - END         [ VSIZE] PRT\/MAX SHRMOD  REGION DETAIL\n      UNUSED SPACE AT START\n--->  \n      __TEXT                      104988000-10535c000    [  9.8M] r-x\/r-x SM=COW  \/Applications\/REAPER.app\/Contents\/MacOS\/REAPER",
+  "extMods" : {"caller":{"thread_create":0,"thread_set_state":0,"task_for_pid":0},"system":{"thread_create":0,"thread_set_state":0,"task_for_pid":0},"targeted":{"thread_create":0,"thread_set_state":0,"task_for_pid":0},"warnings":0},
+  "faultingThread" : 0,
+  "threads" : [{"threadState":{"x":[{"value":5724122048},{"value":0},{"value":73896},{"value":6094758095},{"value":0},{"value":6094759328},{"value":10},{"value":6915453928,"symbolLocation":0,"symbol":"__cxxabiv1::__class_type_info::search_above_dst(__cxxabiv1::__dynamic_cast_info*, void const*, void const*, int, bool) const"},{"value":0},{"value":2},{"value":0},{"value":2},{"value":0},{"value":0},{"value":0},{"value":0},{"value":6915729572,"symbolLocation":0,"symbol":"pthread_mutex_unlock"},{"value":8777972360},{"value":0},{"value":6094761472},{"value":0},{"value":2},{"value":6094761594},{"value":4382002947,"symbolLocation":518289,"symbol":"wdl_base64_alphabet"},{"value":2},{"value":5738084248},{"value":7020059725583381860},{"value":16777619},{"value":6094761920}],"flavor":"ARM_THREAD_STATE64","lr":{"value":13116957932},"cpsr":{"value":1610616832},"fp":{"value":6094759472},"sp":{"value":6094759440},"esr":{"value":2449473542,"description":"(Data Abort) byte read Translation fault"},"pc":{"value":13116957940,"matchesCrashFrame":1},"far":{"value":80}},"id":4457082,"triggered":true,"name":"reaper","queue":"com.apple.main-thread","frames":[{"imageOffset":828660,"symbol":"Ort::SessionOptions::SessionOptions()","symbolLocation":40,"imageIndex":31},{"imageOffset":826492,"symbol":"Ort::SessionOptions::SessionOptions()","symbolLocation":28,"imageIndex":31},{"imageOffset":825524,"symbol":"vxsuite::deepfilternet::DeepFilterService::DeepFilterService()","symbolLocation":528,"imageIndex":31},{"imageOffset":812500,"symbol":"vxsuite::deepfilternet::DeepFilterService::DeepFilterService()","symbolLocation":28,"imageIndex":31},{"imageOffset":811032,"symbol":"VXDeepFilterNetAudioProcessor::VXDeepFilterNetAudioProcessor()","symbolLocation":148,"imageIndex":31},{"imageOffset":812672,"symbol":"VXDeepFilterNetAudioProcessor::VXDeepFilterNetAudioProcessor()","symbolLocation":28,"imageIndex":31},{"imageOffset":822828,"symbol":"createPluginFilter()","symbolLocation":28,"imageIndex":31},{"imageOffset":436696,"symbol":"juce::createPluginFilterOfType(juce::AudioProcessor::WrapperType)","symbolLocation":72,"imageIndex":31},{"imageOffset":435912,"symbol":"juce::JuceVST3Component::JuceVST3Component(juce::VSTComSmartPtr<Steinberg::Vst::IHostApplication> const&, juce::RunLoop const&)","symbolLocation":224,"imageIndex":31},{"imageOffset":435612,"symbol":"juce::JuceVST3Component::JuceVST3Component(juce::VSTComSmartPtr<Steinberg::Vst::IHostApplication> const&, juce::RunLoop const&)","symbolLocation":44,"imageIndex":31},{"imageOffset":425944,"symbol":"juce::JucePluginFactory::createInstance(juce::JucePluginFactoryBase::ClassEntry const&)","symbolLocation":100,"imageIndex":31},{"imageOffset":426772,"symbol":"juce::JucePluginFactoryBase::createInstance(char const*, char const*, void**)","symbolLocation":364,"imageIndex":31},{"imageOffset":425368,"symbol":"juce::JucePluginFactory::createInstance(char const*, char const*, void**)","symbolLocation":68,"imageIndex":31},{"imageOffset":5668700,"symbol":"VST_HostedPlugin::VST3_Init(int, char const*, WDL_FastString*)","symbolLocation":1436,"imageIndex":0},{"imageOffset":3724756,"symbol":"VST_HostedPlugin::OpenFromUID(char const*, int, char const*, WDL_FastString*, bool, int)","symbolLocation":4512,"imageIndex":0},{"imageOffset":3826200,"symbol":"FxDsp::FxDsp(int, char const*, char const*, void*, int)","symbolLocation":1300,"imageIndex":0},{"imageOffset":4028448,"symbol":"FxChain::addDspToChain(int, char const*, char const*, void*, int, bool)","symbolLocation":152,"imageIndex":0},{"imageOffset":4158376,"symbol":"fxadd_add_recs_to_chain(FxAddDef**, int, FxChain*, int, int, int, bool, bool)","symbolLocation":704,"imageIndex":0},{"imageOffset":4221956,"symbol":"add_to_chain(HWND__*, FxChain*, int, int, int, bool, int, bool)","symbolLocation":496,"imageIndex":0},{"imageOffset":4219956,"symbol":"do_insert(HWND__*, bool)","symbolLocation":232,"imageIndex":0},{"imageOffset":4175248,"symbol":"addDialogProc(HWND__*, unsigned int, unsigned long, long)","symbolLocation":15340,"imageIndex":0},{"imageOffset":5301068,"symbol":"SwellDialogDefaultWindowProc(HWND__*, unsigned int, unsigned long, long)","symbolLocation":444,"imageIndex":0},{"imageOffset":4174224,"symbol":"addDialogProc(HWND__*, unsigned int, unsigned long, long)","symbolLocation":14316,"imageIndex":0},{"imageOffset":5301068,"symbol":"SwellDialogDefaultWindowProc(HWND__*, unsigned int, unsigned long, long)","symbolLocation":444,"imageIndex":0},{"imageOffset":5293828,"symbol":"-[REAPERSwell_hwnd swellOnControlDoubleClick:]","symbolLocation":320,"imageIndex":0},{"imageOffset":1941424,"symbol":"-[NSApplication(NSResponder) sendAction:to:from:]","symbolLocation":560,"imageIndex":33},{"imageOffset":1940816,"symbol":"-[NSControl sendAction:to:]","symbolLocation":72,"imageIndex":33},{"imageOffset":2985316,"symbol":"-[NSTableView _sendAction:to:row:column:]","symbolLocation":112,"imageIndex":33},{"imageOffset":2979288,"symbol":"-[NSTableView mouseDown:]","symbolLocation":4040,"imageIndex":33},{"imageOffset":5411364,"symbol":"-[REAPERSwell_listview mouseUp:]","symbolLocation":244,"imageIndex":0},{"imageOffset":12578784,"symbol":"_routeMouseUpEvent","symbolLocation":132,"imageIndex":33},{"imageOffset":1444896,"symbol":"-[NSWindow(NSEventRouting) _reallySendEvent:isDelayedEvent:]","symbolLocation":440,"imageIndex":33},{"imageOffset":1444000,"symbol":"-[NSWindow(NSEventRouting) sendEvent:]","symbolLocation":288,"imageIndex":33},{"imageOffset":10322764,"symbol":"-[NSApplication(NSEventRouting) sendEvent:]","symbolLocation":1504,"imageIndex":33},{"imageOffset":3535040,"symbol":"-[REAPERapp sendEvent:]","symbolLocation":3392,"imageIndex":0},{"imageOffset":6124588,"symbol":"-[NSApplication _handleEvent:]","symbolLocation":60,"imageIndex":33},{"imageOffset":187404,"symbol":"-[NSApplication run]","symbolLocation":520,"imageIndex":33},{"imageOffset":17116,"symbol":"NSApplicationMain","symbolLocation":880,"imageIndex":33},{"imageOffset":27544,"symbol":"start","symbolLocation":6076,"imageIndex":34}]},{"id":4457104,"frames":[{"imageOffset":7020,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":37}],"threadState":{"x":[{"value":6095368192},{"value":3843},{"value":6094831616},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":4096},"fp":{"value":0},"sp":{"value":6095368192},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915730284},"far":{"value":0}}},{"id":4457106,"frames":[{"imageOffset":7020,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":37}],"threadState":{"x":[{"value":6096515072},{"value":8963},{"value":6095978496},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":4096},"fp":{"value":0},"sp":{"value":6096515072},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915730284},"far":{"value":0}}},{"id":4457107,"frames":[{"imageOffset":7020,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":37}],"threadState":{"x":[{"value":6097088512},{"value":9987},{"value":6096551936},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":4096},"fp":{"value":0},"sp":{"value":6097088512},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915730284},"far":{"value":0}}},{"id":4457123,"name":"com.apple.NSEventThread","threadState":{"x":[{"value":268451845},{"value":21592279046},{"value":8589934592},{"value":204522047668224},{"value":0},{"value":204522047668224},{"value":2},{"value":4294967295},{"value":0},{"value":17179869184},{"value":0},{"value":2},{"value":0},{"value":0},{"value":47619},{"value":0},{"value":18446744073709551569},{"value":8777964632},{"value":0},{"value":4294967295},{"value":2},{"value":204522047668224},{"value":0},{"value":204522047668224},{"value":6097657992},{"value":8589934592},{"value":21592279046},{"value":18446744073709550527},{"value":4412409862}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915556152},"cpsr":{"value":4096},"fp":{"value":6097657840},"sp":{"value":6097657760},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480628},"far":{"value":0}},"frames":[{"imageOffset":3124,"symbol":"mach_msg2_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":78648,"symbol":"mach_msg2_internal","symbolLocation":76,"imageIndex":38},{"imageOffset":38756,"symbol":"mach_msg_overwrite","symbolLocation":484,"imageIndex":38},{"imageOffset":4008,"symbol":"mach_msg","symbolLocation":24,"imageIndex":38},{"imageOffset":510988,"symbol":"__CFRunLoopServiceMachPort","symbolLocation":160,"imageIndex":39},{"imageOffset":505128,"symbol":"__CFRunLoopRun","symbolLocation":1208,"imageIndex":39},{"imageOffset":502248,"symbol":"CFRunLoopRunSpecific","symbolLocation":572,"imageIndex":39},{"imageOffset":1435532,"symbol":"_NSEventThread","symbolLocation":140,"imageIndex":33},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457228,"frames":[{"imageOffset":3124,"symbol":"mach_msg2_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":78648,"symbol":"mach_msg2_internal","symbolLocation":76,"imageIndex":38},{"imageOffset":38756,"symbol":"mach_msg_overwrite","symbolLocation":484,"imageIndex":38},{"imageOffset":4008,"symbol":"mach_msg","symbolLocation":24,"imageIndex":38},{"imageOffset":257708,"symbol":"XServerMachPort::ReceiveMessage(int&, void*, int&)","symbolLocation":104,"imageIndex":40},{"imageOffset":395072,"symbol":"MIDIProcess::MIDIInPortThread::Run()","symbolLocation":148,"imageIndex":40},{"imageOffset":350060,"symbol":"CADeprecated::XThread::RunHelper(void*)","symbolLocation":48,"imageIndex":40},{"imageOffset":392772,"symbol":"CADeprecated::CAPThread::Entry(CADeprecated::CAPThread*)","symbolLocation":96,"imageIndex":40},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}],"threadState":{"x":[{"value":268451845},{"value":17179869186},{"value":0},{"value":365050745323520},{"value":0},{"value":365050745323520},{"value":100},{"value":0},{"value":0},{"value":17179869184},{"value":100},{"value":0},{"value":0},{"value":0},{"value":84995},{"value":0},{"value":18446744073709551569},{"value":8777964632},{"value":0},{"value":0},{"value":100},{"value":365050745323520},{"value":0},{"value":365050745323520},{"value":6098233812},{"value":0},{"value":17179869186},{"value":18446744073709550527},{"value":2}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915556152},"cpsr":{"value":4096},"fp":{"value":6098233472},"sp":{"value":6098233392},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480628},"far":{"value":0}}},{"id":4457250,"name":"caulk.messenger.shared:17","threadState":{"x":[{"value":14},{"value":1},{"value":0},{"value":1},{"value":0},{"value":1},{"value":0},{"value":0},{"value":0},{"value":4294967295},{"value":0},{"value":0},{"value":4638851096},{"value":6098808440},{"value":7},{"value":0},{"value":18446744073709551580},{"value":8777967080},{"value":0},{"value":105553129061232},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":7107058888},"cpsr":{"value":2147487744},"fp":{"value":6098808704},"sp":{"value":6098808672},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480496},"far":{"value":0}},"frames":[{"imageOffset":2992,"symbol":"semaphore_wait_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":7368,"symbol":"caulk::semaphore::timed_wait(double)","symbolLocation":224,"imageIndex":41},{"imageOffset":7024,"symbol":"caulk::concurrent::details::worker_thread::run()","symbolLocation":32,"imageIndex":41},{"imageOffset":6212,"symbol":"void* caulk::thread_proxy<std::__1::tuple<caulk::thread::attributes, void (caulk::concurrent::details::worker_thread::*)(), std::__1::tuple<caulk::concurrent::details::worker_thread*>>>(void*)","symbolLocation":96,"imageIndex":41},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457251,"name":"caulk.messenger.shared:high","threadState":{"x":[{"value":14},{"value":51975},{"value":51975},{"value":17},{"value":4294967295},{"value":0},{"value":0},{"value":0},{"value":0},{"value":4294967295},{"value":1},{"value":105553176125704},{"value":0},{"value":0},{"value":0},{"value":0},{"value":18446744073709551580},{"value":8777967080},{"value":0},{"value":105553129061648},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":7107058888},"cpsr":{"value":2147487744},"fp":{"value":6099382144},"sp":{"value":6099382112},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480496},"far":{"value":0}},"frames":[{"imageOffset":2992,"symbol":"semaphore_wait_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":7368,"symbol":"caulk::semaphore::timed_wait(double)","symbolLocation":224,"imageIndex":41},{"imageOffset":7024,"symbol":"caulk::concurrent::details::worker_thread::run()","symbolLocation":32,"imageIndex":41},{"imageOffset":6212,"symbol":"void* caulk::thread_proxy<std::__1::tuple<caulk::thread::attributes, void (caulk::concurrent::details::worker_thread::*)(), std::__1::tuple<caulk::concurrent::details::worker_thread*>>>(void*)","symbolLocation":96,"imageIndex":41},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457267,"name":"*\/video","threadState":{"x":[{"value":4},{"value":0},{"value":1},{"value":1},{"value":0},{"value":50000000},{"value":0},{"value":336},{"value":8760866072,"symbolLocation":0,"symbol":"clock_sem"},{"value":3},{"value":17},{"value":35},{"value":35},{"value":0},{"value":6918312381,"symbolLocation":189,"symbol":"_OBJC_$_INSTANCE_METHODS___NSCFString"},{"value":8760936168,"symbolLocation":0,"symbol":"OBJC_CLASS_$___NSCFString"},{"value":334},{"value":8777962872},{"value":0},{"value":0},{"value":6099955392},{"value":4888342528,"symbolLocation":0,"symbol":"IsWindowEnabled"},{"value":4888342528,"symbolLocation":0,"symbol":"IsWindowEnabled"},{"value":4888342528,"symbolLocation":0,"symbol":"IsWindowEnabled"},{"value":4888342528,"symbolLocation":0,"symbol":"IsWindowEnabled"},{"value":0},{"value":4888342528,"symbolLocation":0,"symbol":"IsWindowEnabled"},{"value":0},{"value":4888342528,"symbolLocation":0,"symbol":"IsWindowEnabled"}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6914299636},"cpsr":{"value":2684358656},"fp":{"value":6099955376},"sp":{"value":6099955328},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494344},"far":{"value":0}},"frames":[{"imageOffset":16840,"symbol":"__semwait_signal","symbolLocation":8,"imageIndex":38},{"imageOffset":55028,"symbol":"nanosleep","symbolLocation":220,"imageIndex":42},{"imageOffset":54796,"symbol":"usleep","symbolLocation":68,"imageIndex":42},{"imageOffset":87076,"symbol":"videoDecodeThread(void*)","symbolLocation":1300,"imageIndex":20},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457305,"name":"JUCE v8.0.12: Timer","threadState":{"x":[{"value":260},{"value":0},{"value":913664},{"value":0},{"value":0},{"value":160},{"value":0},{"value":299998750},{"value":6107982520},{"value":0},{"value":17664},{"value":75866302334210},{"value":75866302334210},{"value":17664},{"value":0},{"value":75866302334208},{"value":305},{"value":8777962752},{"value":0},{"value":5668742400},{"value":5668742464},{"value":6107984096},{"value":299998750},{"value":0},{"value":913664},{"value":913665},{"value":913920},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752092},"cpsr":{"value":1610616832},"fp":{"value":6107982640},"sp":{"value":6107982496},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28828,"symbol":"_pthread_cond_wait","symbolLocation":984,"imageIndex":37},{"imageOffset":123648,"symbol":"std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":43},{"imageOffset":9460108,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&)","symbolLocation":384,"imageIndex":23},{"imageOffset":9459200,"symbol":"void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":23},{"imageOffset":9577892,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&)","symbolLocation":156,"imageIndex":23},{"imageOffset":9577528,"symbol":"bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":72,"imageIndex":23},{"imageOffset":9219488,"symbol":"bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":100,"imageIndex":23},{"imageOffset":9029600,"symbol":"juce::WaitableEvent::wait(double) const","symbolLocation":188,"imageIndex":23},{"imageOffset":8655812,"symbol":"juce::Timer::TimerThread::run()","symbolLocation":340,"imageIndex":23},{"imageOffset":9032488,"symbol":"juce::Thread::threadEntryPoint()","symbolLocation":244,"imageIndex":23},{"imageOffset":9033244,"symbol":"juce::juce_threadEntryPoint(void*)","symbolLocation":24,"imageIndex":23},{"imageOffset":9402816,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const","symbolLocation":148,"imageIndex":23},{"imageOffset":9402656,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*)","symbolLocation":28,"imageIndex":23},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457306,"name":"JUCE v8.0.12: Timer","threadState":{"x":[{"value":260},{"value":0},{"value":1804032},{"value":0},{"value":0},{"value":160},{"value":0},{"value":99999625},{"value":6108555928},{"value":0},{"value":1536},{"value":6597069768194},{"value":6597069768194},{"value":1536},{"value":0},{"value":6597069768192},{"value":305},{"value":8777962752},{"value":0},{"value":5668755944},{"value":5668756008},{"value":6108557536},{"value":99999625},{"value":0},{"value":1804032},{"value":1818369},{"value":1818624},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752092},"cpsr":{"value":1610616832},"fp":{"value":6108556048},"sp":{"value":6108555904},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28828,"symbol":"_pthread_cond_wait","symbolLocation":984,"imageIndex":37},{"imageOffset":123648,"symbol":"std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":43},{"imageOffset":9447280,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&)","symbolLocation":384,"imageIndex":24},{"imageOffset":9446372,"symbol":"void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":24},{"imageOffset":9565064,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&)","symbolLocation":156,"imageIndex":24},{"imageOffset":9564700,"symbol":"bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":72,"imageIndex":24},{"imageOffset":9206660,"symbol":"bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":100,"imageIndex":24},{"imageOffset":9016772,"symbol":"juce::WaitableEvent::wait(double) const","symbolLocation":188,"imageIndex":24},{"imageOffset":9023536,"symbol":"juce::Thread::wait(double) const","symbolLocation":36,"imageIndex":24},{"imageOffset":8643064,"symbol":"juce::Timer::TimerThread::run()","symbolLocation":420,"imageIndex":24},{"imageOffset":9019660,"symbol":"juce::Thread::threadEntryPoint()","symbolLocation":244,"imageIndex":24},{"imageOffset":9020416,"symbol":"juce::juce_threadEntryPoint(void*)","symbolLocation":24,"imageIndex":24},{"imageOffset":9389988,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const","symbolLocation":148,"imageIndex":24},{"imageOffset":9389828,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*)","symbolLocation":28,"imageIndex":24},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457308,"name":"JUCE v8.0.12: Timer","threadState":{"x":[{"value":260},{"value":0},{"value":1033728},{"value":0},{"value":0},{"value":160},{"value":0},{"value":99997042},{"value":6109129368},{"value":0},{"value":512},{"value":2199023256066},{"value":2199023256066},{"value":512},{"value":0},{"value":2199023256064},{"value":305},{"value":8777962752},{"value":0},{"value":5668759192},{"value":5668759256},{"value":6109130976},{"value":99997042},{"value":0},{"value":1033728},{"value":1047553},{"value":1047808},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752092},"cpsr":{"value":1610616832},"fp":{"value":6109129488},"sp":{"value":6109129344},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28828,"symbol":"_pthread_cond_wait","symbolLocation":984,"imageIndex":37},{"imageOffset":123648,"symbol":"std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":43},{"imageOffset":9413612,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&)","symbolLocation":384,"imageIndex":25},{"imageOffset":9412704,"symbol":"void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":25},{"imageOffset":9531396,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&)","symbolLocation":156,"imageIndex":25},{"imageOffset":9531032,"symbol":"bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":72,"imageIndex":25},{"imageOffset":9172992,"symbol":"bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":100,"imageIndex":25},{"imageOffset":8983104,"symbol":"juce::WaitableEvent::wait(double) const","symbolLocation":188,"imageIndex":25},{"imageOffset":8989868,"symbol":"juce::Thread::wait(double) const","symbolLocation":36,"imageIndex":25},{"imageOffset":8609396,"symbol":"juce::Timer::TimerThread::run()","symbolLocation":420,"imageIndex":25},{"imageOffset":8985992,"symbol":"juce::Thread::threadEntryPoint()","symbolLocation":244,"imageIndex":25},{"imageOffset":8986748,"symbol":"juce::juce_threadEntryPoint(void*)","symbolLocation":24,"imageIndex":25},{"imageOffset":9356320,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const","symbolLocation":148,"imageIndex":25},{"imageOffset":9356160,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*)","symbolLocation":28,"imageIndex":25},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457311,"name":"JUCE v8.0.12: Timer","threadState":{"x":[{"value":260},{"value":0},{"value":977664},{"value":0},{"value":0},{"value":160},{"value":0},{"value":99999792},{"value":6109702808},{"value":0},{"value":0},{"value":2},{"value":2},{"value":0},{"value":0},{"value":0},{"value":305},{"value":8777962752},{"value":0},{"value":5669694920},{"value":5669694984},{"value":6109704416},{"value":99999792},{"value":0},{"value":977664},{"value":991745},{"value":992000},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752092},"cpsr":{"value":1610616832},"fp":{"value":6109702928},"sp":{"value":6109702784},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28828,"symbol":"_pthread_cond_wait","symbolLocation":984,"imageIndex":37},{"imageOffset":123648,"symbol":"std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":43},{"imageOffset":9449780,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&)","symbolLocation":384,"imageIndex":26},{"imageOffset":9448872,"symbol":"void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":26},{"imageOffset":9567564,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&)","symbolLocation":156,"imageIndex":26},{"imageOffset":9567200,"symbol":"bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":72,"imageIndex":26},{"imageOffset":9209160,"symbol":"bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":100,"imageIndex":26},{"imageOffset":9019272,"symbol":"juce::WaitableEvent::wait(double) const","symbolLocation":188,"imageIndex":26},{"imageOffset":9026036,"symbol":"juce::Thread::wait(double) const","symbolLocation":36,"imageIndex":26},{"imageOffset":8645564,"symbol":"juce::Timer::TimerThread::run()","symbolLocation":420,"imageIndex":26},{"imageOffset":9022160,"symbol":"juce::Thread::threadEntryPoint()","symbolLocation":244,"imageIndex":26},{"imageOffset":9022916,"symbol":"juce::juce_threadEntryPoint(void*)","symbolLocation":24,"imageIndex":26},{"imageOffset":9392488,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const","symbolLocation":148,"imageIndex":26},{"imageOffset":9392328,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*)","symbolLocation":28,"imageIndex":26},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457317,"name":"JUCE v8.0.12: Timer","threadState":{"x":[{"value":260},{"value":0},{"value":1282304},{"value":0},{"value":0},{"value":160},{"value":0},{"value":299999709},{"value":6110276280},{"value":0},{"value":18176},{"value":78065325590274},{"value":78065325590274},{"value":18176},{"value":0},{"value":78065325590272},{"value":305},{"value":8777962752},{"value":0},{"value":5669700304},{"value":5669700368},{"value":6110277856},{"value":299999709},{"value":0},{"value":1282304},{"value":1282305},{"value":1282560},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752092},"cpsr":{"value":1610616832},"fp":{"value":6110276400},"sp":{"value":6110276256},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28828,"symbol":"_pthread_cond_wait","symbolLocation":984,"imageIndex":37},{"imageOffset":123648,"symbol":"std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":43},{"imageOffset":9434272,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&)","symbolLocation":384,"imageIndex":27},{"imageOffset":9433364,"symbol":"void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":27},{"imageOffset":9552056,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&)","symbolLocation":156,"imageIndex":27},{"imageOffset":9551692,"symbol":"bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":72,"imageIndex":27},{"imageOffset":9193652,"symbol":"bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":100,"imageIndex":27},{"imageOffset":9003764,"symbol":"juce::WaitableEvent::wait(double) const","symbolLocation":188,"imageIndex":27},{"imageOffset":8629976,"symbol":"juce::Timer::TimerThread::run()","symbolLocation":340,"imageIndex":27},{"imageOffset":9006652,"symbol":"juce::Thread::threadEntryPoint()","symbolLocation":244,"imageIndex":27},{"imageOffset":9007408,"symbol":"juce::juce_threadEntryPoint(void*)","symbolLocation":24,"imageIndex":27},{"imageOffset":9376980,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const","symbolLocation":148,"imageIndex":27},{"imageOffset":9376820,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*)","symbolLocation":28,"imageIndex":27},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457351,"name":"caulk::deferred_logger","threadState":{"x":[{"value":14},{"value":105553136599639},{"value":0},{"value":6110851175},{"value":105553136599616},{"value":22},{"value":0},{"value":0},{"value":0},{"value":4294967295},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":18446744073709551580},{"value":8777967080},{"value":0},{"value":105553131245560},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":7107058888},"cpsr":{"value":2147487744},"fp":{"value":6110850944},"sp":{"value":6110850912},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480496},"far":{"value":0}},"frames":[{"imageOffset":2992,"symbol":"semaphore_wait_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":7368,"symbol":"caulk::semaphore::timed_wait(double)","symbolLocation":224,"imageIndex":41},{"imageOffset":7024,"symbol":"caulk::concurrent::details::worker_thread::run()","symbolLocation":32,"imageIndex":41},{"imageOffset":6212,"symbol":"void* caulk::thread_proxy<std::__1::tuple<caulk::thread::attributes, void (caulk::concurrent::details::worker_thread::*)(), std::__1::tuple<caulk::concurrent::details::worker_thread*>>>(void*)","symbolLocation":96,"imageIndex":41},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4457398,"frames":[{"imageOffset":7020,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":37}],"threadState":{"x":[{"value":6113718272},{"value":84511},{"value":6113181696},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":4096},"fp":{"value":0},"sp":{"value":6113718272},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915730284},"far":{"value":0}}},{"id":4461537,"frames":[{"imageOffset":7020,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":37}],"threadState":{"x":[{"value":6107410432},{"value":135703},{"value":6106873856},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":4096},"fp":{"value":0},"sp":{"value":6107410432},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915730284},"far":{"value":0}}},{"id":4461538,"frames":[{"imageOffset":7020,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":37}],"threadState":{"x":[{"value":6111424512},{"value":77647},{"value":6110887936},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":4096},"fp":{"value":0},"sp":{"value":6111424512},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915730284},"far":{"value":0}}},{"id":4461828,"name":"com.apple.audio.IOThread.client","threadState":{"x":[{"value":0},{"value":104483},{"value":0},{"value":0},{"value":0},{"value":24},{"value":0},{"value":0},{"value":1},{"value":9542796112409329827},{"value":6597069768192},{"value":6597069768194},{"value":48},{"value":0},{"value":5698212356},{"value":0},{"value":18446744073709551579},{"value":8777967088},{"value":0},{"value":4836115232},{"value":4836115224},{"value":4689889280},{"value":105553137604544},{"value":8760983552,"symbolLocation":0,"symbol":"AMCP::Log::Scope_Registry::get()::s_registry"},{"value":8721874944,"symbolLocation":416,"symbol":"sVarispeedRateTable"},{"value":512},{"value":0},{"value":0},{"value":6969819457}],"flavor":"ARM_THREAD_STATE64","lr":{"value":7107175160},"cpsr":{"value":1610616832},"fp":{"value":6100528384},"sp":{"value":6100528368},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480508},"far":{"value":0}},"frames":[{"imageOffset":3004,"symbol":"semaphore_wait_signal_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":123640,"symbol":"caulk::mach::semaphore::wait_signal_or_error(caulk::mach::semaphore&)","symbolLocation":36,"imageIndex":41},{"imageOffset":2045596,"symbol":"HALC_ProxyIOContext::IOWorkLoop()","symbolLocation":5276,"imageIndex":44},{"imageOffset":2038508,"symbol":"invocation function for block in HALC_ProxyIOContext::HALC_ProxyIOContext(unsigned int, unsigned int)","symbolLocation":172,"imageIndex":44},{"imageOffset":3784624,"symbol":"HALC_IOThread::Entry(void*)","symbolLocation":88,"imageIndex":44},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461860,"name":"com.apple.audio.IOThread.client","threadState":{"x":[{"value":14},{"value":141611},{"value":0},{"value":0},{"value":0},{"value":32},{"value":4852374464},{"value":6101099948},{"value":1},{"value":9542796112409329827},{"value":5497558140160},{"value":5497558140162},{"value":48},{"value":4683153416},{"value":2},{"value":4096},{"value":18446744073709551579},{"value":8777967088},{"value":0},{"value":4838776608},{"value":4838776600},{"value":4692242432},{"value":105553173290016},{"value":8760983552,"symbolLocation":0,"symbol":"AMCP::Log::Scope_Registry::get()::s_registry"},{"value":8721874944,"symbolLocation":416,"symbol":"sVarispeedRateTable"},{"value":512},{"value":8760872736,"symbolLocation":0,"symbol":"mach_task_self_"},{"value":0},{"value":6969819457}],"flavor":"ARM_THREAD_STATE64","lr":{"value":7107175160},"cpsr":{"value":1610616832},"fp":{"value":6101101824},"sp":{"value":6101101808},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915480508},"far":{"value":0}},"frames":[{"imageOffset":3004,"symbol":"semaphore_wait_signal_trap","symbolLocation":8,"imageIndex":38},{"imageOffset":123640,"symbol":"caulk::mach::semaphore::wait_signal_or_error(caulk::mach::semaphore&)","symbolLocation":36,"imageIndex":41},{"imageOffset":2045596,"symbol":"HALC_ProxyIOContext::IOWorkLoop()","symbolLocation":5276,"imageIndex":44},{"imageOffset":2038508,"symbol":"invocation function for block in HALC_ProxyIOContext::HALC_ProxyIOContext(unsigned int, unsigned int)","symbolLocation":172,"imageIndex":44},{"imageOffset":3784624,"symbol":"HALC_IOThread::Entry(void*)","symbolLocation":88,"imageIndex":44},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461875,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11337984},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11338241},{"value":0},{"value":5376},{"value":23089744188674},{"value":23089744188674},{"value":5376},{"value":0},{"value":23089744188672},{"value":305},{"value":8777962752},{"value":0},{"value":105553142820872},{"value":105553142820936},{"value":1},{"value":5000000},{"value":0},{"value":11337984},{"value":11338241},{"value":11338496},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6101675312},"sp":{"value":6101675168},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461876,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11495424},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11495681},{"value":0},{"value":1792},{"value":7696581396226},{"value":7696581396226},{"value":1792},{"value":0},{"value":7696581396224},{"value":305},{"value":8777962752},{"value":0},{"value":105553142820232},{"value":105553142820296},{"value":1},{"value":5000000},{"value":0},{"value":11495424},{"value":11495681},{"value":11495936},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6102248752},"sp":{"value":6102248608},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461877,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11522816},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11523073},{"value":0},{"value":2560},{"value":10995116280322},{"value":10995116280322},{"value":2560},{"value":0},{"value":10995116280320},{"value":305},{"value":8777962752},{"value":0},{"value":105553142810120},{"value":105553142810184},{"value":1},{"value":5000000},{"value":0},{"value":11522816},{"value":11523073},{"value":11523328},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6102822192},"sp":{"value":6102822048},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461878,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11524352},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11524609},{"value":0},{"value":3072},{"value":13194139536386},{"value":13194139536386},{"value":3072},{"value":0},{"value":13194139536384},{"value":305},{"value":8777962752},{"value":0},{"value":105553142817672},{"value":105553142817736},{"value":1},{"value":5000000},{"value":0},{"value":11524352},{"value":11524609},{"value":11524864},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6103395632},"sp":{"value":6103395488},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461879,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11516160},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11516417},{"value":0},{"value":3072},{"value":13194139536386},{"value":13194139536386},{"value":3072},{"value":0},{"value":13194139536384},{"value":305},{"value":8777962752},{"value":0},{"value":105553142818568},{"value":105553142818632},{"value":1},{"value":5000000},{"value":0},{"value":11516160},{"value":11516417},{"value":11516672},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6103969072},"sp":{"value":6103968928},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461880,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11511808},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11512065},{"value":0},{"value":2304},{"value":9895604652290},{"value":9895604652290},{"value":2304},{"value":0},{"value":9895604652288},{"value":305},{"value":8777962752},{"value":0},{"value":105553142814088},{"value":105553142814152},{"value":1},{"value":5000000},{"value":0},{"value":11511808},{"value":11512065},{"value":11512320},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6104542512},"sp":{"value":6104542368},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461881,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11519488},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11519745},{"value":0},{"value":4864},{"value":20890720932610},{"value":20890720932610},{"value":4864},{"value":0},{"value":20890720932608},{"value":305},{"value":8777962752},{"value":0},{"value":105553142815624},{"value":105553142815688},{"value":1},{"value":5000000},{"value":0},{"value":11519488},{"value":11519745},{"value":11520000},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6105115952},"sp":{"value":6105115808},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461882,"name":"*\/mediaafx","threadState":{"x":[{"value":260},{"value":0},{"value":11537408},{"value":0},{"value":0},{"value":160},{"value":0},{"value":5000000},{"value":11537665},{"value":0},{"value":3840},{"value":16492674420482},{"value":16492674420482},{"value":3840},{"value":0},{"value":16492674420480},{"value":305},{"value":8777962752},{"value":0},{"value":105553142817160},{"value":105553142817224},{"value":1},{"value":5000000},{"value":0},{"value":11537408},{"value":11537665},{"value":11537920},{"value":4382823988,"symbolLocation":0,"symbol":"g_config_workerthread_prio"},{"value":4294967295}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6105689392},"sp":{"value":6105689248},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1317420,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":2304,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461883,"name":"*\/livefx","threadState":{"x":[{"value":260},{"value":0},{"value":2947584},{"value":0},{"value":0},{"value":160},{"value":0},{"value":20000000},{"value":3001601},{"value":0},{"value":256},{"value":1099511628034},{"value":1099511628034},{"value":256},{"value":0},{"value":1099511628032},{"value":305},{"value":8777962752},{"value":0},{"value":105553142816648},{"value":105553142816712},{"value":1},{"value":20000000},{"value":0},{"value":2947584},{"value":3001601},{"value":3001856},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6106262832},"sp":{"value":6106262688},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1318252,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":3136,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461884,"name":"*\/livefx","threadState":{"x":[{"value":260},{"value":0},{"value":2947584},{"value":0},{"value":0},{"value":160},{"value":0},{"value":20000000},{"value":3001601},{"value":0},{"value":256},{"value":1099511628034},{"value":1099511628034},{"value":256},{"value":0},{"value":1099511628032},{"value":305},{"value":8777962752},{"value":0},{"value":105553142867464},{"value":105553142867528},{"value":1},{"value":20000000},{"value":0},{"value":2947584},{"value":3001601},{"value":3001856},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6106836272},"sp":{"value":6106836128},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1318252,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":3136,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4461885,"name":"*\/livefx","threadState":{"x":[{"value":260},{"value":0},{"value":2947584},{"value":0},{"value":0},{"value":160},{"value":0},{"value":20000000},{"value":3001601},{"value":0},{"value":256},{"value":1099511628034},{"value":1099511628034},{"value":256},{"value":0},{"value":1099511628032},{"value":305},{"value":8777962752},{"value":0},{"value":105553142860808},{"value":105553142860872},{"value":1},{"value":20000000},{"value":0},{"value":2947584},{"value":3001601},{"value":3001856},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6111997232},"sp":{"value":6111997088},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":5496544,"symbol":"WaitForSingleObject(void*, unsigned int)","symbolLocation":668,"imageIndex":0},{"imageOffset":1318252,"symbol":"WorkerThreadInst::threadProc(void*)","symbolLocation":3136,"imageIndex":0},{"imageOffset":5497032,"symbol":"__threadproc(void*)","symbolLocation":32,"imageIndex":0},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4462014,"name":"CVDisplayLink","threadState":{"x":[{"value":260},{"value":0},{"value":0},{"value":0},{"value":0},{"value":65704},{"value":0},{"value":15790208},{"value":64513},{"value":0},{"value":0},{"value":2},{"value":2},{"value":0},{"value":0},{"value":0},{"value":305},{"value":8777962752},{"value":0},{"value":6149082680},{"value":6149082744},{"value":1},{"value":15790208},{"value":0},{"value":0},{"value":64513},{"value":64768},{"value":3248874931132},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6112570800},"sp":{"value":6112570656},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":12788,"symbol":"CVDisplayLink::waitUntil(unsigned long long)","symbolLocation":336,"imageIndex":45},{"imageOffset":8924,"symbol":"CVDisplayLink::runIOThread()","symbolLocation":500,"imageIndex":45},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4462015,"name":"CVDisplayLink","threadState":{"x":[{"value":260},{"value":0},{"value":0},{"value":0},{"value":0},{"value":65704},{"value":0},{"value":12333750},{"value":80897},{"value":0},{"value":0},{"value":2},{"value":2},{"value":0},{"value":0},{"value":0},{"value":305},{"value":8777962752},{"value":0},{"value":6149084216},{"value":6149084280},{"value":1},{"value":12333750},{"value":0},{"value":0},{"value":80897},{"value":81152},{"value":3248875053325},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752136},"cpsr":{"value":2684358656},"fp":{"value":6113144240},"sp":{"value":6113144096},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28872,"symbol":"_pthread_cond_wait","symbolLocation":1028,"imageIndex":37},{"imageOffset":12788,"symbol":"CVDisplayLink::waitUntil(unsigned long long)","symbolLocation":336,"imageIndex":45},{"imageOffset":8924,"symbol":"CVDisplayLink::runIOThread()","symbolLocation":500,"imageIndex":45},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]},{"id":4462080,"name":"JUCE v8.0.12: Timer","threadState":{"x":[{"value":260},{"value":0},{"value":0},{"value":0},{"value":0},{"value":160},{"value":0},{"value":99700750},{"value":6095940248},{"value":0},{"value":0},{"value":2},{"value":2},{"value":0},{"value":0},{"value":0},{"value":305},{"value":8777962752},{"value":0},{"value":5692112776},{"value":5692112840},{"value":6095941856},{"value":99700750},{"value":0},{"value":0},{"value":1},{"value":256},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6915752092},"cpsr":{"value":1610616832},"fp":{"value":6095940368},"sp":{"value":6095940224},"esr":{"value":1442840704,"description":" Address size fault"},"pc":{"value":6915494860},"far":{"value":0}},"frames":[{"imageOffset":17356,"symbol":"__psynch_cvwait","symbolLocation":8,"imageIndex":38},{"imageOffset":28828,"symbol":"_pthread_cond_wait","symbolLocation":984,"imageIndex":37},{"imageOffset":123648,"symbol":"std::__1::condition_variable::__do_timed_wait(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::system_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":43},{"imageOffset":936692,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_for<long long, std::__1::ratio<1l, 1000000000l>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>> const&)","symbolLocation":384,"imageIndex":31},{"imageOffset":935784,"symbol":"void std::__1::condition_variable::__do_timed_wait[abi:ne200100]<std::__1::chrono::steady_clock>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l>>>)","symbolLocation":104,"imageIndex":31},{"imageOffset":9608508,"symbol":"std::__1::cv_status std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&)","symbolLocation":156,"imageIndex":31},{"imageOffset":9608144,"symbol":"bool std::__1::condition_variable::wait_until<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000000000l>>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":72,"imageIndex":31},{"imageOffset":9253240,"symbol":"bool std::__1::condition_variable::wait_for[abi:ne200100]<double, std::__1::ratio<1l, 1000l>, juce::WaitableEvent::wait(double) const::$_1>(std::__1::unique_lock<std::__1::mutex>&, std::__1::chrono::duration<double, std::__1::ratio<1l, 1000l>> const&, juce::WaitableEvent::wait(double) const::$_1)","symbolLocation":100,"imageIndex":31},{"imageOffset":9063352,"symbol":"juce::WaitableEvent::wait(double) const","symbolLocation":188,"imageIndex":31},{"imageOffset":9070116,"symbol":"juce::Thread::wait(double) const","symbolLocation":36,"imageIndex":31},{"imageOffset":8689732,"symbol":"juce::Timer::TimerThread::run()","symbolLocation":420,"imageIndex":31},{"imageOffset":9066240,"symbol":"juce::Thread::threadEntryPoint()","symbolLocation":244,"imageIndex":31},{"imageOffset":9066996,"symbol":"juce::juce_threadEntryPoint(void*)","symbolLocation":24,"imageIndex":31},{"imageOffset":9436532,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::operator()(void*) const","symbolLocation":148,"imageIndex":31},{"imageOffset":9436372,"symbol":"juce::Thread::createNativeThread(juce::Thread::Priority)::$_0::__invoke(void*)","symbolLocation":28,"imageIndex":31},{"imageOffset":27592,"symbol":"_pthread_start","symbolLocation":136,"imageIndex":37},{"imageOffset":7040,"symbol":"thread_start","symbolLocation":8,"imageIndex":37}]}],
+  "usedImages" : [
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4372070400,
+    "CFBundleShortVersionString" : "7.59.0_ae874bau",
+    "CFBundleIdentifier" : "com.cockos.reaper",
+    "size" : 10305536,
+    "uuid" : "1071dc3f-6c50-3365-839b-2eef7a6f2455",
+    "path" : "\/Applications\/REAPER.app\/Contents\/MacOS\/REAPER",
+    "name" : "REAPER",
+    "CFBundleVersion" : "7.59.0_ae874bau"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 4595859456,
+    "size" : 49152,
+    "uuid" : "9a87f143-aa9d-3c46-b2e8-b3fb9215e33e",
+    "path" : "\/usr\/lib\/libobjc-trampolines.dylib",
+    "name" : "libobjc-trampolines.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 4624220160,
+    "CFBundleShortVersionString" : "329.2",
+    "CFBundleIdentifier" : "com.apple.AGXMetalG15G-C0",
+    "size" : 7553024,
+    "uuid" : "c0944dee-3f71-3677-b9a0-1e21a80c1060",
+    "path" : "\/System\/Library\/Extensions\/AGXMetalG15G_C0.bundle\/Contents\/MacOS\/AGXMetalG15G_C0",
+    "name" : "AGXMetalG15G_C0",
+    "CFBundleVersion" : "329.2"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4849238016,
+    "size" : 196608,
+    "uuid" : "fdeee20a-415a-3c11-b3e0-2f7a3d2ffb81",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/elastique3.dylib",
+    "name" : "elastique3.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4848779264,
+    "size" : 32768,
+    "uuid" : "b467a3bf-d8d5-30c0-a58e-945a0ce2c239",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/soundtouch.dylib",
+    "name" : "soundtouch.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4848566272,
+    "size" : 114688,
+    "uuid" : "e8b80eeb-df32-3f3f-99d5-8c869d457618",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/rubberband.dylib",
+    "name" : "rubberband.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4850581504,
+    "size" : 360448,
+    "uuid" : "0f4fd3f6-a815-3cb7-9612-75340f1f7d7f",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/jsfx.dylib",
+    "name" : "jsfx.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4623941632,
+    "size" : 147456,
+    "uuid" : "37e06b13-9097-3c81-8fd9-b8edb1f53804",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_wave.dylib",
+    "name" : "reaper_wave.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4878532608,
+    "size" : 163840,
+    "uuid" : "c981fd70-a1dd-3baa-aaf1-4d19784cb2e3",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_mp3dec.dylib",
+    "name" : "reaper_mp3dec.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4879695872,
+    "size" : 294912,
+    "uuid" : "22134e04-d839-3b7c-a8ee-3aa135952a89",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/libmp3lame.dylib",
+    "name" : "libmp3lame.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4883447808,
+    "size" : 1228800,
+    "uuid" : "e4dd3c06-cc65-3a5f-b068-575e24b9bc7f",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_midi.dylib",
+    "name" : "reaper_midi.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4862967808,
+    "size" : 196608,
+    "uuid" : "a5c9b1f4-6ec5-3eef-bbb3-5875273b92e7",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_wavpack.dylib",
+    "name" : "reaper_wavpack.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4878925824,
+    "size" : 458752,
+    "uuid" : "a554ed63-656a-3ba2-a9a7-d0cec4ed0c4b",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_opus.dylib",
+    "name" : "reaper_opus.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4877975552,
+    "size" : 180224,
+    "uuid" : "eb404d5e-25df-3c2d-b07c-516f9f7d43a2",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_flac.dylib",
+    "name" : "reaper_flac.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4688756736,
+    "size" : 65536,
+    "uuid" : "c1db6c56-0bbf-313b-8d8e-63e0ffbc9136",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_rex.dylib",
+    "name" : "reaper_rex.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4845420544,
+    "size" : 49152,
+    "uuid" : "21cde6bf-6e4c-330c-87ce-fdb19b18312a",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_ddp.dylib",
+    "name" : "reaper_ddp.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4881186816,
+    "size" : 311296,
+    "uuid" : "1dc187a4-fdcb-3f64-8841-79e0714faf03",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_explorer.dylib",
+    "name" : "reaper_explorer.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4851515392,
+    "size" : 49152,
+    "uuid" : "995c5b99-6593-3876-ae7c-76f5a983e926",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_cd.dylib",
+    "name" : "reaper_cd.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4881645568,
+    "size" : 688128,
+    "uuid" : "739b30b5-6223-32f5-9e31-c3e4133c4e50",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_ogg.dylib",
+    "name" : "reaper_ogg.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4882644992,
+    "size" : 262144,
+    "uuid" : "5fd19d6c-bde8-39a9-a12f-99b8b64a75b6",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_csurf.dylib",
+    "name" : "reaper_csurf.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4887379968,
+    "size" : 901120,
+    "uuid" : "8b9d28ce-95ff-3af1-92bc-f6e9f3c82592",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reaper_video.dylib",
+    "name" : "reaper_video.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4851646464,
+    "size" : 32768,
+    "uuid" : "792b9e19-3e4d-3050-b35f-e1be85e314a2",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/reap_osx_modern.dylib",
+    "name" : "reap_osx_modern.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4897505280,
+    "size" : 2588672,
+    "uuid" : "ef881429-ddb1-3acb-b347-1a0cd41d7123",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/FFmpeg.dylib",
+    "name" : "FFmpeg.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 5368709120,
+    "CFBundleShortVersionString" : "0.1.0",
+    "CFBundleIdentifier" : "com.vxsuite.vxsubtract",
+    "size" : 13402112,
+    "uuid" : "4a345334-2e66-34b7-a28a-243fdebddbe2",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/VXSubtract.vst3\/Contents\/MacOS\/VXSubtract",
+    "name" : "VXSubtract",
+    "CFBundleVersion" : "0.1.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 5401214976,
+    "CFBundleShortVersionString" : "0.1.0",
+    "CFBundleIdentifier" : "com.vxsuite.vxdenoiser",
+    "size" : 13385728,
+    "uuid" : "d7ad9b7b-9e17-322a-85ba-8062b0f69fb0",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/VXDenoiser.vst3\/Contents\/MacOS\/VXDenoiser",
+    "name" : "VXDenoiser",
+    "CFBundleVersion" : "0.1.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4934860800,
+    "CFBundleShortVersionString" : "0.1.0",
+    "CFBundleIdentifier" : "com.vxsuite.vxproximity",
+    "size" : 11599872,
+    "uuid" : "ab8765fc-ee4e-32f2-b387-4dbab2abf4af",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/VXProximity.vst3\/Contents\/MacOS\/VXProximity",
+    "name" : "VXProximity",
+    "CFBundleVersion" : "0.1.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 5459460096,
+    "CFBundleShortVersionString" : "0.1.0",
+    "CFBundleIdentifier" : "com.vxsuite.vxdeverb",
+    "size" : 13385728,
+    "uuid" : "acdb446e-e3ff-33e3-8336-82a4525f9f11",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/VXDeverb.vst3\/Contents\/MacOS\/VXDeverb",
+    "name" : "VXDeverb",
+    "CFBundleVersion" : "0.1.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 5430329344,
+    "CFBundleShortVersionString" : "0.1.0",
+    "CFBundleIdentifier" : "com.vxsuite.vxpolish",
+    "size" : 11616256,
+    "uuid" : "617a9719-b01f-3f48-97bd-ea9aebb4e5dc",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/VXPolish.vst3\/Contents\/MacOS\/VXPolish",
+    "name" : "VXPolish",
+    "CFBundleVersion" : "0.1.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4886560768,
+    "size" : 81920,
+    "uuid" : "38f106ce-df8a-3321-8bd5-2c32a755356d",
+    "path" : "\/Applications\/REAPER.app\/Contents\/Plugins\/FX\/reaeq.vst.dylib",
+    "name" : "reaeq.vst.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4925833216,
+    "CFBundleShortVersionString" : "3.23",
+    "CFBundleIdentifier" : "com.voxengo.audio-plugins.VST3.SPAN",
+    "size" : 7634944,
+    "uuid" : "3aa1dc06-f953-34a7-82d9-9fb75dc2b173",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/SPAN.vst3\/Contents\/MacOS\/SPAN",
+    "name" : "SPAN",
+    "CFBundleVersion" : "3.23"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 4676648960,
+    "CFBundleShortVersionString" : "1.14",
+    "CFBundleIdentifier" : "com.apple.audio.units.Components",
+    "size" : 1294336,
+    "uuid" : "917d6875-01f4-33f6-a9f0-bc16669a67bb",
+    "path" : "\/System\/Library\/Components\/CoreAudio.component\/Contents\/MacOS\/CoreAudio",
+    "name" : "CoreAudio",
+    "CFBundleVersion" : "1.14"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 13116129280,
+    "CFBundleShortVersionString" : "0.1.0",
+    "CFBundleIdentifier" : "com.vxsuite.vxdeepfilternet",
+    "size" : 27787264,
+    "uuid" : "0926d0fa-5dd1-3b93-8f51-f2a1fcbe5246",
+    "path" : "\/Library\/Audio\/Plug-Ins\/VST3\/VXDeepFilterNet.vst3\/Contents\/MacOS\/VXDeepFilterNet",
+    "name" : "VXDeepFilterNet",
+    "CFBundleVersion" : "0.1.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 13158760448,
+    "size" : 13254656,
+    "uuid" : "3c6471a9-24b2-3276-a121-b4d1e2f644ae",
+    "path" : "\/Users\/USER\/*\/libonnxruntime.1.16.0.dylib",
+    "name" : "libonnxruntime.1.16.0.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6982660096,
+    "CFBundleShortVersionString" : "6.9",
+    "CFBundleIdentifier" : "com.apple.AppKit",
+    "size" : 21563232,
+    "uuid" : "13f235c2-6acb-3fb1-b165-a05f83ee09cb",
+    "path" : "\/System\/Library\/Frameworks\/AppKit.framework\/Versions\/C\/AppKit",
+    "name" : "AppKit",
+    "CFBundleVersion" : "2575.70.55"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6911918080,
+    "size" : 636284,
+    "uuid" : "057e5157-4105-3787-b549-e605eb246448",
+    "path" : "\/usr\/lib\/dyld",
+    "name" : "dyld"
+  },
+  {
+    "size" : 0,
+    "source" : "A",
+    "base" : 0,
+    "uuid" : "00000000-0000-0000-0000-000000000000"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6915354624,
+    "size" : 122880,
+    "uuid" : "bc670272-bf32-38ac-ae3f-f06eda80be30",
+    "path" : "\/usr\/lib\/libc++abi.dylib",
+    "name" : "libc++abi.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6915723264,
+    "size" : 51832,
+    "uuid" : "c0519bf8-8fc4-3222-a4a7-d98af817277c",
+    "path" : "\/usr\/lib\/system\/libsystem_pthread.dylib",
+    "name" : "libsystem_pthread.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6915477504,
+    "size" : 243188,
+    "uuid" : "85034943-c8b6-3c69-8b4b-039cd25ef16d",
+    "path" : "\/usr\/lib\/system\/libsystem_kernel.dylib",
+    "name" : "libsystem_kernel.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6916202496,
+    "CFBundleShortVersionString" : "6.9",
+    "CFBundleIdentifier" : "com.apple.CoreFoundation",
+    "size" : 5500928,
+    "uuid" : "a62a694c-6a33-3d79-81ce-37440d549d08",
+    "path" : "\/System\/Library\/Frameworks\/CoreFoundation.framework\/Versions\/A\/CoreFoundation",
+    "name" : "CoreFoundation",
+    "CFBundleVersion" : "3603.1.405"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 7392116736,
+    "CFBundleShortVersionString" : "2.0",
+    "CFBundleIdentifier" : "com.apple.audio.midi.CoreMIDI",
+    "size" : 765216,
+    "uuid" : "9fb89e2e-e907-39cd-811c-17fb6cd4104d",
+    "path" : "\/System\/Library\/Frameworks\/CoreMIDI.framework\/Versions\/A\/CoreMIDI",
+    "name" : "CoreMIDI",
+    "CFBundleVersion" : "88"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 7107051520,
+    "CFBundleShortVersionString" : "1.0",
+    "CFBundleIdentifier" : "com.apple.audio.caulk",
+    "size" : 163296,
+    "uuid" : "fa67137d-9735-3dce-8716-ab20f8cd6e24",
+    "path" : "\/System\/Library\/PrivateFrameworks\/caulk.framework\/Versions\/A\/caulk",
+    "name" : "caulk"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6914244608,
+    "size" : 528888,
+    "uuid" : "e098cb59-2c56-395c-ade1-6ef590e61199",
+    "path" : "\/usr\/lib\/system\/libsystem_c.dylib",
+    "name" : "libsystem_c.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6914777088,
+    "size" : 577528,
+    "uuid" : "eb94c9fe-91da-3e9f-9c45-7b476feaaeae",
+    "path" : "\/usr\/lib\/libc++.1.dylib",
+    "name" : "libc++.1.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6962921472,
+    "CFBundleShortVersionString" : "5.0",
+    "CFBundleIdentifier" : "com.apple.audio.CoreAudio",
+    "size" : 7545024,
+    "uuid" : "9c4d070a-49c7-3e2b-a3ce-aa64875b5c70",
+    "path" : "\/System\/Library\/Frameworks\/CoreAudio.framework\/Versions\/A\/CoreAudio",
+    "name" : "CoreAudio",
+    "CFBundleVersion" : "5.0"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 7076823040,
+    "CFBundleShortVersionString" : "1.8",
+    "CFBundleIdentifier" : "com.apple.CoreVideo",
+    "size" : 396640,
+    "uuid" : "07221a5f-3241-388c-835e-5c7177fa0b23",
+    "path" : "\/System\/Library\/Frameworks\/CoreVideo.framework\/Versions\/A\/CoreVideo",
+    "name" : "CoreVideo",
+    "CFBundleVersion" : "692.1"
+  }
+],
+  "sharedCache" : {
+  "base" : 6911082496,
+  "size" : 5039783936,
+  "uuid" : "06500f56-f17f-34b5-bbbb-ca9b1caea316"
+},
+  "vmSummary" : "ReadOnly portion of Libraries: Total=1.9G resident=0K(0%) swapped_out_or_unallocated=1.9G(100%)\nWritable regions: Total=1.7G written=1956K(0%) resident=948K(0%) swapped_out=1008K(0%) unallocated=1.7G(100%)\n\n                                VIRTUAL   REGION \nREGION TYPE                        SIZE    COUNT (non-coalesced) \n===========                     =======  ======= \nAccelerate framework               384K        3 \nActivity Tracing                   256K        1 \nCG image                          1024K       43 \nColorSync                          640K       34 \nCoreAnimation                     7824K      165 \nCoreGraphics                        96K        6 \nCoreImage                           48K        3 \nCoreUI image data                 4864K       46 \nFoundation                          16K        1 \nImage IO                           320K       20 \nKernel Alloc Once                   32K        1 \nMALLOC                             1.6G       74 \nMALLOC guard page                  288K       18 \nSTACK GUARD                       56.5M       34 \nStack                             25.5M       34 \nVM_ALLOCATE                        864K       35 \nVM_ALLOCATE (reserved)              32K        1         reserved VM address space (unallocated)\n__AUTH                            5384K      688 \n__AUTH_CONST                      76.1M      928 \n__CTF                               824        1 \n__DATA                            28.3M      947 \n__DATA_CONST                      29.9M      967 \n__DATA_DIRTY                      2764K      336 \n__FONT_DATA                        2352        1 \n__INFO_FILTER                         8        1 \n__LINKEDIT                       714.9M       34 \n__OBJC_RO                         61.4M        1 \n__OBJC_RW                         2397K        1 \n__TEXT                             1.2G      988 \n__TPRO_CONST                       128K        2 \nmapped file                      501.9M       47 \npage table in kernel               948K        1 \nshared memory                     1056K       18 \n===========                     =======  ======= \nTOTAL                              4.3G     5480 \nTOTAL, minus reserved VM space     4.3G     5480 \n",
+  "legacyInfo" : {
+  "threadTriggered" : {
+    "name" : "reaper",
+    "queue" : "com.apple.main-thread"
+  }
+},
+  "logWritingSignature" : "32a01f1b22d2ca43629322380acad07791b715d8",
+  "trialInfo" : {
+  "rollouts" : [
+    {
+      "rolloutId" : "686eddef0a353675271ea2b8",
+      "factorPackIds" : {
+
+      },
+      "deploymentId" : 240000006
+    },
+    {
+      "rolloutId" : "64b21a7351cbb02ce3442e4e",
+      "factorPackIds" : {
+        "REMINDERS_GROCERY" : "6647f0f7b6a75d3dc32993e7"
+      },
+      "deploymentId" : 240000042
+    }
+  ],
+  "experiments" : [
+
+  ]
+}
+}
