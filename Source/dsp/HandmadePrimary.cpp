@@ -356,9 +356,8 @@ void HandmadePrimary::resetStreamingState() {
 
 bool HandmadePrimary::finalizeLearnedProfile() {
     if (learnFrames <= 0) {
-        learnedProfileReady = false;
         learningPrev = learning;
-        return false;
+        return learnedProfileReady;
     }
 
     const float invN = 1.0f / static_cast<float>(learnFrames);
@@ -373,7 +372,7 @@ bool HandmadePrimary::finalizeLearnedProfile() {
         const float weight = std::sqrt(mean);
         weightedRelStd += relStd * weight;
         weightSum += weight;
-        noisePowFrozen[k] = std::max(1.0e-10f, mean + (0.75f + 0.75f * learnedSensitivity) * stddev);
+        noisePowFrozen[k] = std::max(1.0e-10f, mean + (0.40f + 0.45f * learnedSensitivity) * stddev);
     }
     learnedProfileReady = true;
     const float progress = getLearnProgress();
@@ -454,6 +453,7 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
     // How much of the DSP-derived protect mask to apply (0 = bypass, 1 = full).
     // options.guardStrictness = 0 when user sets Protect=0.
     const float guardStrictness = juce::jlimit(0.0f, 1.0f, options.guardStrictness);
+    const bool voiceMode = options.isVoiceMode;
     const float wetCore  = labRaw ? wet : juce::jlimit(0.0f, 1.0f, wet * (1.0f - 0.10f * wet));
     const bool subtractEnabled = subMixGlobal > 1.0e-4f && learnedProfileReady;
     // Allow one transition block when learning just stopped so the frozen
@@ -463,9 +463,6 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
 
     // Learn phase transitions
     if (learning && !learningPrev) {
-        learnedProfileReady = false;
-        learnedProfileConfidence = 0.0f;
-        std::fill(noisePowFrozen.begin(), noisePowFrozen.end(), 1.0e-8f);
         std::fill(learnAccum.begin(), learnAccum.end(), 0.0f);
         std::fill(learnAccumSq.begin(), learnAccumSq.end(), 0.0f);
         for (auto& history : learnHistory)
@@ -474,9 +471,10 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
         learnQualityAccum = 0.0f;
         learnQualityFrames = 0;
         learnTargetFrames = std::max(2, static_cast<int>(
-            std::ceil(1.2f * static_cast<float>(sr) / static_cast<float>(hop))));
+            std::ceil(1.6f * static_cast<float>(sr) / static_cast<float>(hop))));
     } else if (!learning && learningPrev) {
-        // Finalize frozen learn profile from a robust percentile plus variance spread.
+        // Finalize frozen learn profile without destroying the previously
+        // active profile unless we actually captured a replacement.
         finalizeLearnedProfile();
     }
     learningPrev = learning;
@@ -555,10 +553,21 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                                                    lerp(0.05f, 0.015f, wetCore) * 0.85f);
             const float subtractMix = subtractEnabled ? juce::jlimit(0.0f, 1.0f, subMixGlobal) : 0.0f;
             const float profileAuthority = subtractEnabled
-                                             ? juce::jlimit(0.35f, 1.0f, 0.35f + 0.65f * learnedProfileConfidence)
+                                             ? juce::jlimit(voiceMode ? 0.58f : 0.70f,
+                                                            1.0f,
+                                                            (voiceMode ? 0.58f : 0.70f)
+                                                                + (voiceMode ? 0.42f : 0.30f)
+                                                                      * learnedProfileConfidence)
                                              : 0.0f;
-            const float subtractAlpha = lerp(0.0f, lerp(2.1f, 3.8f, profileAuthority), subtractMix);
-            const float subtractFloor = lerp(0.12f, lerp(0.02f, 2.5e-4f, profileAuthority), subtractMix);
+            const float alphaMin = voiceMode ? 2.4f : 2.9f;
+            const float alphaMax = voiceMode ? 3.9f : 4.9f;
+            const float subtractAlpha = lerp(0.0f, lerp(alphaMin, alphaMax, profileAuthority), subtractMix);
+            const float floorStart = voiceMode ? 0.08f : 0.045f;
+            const float floorMin = voiceMode ? 0.010f : 0.0035f;
+            const float floorBest = voiceMode ? 2.0e-4f : 8.0e-5f;
+            const float subtractFloor = lerp(floorStart,
+                                             lerp(floorMin, floorBest, profileAuthority),
+                                             subtractMix);
 
             for (size_t k = 0; k < bins; ++k) {
                 const float p = currPow[k];
@@ -634,8 +643,12 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                     const float rawMask = 0.52f * presenceProb[k]
                                         + 0.28f * tonalnessByBin[k]
                                         + 0.20f * (binInTransient ? 1.0f : 0.0f);
-                    const float protectMask = juce::jlimit(0.0f, 1.0f, guardStrictness * rawMask);
-                    const float effectiveAlpha = subtractAlpha * (1.0f - 0.72f * protectMask);
+                    const float protectMask = juce::jlimit(0.0f,
+                                                           1.0f,
+                                                           guardStrictness * rawMask
+                                                               * (voiceMode ? 1.0f : 0.55f));
+                    const float effectiveAlpha = subtractAlpha
+                                               * (1.0f - (voiceMode ? 0.60f : 0.32f) * protectMask);
                     const float effectiveFloor = juce::jlimit(1.0e-4f, 0.12f,
                                                               lerp(1.0e-4f, subtractFloor, protectMask));
                     const float gSub = juce::jlimit(effectiveFloor, 1.0f,
