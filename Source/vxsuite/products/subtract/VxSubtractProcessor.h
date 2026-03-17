@@ -2,7 +2,7 @@
 
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
-#include "../../../dsp/HandmadePrimary.h"
+#include "dsp/VxSubtractDsp.h"
 
 #include <atomic>
 #include <vector>
@@ -39,7 +39,7 @@ private:
     void ensureScratchCapacity(int channels, int samples);
     void fillAlignedDryScratch(const juce::AudioBuffer<float>& dryBuffer, int numSamples);
 
-    vxcleaner::dsp::HandmadePrimary subtractDsp;
+    vxsuite::subtract::SubtractDsp subtractDsp;
     juce::AudioBuffer<float> dryScratch;
     juce::AudioBuffer<float> alignedDryScratch;
     std::vector<std::vector<float>> dryDelayLines;

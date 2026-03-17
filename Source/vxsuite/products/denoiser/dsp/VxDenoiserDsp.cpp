@@ -34,7 +34,7 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
             2.0f * juce::MathConstants<float>::pi
             * static_cast<float>(n) / static_cast<float>(kFftSize)));
 
-    fftObj     = std::make_unique<juce::dsp::FFT>(kFftOrder);
+    fft.prepare(kFftOrder);
     olaAcc     .assign(olaAccumSize, 0.0f);
     inFifo     .assign(kFftSize,     0.0f);
     frameBuffer.assign(kFftSize,     0.0f);
@@ -220,7 +220,7 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                  const ProcessOptions&     options) {
     const int numCh  = buffer.getNumChannels();
     const int numSmp = buffer.getNumSamples();
-    if (numCh <= 0 || numSmp <= 0 || !fftObj) return false;
+    if (numCh <= 0 || numSmp <= 0 || !fft.isReady()) return false;
 
     const float wet = juce::jlimit(0.0f, 1.0f, amount);
     if (wet <= 0.0f) {
@@ -487,7 +487,7 @@ void DenoiserDsp::processFrame(const float amount,
     }
 
     // ── 2. Forward FFT ────────────────────────────────────────────────────────
-    fftObj->performRealOnlyForwardTransform(fftBuf.data());
+    fft.performForward(fftBuf.data());
 
     // ── 3. Power + Bark flux ──────────────────────────────────────────────────
     std::array<float, 24> barkFlux {};
@@ -723,7 +723,7 @@ void DenoiserDsp::processFrame(const float amount,
                    + 0.06f * (presSum / static_cast<float>(kBins));
 
     // ── 11. Inverse FFT + overlap-add ─────────────────────────────────────────
-    fftObj->performRealOnlyInverseTransform(fftBuf.data());
+    fft.performInverse(fftBuf.data());
 
     const int accSz = olaAccumSize;
     for (int n = 0; n < kFftSize; ++n) {

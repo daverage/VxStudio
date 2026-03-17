@@ -85,6 +85,15 @@ juce::AudioProcessorEditor* VXSubtractAudioProcessor::createEditor() {
 
 void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    // Persist any live learned profile before prepare() wipes it
+    {
+        std::vector<float> liveProfile;
+        float liveConfidence = 0.0f;
+        if (subtractDsp.getLearnedProfileData(liveProfile, liveConfidence)) {
+            savedLearnProfile = std::move(liveProfile);
+            savedLearnConfidence = liveConfidence;
+        }
+    }
     subtractDsp.prepare(currentSampleRateHz, samplesPerBlock);
     // prepare() clears the learned profile — restore it if we have one saved
     if (!savedLearnProfile.empty()) {
@@ -187,7 +196,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     const float subtractStrength = clamp01(smoothedSubtract);
     const float protectStrength = clamp01(smoothedProtect);
 
-    vxcleaner::dsp::ProcessOptions options {};
+    vxsuite::ProcessOptions options {};
     options.isVoiceMode = isVoice;
     options.sourceProtect = isVoice ? clamp01(0.55f + 0.45f * protectStrength)
                                     : clamp01(0.12f + 0.38f * protectStrength);

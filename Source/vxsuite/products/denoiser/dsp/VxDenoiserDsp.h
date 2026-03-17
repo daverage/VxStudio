@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../framework/VxSuiteAudioProcessStage.h"
+#include "../../../framework/VxSuiteFft.h"
 #include "../../../framework/VxSuiteSpectralHelpers.h"
 
 #include <array>
@@ -69,7 +70,7 @@ private:
     static constexpr float kBmin     = 1.66f;   // Martin bias correction
 
     // ── STFT infrastructure ───────────────────────────────────────────────────
-    std::unique_ptr<juce::dsp::FFT> fftObj;
+    vxsuite::RealFft fft;
     int    latencySamples = kFftSize - kHop;
     int    olaAccumSize   = 0;
     double sr             = 48000.0;

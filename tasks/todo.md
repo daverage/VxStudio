@@ -1,3 +1,23 @@
+# VX Cleanup architecture review — 2026-03-17
+
+## Problem
+Review the current `VXCleanup` processor against the supplied classifier-focused design document, identify where the implementation is already strong, where event decisions are still coupled, and call out any realtime/smoothing/state concerns before refactoring.
+
+## Plan
+- [x] Read the current `VXCleanup` processor implementation and shared VX Suite constraints.
+- [x] Map the current analysis/data flow from input to `polishChain.processCorrective()`.
+- [x] Identify where breath, sibilance, plosive, and tonal decisions are currently coupled.
+- [x] Check realtime-safety, parameter smoothing, and persistent-state handling in the current implementation.
+- [x] Write a review summary with file/line references and note the most suitable refactor direction.
+
+## Review
+- The processor already follows a clean analysis-to-mapping-to-DSP flow: control smoothing, voice snapshot capture, tonal analysis, derived ratios/risk metrics, and a final `polish::Dsp::Params` handoff in one place.
+- The strongest existing design choices are block-rate smoothing for the three user controls, reuse of shared voice-analysis context, and preserving a simple VX Suite front-end while keeping corrective mapping internal.
+- The main architectural gap is classifier coupling: `lowTrouble`, `highTrouble`, and `cleanupDrive` currently act as shared upstream drivers for multiple downstream actions, so de-breath, de-ess, plosive control, and broad HF smoothing are not independently classified.
+- The most important concrete coupling today is that `params.deEss`, `params.breath`, and `params.troubleSmooth` all derive significant authority from `highTrouble`, while `params.plosive` depends on `cleanupDrive`, which itself rises with either low- or high-band trouble.
+- Realtime behavior looks disciplined in this file: no heap work in `processProduct`, `ScopedNoDenormals` is present, smoothing is block-based, and long-lived state is limited to the expected smoothed controls plus tonal-analysis state.
+- The most meaningful next refactor would be to keep the current top-level processor shape but split Stage 2 into explicit per-event classifier signals (`breathness`, `sibilance`, `plosiveRisk`, `tonalMud`) before mapping them independently into `polish::Dsp::Params`.
+
 # Shelf toggles + listen audit — 2026-03-16
 
 ## Problem
@@ -218,6 +238,119 @@ The standard denoiser feels echoey on the wet path, and `VXDeepFilterNet` `DFN2`
 - Reduced the standard denoiser STFT size from `2048/512` to `1024/256`, cutting the algorithmic latency from about `32 ms` to about `16 ms` while keeping the same overlap/WOLA structure and realtime-safe processing model.
 - This does not make the spectral denoiser zero-latency, but it materially reduces the delayed-wet feel that could present as an echo on monitored material.
 - Reworked `VXDeepFilterNet` guard behavior so `DFN2` no longer uses post-model dry/wet recovery, which was causing comb-filter/robotic artifacts when protection was raised.
-- `DFN2` guard now mainly backs off the effective denoise drive before inference, while `DFN3` keeps only a light dry-detail recovery blend.
-- Updated the DeepFilterNet guard hint text so the UI better matches the actual behavior.
-- Verified with `cmake --build build --target VXDenoiser VXDeepFilterNet -j4` and `cmake --build build -j4`.
+
+---
+
+# Legacy DSP removal + migration — 2026-03-17
+
+## Problem
+Remove the remaining legacy `Source/dsp/` code by moving the still-live subtract implementation into the VX Suite subtract product, replacing wrapper-only legacy process option/stage headers with the shared framework equivalents, and deleting the obsolete legacy files.
+
+## Plan
+- [x] Read project lessons and VX Suite framework guidance relevant to cleanup/corrective products.
+- [x] Audit remaining legacy DSP files and identify which ones are still live.
+- [x] Confirm the wrapper-only legacy headers duplicate framework-owned concepts.
+- [x] Move the live subtract DSP into `Source/vxsuite/products/subtract/` and update product wiring.
+- [x] Delete obsolete legacy wrapper headers/files and verify the repo still builds.
+
+## Review
+- Moved the only still-live legacy DSP implementation out of `Source/dsp/` and into the subtract product itself:
+  - `Source/vxsuite/products/subtract/dsp/VxSubtractDsp.h`
+  - `Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp`
+- Updated `VXSubtract` to own that DSP locally instead of reaching back into a legacy folder. The processor now includes `dsp/VxSubtractDsp.h`, uses `vxsuite::subtract::SubtractDsp`, and passes the shared `vxsuite::ProcessOptions` directly.
+- Removed the obsolete compatibility wrapper headers entirely:
+  - `Source/dsp/AudioProcessStage.h`
+  - `Source/dsp/ProcessOptions.h`
+  - `Source/dsp/DenoiseEngine.h`
+  - `Source/dsp/DenoiseOptions.h`
+- The migration also eliminates the old `vxcleaner::dsp` namespace from active code. The subtract implementation now lives under the suite-owned `vxsuite::subtract` namespace and uses framework primitives (`VxSuiteAudioProcessStage`, `VxSuiteProcessOptions`, `VxSuiteFft`, `VxSuiteSpectralHelpers`) directly.
+- Updated the build graph so `VXSubtract` now compiles `Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp` instead of `Source/dsp/HandmadePrimary.cpp`.
+- Verified with:
+  - `cmake --build build --target VXSubtract -j4`
+  - `cmake --build build -j4`
+
+---
+
+# VX Suite FFT centralization — 2026-03-17
+
+## Problem
+Active VX Suite spectral products still own `juce::dsp::FFT` locally, which duplicates a core realtime primitive across the framework-facing codebase. Centralize FFT ownership in `Source/vxsuite/framework/` and migrate active users to the shared abstraction, while noting any still-live legacy path that should follow the same contract.
+
+## Plan
+- [x] Audit active and still-live FFT ownership across the repo.
+- [x] Capture the correction in `tasks/lessons.md`.
+- [x] Add a shared framework FFT wrapper that centralizes JUCE FFT ownership and transform calls.
+- [x] Migrate active VX Suite FFT owners to the shared wrapper, plus the still-live legacy `HandmadePrimary` path if it fits cleanly.
+- [x] Build the affected targets and document the result.
+
+## Review
+- Centralized FFT ownership in the framework wrapper at `Source/vxsuite/framework/VxSuiteFft.h`, keeping the abstraction intentionally small: `prepare(order)`, `isReady()`, `size()`, `bins()`, `performForward()`, and `performInverse()`.
+- Confirmed the active VX Suite FFT owners are the denoiser and deverb spectral paths, and migrated both to the shared wrapper:
+  - `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.h`
+  - `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp`
+  - `Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.h`
+  - `Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp`
+- Also aligned the still-live legacy FFT owner behind `VXSubtract`:
+  - `Source/dsp/HandmadePrimary.h`
+  - `Source/dsp/HandmadePrimary.cpp`
+- Kept the change scoped to FFT ownership and transform dispatch only. Window generation, overlap-add logic, frame history, and per-bin DSP state remain product-local, so the spectral algorithms themselves were not rewritten.
+- Verified with `cmake --build build --target VXDeverb VXDenoiser VXSubtract -j4` and `cmake --build build -j4`.
+
+---
+
+# VXPolish split into Cleanup + Finish — 2026-03-17
+
+## Problem
+`VXPolish` had grown into two different jobs: corrective cleanup and finish/loudness shaping. The product now needs to be split into two clear plugins, with every remaining stage doing meaningful work, preserving the existing vocal/general behavior, and keeping any gain/recovery path noise-aware.
+
+## Plan
+- [x] Define the split clearly: `Cleanup` owns corrective removal, `Finish` owns recovery/dynamics/final level.
+- [x] Add shared tonal-analysis helpers plus new `VXCleanup` and `VXFinish` processors wired to the existing DSP stages.
+- [x] Replace `VXPolish` in the build with the two new plugin targets and stage the new bundles.
+- [x] Tighten the de-breath detector so it follows real breath-like events instead of generic bright content, then build and verify the repo.
+
+## Review
+- Added `VXCleanup`, a corrective-only plugin built around the existing polish DSP's subtractive stage. It owns `HPF`, `De-mud`, `Trouble smoothing`, `De-ess`, `De-breath`, and `Plosive` control.
+- Added `VXFinish`, a finishing plugin built around the same DSP's dynamics/recovery stages. It owns smart recovery/body lift, compression, intelligent gain makeup, and limiting.
+- Extracted shared tonal tracking into `Source/vxsuite/products/polish/VxPolishTonalAnalysis.h` so both new plugins follow the same vocal/general analysis instead of diverging.
+- Kept vocal/general behavior aligned across both products: vocal remains more speech-protective, while general allows broader correction or finish reach.
+- Kept all gain-adding behavior noise-aware in `VXFinish` by preserving the existing noise-floor gating and only applying smart makeup / recovery when the signal sits sufficiently above the estimated floor.
+- Tightened the de-breath detector in `VxPolishDsp` so it is gated away from stronger transient and sibilant moments, making it follow breath-like airy events more specifically.
+- Replaced `VXPolish` in the build graph with `VXCleanup` and `VXFinish`, and verified with `cmake -S . -B build`, `cmake --build build --target VXCleanup VXFinish -j4`, and `cmake --build build -j4`.
+
+---
+
+# VXCleanup classifier refactor — 2026-03-17
+
+## Problem
+`VXCleanup` still maps multiple corrective stages from shared `lowTrouble`, `highTrouble`, and `cleanupDrive` signals. This couples de-breath, de-ess, plosive, and tonal cleanup in ways that make the plugin feel less intelligent than its analysis-first architecture deserves.
+
+## Plan
+- [x] Re-read the current `VXCleanup` processor and confirm the active coupled mapping.
+- [x] Add preallocated spectral feature extraction to `VXCleanup` using the shared framework FFT wrapper.
+- [x] Compute explicit smoothed classifiers for breathness, sibilance, plosive risk, tonal mud, and harshness.
+- [x] Remap `polish::Dsp::Params` from those classifier signals instead of shared trouble drives, with strict param clamps before `setParams()`.
+- [x] Build `VXCleanup` and the full repo, then document the verification result.
+
+## Review
+- Added a preallocated spectral-analysis path directly in `VXCleanupAudioProcessor`, using the shared `VxSuiteFft` wrapper plus a ring buffer, Hann window, and FFT workspace allocated during `prepareSuite()`. No new heap work was added to `processProduct()`.
+- `VXCleanup` now extracts explicit block features before mapping DSP params: spectral flatness, harmonicity (peak-dominance proxy), high-frequency ratio, high-band energy, and low-burst ratio. These are combined with the existing tonal ratios and voice-analysis snapshot instead of replacing them.
+- Replaced the old coupled `lowTrouble` / `highTrouble` / `cleanupDrive` mapping with explicit classifier-style envelopes:
+  - `breathEnv`
+  - `sibilanceEnv`
+  - `plosiveEnv`
+  - `tonalMudEnv`
+  - `harshnessEnv`
+- Remapped the corrective stages from those classifiers rather than from a shared high-trouble signal:
+  - `deMud` now follows `tonalMudWeight`
+  - `deEss` now follows `sibilanceWeight`
+  - `breath` now follows `breathWeight`
+  - `plosive` now follows `plosiveWeight`
+  - `troubleSmooth` now follows `harshWeight`
+- The new breath/sibilance split is intentional:
+  - breath classification favors noise-like, broadband, high-frequency content with low harmonicity and is gated by speech confidence/directness
+  - sibilance classification favors bright, high-band, spectrally peaky content instead of sharing the same upstream drive as de-breath
+- Added strict param clamps in the cleanup processor before `polishChain.setParams(params)` so the product enforces its own bounds even though the downstream DSP also guards inputs.
+- Verified with:
+  - `cmake --build build --target VXCleanup -j4`
+  - `cmake --build build -j4`

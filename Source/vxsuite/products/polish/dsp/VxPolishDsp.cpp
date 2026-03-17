@@ -435,7 +435,17 @@ void Dsp::processCorrective(juce::AudioBuffer<float>& buffer) {
         const float breathLevelNorm = juce::jlimit(0.0f, 1.0f,
                                                    (breathLevelCeil - monoAbs) / (breathLevelCeil - breathLevelFloor + 1.0e-6f));
         const float breathSpeechGuard = juce::jlimit(0.15f, 1.0f, 1.0f - (voiceMode ? 0.45f : 0.65f) * speechPresence);
-        const float breathTarget = juce::jlimit(0.0f, 1.0f, breathNorm) * breathLevelNorm * breathSpeechGuard * breathAmt;
+        const float breathTransientGuard = juce::jlimit(0.0f, 1.0f, 1.0f - 1.25f * burst);
+        const float breathSibilantGuard = juce::jlimit(0.0f, 1.0f, 1.0f - 0.80f * deEssEnv);
+        // Real breaths tend to be low-level airy events, not simply any bright
+        // consonant. Reject strong transient/sibilant moments so de-breath
+        // follows breathy exhales more than general HF activity.
+        const float breathTarget = juce::jlimit(0.0f, 1.0f, breathNorm)
+                                 * breathLevelNorm
+                                 * breathSpeechGuard
+                                 * breathTransientGuard
+                                 * breathSibilantGuard
+                                 * breathAmt;
         const float breathA = breathTarget > breathEnv ? breathAtk : breathRel;
         breathEnv = breathA * breathEnv + (1.0f - breathA) * breathTarget;
         const float breathGain = juce::Decibels::decibelsToGain(-breathMaxCutDb * breathEnv);

@@ -13,7 +13,7 @@ SpectralProcessor::~SpectralProcessor() = default;
 
 void SpectralProcessor::setChannelCount(const int numChannels) {
     preparedChannels = std::max(0, numChannels);
-    if (fftObj)
+    if (fft.isReady())
         allocateChannels(preparedChannels);
 }
 
@@ -97,7 +97,7 @@ void SpectralProcessor::prepare(const double sampleRate, const int maxBlockSize)
         olaNorm[static_cast<size_t>(n)] = std::max(norm, 1.0e-6f);
     }
 
-    fftObj = std::make_unique<juce::dsp::FFT>(order);
+    fft.prepare(order);
 
     // Allocate WPE scratch buffers (pre-allocated, no audio-thread allocation)
     wpeReScratch.assign(static_cast<size_t>(numBins), 0.0f);
@@ -163,7 +163,7 @@ bool SpectralProcessor::processInPlace(juce::AudioBuffer<float>& buffer,
                                        const ProcessOptions&     /*options*/) {
     const int numCh  = buffer.getNumChannels();
     const int numSmp = buffer.getNumSamples();
-    if (numCh <= 0 || numSmp <= 0 || !fftObj) return false;
+    if (numCh <= 0 || numSmp <= 0 || !fft.isReady()) return false;
 
     if (static_cast<int>(chans.size()) != numCh) {
         jassertfalse;
@@ -245,7 +245,7 @@ void SpectralProcessor::processFrame(ChannelState& ch,
     //
     // Input:  fftBuf[0..N−1] = windowed signal,  fftBuf[N..2N−1] = 0
     // Output: fftBuf[2k] = Re(X[k]),  fftBuf[2k+1] = Im(X[k]),  k = 0..N−1
-    fftObj->performRealOnlyForwardTransform(ch.fftBuf.data());
+    fft.performForward(ch.fftBuf.data());
 
     // ── 3. LRSV Wiener gain per bin ───────────────────────────────────────────
     //
@@ -343,7 +343,7 @@ void SpectralProcessor::processFrame(ChannelState& ch,
     //
     // Input:  fftBuf[2k], fftBuf[2k+1] = Re, Im of full N-point spectrum
     // Output: fftBuf[0..N−1] = real signal (JUCE normalises by 1/N internally)
-    fftObj->performRealOnlyInverseTransform(ch.fftBuf.data());
+    fft.performInverse(ch.fftBuf.data());
 
     // ── 6. Overlap-add into the OLA output accumulator ────────────────────────
     //

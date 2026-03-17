@@ -1,9 +1,11 @@
 # VX Suite
 
 > **Focused, realtime-safe audio processors for voice and vocal production.**  
-> Six plugins. One shared framework. One job each.
+> Seven plugins. One shared framework. One job each.
 
 VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
+I wanted simple to use, smart plugins that would all work well together to enable content creators to produce high-quality audio with minimal effort. My initial use case was to take audio from a video that was recorded on my phone, at a distance, then clean it up to the sound quality of a studio recording.
+This repo contains one of the few implementations of de-reverb or deverb / reverberation removal on Github as well!
  
 ---
 
@@ -16,7 +18,8 @@ VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ fr
 | **VXSubtract** | Profile-guided subtractive denoise | `Subtract` · `Protect` · `Learn` | Learnable noise beds, hum, machine noise |
 | **VXDeverb** | Room tail and reverb removal | `Reduce` · `Blend` | Echoey rooms, distant speech, reverberant dialogue |
 | **VXProximity** | Close-mic tone shaping | `Closer` · `Air` | Intimacy, warmth, fullness after cleanup |
-| **VXPolish** | Corrective finishing | `Polish` · `Body` · `Focus` | Mud, harshness, sibilance, plosives, dynamic roughness |
+| **VXCleanup** | Corrective voice cleanup | `Cleanup` · `Body` · `Focus` | Mud, harshness, breaths, plosives, sibilance |
+| **VXFinish** | Smart finish and level control | `Finish` · `Body` · `Gain` | Compression, recovery lift, controlled loudness, final polish |
 
 ---
 
@@ -25,24 +28,25 @@ VX Suite is a collection of JUCE/VST3 audio effects built around a shared C++ fr
 VX Suite is designed around composability. Each plugin complements the others without duplicating them. When a recording has multiple problems, this order works best:
 
 ```
-VXDeepFilterNet / VXDenoiser / VXSubtract  →  VXDeverb  →  VXProximity  →  VXPolish
+VXDeepFilterNet / VXDenoiser / VXSubtract  →  VXDeverb  →  VXCleanup  →  VXProximity  →  VXFinish
 ```
 
 **Why this order:**
 
 1. **Remove noise first** — later processors should not react to or enhance a dirty noise floor.
 2. **Remove room tail before tone-shaping** — proximity or polish moves can emphasize reverberant smear if applied to an untreated room recording.
-3. **Add closeness and tone after cleanup** — shaping works better on a stable, already-cleaner source.
-4. **Finish with VXPolish** — broad corrective and recovery work is most effective as the final pass.
+3. **Clean up tone before enhancement** — subtractive cleanup prevents later processors from lifting mud, breaths, or harshness back up.
+4. **Add closeness after cleanup** — proximity-style shaping works better on a stable, already-cleaner source.
+5. **Finish last** — compression, recovery, and smart gain are safest once the signal is already controlled.
 
 ### Practical Examples
 
 ```
 Heavy street noise, reflective room:
-  VXDeepFilterNet → VXDeverb → VXPolish
+  VXDeepFilterNet → VXDeverb → VXCleanup → VXFinish
 
 HVAC noise, thin and distant vocal:
-  VXSubtract → VXDeverb → VXProximity → VXPolish
+  VXSubtract → VXDeverb → VXCleanup → VXProximity → VXFinish
 ```
 
 ### Denoiser Choice
@@ -139,9 +143,9 @@ Profile-guided subtractive denoiser. Designed for cases where a learned noise pr
 
 `Subtract` — Main subtractive amount. Higher values remove more of the learned profile.
 
-`Protect` — Speech and detail protection. Raise this when the cleanup sounds correct but the voice becomes hollow or over-scooped.
+`Protect` — Speech and detail protection. Raise this when the cleanup sounds correct but the voice becomes hollow or over-scooped. Higher settings also make the subtract engine back off more, so it is both a preservation control and a subtraction-strength limiter.
 
-`Learn` — Arms guided profile capture. Play the representative noise to build the profile.
+`Learn` — Starts guided profile capture. Play the representative noise, then switch `Learn` off to lock the replacement profile.
 
 ---
 
@@ -169,17 +173,31 @@ Lightweight close-mic tone shaper. Simulates the tonal effect of moving a microp
 
 ---
 
-### VXPolish
+### VXCleanup
 
-The suite's finishing processor. A macro-style front end driving a multi-stage corrective and recovery DSP chain: mud reduction, de-essing, plosive taming, gentle compression, and trouble smoothing.
+Corrective cleanup processor. Focused on subtractive voice repair rather than enhancement: mud reduction, de-essing, de-breath, plosive control, and intelligent trouble smoothing.
 
 **Controls:**
 
-`Polish` — Main corrective amount. Drives overall cleanup intensity.
+`Cleanup` — Main corrective amount. Drives overall cleanup intensity.
 
-`Body` — Recovery amount. Restores useful spectral weight after corrective stages.
+`Body` — Preservation bias. Keeps useful low and low-mid weight while cleanup works.
 
-`Focus` — Steers the correction target (low-mid warmth vs. upper-mid smoothing).
+`Focus` — Steers the correction target (low-mid cleanup vs. upper-mid / air cleanup).
+
+---
+
+### VXFinish
+
+Final shaping and level processor. Handles the restorative and dynamic side after cleanup: smart recovery lift, compression, intelligent gain makeup, and limiting, with noise-aware gating to avoid reintroducing floor noise.
+
+**Controls:**
+
+`Finish` — Main finish amount. Drives compression, final control, and overall polish.
+
+`Body` — Recovery amount. Restores useful weight and presence intelligently after cleanup.
+
+`Gain` — Smart gain. Increases mode-aware lift and makeup only when the signal is clean enough to support it.
 
 ---
 
@@ -204,7 +222,8 @@ cmake --build build -j$(nproc)
 | `VXSubtract_VST3` | Subtract plugin |
 | `VXDeverb_VST3` | Deverb plugin |
 | `VXProximity_VST3` | Proximity plugin |
-| `VXPolish_VST3` | Polish plugin |
+| `VXCleanup_VST3` | Cleanup plugin |
+| `VXFinish_VST3` | Finish plugin |
 
 ---
 
@@ -220,6 +239,8 @@ Source/
       subtract/       VXSubtract processor + DSP
       deverb/         VXDeverb processor + DSP
       proximity/      VXProximity processor + DSP
+      cleanup/        VXCleanup processor
+      finish/         VXFinish processor
       polish/         VXPolish processor + DSP
   dsp/                Shared subtractive DSP used by VXSubtract
 tests/                Measurement and behaviour tests
@@ -231,4 +252,4 @@ docs/                 Framework and product reference
 
 ## 🚥 Status
 
-VST3 on macOS. All six plugins build, stage, and present a consistent VX Suite framework contract. VXDeepFilterNet requires ONNX Runtime and valid model files in the `assets/` directory.
+VST3 on macOS. All seven plugins build, stage, and present a consistent VX Suite framework contract. VXDeepFilterNet requires ONNX Runtime and valid model files in the `assets/` directory.

@@ -204,32 +204,59 @@ target_link_libraries(VXProximity PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXProximityPlugin ALL DEPENDS VXProximity_VST3)
 vxsuite_stage_vst3_bundle(VXProximity_VST3 "VXProximity")
 
-juce_add_plugin(VXPolish
+juce_add_plugin(VXCleanup
   FORMATS VST3
   COMPANY_NAME "VX Suite"
-  BUNDLE_ID "com.vxsuite.vxpolish"
+  BUNDLE_ID "com.vxsuite.vxcleanup"
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   PLUGIN_MANUFACTURER_CODE "VXS1"
-  PLUGIN_CODE "VXPL"
+  PLUGIN_CODE "VXCL"
 )
-target_compile_definitions(VXPolish PRIVATE
+target_compile_definitions(VXCleanup PRIVATE
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
   JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
   JUCE_WEB_BROWSER=0
 )
-juce_generate_juce_header(VXPolish)
-target_sources(VXPolish PRIVATE
-  Source/vxsuite/products/polish/VxPolishProcessor.cpp
+juce_generate_juce_header(VXCleanup)
+target_sources(VXCleanup PRIVATE
+  Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp
   Source/vxsuite/products/polish/dsp/VxPolishDsp.cpp
 )
-target_include_directories(VXPolish PRIVATE Source)
-target_link_libraries(VXPolish PRIVATE VxSuiteFramework juce::juce_dsp)
-add_custom_target(VXPolishPlugin ALL DEPENDS VXPolish_VST3)
-vxsuite_stage_vst3_bundle(VXPolish_VST3 "VXPolish")
+target_include_directories(VXCleanup PRIVATE Source)
+target_link_libraries(VXCleanup PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXCleanupPlugin ALL DEPENDS VXCleanup_VST3)
+vxsuite_stage_vst3_bundle(VXCleanup_VST3 "VXCleanup")
+
+juce_add_plugin(VXFinish
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxfinish"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXFN"
+)
+target_compile_definitions(VXFinish PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXFinish)
+target_sources(VXFinish PRIVATE
+  Source/vxsuite/products/finish/VxFinishProcessor.cpp
+  Source/vxsuite/products/polish/dsp/VxPolishDsp.cpp
+)
+target_include_directories(VXFinish PRIVATE Source)
+target_link_libraries(VXFinish PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXFinishPlugin ALL DEPENDS VXFinish_VST3)
+vxsuite_stage_vst3_bundle(VXFinish_VST3 "VXFinish")
 
 juce_add_plugin(VXSubtract
   FORMATS VST3
@@ -251,7 +278,7 @@ target_compile_definitions(VXSubtract PRIVATE
 juce_generate_juce_header(VXSubtract)
 target_sources(VXSubtract PRIVATE
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
-  Source/dsp/HandmadePrimary.cpp
+  Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
 )
 target_include_directories(VXSubtract PRIVATE Source)
 target_link_libraries(VXSubtract PRIVATE VxSuiteFramework juce::juce_dsp)
@@ -323,13 +350,15 @@ add_custom_target(VXSuite_VST3
   DEPENDS
     VXDeverb_VST3
     VXProximity_VST3
-    VXPolish_VST3
+    VXCleanup_VST3
+    VXFinish_VST3
     VXSubtract_VST3
     VXDenoiser_VST3
     VXDeepFilterNet_VST3
     VXDeverbStage
     VXProximityStage
-    VXPolishStage
+    VXCleanupStage
+    VXFinishStage
     VXSubtractStage
     VXDenoiserStage
     VXDeepFilterNetStage

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../framework/VxSuiteAudioProcessStage.h"
+#include "../../../framework/VxSuiteFft.h"
 #include "VxDeverbRt60Estimator.h"
 #include "VxDeverbWpeStage.h"
 
@@ -175,7 +176,7 @@ private:
     static float lrsvCoeffFromRt60(float rt60Seconds) noexcept;
 
     // ── STFT configuration (set in prepare, never changed during playback) ────
-    std::unique_ptr<juce::dsp::FFT> fftObj;
+    vxsuite::RealFft fft;
     std::vector<float>              window;   ///< periodic Hann, length fftSize
     std::vector<float>              olaNorm;  ///< overlap norm for windowed OLA
 
