@@ -515,3 +515,22 @@ Add a processor-level regression harness that checks the most failure-prone suit
 - The render helper is latency-aware, so processors are exercised with their reported plugin latency rather than with unrealistic zero-latency assumptions.
 - The Subtract listen assertion was tuned to check steady-state recombination with a realistic tolerance after the initial alignment transient, which makes it useful as a regression guard without overfitting to startup buffer state.
 - Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4 && ./build/VXSuitePluginRegressionTests`, which completed successfully.
+
+# Framework listen + Finish role pass — 2026-03-17
+
+## Problem
+Implement the next high-priority suite cleanup pass: centralize latency-aware listen and latency reporting in the shared framework, add a small coordination path for stage latency, reduce block-size dependence with explicit regression tests, and tighten `VXFinish` so it behaves like a finish stage rather than cleanup.
+
+## Plan
+- [x] Centralize latency-aware listen capture/alignment/rendering in the shared processor framework and remove duplicated product-local listen plumbing where it is no longer needed.
+- [x] Add a small shared latency-coordination helper so processors can report summed stage latency consistently instead of open-coding `setLatencySamples(...)`.
+- [x] Refactor `VXFinish` mapping and DSP flow so it no longer performs corrective cleanup work and its gain path is target-driven rather than RMS-reactive.
+- [x] Extend the regression harness with host block-size invariance checks and an explicit full-chain test.
+- [x] Build the affected targets, run the regression harness, and document the result.
+
+## Review
+- Added a shared coordinator at `Source/vxsuite/framework/VxSuiteProcessCoordinator.h` and wired it through `Source/vxsuite/framework/VxSuiteProcessorBase.h` / `Source/vxsuite/framework/VxSuiteProcessorBase.cpp`, so latency-aware removed-content listen now lives in the framework instead of four separate products carrying their own aligned-dry plumbing.
+- `VXDenoiser`, `VXSubtract`, `VXDeverb`, and `VXDeepFilterNet` now report stage latency through the shared framework helpers and use the base listen path; `VXDeverb` still accesses aligned dry during processing for body restore, but it now does so through the base coordinator instead of a product-local listen buffer.
+- `VXFinish` now behaves more like a finishing stage: its control mapping no longer rises from cleanup-style trouble metrics, recovery is driven by tonal deficit plus speech clarity, and makeup is target-driven from intended output loudness instead of being a direct reaction to pre/post RMS reduction inside the block.
+- Expanded the regression harness to cover `Subtract -> Cleanup -> Proximity -> Finish` as an explicit suite chain and added block-size invariance checks so the current release bar now includes host-buffer consistency, not just single-block correctness.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4 && ./build/VXSuitePluginRegressionTests` and `cmake --build build -j4`.

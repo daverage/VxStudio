@@ -97,14 +97,12 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
         learnReady.store(true, std::memory_order_relaxed);
         learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
     }
-    setLatencySamples(subtractDsp.getLatencySamples());
-    latencyListen.prepare(getTotalNumOutputChannels(), samplesPerBlock, subtractDsp.getLatencySamples());
+    setReportedLatencyFromStages(subtractDsp);
     resetSuite();
 }
 
 void VXSubtractAudioProcessor::resetSuite() {
     subtractDsp.resetStreamingState();
-    latencyListen.reset();
     smoothedSubtract = 0.0f;
     smoothedProtect = 0.5f;
     controlsPrimed = false;
@@ -133,9 +131,6 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         smoothedSubtract = vxsuite::smoothBlockValue(smoothedSubtract, subtractTarget, currentSampleRateHz, numSamples, 0.045f);
         smoothedProtect = vxsuite::smoothBlockValue(smoothedProtect, protectTarget, currentSampleRateHz, numSamples, 0.080f);
     }
-
-    if (latencyListen.canStore(numChannels, numSamples))
-        latencyListen.captureDry(buffer, numSamples);
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const bool learnRequested = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
@@ -186,15 +181,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     learnReady.store(subtractDsp.hasLearnedProfile(), std::memory_order_relaxed);
     learnToggleLatched = learnRequested;
 
-    if (latencyListen.canStore(numChannels, numSamples))
-        latencyListen.buildAlignedDry(numSamples, subtractDsp.getLatencySamples());
-}
-
-void VXSubtractAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
-                                                  const juce::AudioBuffer<float>& inputBuffer) {
-    juce::ignoreUnused(inputBuffer);
-
-    latencyListen.renderRemovedDelta(outputBuffer);
+    ensureLatencyAlignedListenDry(numSamples);
 }
 
 void VXSubtractAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {

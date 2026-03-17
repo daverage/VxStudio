@@ -95,13 +95,11 @@ void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const 
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
     prepareEngineIfNeeded();
-    latencyListen.prepare(getTotalNumOutputChannels(), currentBlockSize, engine.getLatencySamples());
     resetSuite();
 }
 
 void VXDeepFilterNetAudioProcessor::resetSuite() {
     engine.resetRealtime();
-    latencyListen.reset();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
     controlsPrimed = false;
@@ -119,8 +117,7 @@ void VXDeepFilterNetAudioProcessor::prepareEngineIfNeeded() {
     engine.setModelVariant(selectedModelVariant());
     if (engine.needsRealtimePrepare(currentSampleRateHz, currentBlockSize)) {
         engine.prepareRealtime(currentSampleRateHz, currentBlockSize);
-        setLatencySamples(engine.getLatencySamples());
-        latencyListen.prepare(getTotalNumOutputChannels(), currentBlockSize, engine.getLatencySamples());
+        setReportedLatencySamples(engine.getLatencySamples());
     }
 }
 
@@ -148,9 +145,6 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
         smoothedGuard = vxsuite::smoothBlockValue(smoothedGuard, guardTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
-    if (latencyListen.canStore(numChannels, numSamples))
-        latencyListen.captureDry(buffer, numSamples);
-
     const auto variant = selectedModelVariant();
     float effectiveClean = vxsuite::clamp01(0.10f + 0.90f * smoothedClean);
     if (variant == ModelVariant::dfn2) {
@@ -160,12 +154,12 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     }
     const bool processed = engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
 
-    if (processed && latencyListen.canStore(numChannels, numSamples)) {
-        latencyListen.buildAlignedDry(numSamples, engine.getLatencySamples());
+    if (processed) {
+        ensureLatencyAlignedListenDry(numSamples);
         const float guardRecovery = variant == ModelVariant::dfn2
             ? 0.0f
             : vxsuite::clamp01(0.18f * smoothedGuard);
-        const auto& alignedDryScratch = latencyListen.alignedDryBuffer();
+        const auto& alignedDryScratch = getLatencyAlignedListenDryBuffer();
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* wet = buffer.getWritePointer(ch);
             const auto* dry = alignedDryScratch.getReadPointer(ch);
@@ -173,12 +167,6 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
                 wet[i] = wet[i] + (dry[i] - wet[i]) * guardRecovery;
         }
     }
-}
-
-void VXDeepFilterNetAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
-                                                       const juce::AudioBuffer<float>& inputBuffer) {
-    juce::ignoreUnused(inputBuffer);
-    latencyListen.renderRemovedDelta(outputBuffer);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {

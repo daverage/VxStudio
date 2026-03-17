@@ -114,6 +114,8 @@ void VXProximityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& out
     }
 }
 
+ #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXProximityAudioProcessor();
 }
+ #endif

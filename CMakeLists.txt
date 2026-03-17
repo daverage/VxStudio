@@ -411,6 +411,8 @@ add_executable(VXSuitePluginRegressionTests
   Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/proximity/VxProximityProcessor.cpp
+  Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
   Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp

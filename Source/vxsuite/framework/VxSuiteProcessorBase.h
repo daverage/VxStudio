@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VxSuiteParameters.h"
+#include "VxSuiteProcessCoordinator.h"
 #include "VxSuiteVoiceAnalysis.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -60,6 +61,17 @@ protected:
 
     const ModePolicy& currentModePolicy() const noexcept;
     bool isListenEnabled() const noexcept;
+    void prepareProcessCoordinator(int maxBlockSize);
+    void resetProcessCoordinator();
+    void releaseProcessCoordinator();
+    void setReportedLatencySamples(int latencySamples);
+    template <typename... Stages>
+    void setReportedLatencyFromStages(const Stages&... stages) {
+        processCoordinator.setLatencyFromStages(stages...);
+        juce::AudioProcessor::setLatencySamples(processCoordinator.latencySamples());
+    }
+    void ensureLatencyAlignedListenDry(int numSamples);
+    const juce::AudioBuffer<float>& getLatencyAlignedListenDryBuffer() const noexcept;
 
     ProductIdentity productIdentity;
     juce::AudioProcessorValueTreeState parameters;
@@ -67,6 +79,7 @@ protected:
 
 private:
     juce::AudioBuffer<float> listenInputScratch;
+    ProcessCoordinator processCoordinator;
 };
 
 } // namespace vxsuite

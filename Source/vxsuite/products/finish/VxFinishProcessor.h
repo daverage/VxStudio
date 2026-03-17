@@ -33,6 +33,6 @@ private:
     float smoothedFinish = 0.0f;
     float smoothedBody = 0.5f;
     float smoothedGain = 0.5f;
-    float smoothedMakeupDb = 0.0f;
+    float smoothedTargetGainDb = 0.0f;
     bool controlsPrimed = false;
 };

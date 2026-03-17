@@ -1,5 +1,6 @@
 #include "../Source/vxsuite/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
+#include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
 #include "VxSuiteProcessorTestUtils.h"
 
@@ -8,6 +9,40 @@
 namespace {
 
 using namespace vxsuite::test;
+
+bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr);
+
+juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double sr,
+                                                                   const int blockSize,
+                                                                   const juce::AudioBuffer<float>& input) {
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(sr, blockSize);
+    if (!primeSubtractLearn(subtract, sr))
+        return {};
+    setParamNormalized(subtract, "subtract", 0.78f);
+    setParamNormalized(subtract, "protect", 0.48f);
+    auto afterSubtract = render(subtract, input, blockSize);
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, blockSize);
+    setParamNormalized(cleanup, "cleanup", 0.52f);
+    setParamNormalized(cleanup, "body", 0.44f);
+    setParamNormalized(cleanup, "focus", 0.55f);
+    auto afterCleanup = render(cleanup, afterSubtract, blockSize);
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, blockSize);
+    setParamNormalized(proximity, "closer", 0.24f);
+    setParamNormalized(proximity, "air", 0.18f);
+    auto afterProximity = render(proximity, afterCleanup, blockSize);
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, blockSize);
+    setParamNormalized(finish, "finish", 0.42f);
+    setParamNormalized(finish, "body", 0.32f);
+    setParamNormalized(finish, "gain", 0.28f);
+    return render(finish, afterProximity, blockSize);
+}
 
 bool testCleanupZeroIsIdentity() {
     constexpr double sr = 48000.0;
@@ -131,29 +166,7 @@ bool testCleanupFinishSubtractChainStaysStable() {
     auto speech = makeSpeechLike(sr, 1.2f);
     auto noise = makeNoise(sr, 1.2f, 0.07f);
     auto noisy = addBuffers(speech, noise);
-
-    VXSubtractAudioProcessor subtract;
-    subtract.prepareToPlay(sr, 256);
-    if (!primeSubtractLearn(subtract, sr))
-        return false;
-    setParamNormalized(subtract, "subtract", 0.78f);
-    setParamNormalized(subtract, "protect", 0.48f);
-    setParamNormalized(subtract, "listen", 0.0f);
-    auto afterSubtract = render(subtract, noisy);
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.52f);
-    setParamNormalized(cleanup, "body", 0.44f);
-    setParamNormalized(cleanup, "focus", 0.55f);
-    auto afterCleanup = render(cleanup, afterSubtract);
-
-    VXFinishAudioProcessor finish;
-    finish.prepareToPlay(sr, 256);
-    setParamNormalized(finish, "finish", 0.42f);
-    setParamNormalized(finish, "body", 0.32f);
-    setParamNormalized(finish, "gain", 0.28f);
-    auto finalOut = render(finish, afterCleanup);
+    auto finalOut = renderSubtractCleanupProximityFinishChain(sr, 256, noisy);
 
     if (!allFinite(finalOut)) {
         std::cerr << "[VXSuitePluginRegression] Combined chain produced non-finite samples\n";
@@ -166,6 +179,53 @@ bool testCleanupFinishSubtractChainStaysStable() {
     const float corr = std::abs(speechBandCorrelation(speech, finalOut, sr));
     if (corr < 0.45f) {
         std::cerr << "[VXSuitePluginRegression] Combined chain damaged speech coherence too much: |corr|=" << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testCleanupBlockSizeInvariance() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.1f);
+
+    VXCleanupAudioProcessor cleanup64;
+    cleanup64.prepareToPlay(sr, 64);
+    setParamNormalized(cleanup64, "cleanup", 0.58f);
+    setParamNormalized(cleanup64, "body", 0.40f);
+    setParamNormalized(cleanup64, "focus", 0.62f);
+    const auto out64 = render(cleanup64, input, 64);
+
+    VXCleanupAudioProcessor cleanup512;
+    cleanup512.prepareToPlay(sr, 512);
+    setParamNormalized(cleanup512, "cleanup", 0.58f);
+    setParamNormalized(cleanup512, "body", 0.40f);
+    setParamNormalized(cleanup512, "focus", 0.62f);
+    const auto out512 = render(cleanup512, input, 512);
+
+    const float corr = bufferCorrelationSkip(out64, out512, 1024);
+    if (corr < 0.985f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup changed too much across host block sizes: corr=" << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testFullChainBlockSizeInvariance() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 1.3f);
+    auto noise = makeNoise(sr, 1.3f, 0.07f);
+    auto noisy = addBuffers(speech, noise);
+
+    const auto out64 = renderSubtractCleanupProximityFinishChain(sr, 64, noisy);
+    if (out64.getNumSamples() <= 0)
+        return false;
+    const auto out512 = renderSubtractCleanupProximityFinishChain(sr, 512, noisy);
+    if (out512.getNumSamples() <= 0)
+        return false;
+
+    const float corr = bufferCorrelationSkip(out64, out512, 4096);
+    if (corr < 0.95f) {
+        std::cerr << "[VXSuitePluginRegression] Full chain changed too much across host block sizes: corr=" << corr << "\n";
         return false;
     }
     return true;
@@ -211,6 +271,8 @@ int main() {
     ok &= testSubtractLearnLifecycleMakesSense();
     ok &= testSubtractListenOutputsMeaningfulRemovedDelta();
     ok &= testCleanupFinishSubtractChainStaysStable();
+    ok &= testCleanupBlockSizeInvariance();
+    ok &= testFullChainBlockSizeInvariance();
     ok &= testCombinedChainKeepsSilenceSilent();
     return ok ? 0 : 1;
 }

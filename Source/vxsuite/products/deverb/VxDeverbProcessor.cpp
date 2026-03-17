@@ -71,15 +71,13 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
     preparedBlockSize = std::max(kMinPreparedBlockSize, std::max(1, samplesPerBlock));
     deverbProcessor.setChannelCount(getTotalNumOutputChannels());
     deverbProcessor.prepare(currentSampleRateHz, preparedBlockSize);
-    setLatencySamples(deverbProcessor.getLatencySamples());
+    setReportedLatencyFromStages(deverbProcessor);
     ensureScratchCapacity(getTotalNumOutputChannels(), preparedBlockSize);
-    latencyListen.prepare(getTotalNumOutputChannels(), preparedBlockSize, deverbProcessor.getLatencySamples());
     resetSuite();
 }
 
 void VXDeverbAudioProcessor::resetSuite() {
     deverbProcessor.reset();
-    latencyListen.reset();
     wetScratch.clear();
     if (!dryLowpassState.empty())
         std::fill(dryLowpassState.begin(), dryLowpassState.end(), 0.0f);
@@ -141,12 +139,8 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0)
         return;
-    if (!latencyListen.canStore(outputChannels, numSamples))
-        return;
     if (wetScratch.getNumChannels() < outputChannels || wetScratch.getNumSamples() < numSamples)
         return;
-
-    latencyListen.captureDry(buffer, numSamples);
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
@@ -161,7 +155,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     }
 
     for (int ch = 0; ch < outputChannels; ++ch)
-        wetScratch.copyFrom(ch, 0, latencyListen.dryBuffer(), ch, 0, numSamples);
+        wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
 
     vxsuite::ProcessOptions options {};
     options.isVoiceMode = false;
@@ -187,20 +181,13 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         juce::AudioBuffer<float> wetView (wetScratch.getArrayOfWritePointers(), outputChannels, numSamples);
         deverbProcessor.processInPlace(wetView, reduce, options);
     }
-    latencyListen.buildAlignedDry(numSamples, deverbProcessor.getLatencySamples());
+    ensureLatencyAlignedListenDry(numSamples);
 
     for (int ch = 0; ch < outputChannels; ++ch)
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
     if (smoothedBody > 1.0e-4f)
-        applyBodyRestore(latencyListen.alignedDryBuffer(), buffer, smoothedBody, isFirstBlock);
-}
-
-void VXDeverbAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
-                                                const juce::AudioBuffer<float>& inputBuffer) {
-    juce::ignoreUnused(inputBuffer);
-
-    latencyListen.renderRemovedDelta(outputBuffer);
+        applyBodyRestore(getLatencyAlignedListenDryBuffer(), buffer, smoothedBody, isFirstBlock);
 }
 
 void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {

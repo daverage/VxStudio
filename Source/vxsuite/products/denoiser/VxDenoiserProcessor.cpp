@@ -63,14 +63,12 @@ void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
                                              const int    samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     denoiserDsp.prepare(currentSampleRateHz, samplesPerBlock);
-    setLatencySamples(denoiserDsp.getLatencySamples());
-    latencyListen.prepare(getTotalNumOutputChannels(), std::max(8192, samplesPerBlock), denoiserDsp.getLatencySamples());
+    setReportedLatencyFromStages(denoiserDsp);
     resetSuite();
 }
 
 void VXDenoiserAudioProcessor::resetSuite() {
     denoiserDsp.reset();
-    latencyListen.reset();
     smoothedClean  = 0.0f;
     smoothedGuard  = 0.5f;
     controlsPrimed = false;
@@ -95,11 +93,6 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         smoothedGuard = vxsuite::smoothBlockValue(smoothedGuard, guardTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
-    // Capture dry before processing — needed for latency-aligned listen output
-    const int numCh = buffer.getNumChannels();
-    if (latencyListen.canStore(numCh, numSamples))
-        latencyListen.captureDry(buffer, numSamples);
-
     const bool isVoice  = vxsuite::readMode(parameters, productIdentity)
                        == vxsuite::Mode::vocal;
     const auto& policy  = currentModePolicy();
@@ -116,17 +109,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     denoiserDsp.processInPlace(buffer, effectiveClean, opts);
 
-    // Build latency-aligned dry scratch for listen output
-    if (latencyListen.canStore(numCh, numSamples))
-        latencyListen.buildAlignedDry(numSamples, denoiserDsp.getLatencySamples());
-}
-
-void VXDenoiserAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
-                                                   const juce::AudioBuffer<float>& /*inputBuffer*/) {
-    // Output aligned dry minus wet — auditions what was removed.
-    // Uses alignedDryScratch (latency-compensated) rather than the base-class
-    // undelayed inputBuffer, which would be misaligned by ~32 ms.
-    latencyListen.renderRemovedDelta(outputBuffer);
+    ensureLatencyAlignedListenDry(numSamples);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {

@@ -12,18 +12,21 @@ ProcessorBase::ProcessorBase(ProductIdentity identity,
 void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
     listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
+    prepareProcessCoordinator(samplesPerBlock);
     prepareSuite(sampleRate, samplesPerBlock);
 }
 
 void ProcessorBase::reset() {
     voiceAnalysis.reset();
     listenInputScratch.clear();
+    resetProcessCoordinator();
     resetSuite();
 }
 
 void ProcessorBase::releaseResources() {
     voiceAnalysis.reset();
     listenInputScratch.setSize(0, 0);
+    releaseProcessCoordinator();
     resetSuite();
 }
 
@@ -35,6 +38,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (canRenderListen) {
         listenInputScratch.makeCopyOf(buffer, true);
     }
+    processCoordinator.beginBlock(buffer, canRenderListen);
     processProduct(buffer, midi);
     if (canRenderListen)
         renderListenOutput(buffer, listenInputScratch);
@@ -66,16 +70,35 @@ bool ProcessorBase::isListenEnabled() const noexcept {
         && readBool(parameters, productIdentity.listenParamId, false);
 }
 
+void ProcessorBase::prepareProcessCoordinator(const int maxBlockSize) {
+    processCoordinator.prepare(getTotalNumOutputChannels(), std::max(1, maxBlockSize), getLatencySamples());
+}
+
+void ProcessorBase::resetProcessCoordinator() {
+    processCoordinator.reset();
+}
+
+void ProcessorBase::releaseProcessCoordinator() {
+    processCoordinator.release();
+}
+
+void ProcessorBase::setReportedLatencySamples(const int latencySamples) {
+    processCoordinator.setLatencySamples(latencySamples);
+    juce::AudioProcessor::setLatencySamples(processCoordinator.latencySamples());
+}
+
+void ProcessorBase::ensureLatencyAlignedListenDry(const int numSamples) {
+    processCoordinator.ensureAlignedDry(numSamples);
+}
+
+const juce::AudioBuffer<float>& ProcessorBase::getLatencyAlignedListenDryBuffer() const noexcept {
+    return processCoordinator.alignedDryBuffer();
+}
+
 void ProcessorBase::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                        const juce::AudioBuffer<float>& inputBuffer) {
-    const int channels = std::min(outputBuffer.getNumChannels(), inputBuffer.getNumChannels());
-    const int samples = std::min(outputBuffer.getNumSamples(), inputBuffer.getNumSamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        auto* out = outputBuffer.getWritePointer(ch);
-        const auto* in = inputBuffer.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = in[i] - out[i];
-    }
+    juce::ignoreUnused(inputBuffer);
+    processCoordinator.renderRemovedDelta(outputBuffer);
 }
 
 } // namespace vxsuite

@@ -194,4 +194,29 @@ inline float speechBandCorrelation(const juce::AudioBuffer<float>& ref,
     return static_cast<float>(dot / std::sqrt(std::max(1.0e-12, refEnergy * testEnergy)));
 }
 
+inline float bufferCorrelationSkip(const juce::AudioBuffer<float>& a,
+                                   const juce::AudioBuffer<float>& b,
+                                   const int skipSamples = 0) {
+    const int channels = std::min(a.getNumChannels(), b.getNumChannels());
+    const int samples = std::min(a.getNumSamples(), b.getNumSamples());
+    const int start = juce::jlimit(0, samples, skipSamples);
+    double dot = 0.0;
+    double aEnergy = 0.0;
+    double bEnergy = 0.0;
+    for (int i = start; i < samples; ++i) {
+        float aMono = 0.0f;
+        float bMono = 0.0f;
+        for (int ch = 0; ch < channels; ++ch) {
+            aMono += a.getSample(ch, i);
+            bMono += b.getSample(ch, i);
+        }
+        aMono /= static_cast<float>(channels);
+        bMono /= static_cast<float>(channels);
+        dot += static_cast<double>(aMono) * bMono;
+        aEnergy += static_cast<double>(aMono) * aMono;
+        bEnergy += static_cast<double>(bMono) * bMono;
+    }
+    return static_cast<float>(dot / std::sqrt(std::max(1.0e-12, aEnergy * bEnergy)));
+}
+
 } // namespace vxsuite::test

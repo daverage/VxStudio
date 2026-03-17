@@ -2,7 +2,6 @@
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
-#include "../../framework/VxSuiteLatencyAlignedListen.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxDeverbSpectralProcessor.h"
 
@@ -31,8 +30,6 @@ protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
     void processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
-    void renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
-                            const juce::AudioBuffer<float>& inputBuffer) override;
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
@@ -44,7 +41,6 @@ private:
                           bool isFirstBlock);
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
-    vxsuite::LatencyAlignedListenBuffer latencyListen;
     juce::AudioBuffer<float> wetScratch;
     std::vector<float> dryLowpassState;
     std::vector<float> wetLowpassState;
