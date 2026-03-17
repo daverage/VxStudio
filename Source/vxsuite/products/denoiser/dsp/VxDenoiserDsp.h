@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../framework/VxSuiteAudioProcessStage.h"
+#include "../../../framework/VxSuiteSpectralHelpers.h"
 
 #include <array>
 #include <vector>
@@ -104,6 +105,10 @@ private:
     std::vector<float> gainFreqSmooth;
     std::vector<float> harmonicFloor;
     std::vector<float> barkMaskFloor;
+    std::vector<float> humTargetGain;
+    std::vector<float> narrowbandTargetGain;
+    std::vector<float> narrowbandConfidence;
+    std::array<float, 2> humScores {};
 
     // ── Martin minimum statistics noise estimation ────────────────────────────
     struct MinStatsBin {
@@ -159,9 +164,8 @@ private:
     // ── Internal methods ──────────────────────────────────────────────────────
     void processFrame(float amount, const ProcessOptions& options) noexcept;
     void updateMinStats(int k, float p, float presence) noexcept;
+    void applyHumAndNarrowbandSuppression(float amount, const ProcessOptions& options) noexcept;
 
-    static float wrapPi(float x) noexcept;
-    static float hzToBark(float hz) noexcept;
     static float clamp01(float x) noexcept { return juce::jlimit(0.0f, 1.0f, x); }
     static float safe(float x) noexcept;
 };

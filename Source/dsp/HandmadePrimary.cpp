@@ -1,4 +1,5 @@
 #include "HandmadePrimary.h"
+#include "../vxsuite/framework/VxSuiteSpectralHelpers.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -10,17 +11,6 @@ namespace {
 constexpr float kEps = 1.0e-12f;
 inline float clamp01(float x) { return juce::jlimit(0.0f, 1.0f, x); }
 inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
-inline float wrapPi(float x) {
-    while (x > juce::MathConstants<float>::pi)  x -= 2.0f * juce::MathConstants<float>::pi;
-    while (x < -juce::MathConstants<float>::pi) x += 2.0f * juce::MathConstants<float>::pi;
-    return x;
-}
-inline float hzToBark(float hz) {
-    const float term1 = 13.0f * std::atan(0.00076f * hz);
-    const float ratio = hz / 7500.0f;
-    const float term2 = 3.5f * std::atan(ratio * ratio);
-    return term1 + term2;
-}
 }
 
 float HandmadePrimary::safe(float x) {
@@ -137,7 +127,7 @@ void HandmadePrimary::prepare(double sampleRate, int maxBlockSize) {
 
     for (size_t k = 0; k < bins; ++k) {
         const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(fftSize);
-        const int bark = juce::jlimit(0, 23, static_cast<int>(std::floor(hzToBark(hz))));
+        const int bark = juce::jlimit(0, 23, static_cast<int>(std::floor(vxsuite::spectral::hzToBark(hz))));
         binToBark[k] = bark;
         barkBandBins[static_cast<size_t>(bark)].push_back(k);
         lowBandStability[k] = clamp01((700.0f - hz) / 450.0f);
@@ -558,8 +548,7 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
 
                 const float left       = currPow[(k > 0u) ? k - 1u : k];
                 const float right      = currPow[(k + 1u < bins) ? k + 1u : k];
-                const float tonalRatio = p / std::max(kEps, 0.5f * (left + right) + 0.15f * p);
-                const float tonalness  = clamp01((tonalRatio - 1.25f) / 2.8f);
+                const float tonalness  = vxsuite::spectral::tonalnessFromNeighbors(p, left, right);
                 tonalnessByBin[k] = tonalness;
 
                 const float localSNR_dB = 10.0f * std::log10(std::max(1.0f, Gamma));
@@ -723,9 +712,8 @@ bool HandmadePrimary::processInPlace(juce::AudioBuffer<float>& buffer,
                     const float phaseIn = std::atan2(imIn, reIn);
                     float phaseOut = phaseIn;
                     if (phaseHistoryReady) {
-                        const float dphi = wrapPi((phaseIn - prevInputPhase[k]) - phaseAdvance[k]);
-                        phaseOut = prevOutputPhase[k] + phaseAdvance[k] + dphi;
-                        phaseOut = wrapPi(phaseOut);
+                        const float dphi = vxsuite::spectral::wrapPi((phaseIn - prevInputPhase[k]) - phaseAdvance[k]);
+                        phaseOut = vxsuite::spectral::wrapPi(prevOutputPhase[k] + phaseAdvance[k] + dphi);
                     }
 
                     frame[2u * k] = safe(mag * std::cos(phaseOut));
