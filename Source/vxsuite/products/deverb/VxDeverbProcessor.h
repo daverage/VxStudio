@@ -44,6 +44,7 @@ private:
     juce::AudioBuffer<float> wetScratch;
     std::vector<float> dryLowpassState;
     std::vector<float> wetLowpassState;
+    std::vector<float> bodySpeechState;
     float smoothedReduce = 0.45f;
     float smoothedBody   = 0.60f;
     double currentSampleRateHz = 48000.0;

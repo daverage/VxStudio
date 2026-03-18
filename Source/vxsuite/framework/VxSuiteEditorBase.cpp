@@ -272,25 +272,26 @@ void EditorBase::resized() {
         body.removeFromTop(scaled(4));
     }
 
-    // Shelf filter icons — decorative, above the knobs
     lowShelfIconBounds  = {};
     highShelfIconBounds = {};
     const auto& layoutId = processor.getProductIdentity();
-    if (layoutId.showLowShelfIcon || layoutId.showHighShelfIcon) {
+    const auto placeInlineShelfIcons = [&](const juce::Rectangle<int>& anchorLabelBounds) {
+        if (!(layoutId.showLowShelfIcon || layoutId.showHighShelfIcon))
+            return;
+
         const int iconW = scaled(32);
         const int iconH = scaled(18);
-        const int gap   = scaled(10);
-        auto iconRow    = body.removeFromTop(scaled(26));
-        body.removeFromTop(scaled(4));
+        const int gap = scaled(10);
         const bool both = layoutId.showLowShelfIcon && layoutId.showHighShelfIcon;
-        const int rowW  = both ? iconW * 2 + gap : iconW;
-        const int x0    = iconRow.getCentreX() - rowW / 2;
-        const int iconY = iconRow.getCentreY() - iconH / 2;
+        const int rowW = both ? iconW * 2 + gap : iconW;
+        const int startX = anchorLabelBounds.getCentreX() - rowW / 2 + scaled(54);
+        const int iconY = anchorLabelBounds.getCentreY() - iconH / 2;
+
         if (layoutId.showLowShelfIcon)
-            lowShelfIconBounds  = { x0, iconY, iconW, iconH };
+            lowShelfIconBounds = { startX, iconY, iconW, iconH };
         if (layoutId.showHighShelfIcon)
-            highShelfIconBounds = { both ? x0 + iconW + gap : x0, iconY, iconW, iconH };
-    }
+            highShelfIconBounds = { both ? startX + iconW + gap : startX, iconY, iconW, iconH };
+    };
     if (stacked) {
         body.removeFromBottom(scaled(34));
         const int rows = hasQuaternary ? 4 : (hasTertiary ? 3 : 2);
@@ -317,6 +318,7 @@ void EditorBase::resized() {
         } else {
             layoutKnob(body, secondarySlider, secondaryLabel, secondaryHint);
         }
+        placeInlineShelfIcons(secondaryLabel.getBounds());
         return;
     }
 
@@ -341,6 +343,7 @@ void EditorBase::resized() {
         layoutKnob(c2, secondarySlider, secondaryLabel, secondaryHint);
         layoutKnob(c3, tertiarySlider, tertiaryLabel, tertiaryHint);
         layoutKnob(c4, quaternarySlider, quaternaryLabel, quaternaryHint);
+        placeInlineShelfIcons(secondaryLabel.getBounds());
         return;
     }
 
@@ -362,6 +365,7 @@ void EditorBase::resized() {
         layoutKnob(left, primarySlider, primaryLabel, primaryHint);
         layoutKnob(center, secondarySlider, secondaryLabel, secondaryHint);
         layoutKnob(right, tertiarySlider, tertiaryLabel, tertiaryHint);
+        placeInlineShelfIcons(secondaryLabel.getBounds());
         return;
     }
 
@@ -382,6 +386,7 @@ void EditorBase::resized() {
     secondarySlider.setBounds(rightDialRow.withSizeKeepingCentre(dialSize, dialSize));
     right.removeFromTop(scaled(12));
     secondaryHint.setBounds(right.removeFromTop(scaled(56)));
+    placeInlineShelfIcons(secondaryLabel.getBounds());
 }
 
 void EditorBase::setScaleFactor(const float newScale) {
@@ -438,12 +443,9 @@ void EditorBase::showTransientStatus(const juce::String& text) {
 }
 
 void EditorBase::mouseDown(const juce::MouseEvent& e) {
-    if (e.eventComponent != this)
-        return;
-
     const auto& id  = processor.getProductIdentity();
     auto& state     = processor.getValueTreeState();
-    const auto pos  = e.getPosition();
+    const auto pos  = e.getEventRelativeTo(this).getPosition();
 
     auto toggleParam = [&](std::string_view paramId, const juce::String& onText, const juce::String& offText) {
         if (auto* param = state.getParameter(paramId.data())) {

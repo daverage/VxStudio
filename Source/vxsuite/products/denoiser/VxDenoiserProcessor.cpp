@@ -89,19 +89,23 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     // Map user controls + ModePolicy onto ProcessOptions
     vxsuite::ProcessOptions opts;
-    const float effectiveClean = isVoice ? vxsuite::clamp01(0.58f * smoothedClean)
-                                         : vxsuite::clamp01(0.72f * smoothedClean);
+    const float effectiveClean = isVoice ? vxsuite::clamp01(0.08f * smoothedClean)
+                                         : vxsuite::clamp01(0.60f * smoothedClean);
     opts.isVoiceMode        = isVoice;
-    opts.sourceProtect      = vxsuite::clamp01(0.35f + 0.65f * smoothedGuard * policy.sourceProtect);
+    opts.sourceProtect      = isVoice ? vxsuite::clamp01(0.55f + 0.45f * smoothedGuard * policy.sourceProtect)
+                                      : vxsuite::clamp01(0.28f + 0.52f * smoothedGuard * policy.sourceProtect);
     opts.lateTailAggression = policy.lateTailAggression;
-    opts.guardStrictness    = vxsuite::clamp01(0.40f + 0.60f * smoothedGuard * policy.guardStrictness);
-    opts.speechFocus        = isVoice ? juce::jmax(0.60f, policy.speechFocus) : policy.speechFocus;
+    opts.guardStrictness    = isVoice ? vxsuite::clamp01(0.55f + 0.45f * smoothedGuard * policy.guardStrictness)
+                                      : vxsuite::clamp01(0.35f + 0.50f * smoothedGuard * policy.guardStrictness);
+    opts.speechFocus        = isVoice ? juce::jmax(0.78f, policy.speechFocus) : juce::jmax(0.18f, policy.speechFocus);
 
     stageChain.processInPlace(buffer, { effectiveClean }, opts);
 
     ensureLatencyAlignedListenDry(numSamples);
 }
 
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXDenoiserAudioProcessor();
 }
+#endif

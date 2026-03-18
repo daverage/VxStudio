@@ -1,19 +1,45 @@
-# VX Spectrum scope review — 2026-03-17
+# VX Spectrum implementation — 2026-03-17
 
 ## Problem
-Assess whether VX Suite can support a standalone realtime analyzer that shows the dry spectrum, final wet spectrum, and per-plugin spectral influence for VX-family processors in one place, with optional waveform views and per-plugin visibility toggles, while keeping all analysis outside the critical audio path.
+Build a dedicated VX analyzer plugin that can show dry/wet spectrum overlays plus one coloured trace per active VX-family plugin, while moving the shared snapshot engine into the framework so current and future plugins can publish telemetry without duplicating analysis code.
 
 ## Plan
 - [x] Review VX Suite framework rules, research notes, and project lessons related to analysis, FFT ownership, and realtime/UI separation.
 - [x] Inspect the current framework and processor architecture for shared FFT, stage-chain, and chain-visibility hooks.
-- [x] Write a feasibility recommendation that distinguishes what is possible inside one plugin instance versus what requires explicit cross-plugin telemetry.
+- [x] Define a realistic v1 scope: standalone analyzer product, framework snapshot publisher, spectrum-first UI, waveform deferred or secondary.
+- [x] Add a realtime-safe shared snapshot publisher to the VX Suite framework and auto-wire it into `ProcessorBase`.
+- [x] Add a new analyzer product/plugin that renders dry, wet, and per-plugin spectrum traces with visibility toggles.
+- [x] Build and verify the new plugin and the existing suite products that now publish telemetry.
 
 ## Review
-- The idea is technically possible, but not as a normal passive VST that can automatically "see" sibling VX plugins in an arbitrary DAW chain. This repo currently ships independent plugins, not a shared host graph, so a standalone analyzer would need an explicit telemetry channel from each participating VX plugin.
-- The existing framework is a good base for this because FFT ownership is already centralized under `Source/vxsuite/framework/`, and the `StageChain` / processor-base pattern gives a clean place to add optional stage taps without turning each product into a one-off analyzer.
-- To stay aligned with the VX Suite rules, this should not become a sprawling diagnostic panel inside every shipping product. The cleaner fit is a separate analyzer product or debug/companion product that consumes lightweight shared analysis snapshots.
-- The safest architecture is: each VX-family plugin publishes downsampled, latency-aware analysis snapshots from lock-free preallocated buffers; the analyzer plugin subscribes and renders dry/wet/final overlays plus per-plugin traces and visibility toggles entirely on the UI/message side.
-- Waveform overlays are also possible, but they should likely be a secondary tab or switchable layer. Trying to show dense multitrace spectrum plus waveform in one view would fight the suite's simplicity goals and reduce readability.
+- The idea is technically possible, but not as a passive VST that automatically inspects sibling plugins. The framework needs an explicit shared telemetry path.
+- Added a framework-owned snapshot registry/publisher and wired it into `ProcessorBase`, so existing VX Suite products now publish compact dry/wet waveform telemetry automatically without product-local analyzer code.
+- After the first build proved bundle-local only, replaced the registry backend with a shared-memory mapped transport so separate VX plugin bundles can see the same telemetry pool instead of each keeping a private static registry.
+- Added a dedicated `VXSpectrum` plugin with a custom editor that renders the inferred chain dry bed, the analyzer input/final wet spectrum, and one coloured trace per active VX-family plugin with visibility toggles.
+- The analyzer computes FFT visuals on the UI side from published waveform snapshots, keeping the heavier spectral rendering work out of the product audio path while the framework publishers stay preallocated, fixed-size, and lock-free during block publication.
+- Verified with `cmake -S . -B build`, `cmake --build build --target VXSpectrum VXCleanup -j4`, `cmake --build build --target VXSpectrumPlugin VXDenoiser_VST3 -j4`, and `cmake --build build --target VXSuite_VST3 -j4` after the shared-memory backend landed.
+- Remaining v1 limitation: chain ordering is still inferred from active VX publisher order rather than explicit host graph routing, so waveform view and more explicit chain/session routing are the next clean upgrades after we host-smoke-test the current analyzer.
+
+# VX Spectrum pickup + comparison pass — 2026-03-17
+
+## Problem
+`VXSpectrum` still stops showing upstream VX plugins reliably after the pause/bypass work, and the live traces move too quickly to make useful visual comparisons in real time.
+
+## Plan
+- [x] Review the current telemetry publish/reset path and the chain matcher together to find why active upstream plugins are being dropped.
+- [x] Make the analyzer resilient to pause/bypass-induced silence snapshots without showing stale garbage when a plugin is actually gone.
+- [x] Improve the real-time comparison view so traces are visually stable enough to compare, while keeping the analyzer lightweight and off the audio path.
+- [x] Build and run targeted verification for `VXSpectrum` and the shared telemetry framework.
+
+## Review
+- Root cause was split across the transport and UI: bypassed/paused plugins were still holding active telemetry slots with silent snapshots, and the analyzer was treating those zeroed frames as current truth when reconstructing the upstream chain.
+- The shared telemetry slot now carries `silent` plus `lastPublishMs`, so paused publishers are still visible to the backend but can be reused safely when they stay silent. `SnapshotPublisher` also re-registers lazily if it loses a slot, which prevents `VXSpectrum` from getting stuck in a no-self-slot state after the pool fills.
+- `VXSpectrum` now keeps a short UI-side hold on the last non-silent snapshot for each slot instead of immediately trusting a single silent frame, which makes chain pickup much less fragile around pause/bypass transitions.
+- The display is now intentionally stabilised: spectrum lines use short attack/release smoothing so users can compare shapes in real time without chasing raw per-refresh jitter.
+- A second matcher bug showed up in host testing: the analyzer was treating telemetry registration order like chain order. That is not a real DAW routing signal, so the matcher now uses signal-first correlation with order only as a weak hint instead of a hard gate.
+- Cleaned up the no-match state so it renders as a small banner rather than overlapping the plot content.
+- Verified with `cmake --build build --target VXSpectrumPlugin -j4` and `cmake --build build --target VXSuite_VST3 -j4` so the rebuilt staged bundles in `Source/vxsuite/vst/` all speak the same telemetry format.
+
 
 # VX Cleanup architecture review — 2026-03-17
 
@@ -691,3 +717,73 @@ The user explicitly wants to keep WPE, because the old plugin with WPE worked we
   - `cmake --build build --target VXSuitePluginRegressionTests VXFinish -j4`
   - `./build/VXSuitePluginRegressionTests`
   - `cmake --build build -j4`
+
+---
+
+# VXFinish clipping + slope hit-testing — 2026-03-17
+
+## Problem
+`VXFinish` still clips/distorts under compression, and the shared inline slope buttons no longer react after the icon layout change.
+
+## Plan
+- [x] Remove hidden compressor makeup from the shared corrective stage so `VXFinish` does not stack gain ahead of its limiter/output trim.
+- [x] Fix shared slope icon hit-testing so inline icons toggle reliably even when the mouse event originates from a child component.
+- [x] Rebuild the affected VST3 targets and record the verification result.
+
+## Review
+- Removed the shared corrective-stage compressor makeup path in `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp`, so compression now only attenuates and can no longer quietly add level before `VXFinish` reaches its own limiter and output trim.
+- Fixed the inline slope icon hit-testing in `Source/vxsuite/framework/VxSuiteEditorBase.cpp` by converting incoming mouse events into editor coordinates before checking the stored icon bounds. This restores the shared low/high slope toggles after the inline layout change.
+- Verified with `cmake --build build --target VXFinish_VST3 VXCleanup_VST3 -j4` and then `cmake --build build --target VXSuite_VST3 -j4`, which rebuilt and restaged the full suite into `Source/vxsuite/vst/`.
+
+---
+
+# Full chain audit — 2026-03-17
+
+## Problem
+Review the full audio chain of each VX plugin and verify the suite stays clean: no clipping/distortion, no obvious phase/delay regressions, and sensible behavior when plugins are used together.
+
+## Plan
+- [x] Inspect the processor paths, latency handling, listen semantics, and output safety coverage across the current VX products.
+- [x] Run the existing regression and deverb-focused tests, then expand coverage for under-tested products.
+- [x] Apply focused fixes where the audit found concrete safety or routing issues.
+- [x] Record the results, including any residual failures that still need deeper DSP work.
+
+## Review
+- Strengthened shared safety handling in `Source/vxsuite/framework/VxSuiteOutputTrimmer.h` so overload protection now applies immediate reduction on attack instead of ramping down too slowly through the same block.
+- Added output-safety trimming to `Source/vxsuite/products/tone/VxToneProcessor.cpp`, `Source/vxsuite/products/proximity/VxProximityProcessor.cpp`, and `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp`, which closes an output-headroom gap for additive/EQ-style products and extreme deverb body settings.
+- Normalized plugin-entrypoint guarding in `Source/vxsuite/products/tone/VxToneProcessor.cpp` and `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp` so these products can be linked into regression binaries without duplicate `createPluginFilter()` symbols.
+- Expanded `tests/VXSuitePluginRegressionTests.cpp` to cover `Tone`, `Proximity`, and `Denoiser`, which were previously underrepresented compared with Cleanup / Finish / Deverb / Subtract.
+- Reworked `Source/vxsuite/products/deverb/VxDeverbProcessor.cpp` body-restore logic so it no longer applies a negative low-band “restore” when wet low energy already exceeds dry, and so its restore path is more tightly gated and bounded.
+- Rebalanced `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp` to be more conservative at high settings and added a small latency-aligned dry recovery tied to `Guard`, reducing the risk of over-destructive speech damage.
+- Verified successful rebuilds with:
+  - `cmake --build build --target VXSuitePluginRegressionTests VXDeverbTests -j4`
+  - `cmake --build build --target VXSuite_VST3 -j4`
+- Current residual failures after the audit:
+  - `./build/VXDeverbTests` still fails `Body` restoration magnitude (`off=0.774373 on=0.777374`), so Deverb `Blend` is now safer but still too weak to meet the intended restore contract.
+  - `./build/VXSuitePluginRegressionTests` still fails Deverb extreme-tail suppression (`rms=0.186114` in the tail), which means Deverb `Blend` still reintroduces too much sustained low tail at the extreme.
+  - `./build/VXSuitePluginRegressionTests` still fails the new denoiser coherence check (`|corr|=0.128598`), so the aggressive end of `VXDenoiser` still needs deeper DSP tuning beyond wrapper-level mapping changes.
+- Conclusion from this audit: the suite is in a safer place than before, and several framework/product safety gaps were fixed, but I cannot honestly mark every plugin chain as fully clean yet because `VXDeverb` and `VXDenoiser` still have measurable behavior regressions under strong settings.
+- Follow-up direction from the user: prefer upstream DSP/gain fixes over output trimming. I removed the new trim reliance from `VXTone`, `VXProximity`, and `VXDeverb`, reduced the shelf gain laws for Tone/Proximity, and switched the deverb audit pass toward speech-aware body gating plus an instability fallback rerender instead of simple output shaving.
+- After that upstream-first pass, `Tone` and `Proximity` remain on the cleaner path, but `VXDeverb` still fails both body-restore and extreme-tail checks, and `VXDenoiser` still fails the aggressive-setting audit. Those two need deeper product-specific DSP work rather than more wrapper-level protection.
+
+---
+
+# Finish compressor/headroom review — 2026-03-17
+
+## Problem
+`VXFinish` still distorts when the compressor/finish path is pushed. Review the full in/out audio path and leave more real DSP headroom rather than relying on distortion-prone last-stage catching.
+
+## Plan
+- [x] Inspect the full Finish path: corrective stage, recovery lift, makeup, output gain, limiter, and final safety.
+- [x] Remove distortion-prone limiter behavior and reduce gain stacking into the limiter.
+- [x] Rebuild `VXFinish` and run focused regression/build verification.
+- [x] Record the result and any remaining non-Finish regressions separately.
+
+## Review
+- `Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp` no longer uses the old `softLimitSample(...)` stage in the limiter. The limiter is now a cleaner gain-only limiter with instant attack when reduction is needed, a slightly lower ceiling, and release smoothing only on recovery.
+- `Source/vxsuite/products/finish/VxFinishProcessor.cpp` now leaves explicit internal headroom before the limiter by scanning the post-recovery/post-makeup/post-output-gain block and cleanly scaling it down to a `-6 dB` pre-limiter target when needed. This keeps the limiter from being driven into distortion as normal operating behavior.
+- The Finish makeup target is also less aggressive: lower target loudness, smaller density lift, and a tighter maximum makeup range, so the product is less likely to stack recovery + makeup + gain into the limiter.
+- Verified with:
+  - `cmake --build build --target VXFinish_VST3 VXSuitePluginRegressionTests -j4`
+  - `./build/VXSuitePluginRegressionTests`
+- The regression executable still fails, but the remaining reported failures are currently `VXDeverb` and `VXDenoiser`, not `VXFinish`.

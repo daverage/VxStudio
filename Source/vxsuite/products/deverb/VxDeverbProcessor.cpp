@@ -26,6 +26,20 @@ float onePoleAlpha(const double sampleRate, const float cutoffHz) {
     return std::exp(-2.0f * juce::MathConstants<float>::pi * cutoffHz / static_cast<float>(sampleRate));
 }
 
+bool bufferIsStable(const juce::AudioBuffer<float>& buffer, const float maxPeak) {
+    float peak = 0.0f;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < buffer.getNumSamples(); ++i) {
+            const float s = data[i];
+            if (!std::isfinite(s))
+                return false;
+            peak = std::max(peak, std::abs(s));
+        }
+    }
+    return peak <= maxPeak;
+}
+
 } // namespace
 
 VXDeverbAudioProcessor::VXDeverbAudioProcessor()
@@ -77,6 +91,8 @@ void VXDeverbAudioProcessor::resetSuite() {
         std::fill(dryLowpassState.begin(), dryLowpassState.end(), 0.0f);
     if (!wetLowpassState.empty())
         std::fill(wetLowpassState.begin(), wetLowpassState.end(), 0.0f);
+    if (!bodySpeechState.empty())
+        std::fill(bodySpeechState.begin(), bodySpeechState.end(), 0.0f);
     smoothedReduce = 0.0f;
     smoothedBody = 0.0f;
     controlsPrimed = false;
@@ -167,9 +183,21 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const float reduce = vxsuite::clamp01(smoothedReduce);
     deverbProcessor.setOverSubtract(1.0f + 1.5f * reduce);
 
-    {
+    const auto renderWet = [&](const float amount) {
+        for (int ch = 0; ch < outputChannels; ++ch)
+            wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
         juce::AudioBuffer<float> wetView (wetScratch.getArrayOfWritePointers(), outputChannels, numSamples);
-        deverbProcessor.processInPlace(wetView, reduce, options);
+        deverbProcessor.processInPlace(wetView, amount, options);
+    };
+
+    renderWet(reduce);
+    if (!bufferIsStable(wetScratch, 4.0f)) {
+        deverbProcessor.reset();
+        renderWet(std::min(reduce, 0.55f));
+        if (!bufferIsStable(wetScratch, 4.0f)) {
+            deverbProcessor.reset();
+            renderWet(std::min(reduce, 0.35f));
+        }
     }
     ensureLatencyAlignedListenDry(numSamples);
 
@@ -186,6 +214,7 @@ void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int
     wetScratch.setSize(safeChannels, safeSamples, false, false, true);
     dryLowpassState.assign(static_cast<size_t>(safeChannels), 0.0f);
     wetLowpassState.assign(static_cast<size_t>(safeChannels), 0.0f);
+    bodySpeechState.assign(static_cast<size_t>(safeChannels), 0.0f);
 }
 
 void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dryBuffer,
@@ -198,36 +227,48 @@ void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dr
         return;
 
     const float alpha = onePoleAlpha(currentSampleRateHz, 180.0f);
-    const float restore = juce::jlimit(0.0f, 1.20f, 1.20f * std::pow(vxsuite::clamp01(bodyAmount), 0.7f));
-    const float support = 0.28f * vxsuite::clamp01(bodyAmount);
+    const float restore = juce::jlimit(0.0f, 1.05f, 1.05f * std::pow(vxsuite::clamp01(bodyAmount), 0.72f));
+    const float support = 0.24f * vxsuite::clamp01(bodyAmount);
     const float rampDuration = 2.0f * static_cast<float>(currentSampleRateHz) / 1000.0f;
+    const float speechAttack = std::exp(-1.0f / (0.004f * static_cast<float>(currentSampleRateHz)));
+    const float speechRelease = std::exp(-1.0f / (0.160f * static_cast<float>(currentSampleRateHz)));
 
     for (int ch = 0; ch < channels; ++ch) {
         auto* wet = wetBuffer.getWritePointer(ch);
         const auto* dry = dryBuffer.getReadPointer(ch);
         float dryLp = dryLowpassState[static_cast<size_t>(ch)];
         float wetLp = wetLowpassState[static_cast<size_t>(ch)];
+        float speechState = bodySpeechState[static_cast<size_t>(ch)];
 
         if (isFirstBlock) {
             dryLp = dry[0];
             wetLp = wet[0];
+            speechState = 0.0f;
         }
 
         for (int i = 0; i < samples; ++i) {
             dryLp = alpha * dryLp + (1.0f - alpha) * dry[i];
             wetLp = alpha * wetLp + (1.0f - alpha) * wet[i];
             const float wetHigh = wet[i] - wetLp;
+            const float dryHigh = dry[i] - dryLp;
             const float ramp = isFirstBlock
                 ? std::min(1.0f, static_cast<float>(i + 1) / std::max(1.0f, rampDuration))
                 : 1.0f;
+            const float speechDriver = std::abs(dryHigh) + 0.18f * std::abs(dry[i]);
+            const float speechIndicator = juce::jlimit(0.0f, 1.0f, (speechDriver - 0.0010f) / 0.012f);
+            const float speechCoeff = speechIndicator > speechState ? speechAttack : speechRelease;
+            speechState = speechCoeff * speechState + (1.0f - speechCoeff) * speechIndicator;
+            const float gatedRamp = ramp * speechState;
+            const float restoreDelta = std::max(0.0f, dryLp - wetLp);
             const float blendedLow = wetLp
-                + (restore * ramp) * (dryLp - wetLp)
-                + (support * ramp) * dryLp;
+                + (restore * gatedRamp) * restoreDelta
+                + (support * gatedRamp) * dryLp;
             wet[i] = safeValue(wetHigh + blendedLow);
         }
 
         dryLowpassState[static_cast<size_t>(ch)] = dryLp;
         wetLowpassState[static_cast<size_t>(ch)] = wetLp;
+        bodySpeechState[static_cast<size_t>(ch)] = speechState;
     }
 }
 

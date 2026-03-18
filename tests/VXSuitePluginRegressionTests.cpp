@@ -1,8 +1,10 @@
 #include "../Source/vxsuite/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxsuite/products/deverb/VxDeverbProcessor.h"
+#include "../Source/vxsuite/products/denoiser/VxDenoiserProcessor.h"
 #include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
 #include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
+#include "../Source/vxsuite/products/tone/VxToneProcessor.h"
 #include "VxSuiteProcessorTestUtils.h"
 
 #include <atomic>
@@ -438,6 +440,81 @@ bool testFinishGainIsBipolarAroundCenter() {
     return true;
 }
 
+bool testToneCenterIsIdentityAndExtremesStayBounded() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXToneAudioProcessor toneFlat;
+    toneFlat.prepareToPlay(sr, 256);
+    setParamNormalized(toneFlat, "bass", 0.5f);
+    setParamNormalized(toneFlat, "treble", 0.5f);
+    const auto flatOut = render(toneFlat, input, 256);
+    if (maxAbsDiff(input, flatOut) > 1.0e-6f) {
+        std::cerr << "[VXSuitePluginRegression] Tone center should be identity\n";
+        return false;
+    }
+
+    VXToneAudioProcessor toneExtreme;
+    toneExtreme.prepareToPlay(sr, 256);
+    setParamNormalized(toneExtreme, "bass", 1.0f);
+    setParamNormalized(toneExtreme, "treble", 1.0f);
+    const auto boostedOut = render(toneExtreme, input, 256);
+    if (!allFinite(boostedOut) || peakAbs(boostedOut) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Tone extreme boost clipped or became unstable\n";
+        return false;
+    }
+    if (maxAbsDiffSkip(input, boostedOut, 128) < 0.01f) {
+        std::cerr << "[VXSuitePluginRegression] Tone extreme boost was too subtle\n";
+        return false;
+    }
+    return true;
+}
+
+bool testProximityExtremeIsBoundedAndAdditive() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    setParamNormalized(proximity, "closer", 1.0f);
+    setParamNormalized(proximity, "air", 1.0f);
+    const auto out = render(proximity, input, 256);
+
+    if (!allFinite(out) || peakAbs(out) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity extreme setting clipped or became unstable\n";
+        return false;
+    }
+    if (maxAbsDiffSkip(input, out, 128) < 0.01f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity extreme setting was too subtle\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDenoiserStrongSettingStaysCoherentAndBounded() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noisy = addBuffers(speech, makeNoise(sr, 1.0f, 0.07f));
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    setParamNormalized(denoiser, "clean", 0.90f);
+    setParamNormalized(denoiser, "guard", 0.65f);
+    const auto out = render(denoiser, noisy, 256);
+
+    if (!allFinite(out) || peakAbs(out) > 1.05f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser strong setting clipped or became unstable\n";
+        return false;
+    }
+    const float corr = std::abs(speechBandCorrelation(speech, out, sr));
+    if (corr < 0.40f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser strong setting damaged speech coherence too much: |corr|="
+                  << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool testLifecycleAndStateRestore() {
     constexpr double srA = 48000.0;
     constexpr double srB = 44100.0;
@@ -665,6 +742,9 @@ int main() {
     ok &= testCleanupStrongSettingIsAudibleButBounded();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
+    ok &= testToneCenterIsIdentityAndExtremesStayBounded();
+    ok &= testProximityExtremeIsBoundedAndAdditive();
+    ok &= testDenoiserStrongSettingStaysCoherentAndBounded();
     ok &= testCleanupBlockSizeInvariance();
     ok &= testFullChainBlockSizeInvariance();
     ok &= testLifecycleAndStateRestore();

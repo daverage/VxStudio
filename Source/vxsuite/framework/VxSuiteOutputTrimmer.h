@@ -38,7 +38,9 @@ public:
             currentGain += alpha * (targetGain - currentGain);
         }
 
-        if (std::abs(previousGain - 1.0f) > 1.0e-5f || std::abs(currentGain - 1.0f) > 1.0e-5f) {
+        if (targetGain < previousGain) {
+            buffer.applyGain(currentGain);
+        } else if (std::abs(previousGain - 1.0f) > 1.0e-5f || std::abs(currentGain - 1.0f) > 1.0e-5f) {
             for (int ch = 0; ch < numChannels; ++ch)
                 buffer.applyGainRamp(ch, 0, numSamples, previousGain, currentGain);
         }

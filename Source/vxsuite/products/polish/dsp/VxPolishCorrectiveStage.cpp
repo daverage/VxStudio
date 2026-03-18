@@ -195,7 +195,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
     const float breathThreshold = juce::jlimit(0.22f, 0.55f, (voiceMode ? 0.30f : 0.40f) + 0.06f * loudNorm);
     const float breathCeil = juce::jlimit(0.42f, 0.75f, breathThreshold + (voiceMode ? 0.18f : 0.14f));
     const float breathLevelFloor = juce::Decibels::decibelsToGain(params.noiseFloorDb + (voiceMode ? 8.0f : 10.0f));
-    const float breathLevelCeil = voiceMode ? 0.14f : 0.10f;
+    const float breathLevelCeil = voiceMode ? 0.32f : 0.22f;
     const float breathMaxCutDb = (voiceMode ? 7.0f : 2.8f) * breathAmt * (0.85f + 0.15f * (1.0f - speechPresence));
     const float plosiveMaxCutDb = (voiceMode ? 8.5f : 4.4f) * plosiveAmt * (0.82f + 0.28f * proxCtx);
 
@@ -203,7 +203,6 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
     const float compRel = std::exp(-1.0f / ((0.220f - 0.090f * compAmt) * static_cast<float>(sr)));
     const float compThresholdDb = -20.0f - 8.0f * compAmt;
     const float compRatio = 1.6f + 4.0f * compAmt;
-    const float compMakeupDb = 1.0f * compAmt;
     const float compSidechainBoost = juce::Decibels::decibelsToGain(juce::jlimit(0.0f, 18.0f, params.compSidechainBoostDb));
 
     float deMudAcc = 0.0f;
@@ -312,9 +311,9 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
         compEnv = compA * compEnv + (1.0f - compA) * compIn;
         const float compEnvDb = 20.0f * std::log10(compEnv + 1.0e-6f);
         float gainReductionDb = 0.0f;
-        if (compEnvDb > compThresholdDb)
+        if (compAmt > 1.0e-6f && compEnvDb > compThresholdDb)
             gainReductionDb = (1.0f - 1.0f / compRatio) * (compEnvDb - compThresholdDb);
-        const float compTargetGain = juce::Decibels::decibelsToGain(-gainReductionDb + compMakeupDb);
+        const float compTargetGain = juce::jmin(1.0f, juce::Decibels::decibelsToGain(-gainReductionDb));
         compGain = cCompGainSmooth * compGain + (1.0f - cCompGainSmooth) * compTargetGain;
         const float compDb = std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(compGain, 1.0e-6f), -120.0f));
         compAcc += juce::jlimit(0.0f, 1.0f, compDb / 8.0f);

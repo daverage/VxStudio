@@ -11,7 +11,10 @@ ProcessorBase::ProcessorBase(ProductIdentity identity,
     : juce::AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                             .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       productIdentity(std::move(identity)),
-      parameters(*this, nullptr, "STATE", std::move(parameterLayout)) {}
+      parameters(*this, nullptr, "STATE", std::move(parameterLayout)),
+      spectrumPublisher(productIdentity, true) {}
+
+ProcessorBase::~ProcessorBase() = default;
 
 juce::AudioProcessorEditor* ProcessorBase::createEditor() {
     return new EditorBase(*this);
@@ -21,6 +24,7 @@ void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerB
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
     listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
     prepareProcessCoordinator(samplesPerBlock);
+    spectrumPublisher.prepare(sampleRate, samplesPerBlock);
     prepareSuite(sampleRate, samplesPerBlock);
 }
 
@@ -28,6 +32,7 @@ void ProcessorBase::reset() {
     voiceAnalysis.reset();
     listenInputScratch.clear();
     resetProcessCoordinator();
+    spectrumPublisher.reset();
     resetSuite();
 }
 
@@ -35,21 +40,31 @@ void ProcessorBase::releaseResources() {
     voiceAnalysis.reset();
     listenInputScratch.setSize(0, 0);
     releaseProcessCoordinator();
+    spectrumPublisher.reset();
     resetSuite();
 }
 
 void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     voiceAnalysis.update(buffer, buffer.getNumSamples());
-    const bool canRenderListen = isListenEnabled()
-        && listenInputScratch.getNumChannels() >= buffer.getNumChannels()
+    const bool hasDryScratch = listenInputScratch.getNumChannels() >= buffer.getNumChannels()
         && listenInputScratch.getNumSamples() >= buffer.getNumSamples();
-    if (canRenderListen) {
-        listenInputScratch.makeCopyOf(buffer, true);
+    if (hasDryScratch) {
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            listenInputScratch.copyFrom(channel, 0, buffer, channel, 0, buffer.getNumSamples());
     }
-    processCoordinator.beginBlock(buffer, true);
+
+    const bool canRenderListen = hasDryScratch && isListenEnabled();
+    processCoordinator.beginBlock(hasDryScratch ? listenInputScratch : buffer, canRenderListen);
     processProduct(buffer, midi);
+    if (hasDryScratch)
+        spectrumPublisher.publish(listenInputScratch, buffer);
     if (canRenderListen)
         renderListenOutput(buffer, listenInputScratch);
+}
+
+void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
+    juce::ignoreUnused(buffer, midi);
+    spectrumPublisher.publishSilence();
 }
 
 bool ProcessorBase::isBusesLayoutSupported(const BusesLayout& layouts) const {

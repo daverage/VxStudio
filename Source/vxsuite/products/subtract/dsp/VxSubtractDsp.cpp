@@ -790,29 +790,25 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 }
             }
 
-            float midDryEnergy = 1.0e-9f;
-            float midWetEnergy = 1.0e-9f;
-
-            // Extract aligned dry and compute energy for side scaling
+            // Drain aligned dry mid (needed for extra-channel reconstruction).
             for (int i = 0; i < n; ++i) {
                 float dryMidAligned = 0.0f;
-                if (midDryDelayCount > sideLatency) {
+                if (midDryDelayCount >= sideLatency) {
                     dryMidAligned = midDryDelay[midDryDelayRead];
                     midDryDelayRead = (midDryDelayRead + 1u) % midDryDelayCap;
                     --midDryDelayCount;
                 }
                 alignedMidDry[static_cast<size_t>(i)] = dryMidAligned;
-                midDryEnergy += dryMidAligned * dryMidAligned;
-                midWetEnergy += monoOut[static_cast<size_t>(i)] * monoOut[static_cast<size_t>(i)];
             }
 
-            const float midRatio = juce::jlimit(0.0f, 1.5f, std::sqrt(midWetEnergy / midDryEnergy));
-            float sideScale = labRaw ? 1.0f : juce::jlimit(0.50f, 1.0f, lerp(1.0f, midRatio, 0.35f * wet));
+            // Side is passed through at unity — dynamic M/S balance scaling
+            // was causing time-varying stereo width modulation perceived as delay.
+            const float sideScale = 1.0f;
 
             for (int i = 0; i < n; ++i) {
                 const float midOut = monoOut[static_cast<size_t>(i)];
                 float sideDelayed = 0.0f;
-                if (sideDelayCount > sideLatency) {
+                if (sideDelayCount >= sideLatency) {
                     sideDelayed = sideDelay[sideDelayRead];
                     sideDelayRead = (sideDelayRead + 1u) % sideDelayCap;
                     --sideDelayCount;
@@ -835,7 +831,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                         if (ed.available < ed.buffer.size()) ++ed.available;
                         else ed.readPos = (ed.readPos + 1) % ed.buffer.size();
 
-                        if (ed.available > sideLatency) {
+                        if (ed.available >= sideLatency) {
                             dryAligned = ed.buffer[ed.readPos];
                             ed.readPos = (ed.readPos + 1) % ed.buffer.size();
                             --ed.available;

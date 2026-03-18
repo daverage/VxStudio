@@ -146,7 +146,7 @@ void DenoiserDsp::reset() {
 
     inFifoWritePos = 0;
     hopFillCount   = 0;
-    olaWritePos    = latencySamples;
+    olaWritePos    = 0;
     olaReadPos     = 0;
 
     phaseReady      = false;
@@ -237,29 +237,16 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         float* l = buffer.getWritePointer(0);
         float* r = buffer.getWritePointer(1);
 
-        // Per-block energy for side ratio (smoothed to avoid pumping)
-        float midDryE = kEps, midWetE = kEps;
+        // Drain mid-dry delay (keeps buffer count balanced; no longer used for sideScale).
         for (int i = 0; i < numSmp; ++i) {
-            const float mo = monoOut[static_cast<size_t>(i)];
-            midWetE += mo * mo;
-
-            float dryMid = 0.0f;
-            if (midDryDelayCount > latencySamples) {
-                dryMid = midDryDelayBuf[midDryDelayRead];
+            if (midDryDelayCount >= latencySamples) {
                 midDryDelayRead  = (midDryDelayRead + 1) % midDryDelaySize;
                 --midDryDelayCount;
             }
-            midDryE += dryMid * dryMid;
         }
-        const float rawRatio  = juce::jlimit(0.0f, 1.5f,
-                                             std::sqrt(midWetE / midDryE));
-        // 200 ms one-pole smoothing on the ratio — eliminates per-block pumping
-        const float ratioAlpha = std::exp(
-            -static_cast<float>(numSmp) / (0.200f * static_cast<float>(sr)));
-        smoothedSideRatio = ratioAlpha * smoothedSideRatio
-                          + (1.0f - ratioAlpha) * rawRatio;
-        const float sideScale = juce::jlimit(0.50f, 1.0f,
-            1.0f + (smoothedSideRatio - 1.0f) * 0.35f * wet);
+        // Side is passed through at unity — dynamic M/S balance scaling
+        // was causing time-varying stereo width modulation perceived as delay.
+        const float sideScale = 1.0f;
 
         // Interpolate sideScale from prev block to current across samples to
         // avoid a step at the block boundary (block-rate step is otherwise
@@ -273,7 +260,7 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
         for (int i = 0; i < numSmp; ++i) {
             float sideD = 0.0f;
-            if (sideDelayCount > latencySamples) {
+            if (sideDelayCount >= latencySamples) {
                 sideD = sideDelayBuf[sideDelayRead];
                 sideDelayRead  = (sideDelayRead + 1) % sideDelaySize;
                 --sideDelayCount;

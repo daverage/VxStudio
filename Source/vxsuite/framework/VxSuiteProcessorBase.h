@@ -2,6 +2,7 @@
 
 #include "VxSuiteParameters.h"
 #include "VxSuiteProcessCoordinator.h"
+#include "VxSuiteSpectrumTelemetry.h"
 #include "VxSuiteVoiceAnalysis.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -13,7 +14,7 @@ public:
     explicit ProcessorBase(ProductIdentity identity);
     ProcessorBase(ProductIdentity identity,
                   juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout);
-    ~ProcessorBase() override = default;
+    ~ProcessorBase() override;
 
     const ProductIdentity& getProductIdentity() const noexcept { return productIdentity; }
     const juce::String getName() const override {
@@ -38,6 +39,7 @@ public:
     void reset() override;
     void releaseResources() override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) final;
+    void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
 
     double getTailLengthSeconds() const override { return 0.0; }
@@ -81,6 +83,7 @@ protected:
     ProductIdentity productIdentity;
     juce::AudioProcessorValueTreeState parameters;
     VoiceAnalysisState voiceAnalysis;
+    spectrum::SnapshotPublisher spectrumPublisher;
 
 private:
     juce::AudioBuffer<float> listenInputScratch;

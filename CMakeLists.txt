@@ -376,6 +376,33 @@ target_link_libraries(VXTone PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxsuite_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
+juce_add_plugin(VXSpectrum
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxspectrum"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXSP"
+)
+target_compile_definitions(VXSpectrum PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXSpectrum)
+target_sources(VXSpectrum PRIVATE
+  Source/vxsuite/products/spectrum/VxSpectrumProcessor.cpp
+  Source/vxsuite/products/spectrum/VxSpectrumEditor.cpp
+)
+target_include_directories(VXSpectrum PRIVATE Source)
+target_link_libraries(VXSpectrum PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXSpectrumPlugin ALL DEPENDS VXSpectrum_VST3)
+vxsuite_stage_vst3_bundle(VXSpectrum_VST3 "VXSpectrum")
+
 add_custom_target(VXSuite_VST3
   DEPENDS
     VXDeverb_VST3
@@ -385,6 +412,7 @@ add_custom_target(VXSuite_VST3
     VXSubtract_VST3
     VXDenoiser_VST3
     VXDeepFilterNet_VST3
+    VXSpectrum_VST3
     VXDeverbStage
     VXProximityStage
     VXCleanupStage
@@ -392,6 +420,7 @@ add_custom_target(VXSuite_VST3
     VXSubtractStage
     VXDenoiserStage
     VXDeepFilterNetStage
+    VXSpectrumStage
   COMMENT "Building all VX Suite VST3 products")
 
 add_executable(VXDeverbTests
@@ -441,12 +470,15 @@ add_executable(VXSuitePluginRegressionTests
   Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
+  Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp
+  Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
   Source/vxsuite/products/proximity/VxProximityProcessor.cpp
   Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
   Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
+  Source/vxsuite/products/tone/VxToneProcessor.cpp
   Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXSuitePluginRegressionTests PRIVATE Source tests)

@@ -12,6 +12,7 @@ constexpr std::string_view kGainParam = "gain";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
 constexpr float kNeutralGainPosition = 0.5f;
+constexpr float kPreLimiterHeadroomDb = -6.0f;
 
 } // namespace
 
@@ -173,9 +174,9 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     polishChain.processRecovery(buffer);
 
     {
-        const float baseTargetLoudnessDb = voiceMode ? -19.0f : -19.8f;
-        const float densityLiftDb = 0.48f * finishDrive + 0.32f * finish + 0.18f * (1.0f - analysis.speechStability);
-        const float targetMakeupDb = juce::jlimit(-2.5f, 4.0f,
+        const float baseTargetLoudnessDb = voiceMode ? -20.5f : -21.0f;
+        const float densityLiftDb = 0.34f * finishDrive + 0.22f * finish + 0.12f * (1.0f - analysis.speechStability);
+        const float targetMakeupDb = juce::jlimit(-2.5f, 2.2f,
             (baseTargetLoudnessDb - evidence.speechLoudnessDb + densityLiftDb)
           * juce::jlimit(0.0f, 1.0f, 0.24f + 0.50f * speechClarity));
         const float alpha = targetMakeupDb > smoothedTargetGainDb
@@ -187,8 +188,6 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         if (std::abs(smoothedTargetGainDb) > 0.05f)
             buffer.applyGain(makeupGain);
     }
-
-    polishChain.processLimiter(buffer);
 
     {
         const float targetOutputGainDb = voiceMode
@@ -207,6 +206,14 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         }
     }
 
+    {
+        const float peak = buffer.getMagnitude(0, numSamples);
+        const float targetPeak = juce::Decibels::decibelsToGain(kPreLimiterHeadroomDb);
+        if (peak > targetPeak)
+            buffer.applyGain(targetPeak / std::max(peak, 1.0e-6f));
+    }
+
+    polishChain.processLimiter(buffer);
     outputTrimmer.process(buffer, currentSampleRateHz);
 }
 

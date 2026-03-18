@@ -6,15 +6,6 @@ namespace vxsuite::finish {
 
 namespace {
 
-float softLimitSample(const float x) {
-    const float ax = std::abs(x);
-    if (ax <= 0.98f)
-        return x;
-
-    const float shaped = 0.98f + 0.10f * std::tanh((ax - 0.98f) / 0.10f);
-    return std::copysign(std::min(shaped, 1.0f), x);
-}
-
 } // namespace
 
 void Dsp::prepare(double sampleRate, int, int numChannels) {
@@ -218,9 +209,9 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
     }
 
     const bool voiceMode = params.contentMode == 0;
-    const float limiterAttackA = std::exp(-1.0f / ((0.00028f + 0.00045f * (1.0f - limitAmt)) * static_cast<float>(sr)));
+    const float limiterAttackA = std::exp(-1.0f / ((0.00020f + 0.00030f * (1.0f - limitAmt)) * static_cast<float>(sr)));
     const float limiterReleaseA = std::exp(-1.0f / ((0.030f + 0.050f * (1.0f - limitAmt)) * static_cast<float>(sr)));
-    const float limiterCeil = juce::Decibels::decibelsToGain(voiceMode ? -0.95f : -1.10f);
+    const float limiterCeil = juce::Decibels::decibelsToGain(voiceMode ? -1.50f : -1.70f);
 
     float limiterAcc = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
@@ -235,13 +226,16 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
             limitTargetGain = limiterCeil / (limitEnv + 1.0e-6f);
         if (samplePeak > limiterCeil)
             limitTargetGain = std::min(limitTargetGain, limiterCeil / (samplePeak + 1.0e-6f));
-        const float gainA = limitTargetGain < limitGain ? limiterAttackA : limiterReleaseA;
-        limitGain = gainA * limitGain + (1.0f - gainA) * limitTargetGain;
+        if (limitTargetGain < limitGain) {
+            limitGain = limitTargetGain;
+        } else {
+            limitGain = limiterReleaseA * limitGain + (1.0f - limiterReleaseA) * limitTargetGain;
+        }
         limiterAcc += std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(limitGain, 1.0e-6f), -120.0f));
 
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* d = buffer.getWritePointer(ch);
-            d[i] = softLimitSample(d[i] * limitGain);
+            d[i] *= limitGain;
         }
     }
     limiterActivity = juce::jlimit(0.0f, 1.0f, (limiterAcc / static_cast<float>(numSamples)) / 6.0f);

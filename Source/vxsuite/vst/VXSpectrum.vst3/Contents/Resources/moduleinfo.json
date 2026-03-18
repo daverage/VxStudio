@@ -1,0 +1,46 @@
+{
+  "Name": "VXSpectrum",
+  "Version": "0.1.0",
+  "Factory Info": {
+    "Vendor": "VX Suite",
+    "URL": "",
+    "E-Mail": "",
+    "Flags": {
+      "Unicode": true,
+      "Classes Discardable": false,
+      "Component Non Discardable": false,
+    },
+  },
+  "Classes": [
+    {
+      "CID": "ABCDEF019182FAEB5658533156585350",
+      "Category": "Audio Module Class",
+      "Name": "VXSpectrum",
+      "Vendor": "VX Suite",
+      "Version": "0.1.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+    {
+      "CID": "ABCDEF011234ABCD5658533156585350",
+      "Category": "Component Controller Class",
+      "Name": "VXSpectrum",
+      "Vendor": "VX Suite",
+      "Version": "0.1.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+  ],
+}

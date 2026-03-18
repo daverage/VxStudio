@@ -48,8 +48,9 @@ public:
 
     void beginBlock(const juce::AudioBuffer<float>& dryInput,
                     const bool listenEnabled) {
+        juce::ignoreUnused(listenEnabled);
         alignedDryReady = false;
-        if (!canRenderListen(dryInput, listenEnabled))
+        if (!listenBuffer.canStore(dryInput.getNumChannels(), dryInput.getNumSamples()))
             return;
         listenBuffer.captureDry(dryInput, dryInput.getNumSamples());
     }

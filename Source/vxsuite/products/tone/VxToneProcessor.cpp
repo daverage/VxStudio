@@ -18,10 +18,10 @@ constexpr std::string_view kListenParam  = "listen";
 // General mode: full-range shelves with more headroom.
 constexpr float kVocalBassFreqHz    = 200.f;
 constexpr float kVocalTrebleFreqHz  = 6000.f;
-constexpr float kVocalMaxGainDb     = 8.f;
+constexpr float kVocalMaxGainDb     = 6.f;
 constexpr float kGeneralBassFreqHz  = 120.f;
 constexpr float kGeneralTrebleFreqHz = 8000.f;
-constexpr float kGeneralMaxGainDb   = 12.f;
+constexpr float kGeneralMaxGainDb   = 8.f;
 
 } // namespace
 
@@ -182,6 +182,8 @@ void VXToneAudioProcessor::applyBiquad(float* samples, const int numSamples,
     }
 }
 
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXToneAudioProcessor();
 }
+#endif

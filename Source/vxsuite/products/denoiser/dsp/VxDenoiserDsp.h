@@ -84,7 +84,7 @@ private:
 
     int inFifoWritePos = 0;
     int hopFillCount   = 0;
-    int olaWritePos    = kFftSize - kHop;
+    int olaWritePos    = 0;
     int olaReadPos     = 0;
 
     // ── Lookup tables (set in prepare, never written on audio thread) ─────────
