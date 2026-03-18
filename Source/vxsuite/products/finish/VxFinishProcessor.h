@@ -4,8 +4,6 @@
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteProcessorBase.h"
-#include "../polish/VxPolishAnalysisEvidence.h"
-#include "../polish/VxPolishTonalAnalysis.h"
 #include "dsp/VxFinishDsp.h"
 
 class VXFinishAudioProcessor final : public vxsuite::ProcessorBase {
@@ -29,13 +27,10 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::finish::Dsp polishChain;
-    vxsuite::polish::TonalAnalysisState tonalAnalysis;
     double currentSampleRateHz = 48000.0;
     float smoothedFinish = 0.0f;
     float smoothedBody = 0.5f;
     float smoothedGain = 0.5f;
-    float smoothedTargetGainDb = 0.0f;
-    float smoothedOutputGainDb = 0.0f;
     vxsuite::OutputTrimmer outputTrimmer;
     bool controlsPrimed = false;
 };

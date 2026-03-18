@@ -255,6 +255,7 @@ juce_generate_juce_header(VXFinish)
 target_sources(VXFinish PRIVATE
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp
   Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXFinish PRIVATE Source)
@@ -474,6 +475,7 @@ add_executable(VXSuitePluginRegressionTests
   Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp
   Source/vxsuite/products/proximity/VxProximityProcessor.cpp
   Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
@@ -495,6 +497,7 @@ add_executable(VXSuiteProfile
   Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp
   Source/vxsuite/products/proximity/VxProximityProcessor.cpp
   Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp

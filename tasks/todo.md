@@ -1,5 +1,40 @@
 # VX Spectrum implementation — 2026-03-17
 
+# Cleanup + Finish opto integration review — 2026-03-18
+
+## Problem
+Review the new `optocomp` compressor integration for `VXFinish`, identify any correctness/build risks first, then apply the `clean and finish.md` product-split upgrades without breaking the new compressor path.
+
+## Plan
+- [x] Review the current `VXFinish` integration, the new `OptoComp` files, and the `clean and finish.md` intent document.
+- [x] Capture the concrete integration issues and fix the build/runtime wiring so `VXFinish` really uses the new opto compressor.
+- [x] Align `Cleanup` and `Finish` behavior with the requested split: Cleanup stays subtractive/protective, Finish stays additive/leveling.
+- [x] Build and verify the affected targets, then document the final review and any residual risks.
+
+## Spec Notes
+- `Cleanup` must remain subtractive and protective: no compression, no loudness shaping, no guessing at what `Finish` should add back.
+- `Finish` must stay focused on opto compression, light body shaping, and final level control.
+- The new compressor should be preserved as the core `Finish` dynamics stage rather than replaced with the older shared polish chain.
+- Any integration fix should be minimal and framework-friendly: no product-specific forks unless required for correctness.
+
+## Review
+- Review findings first:
+- `VxFinishDsp.h` included `OptoCompressorLA2A.h` with no reachable path, so the new compressor could not compile at all.
+- `VxFinishProcessor.cpp` switched over to a nonexistent `dsp` member while the class still owned `polishChain`, so the product would still fail after the include issue.
+- `VxFinishDsp.cpp` was a stale pre-opto implementation that no longer matched the header, which meant the new compressor path was only half-integrated.
+- `OptoCompressorLA2A.cpp` stored body-shelf state in `static thread_local` storage, so reset behavior was not instance-deterministic and could leak state across plugin instances on the same thread.
+- Fixes landed:
+- Rewired `VXFinish` so it now consistently drives the new `OptoComp` LA-2A-style compressor through `vxsuite::finish::Dsp`.
+- Replaced the stale `VxFinishDsp.cpp` implementation with a focused Finish path: opto compression, light adaptive makeup, clean peak limiting, and final trimming.
+- Kept the product split sharp: `Cleanup` remains the subtractive/protective stage, while `Finish` no longer depends on the old polish-analysis/recovery path.
+- Made the compressor body shelf instance-owned and resettable instead of `thread_local`, then added a regression test to lock that behavior in.
+- Verification:
+- `cmake --build build --target VXSuitePluginRegressionTests -j4`
+- `./build/VXSuitePluginRegressionTests`
+- `cmake --build build --target VXFinishPlugin -j4`
+- Residual risk:
+- `Finish` now follows the requested architecture much more closely, but the adaptive makeup stage is intentionally simple and heuristic rather than analysis-driven. That keeps the new compressor path intact and predictable, but there is still room for future tuning by ear in-host.
+
 ## Problem
 Build a dedicated VX analyzer plugin that can show dry/wet spectrum overlays plus one coloured trace per active VX-family plugin, while moving the shared snapshot engine into the framework so current and future plugins can publish telemetry without duplicating analysis code.
 

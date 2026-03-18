@@ -440,6 +440,34 @@ bool testFinishGainIsBipolarAroundCenter() {
     return true;
 }
 
+bool testFinishResetIsDeterministic() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    setParamNormalized(finish, "finish", 0.55f);
+    setParamNormalized(finish, "body", 0.72f);
+    setParamNormalized(finish, "gain", 0.5f);
+    const auto first = render(finish, input, 256);
+
+    finish.reset();
+    setParamNormalized(finish, "finish", 0.55f);
+    setParamNormalized(finish, "body", 0.72f);
+    setParamNormalized(finish, "gain", 0.5f);
+    const auto second = render(finish, input, 256);
+
+    if (maxAbsDiffSkip(first, second, 512) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Finish reset no longer restores deterministic compressor state\n";
+        return false;
+    }
+    if (!allFinite(second) || peakAbs(second) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Finish reset path became unstable\n";
+        return false;
+    }
+    return true;
+}
+
 bool testToneCenterIsIdentityAndExtremesStayBounded() {
     constexpr double sr = 48000.0;
     auto input = makeSpeechLike(sr, 1.0f);
@@ -742,6 +770,7 @@ int main() {
     ok &= testCleanupStrongSettingIsAudibleButBounded();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
+    ok &= testFinishResetIsDeterministic();
     ok &= testToneCenterIsIdentityAndExtremesStayBounded();
     ok &= testProximityExtremeIsBoundedAndAdditive();
     ok &= testDenoiserStrongSettingStaysCoherentAndBounded();
