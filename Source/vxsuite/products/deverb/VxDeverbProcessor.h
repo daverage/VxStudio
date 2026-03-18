@@ -37,6 +37,10 @@ private:
                           juce::AudioBuffer<float>& wetBuffer,
                           float bodyAmount,
                           bool isFirstBlock);
+    void applyLoudnessCompensation(juce::AudioBuffer<float>& wetBuffer,
+                                   float dryRms,
+                                   float reduceAmount,
+                                   bool isFirstBlock) noexcept;
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
     juce::AudioBuffer<float> wetScratch;
@@ -45,6 +49,7 @@ private:
     std::vector<float> bodySpeechState;
     float smoothedReduce = 0.45f;
     float smoothedBody   = 0.60f;
+    float smoothedCompensationGain = 1.0f;
     double currentSampleRateHz = 48000.0;
     int    preparedBlockSize   = 0;
     bool   controlsPrimed      = false;

@@ -40,6 +40,38 @@ bool bufferIsStable(const juce::AudioBuffer<float>& buffer, const float maxPeak)
     return peak <= maxPeak;
 }
 
+float computeBufferRms(const juce::AudioBuffer<float>& buffer) {
+    const int channels = buffer.getNumChannels();
+    const int samples = buffer.getNumSamples();
+    if (channels <= 0 || samples <= 0)
+        return 0.0f;
+
+    double sumSquares = 0.0;
+    int sampleCount = 0;
+    for (int ch = 0; ch < channels; ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i) {
+            const double sample = data[i];
+            sumSquares += sample * sample;
+        }
+        sampleCount += samples;
+    }
+
+    if (sampleCount <= 0)
+        return 0.0f;
+    return static_cast<float>(std::sqrt(sumSquares / static_cast<double>(sampleCount)));
+}
+
+float computePeakAbs(const juce::AudioBuffer<float>& buffer) {
+    float peak = 0.0f;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            peak = std::max(peak, std::abs(data[i]));
+    }
+    return peak;
+}
+
 } // namespace
 
 VXDeverbAudioProcessor::VXDeverbAudioProcessor()
@@ -95,6 +127,7 @@ void VXDeverbAudioProcessor::resetSuite() {
         std::fill(bodySpeechState.begin(), bodySpeechState.end(), 0.0f);
     smoothedReduce = 0.0f;
     smoothedBody = 0.0f;
+    smoothedCompensationGain = 1.0f;
     controlsPrimed = false;
 }
 
@@ -150,6 +183,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
+    const float dryRms = computeBufferRms(buffer);
     const bool isFirstBlock = !controlsPrimed;
     if (isFirstBlock) {
         smoothedReduce = reduceTarget;
@@ -195,6 +229,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
 
     if (smoothedBody > 1.0e-4f)
         applyBodyRestore(getLatencyAlignedListenDryBuffer(), buffer, smoothedBody, isFirstBlock);
+    applyLoudnessCompensation(buffer, dryRms, reduce, isFirstBlock);
 }
 
 void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {
@@ -259,6 +294,38 @@ void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dr
         wetLowpassState[static_cast<size_t>(ch)] = wetLp;
         bodySpeechState[static_cast<size_t>(ch)] = speechState;
     }
+}
+
+void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>& wetBuffer,
+                                                       const float dryRms,
+                                                       const float reduceAmount,
+                                                       const bool isFirstBlock) noexcept {
+    const float wetRms = computeBufferRms(wetBuffer);
+    if (dryRms <= 1.0e-6f || wetRms <= 1.0e-6f || reduceAmount <= 1.0e-4f) {
+        smoothedCompensationGain = 1.0f;
+        return;
+    }
+
+    const float dryDb = juce::Decibels::gainToDecibels(dryRms, -120.0f);
+    const float wetDb = juce::Decibels::gainToDecibels(wetRms, -120.0f);
+    const float lostDb = std::max(0.0f, dryDb - wetDb);
+    const float compensationDb = std::min(9.0f, lostDb * (0.72f + 0.18f * reduceAmount));
+    const float targetGain = juce::Decibels::decibelsToGain(compensationDb);
+
+    if (isFirstBlock) {
+        smoothedCompensationGain = targetGain;
+    } else {
+        smoothedCompensationGain = vxsuite::smoothBlockValue(smoothedCompensationGain,
+                                                             targetGain,
+                                                             currentSampleRateHz,
+                                                             wetBuffer.getNumSamples(),
+                                                             0.180f);
+    }
+
+    const float wetPeak = computePeakAbs(wetBuffer);
+    const float peakSafeGain = wetPeak > 1.0e-6f ? std::min(1.0f / wetPeak, 1.8f) : 1.0f;
+    const float appliedGain = std::min(smoothedCompensationGain, peakSafeGain);
+    wetBuffer.applyGain(appliedGain);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {

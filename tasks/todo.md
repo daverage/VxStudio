@@ -1,3 +1,190 @@
+# Analyzer timing + spectrum fidelity pass — 2026-03-18
+
+## Problem
+The analyser is closer, but it still diverges from SPAN in two visible ways: `Avg Time` feels jerky because it currently gates visible refreshes instead of behaving like a smooth RT-average, and the spectrum shape still loses too much low/high detail because each log band is reduced with a broad RMS average.
+
+## Plan
+- [x] Rework `Avg Time` so the chart repaints steadily while averaging continuously over time, instead of stepping the visible snapshot cadence.
+- [x] Improve the summary-spectrum reduction so the full `20 Hz` to `20 kHz` plot preserves prominent peaks and better matches the reference analyzer shape.
+- [x] Build and run the analyser/deverb verification targets, then document the remaining gap versus SPAN.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.*` now treats `Avg Time` as a true time-domain average of incoming spectrum/envelope frames rather than a stepped snapshot throttle. The UI repaints steadily at `24 Hz`, and longer average times now simply lengthen the decay/settling of the displayed spectrum instead of making the chart visibly jerk between sparse refreshes.
+- Expanded `Avg Time` options to `100 ms` through `10000 ms`, keeping the default at `1000 ms` so the analyzer can cover both transient debugging and long-horizon tonal-balance reading more like SPAN.
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.h` now publishes a denser analyzer spectrum with `256` log-spaced display bands and an `8192`-sample FFT. `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` now reduces each log band with a peak-preserving blend instead of a plain RMS average, which keeps narrow resonances and high-frequency structure from collapsing into a broad midrange hump.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now applies a fixed `4.5 dB/oct` display slope, matching the supplied SPAN reference more closely, and labels the full visible frequency range from `20 Hz` to `20 kHz`.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin VXDeverbTests -j4` and `./build/VXDeverbTests`.
+
+# Analyzer stage visibility + smoothing calibration — 2026-03-18
+
+## Problem
+After the timing/fidelity pass, the analyser regressed in two practical ways: external stage rows could disappear so the UI looked like it only supported `Full Chain`, and the smoothing control became nearly inert because the old fixed-neighbor mapping was far too weak for the new `256`-band spectrum.
+
+## Plan
+- [x] Relax the stage freshness gate so valid VX Suite stages remain visible/selectable in the rail instead of dropping out to full-chain fallback.
+- [x] Remap spectral smoothing by octave width so `1/12`, `1/6`, `1/3`, and `1 OCT` produce visibly different blur amounts on the denser spectrum.
+- [x] Rebuild the analyser target and rerun the standing deverb regression check.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now keeps stage rows alive for up to `1500 ms` of telemetry age, which is much more tolerant of host/UI jitter than the previous `300 ms` gate and should stop the analyser collapsing to `Full Chain` when the live stage list is still valid.
+- The smoothing control now scales against actual bins-per-octave for the current analyzer spectrum density instead of a tiny fixed radius. On a `256`-band plot, `1/6 OCT`, `1/3 OCT`, and broader modes now smooth over meaningfully different frequency spans, so the control should finally behave like a real spectral smoothing selector.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyzer stage fallback + Avg Time visibility pass — 2026-03-18
+
+## Problem
+The analyser still showed two regressions in-host: the left rail could still end up empty except for `Full Chain`, and `Avg Time` remained too subtle because the visible traces were no longer being averaged strongly enough for the user to perceive the longer time constants.
+
+## Plan
+- [x] Add a robust fallback stage scan so the analyser can still populate the rail from live VX Suite stages when the strict current-domain scan comes up empty.
+- [x] Make `Avg Time` act on the visible dry/wet traces more strongly so long settings like `5000 ms` and `10000 ms` clearly slow and stabilize the chart.
+- [x] Rebuild the analyser target and rerun the standing deverb regression check.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.h` / `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now carry a fallback-stage mode. If no valid stages are found in the analyser's exact current domain, the UI falls back to other recent live VX Suite stages from the shared registry instead of presenting an empty rail.
+- The diagnostics text now reports whether the rail is coming from the current domain or the fallback registry scan, which should make any remaining domain-binding issue obvious instead of silent.
+- `Avg Time` now drives a stronger second temporal averaging pass over the visible dry/wet traces themselves, not just the hidden linear intermediate state. That should make large values visibly stabilize and slow the plotted curves in a way the user can actually perceive.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyzer cross-process domain binding fix — 2026-03-18
+
+## Problem
+The latest in-host screenshot showed `live stages: 0`, which meant the analyser was only seeing its own pass-through telemetry. That explains the empty left rail, the fake dry/wet behavior, and why stage selection could not work at all. The likely root cause is cross-process hosting: external VX stages were only trying to bind to the newest analyser domain in their own process, not the newest analyser domain globally.
+
+## Plan
+- [x] Add a global active-domain lookup alongside the existing per-process lookup in the shared analysis registry.
+- [x] Make stage publishers fall back to that global analyser domain when no current-process analyser domain exists.
+- [x] Rebuild the analyser target and rerun the standing deverb regression check.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.h` / `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` now expose `DomainRegistry::latestActiveDomain(...)` in addition to `latestDomainForProcess(...)`.
+- `StagePublisher::refreshDomainBinding(...)` now first tries to bind to the newest analyser domain in the current process, and if that fails, falls back to the newest active analyser domain globally. This should let VX stages still join the analyser chain even when the host bridges plugins into separate processes.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyzer real Avg Time window — 2026-03-18
+
+## Problem
+Even after the earlier timing passes, `Avg Time` still behaved more like a subtle smoother than a real analyzer average. The user clarified the intended contract: higher values should visibly reduce fluctuation while the trace remains fluid, like SPAN's continuous RT averaging.
+
+## Plan
+- [x] Replace the editor-side exponential-only spectrum smoothing with a true rolling time window over recent spectrum frames.
+- [x] Keep the UI repaint cadence smooth while using the selected `Avg Time` value to control how much recent spectrum history contributes to the visible trace.
+- [x] Rebuild the analyser target and rerun the standing deverb regression check.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.h` / `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now maintain a rolling spectrum history per selection, along with running sums for dry and wet spectra.
+- `Avg Time` now directly controls the size of that time window. Increasing the control causes the visible spectrum to average more recent frames together, which should reduce fluctuation without turning the chart into a stepped or frozen display.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Restage VX chain after framework telemetry fixes — 2026-03-18
+
+## Problem
+The sidebar still did not repopulate in REAPER even after the framework-side domain fixes. The likely operational cause is that only `VXStudioAnalyser` had been rebuilt/restaged; the other VX Suite effects in the chain were still older binaries and therefore still publishing stage telemetry with the pre-fix shared framework behavior.
+
+## Plan
+- [x] Rebuild and restage the relevant VX Suite chain plugins so they all pick up the latest shared framework telemetry/domain changes.
+- [x] Rerun the standing deverb regression check after the full plugin restage.
+
+## Review
+- Rebuilt/restaged `VXSubtract`, `VXCleanup`, `VXDeepFilterNet`, `VXDeverb`, `VXDenoiser`, `VXProximity`, `VXTone`, `VXOptoComp`, `VXFinish`, and `VXStudioAnalyser` with `cmake --build build --target VXSubtractPlugin VXCleanupPlugin VXDeepFilterNetPlugin VXDeverbPlugin VXDenoiserPlugin VXProximityPlugin VXTonePlugin VXOptoCompPlugin VXFinishPlugin VXStudioAnalyserPlugin -j4`.
+- This ensures the whole REAPER chain now shares the same updated `VxSuiteFramework` telemetry/domain code rather than mixing a new analyser with old effect binaries.
+- Re-ran `./build/VXDeverbTests` after the full restage.
+
+# Analyzer FFT + range upgrade — 2026-03-18
+
+## Problem
+The analyser still feels fundamentally unlike SPAN because the underlying shared telemetry is too coarse. Even with better display logic, a `32`-band summary spectrum cannot present the full `20 Hz` to `20 kHz` picture with the width and separation the user expects from a real analyzer-style display.
+
+## Plan
+- [x] Increase the analyser telemetry FFT size and spectrum-band density so the dry/wet overlay can represent the audible range much more faithfully.
+- [x] Tune the analyser plot labels and scaling so the denser spectrum reads clearly from `20 Hz` to `20 kHz`.
+- [x] Build and run the affected targets/tests, then document the new analyzer contract and any remaining gaps versus SPAN.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.h` now publishes a denser analyser spectrum using a `4096`-sample FFT (`kSummarySpectrumFftOrder = 12`) and `128` display bands instead of the old `2048` / `32` summary path. That gives the dry/wet overlay much more room to represent the full `20 Hz` to `20 kHz` range rather than collapsing into a broad midrange sketch.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` continues to use the same stage-selection model on top of that denser telemetry, while the sparse-spectrum detection thresholds were widened so narrowband/test-tone cases still switch into the honest sparse display mode with the higher band count.
+- The analyser still is not a clone of SPAN: it remains a VX Suite stage-aware analyzer rather than a full dedicated meter. But the backend is no longer bottlenecked by a 32-band summary spectrum, which was the main reason the view could not feel wide enough no matter how the UI was tuned.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin VXDeverbTests -j4` and `./build/VXDeverbTests`.
+
+# Deverb loudness + analyser spectrum redesign — 2026-03-18
+
+## Problem
+`VXDeverb` currently allows a substantial output level collapse because its wet path removes energy without any restrained direct-loudness compensation. Separately, `VX Studio Analyser` still uses a `Tone/Dynamics` presentation model when the desired product direction is closer to SPAN: dry and wet spectra overlaid in one place, while keeping stage-by-stage chain selection.
+
+## Plan
+- [x] Add a bounded loudness-preservation path to `VXDeverb` so dereverbing no longer causes a large level drop simply from inserting/using the plugin.
+- [x] Add a regression test that catches unacceptable `VXDeverb` volume loss while preserving tail-reduction behavior.
+- [x] Rework `VX Studio Analyser` into a single dry-vs-wet spectrum view with the current stage-selection model, replacing the current `Tone/Dynamics` tab split in practice.
+- [x] Build and run the affected targets/tests, then document the new behavior contract and any remaining calibration work.
+
+## Review
+- `Source/vxsuite/products/deverb/VxDeverbProcessor.*` now applies a restrained post-deverb loudness compensation stage based on the dry-versus-wet RMS delta. The makeup is capped, smoothed over time, and peak-limited so `VXDeverb` no longer solves dereverbing by simply dumping overall level.
+- Added a regression in `tests/VXDeverbTests.cpp` that fails if a representative dereverb render keeps too little of the input RMS, while the existing tail-reduction/coherence tests continue to guard the actual dereverb job.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.*` now behaves as a single dry/wet spectrum viewer instead of a `Tone/Dynamics` toggle. The main plot overlays dry and wet spectra in one place, keeps the stage-chain selection model, and preserves the sparse-spectrum honesty mode for narrowband/test-like signals.
+- Added user-facing analyser controls for `Avg Time` and `Smoothing`, defaulting to `1000 ms` and `1/6 OCT` to match the supplied SPAN reference. These settings now drive the editor-side temporal averaging and frequency-domain smoothing so you can trade stability against detail.
+- The current analyser still uses the existing backend telemetry overlap, which already starts from the same 75% overlap contract as the SPAN screenshot. The new controls are editor-side timing/smoothing controls rather than a full telemetry ABI change.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin VXDeverbTests -j4` and `./build/VXDeverbTests`.
+
+# Analyzer sparse-spectrum honesty pass — 2026-03-18
+
+## Problem
+The current `VX Studio Analyser` tone view still lies on sparse or test-like material. A sine/comb-like chain that reads as distinct peaks in SPAN is being blurred into a broad connected curve and summarized with language like `Low lift`, which makes the analyser look unstable and semantically wrong even when the underlying processors are not.
+
+## Plan
+- [x] Detect sparse / narrowband tone cases in the analyser render model instead of treating every spectrum like a broad voice-shaping curve.
+- [x] Change the tone graph and summary language for sparse cases so the UI shows discrete affected bands and suppresses fake broad labels.
+- [x] Build `VXStudioAnalyserPlugin`, review the new behavior contract, and document any remaining limitations.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.*` now classifies sparse / narrowband spectra from the actual band-energy distribution before choosing how to render the tone view. Signals dominated by a few peaks no longer get automatically passed through the broad-curve path.
+- In sparse mode, the tone tab now stops neighbor-blending the bins into a fake shelf/tilt shape. It renders discrete per-band stems and markers instead, which is much closer to what tools like SPAN show for comb-like or test-tone material.
+- The tone summary text now becomes honest for sparse cases: it reports the primary changed band plus a few significant band changes and explicitly suppresses broad labels like `Low lift` or `High cut`.
+- The stage rail classifier now uses the same sparse detection, so rows that would previously chatter between `Tone`, `Dynamic`, and `Mixed` on narrowband material can identify as `Sparse` instead of pretending the change is a broad tonal shape.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4`. The existing ad-hoc code-signing replacement message appeared during VST3 staging, but the target completed successfully.
+- Remaining limitation: this is still a 32-band explanation view, not a full-resolution analyzer like SPAN. The sparse mode makes it materially more honest, but it will still summarize rather than measure every narrow peak.
+
+# Analyzer readability fixes — 2026-03-18
+
+## Problem
+`VX Studio Analyser` is functionally live, but the current in-host UI still fails the readability bar from the latest screenshots. The left stage rail does not present plugin names clearly, its first row collides with the rail header, and the Tone/Dynamics plots move too quickly and abstractly to communicate meaningful change.
+
+## Plan
+- [x] Fix the analyser stage rail layout/rendering so the header, full-chain row, and per-stage rows do not overlap and each row shows the plugin name/state/impact clearly in-host.
+- [x] Simplify and slow the tone/dynamics render model so plotted changes are easier to read, with stronger temporal smoothing/hold behaviour and less meaningless frame-to-frame motion.
+- [x] Build the analyser target, review the resulting diff, and document what changed plus any remaining calibration follow-up.
+
+## Spec Notes
+- Prefer the smallest editor-side fix that restores readable stage names and reliable hit targets.
+- Preserve the existing telemetry ABI unless the plot issue clearly requires a framework-level cadence/smoothing adjustment.
+- Favor “stable explanation” over “maximum liveness”; the analyser should read like a metering tool, not raw telemetry.
+
+## Review
+- Removed the invisible per-row `TextButton` overlay from the stage rail interaction path. Stage rows are now painted directly and selected via `mouseUp`, which avoids child-component repainting over the custom row text.
+- Added explicit spacing between the `STAGE CHAIN` header and the `Full Chain` row so the first control no longer collides with the section title.
+- Kept row text readable with fitted stage-name/state/impact text instead of relying on the hidden buttons.
+- Slowed the analyser backend refresh from 20 Hz to 10 Hz and increased tone/dynamics/summary smoothing constants so the view behaves more like a readable meter than raw telemetry.
+- Smoothed neighbouring tone bins and replaced the Catmull-Rom tone path with a direct line path so the graph stops inventing spline wiggles between sparse summary bands.
+- Compile-verified with `cmake --build build --target VXStudioAnalyserPlugin -j4`.
+- Remaining follow-up: this is compile-verified and targeted at the exact screenshot issues, but it still needs an in-host visual check to confirm the new cadence feels right across real material.
+
+# VX Studio Analyser UI correction pass — 2026-03-18
+
+## Problem
+The rebuilt analyser still misses the usability bar in-host: the left stage rail does not reliably show plugin names and the rail header overlaps the top control, while the tone/dynamics plots feel too twitchy and semantically weak to read as a practical explanation tool.
+
+## Plan
+- [x] Fix the stage rail layout/render path so the header has its own space and every live stage name is visibly rendered.
+- [x] Simplify and stabilize the tone/dynamics display model so changes read as broad, interpretable processor behaviour instead of fast-moving telemetry.
+- [x] Build `VXStudioAnalyserPlugin`, review the result, and document any remaining calibration gaps.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.*` no longer relies on invisible `TextButton` overlays for stage selection. The stage rail is now painted directly, stage clicks are resolved via row hit-testing, and the rail header has dedicated vertical space above the `Full Chain` control, so the plugin names/state text are no longer hidden under button painting or overlapping the header region.
+- The analyser display cadence is calmer: backend refresh moved from 50 ms to 100 ms, tone/dynamics summary smoothing was lengthened, tiny tone deltas are suppressed, and neighboring bins are blended before rendering so the curves read as broad processor moves instead of frame-by-frame FFT chatter.
+- The tone path now draws a direct band-connected line instead of the previous overshooting spline, which removes fake wiggles between analyzer bands. Dynamics curves also get an extra neighbor-smoothing pass before the path is built, so the history panel is easier to read.
+- Cleaned up text presentation alongside the fix: the title/header stack now includes the `VX SUITE` label again, the summary card only shows the actionable lines, and diagnostics/dynamics text now uses plain ASCII state words instead of the broken glyphs shown in-host.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4`. The VST3 restage emitted the existing ad-hoc code-signing replacement message but completed successfully.
+- Remaining caveat: this pass is compile-verified and targeted to the exact issues from the screenshots, but I have not done a fresh REAPER visual check from this environment. The next refinement, if needed, should be based on one more in-host screenshot so we can tune readability rather than guess at it.
+
 # Analyzer smoothing + render contract — 2026-03-18
 
 ## Problem
@@ -14,6 +201,7 @@
 - `VXStudioAnalyserProcessor` now publishes its own pass-through stage telemetry as a dry baseline. The editor excludes that analyzer stage from the visible chain, but uses it when there are no active upstream VX processors so the UI shows a stable dry/zero-change state instead of looking empty.
 - `VXStudioAnalyserEditor` was split into a backend/render pipeline: a `HighResolutionTimer` builds the render model at 20 Hz, a UI timer applies it at 30 Hz, and `paint()` now only draws the already-prepared model. Telemetry reads, scope resolution, smoothing, and summary generation are out of the paint path.
 - Tone rendering now follows the requested contract more closely: log-frequency axis, centered dB range, delta-first fill, faint before/after context, largest-change marker, and summary-strip language derived from smoothed values. Dynamics now shows RMS-over-time in dBFS with proper meter-style axes instead of unlabeled abstract traces.
+- The analyzer chrome now follows the same VX Suite shell more closely: quieter rounded panels, stronger typographic hierarchy, a calmer stage rail, a dedicated summary card, and smoothed spline-style curve drawing so the hero graph feels closer to an industry EQ/dynamics tool rather than a raw debug plot.
 - Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `cmake --build build --target VXCleanupPlugin -j4`.
 - Remaining caveat: this pass is compile-verified and architecture-aligned, but not yet visually calibrated in-host after the new smoothing constants landed. The next likely refinement, if needed, is tuning summary wording or graph normalization from real screenshots rather than changing the transport again.
 

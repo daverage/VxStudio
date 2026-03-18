@@ -119,6 +119,19 @@ float tailRms(const juce::AudioBuffer<float>& buffer, const int startSample) {
     return std::sqrt(energy / std::max(1, count));
 }
 
+float rms(const juce::AudioBuffer<float>& buffer) {
+    double energy = 0.0;
+    int count = 0;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* s = buffer.getReadPointer(ch);
+        for (int i = 0; i < buffer.getNumSamples(); ++i) {
+            energy += static_cast<double>(s[i]) * s[i];
+            ++count;
+        }
+    }
+    return std::sqrt(energy / std::max(1, count));
+}
+
 float lowBandRatio(const juce::AudioBuffer<float>& buffer, const double sampleRate) {
     float lp = 0.0f;
     const float alpha = onePoleAlpha(sampleRate, 190.0f);
@@ -305,6 +318,27 @@ bool testBodyRestoreIsIntentional() {
     return true;
 }
 
+bool testReduceKeepsUsableOutputLevel() {
+    constexpr double sr = 48000.0;
+    auto dry = makeSpeechLike(sr, 1.2f);
+    auto room = addRoomTail(dry, sr);
+
+    VXDeverbAudioProcessor processor;
+    processor.setDebugDeterministicReset(true);
+    processor.prepareToPlay(sr, room.getNumSamples());
+    auto out = render(processor, room, 0.82f, 0.0f);
+
+    const float inRms = rms(room);
+    const float outRms = rms(out);
+    const float retained = outRms / std::max(1.0e-6f, inRms);
+    if (retained < 0.62f) {
+        std::cerr << "[VXDeverbTests] expected deverb to preserve usable level: in_rms="
+                  << inRms << " out_rms=" << outRms << " retained=" << retained << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool testRt60Estimator() {
     using vxsuite::deverb::LollmannRt60Estimator;
     constexpr double sr = 48000.0;
@@ -482,6 +516,7 @@ int main() {
     ok &= testFullyWetStaysCoherentWithDelayedDry();
     ok &= testReduceChangesAudioAndLowersTail();
     ok &= testBodyRestoreIsIntentional();
+    ok &= testReduceKeepsUsableOutputLevel();
     ok &= testResetAndSilenceRecovery();
     ok &= testRt60Estimator();
     ok &= testWpeVoiceMode();

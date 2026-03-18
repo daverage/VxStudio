@@ -1,5 +1,18 @@
 # Lessons
 
+- In analyzer UIs, `Avg Time` and spectral `Smoothing` are different dimensions: `Avg Time` must be continuous temporal averaging of spectrum frames, not a throttled or stepped repaint cadence, while `Smoothing` should stay a separate frequency-domain blur.
+- When an analyzer spectrum gets denser, do not keep old fixed-neighbor smoothing radii; map smoothing options by octave width or bins-per-octave, otherwise controls like `1/6 OCT` become visually inert.
+- Analyzer stage rails should tolerate realistic telemetry jitter; if a freshness filter is too aggressive, the UI can collapse to misleading `Full Chain` fallback even while the chain is still live.
+- If an analyzer depends on domain-scoped live telemetry, provide a visible fallback path or diagnostics when the domain scan comes up empty; otherwise the UI can look broken even though usable recent stage data still exists in the shared registry.
+- For host-integrated cross-plugin telemetry, do not assume all plugins live in the same process; per-process domain lookup needs a global fallback or bridged hosts will make the analyzer appear empty.
+- If an analyzer's `Avg Time` is expected to behave like SPAN, do not approximate it with a single-frame EMA alone; use a real rolling time window over recent spectrum frames so fluctuation visibly reduces while motion stays continuous.
+- After shared-framework telemetry fixes, rebuild/restage the whole VX plugin chain, not just the analyser; otherwise the host can keep running old effect binaries and the analyzer symptoms will look like the fix failed.
+- Once an analyser product is expected to feel like a real spectrum meter, a coarse summary spectrum is no longer sufficient; upgrade the shared telemetry FFT/band density instead of trying to fake width and range through UI smoothing, offsets, or styling.
+- For correction/removal products like Deverb, do not accept large output-level loss as “just the cost of subtraction”; preserve direct-signal loudness with bounded compensation after the main removal path, and lock it in with an RMS-retention regression test.
+- When users calibrate an analyser against a reference meter like SPAN, expose the key presentation controls they actually use (at minimum average time and spectrum smoothing) instead of hardcoding one editorial view.
+- In analyzer UIs, never smooth sparse or narrowband spectra into the same connected broad-shape view used for voice-wide EQ changes; detect peak-dominated/test-tone cases first and switch to a discrete representation plus explicit “broad summary suppressed” language.
+- In VX Suite analyser/editor UIs, do not place invisible `TextButton` hit targets over custom-painted stage rows; the shared look-and-feel will still paint the child control and can hide the row text entirely. Paint the row directly and handle hit-testing explicitly when the row itself owns the visual contract.
+- For analyzer-style plots, avoid fast frame-by-frame telemetry presentation even when the backend is technically correct; slow the publish/render cadence, suppress tiny deltas, and smooth neighboring bins so the display reads as a stable explanation tool rather than jittery debug output.
 - When the user asks for extraction instead of copying, prefer factoring shared logic into active VX Suite code and reusing it from the old path so legacy files visibly shrink in responsibility.
 - Never leave a new VX Suite product linked to sibling-repo legacy code; import the needed implementation into this repo and improve it locally before wiring the product.
 - For profile-based cleanup tools, match the product mental model literally: `Learn` should be an explicit non-destructive capture/commit flow, not a hidden auto-stop heuristic layered on top of a profile-removal UI.
@@ -26,3 +39,4 @@
 - When mapping a bipolar normalized control around center, do not use the 3-argument `juce::jmap`; it treats the input as 0..1 and will silently shift a neutral `0.5` control off-center.
 - When the user asks to replace an analyzer product with a new stage-aware design, do not carry the old analyzer UI forward under a new name; replace the interaction and render model itself so the product matches the agreed explanation contract.
 - Analyzer visuals are only as good as their semantic contract: before making plots prettier, lock the cadence, units, smoothing, axes, and dry-baseline behavior so the graph reads like a familiar EQ/dynamics tool instead of debug telemetry.
+- For analyzer stage rails, do not paint informative row content underneath live child controls; either let the row component own its text or handle hit-testing separately, otherwise plugin names can disappear even when the data model is correct.

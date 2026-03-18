@@ -491,7 +491,7 @@ namespace vxsuite::analysis {
 namespace {
 
 constexpr std::uint32_t kAnalysisSharedMagic = 0x5658414Eu; // VXAN
-constexpr std::uint32_t kAnalysisSharedVersion = 1u;
+constexpr std::uint32_t kAnalysisSharedVersion = 2u;
 constexpr auto kAnalysisSharedLockName = "vxsuite-analysis-telemetry-lock";
 constexpr auto kAnalysisSharedFileName = "vxsuite-analysis-telemetry.bin";
 constexpr auto kDomainSharedFileName = "vxsuite-analysis-domains.bin";
@@ -845,16 +845,23 @@ void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept
 
             double powerSum = 0.0;
             double weightSum = 0.0;
+            float peakMagnitude = 0.0f;
             for (int bin = startBin; bin <= endBin; ++bin) {
                 const float re = fftScratch[static_cast<std::size_t>(bin * 2)];
                 const float im = fftScratch[static_cast<std::size_t>(bin * 2 + 1)];
                 const double magnitude = std::sqrt(static_cast<double>(re) * re + static_cast<double>(im) * im) * fftScale;
                 powerSum += magnitude * magnitude;
                 weightSum += 1.0;
+                peakMagnitude = std::max(peakMagnitude, static_cast<float>(magnitude));
             }
 
-            spectrum[static_cast<std::size_t>(band)] =
-                weightSum > 0.0 ? static_cast<float>(std::sqrt(powerSum / weightSum)) : 0.0f;
+            if (weightSum > 0.0) {
+                const float rmsMagnitude = static_cast<float>(std::sqrt(powerSum / weightSum));
+                // Preserve prominent partials instead of flattening each log bucket into a broad RMS hump.
+                spectrum[static_cast<std::size_t>(band)] = 0.75f * peakMagnitude + 0.25f * rmsMagnitude;
+            } else {
+                spectrum[static_cast<std::size_t>(band)] = 0.0f;
+            }
         }
     }
 }
@@ -963,6 +970,28 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
         if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
             continue;
         if (slot.hostProcessId != hostProcessId)
+            continue;
+        if (!found || slot.creationTimeMs > out.creationTimeMs) {
+            out.active = true;
+            out.slotIndex = slotIndex;
+            out.analysisDomainId = slot.analysisDomainId;
+            out.hostProcessId = slot.hostProcessId;
+            out.creationTimeMs = slot.creationTimeMs;
+            found = true;
+        }
+    }
+    return found;
+}
+
+bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
+    auto* state = domainState();
+    if (state == nullptr)
+        return false;
+
+    bool found = false;
+    for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+        auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
             continue;
         if (!found || slot.creationTimeMs > out.creationTimeMs) {
             out.active = true;
@@ -1128,6 +1157,7 @@ void StagePublisher::prepare(const double sampleRate, const int maxBlockSize) no
     domainRefreshCountdown = kDomainRefreshSamples;
     inputAccumulator->prepare(currentSampleRate, publishIntervalSamples);
     outputAccumulator->prepare(currentSampleRate, publishIntervalSamples);
+    refreshDomainBinding(true);
     ensureRegistered();
 }
 
@@ -1175,10 +1205,11 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
 
     domainRefreshCountdown = kDomainRefreshSamples;
     DomainView domain;
-    const auto newDomainId =
-        DomainRegistry::instance().latestDomainForProcess(DomainRegistry::instance().currentProcessId(), domain)
-            ? domain.analysisDomainId
-            : 0;
+    const auto& registry = DomainRegistry::instance();
+    const bool foundDomain =
+        registry.latestDomainForProcess(registry.currentProcessId(), domain)
+        || registry.latestActiveDomain(domain);
+    const auto newDomainId = foundDomain ? domain.analysisDomainId : 0;
 
     if (!force && newDomainId == analysisDomainIdValue)
         return;

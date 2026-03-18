@@ -1,24 +1,26 @@
 #pragma once
 
+#include "../../framework/VxSuiteLookAndFeel.h"
 #include "../../framework/VxSuiteSpectrumTelemetry.h"
 #include "VXStudioAnalyserProcessor.h"
 
 #include <array>
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class VXStudioAnalyserEditor final : public juce::AudioProcessorEditor,
-                                     private juce::Timer,
-                                     private juce::HighResolutionTimer {
+                                     private juce::Timer {
 public:
     explicit VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor&);
     ~VXStudioAnalyserEditor() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseUp(const juce::MouseEvent& event) override;
 
 private:
     enum class Tab {
@@ -36,12 +38,16 @@ private:
 
     struct RenderModel {
         bool valid = false;
+        bool sparseTone = false;
+        bool fallbackStages = false;
+        bool snapshotFallback = false;
         std::uint64_t generation = 0;
         juce::String statusText;
         juce::String selectionTitle;
         std::array<juce::String, 4> summaryLines {};
         juce::String diagnosticsText;
         std::vector<ChainRow> chainRows;
+        std::vector<int> sparseToneBands;
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> deltaToneDb {};
@@ -51,10 +57,22 @@ private:
     };
 
     struct BackendState {
+        struct SpectrumHistoryFrame {
+            std::uint64_t timestampMs = 0;
+            std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeLinear {};
+            std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterLinear {};
+        };
+
         bool initialized = false;
         juce::String selectionKey;
+        std::deque<SpectrumHistoryFrame> spectrumHistory;
+        std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeToneLinearSum {};
+        std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterToneLinearSum {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeToneLinear {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterToneLinear {};
+        std::array<float, vxsuite::analysis::kSummarySpectrumBins> displayBeforeToneDb {};
+        std::array<float, vxsuite::analysis::kSummarySpectrumBins> displayAfterToneDb {};
+        std::array<float, vxsuite::analysis::kSummarySpectrumBins> displayDeltaToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> deltaToneDb {};
         std::array<float, vxsuite::analysis::kSummaryEnvelopeBins> beforeDynamicsLinear {};
         std::array<float, vxsuite::analysis::kSummaryEnvelopeBins> afterDynamicsLinear {};
@@ -82,13 +100,14 @@ private:
     };
 
     void timerCallback() override;
-    void hiResTimerCallback() override;
     void refreshRenderModel();
     void applyPendingRenderModel();
     void rebuildStageButtons();
     void selectStage(int index);
     void selectFullChain();
     void updateTabButtons();
+    [[nodiscard]] float currentAverageTimeSeconds() const noexcept;
+    [[nodiscard]] int currentSpectrumSmoothingRadius() const noexcept;
 
     [[nodiscard]] juce::Path makeTonePath(const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& valuesDb,
                                           juce::Rectangle<float> bounds) const;
@@ -97,11 +116,15 @@ private:
     [[nodiscard]] juce::Colour colourFromRgb(const std::array<float, 3>& rgb, float alpha = 1.0f) const noexcept;
 
     VXStudioAnalyserAudioProcessor& processor;
+    vxsuite::SuiteLookAndFeel lookAndFeel;
 
     std::atomic<int> selectedStageIndex { -1 };
     std::atomic<bool> fullChainSelected { true };
     std::atomic<int> currentTabIndex { static_cast<int>(Tab::tone) };
+    std::atomic<int> averageTimeIndex { 3 };
+    std::atomic<int> smoothingIndex { 3 };
     bool diagnosticsExpanded = false;
+    bool chainCollapsed = false;
 
     juce::SpinLock renderModelLock;
     RenderModel pendingRenderModel;
@@ -112,15 +135,20 @@ private:
     BackendState backendState;
 
     juce::Label titleLabel;
+    juce::Label suiteLabel;
     juce::Label subtitleLabel;
     juce::Label statusLabel;
     juce::Label selectionLabel;
     juce::Label summaryLabel;
+    juce::Label averageTimeLabel;
+    juce::Label smoothingLabel;
     juce::TextButton fullChainButton;
     juce::TextButton toneTabButton;
     juce::TextButton dynamicsTabButton;
+    juce::TextButton chainToggleButton;
     juce::TextButton diagnosticsToggleButton;
-    std::vector<std::unique_ptr<juce::TextButton>> stageButtons;
+    juce::ComboBox averageTimeBox;
+    juce::ComboBox smoothingBox;
 
     juce::Rectangle<int> chainBounds;
     juce::Rectangle<int> contentBounds;
@@ -128,4 +156,5 @@ private:
     juce::Rectangle<int> tabsBounds;
     juce::Rectangle<int> plotBounds;
     juce::Rectangle<int> diagnosticsBounds;
+    std::vector<juce::Rectangle<int>> stageRowBounds;
 };

@@ -110,9 +110,9 @@ namespace vxsuite::analysis {
 
 constexpr int kMaxDomains = 8;
 constexpr int kMaxStageSlots = 48;
-constexpr int kSummarySpectrumBins = 32;
+constexpr int kSummarySpectrumBins = 256;
 constexpr int kSummaryEnvelopeBins = 96;
-constexpr int kSummarySpectrumFftOrder = 11;
+constexpr int kSummarySpectrumFftOrder = 13;
 constexpr int kSummarySpectrumFftSize = 1 << kSummarySpectrumFftOrder;
 
 enum class DetailLevel : std::uint8_t {
@@ -226,6 +226,7 @@ public:
     std::uint64_t registerAnalyserDomain() noexcept;
     void unregisterAnalyserDomain(std::uint64_t analysisDomainId) noexcept;
     [[nodiscard]] bool latestDomainForProcess(std::uint64_t hostProcessId, DomainView& out) const noexcept;
+    [[nodiscard]] bool latestActiveDomain(DomainView& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
 };
 
