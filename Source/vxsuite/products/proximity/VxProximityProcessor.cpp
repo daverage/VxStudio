@@ -93,15 +93,7 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
 void VXProximityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                                     const juce::AudioBuffer<float>& inputBuffer) {
-    // Proximity is additive: wet = dry + effect. Listen plays wet - dry (the added effect).
-    const int channels = std::min(outputBuffer.getNumChannels(), inputBuffer.getNumChannels());
-    const int samples  = std::min(outputBuffer.getNumSamples(),  inputBuffer.getNumSamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        auto*       out = outputBuffer.getWritePointer(ch);
-        const auto* in  = inputBuffer.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = out[i] - in[i];
-    }
+    renderAddedDeltaOutput(outputBuffer, inputBuffer);
 }
 
  #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)

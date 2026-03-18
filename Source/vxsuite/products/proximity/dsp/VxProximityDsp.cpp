@@ -115,14 +115,14 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     // Low-shelf tuning
     const float lowFcMin = isVoice ?  80.f : 120.f;
     const float lowFcMax = isVoice ? 200.f : 300.f;
-    const float lowGainMax = isVoice ? 8.5f : 7.0f;
+    const float lowGainMax = isVoice ? 6.0f : 5.2f;
 
     const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * closer;
     const float lowGain  = lowGainMax * closer * closer;
 
     // High-shelf tuning
     const float highFc   = isVoice ? 3500.f : 8000.f;
-    const float highGain = 4.0f * air;
+    const float highGain = 3.0f * air;
 
     const BiquadCoeffs lowC  = makeLowShelf (sr, lowFc,  lowGain);
     const BiquadCoeffs highC = makeHighShelf(sr, highFc, highGain);

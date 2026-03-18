@@ -81,6 +81,7 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
 
   const Mode mode = p.mode;
   const float pr01 = clamp01(p.peakReduction);
+  const bool compressionEnabled = pr01 > 1.0e-4f;
 
   // Targets from documentation:
   // - Attack effectively fixed-ish. Use ~10ms (time constant-ish).
@@ -157,8 +158,11 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
     // Effective input to gain computer
     const float drivenDb = scDb + driveDb;
 
-    // Static curve => target gain reduction
-    const float targetGrDb = std::max(0.0f, gainReductionSoftKneeDb(drivenDb, baseThresholdDb, ratio, kneeDb));
+    // When Peak Reduction is at zero, the opto stage should behave like a transparent
+    // makeup/body wrapper rather than a still-live fixed-threshold compressor.
+    const float targetGrDb = compressionEnabled
+        ? std::max(0.0f, gainReductionSoftKneeDb(drivenDb, baseThresholdDb, ratio, kneeDb))
+        : 0.0f;
 
     // Update memory state:
     // target is proportional to GR; decay slower than rise.
@@ -213,7 +217,7 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
 
   // Activity: normalise GR amount for UI
   const float grAvgDb = grAcc / static_cast<float>(numSamples);
-  activity01 = clamp01(grAvgDb / 12.0f); // 12dB -> “full” activity
+  activity01 = compressionEnabled ? clamp01(grAvgDb / 12.0f) : 0.0f; // 12dB -> “full” activity
 
   // Optional gentle tone shaping after compression
   applyBodyShelf(buffer);

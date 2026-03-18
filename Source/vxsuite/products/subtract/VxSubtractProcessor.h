@@ -42,6 +42,9 @@ private:
     bool learnToggleLatched = false;
     std::vector<float> savedLearnProfile;
     float savedLearnConfidence = 0.0f;
+    double savedLearnProfileSampleRate = 0.0;
+    int savedLearnProfileFftSize = 0;
+    int savedLearnProfileHopSize = 0;
     std::atomic<float> learnProgress { 0.0f };
     std::atomic<float> learnConfidence { 0.0f };
     std::atomic<float> learnObservedSeconds { 0.0f };

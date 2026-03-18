@@ -240,8 +240,8 @@ Two independent biquad IIR shelf filters — one low shelf (bass) and one high s
 
 | Mode | Bass shelf | Treble shelf | Gain range |
 |---|---|---|---|
-| **Vocal** | 200 Hz | 6 000 Hz | ±8 dB |
-| **General** | 120 Hz | 8 000 Hz | ±12 dB |
+| **Vocal** | 200 Hz | 6 000 Hz | ±5 dB |
+| **General** | 120 Hz | 8 000 Hz | ±6 dB |
 
 Vocal mode positions the shelves so the 200 Hz–6 kHz speech band is left completely untouched — you can boost the warmth below it or add air above it without affecting consonants or fundamentals.
 
@@ -362,5 +362,7 @@ Source/vxsuite/
     ├── subtract/                      ← VXSubtract
     ├── proximity/                     ← VXProximity
     ├── denoiser/                      ← VXDenoiser
-    └── deepfilternet/                 ← VXDeepFilterNet (ML)
+    ├── deepfilternet/                 ← VXDeepFilterNet (ML)
+    ├── OptoComp/                      ← VXOptoComp (opto compressor)
+    └── analyser/                      ← VXStudioAnalyser (chain analyser)
 ```

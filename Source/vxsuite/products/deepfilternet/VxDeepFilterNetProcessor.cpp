@@ -29,7 +29,7 @@ juce::String describeVariant(const vxsuite::deepfilternet::DeepFilterService::Mo
 
 VXDeepFilterNetAudioProcessor::VXDeepFilterNetAudioProcessor()
     : ProcessorBase(makeIdentity()) {
-    startTimerHz(4);
+    startTimerHz(30);
 }
 
 VXDeepFilterNetAudioProcessor::~VXDeepFilterNetAudioProcessor() {
@@ -84,7 +84,6 @@ void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const 
 }
 
 void VXDeepFilterNetAudioProcessor::resetSuite() {
-    engine.resetRealtime();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
     controlsPrimed = false;
@@ -131,7 +130,8 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     }
 
     const auto variant = selectedModelVariant();
-    float effectiveClean = vxsuite::clamp01(0.10f + 0.90f * smoothedClean);
+    const float wetMix = vxsuite::clamp01(smoothedClean);
+    float effectiveClean = wetMix;
     if (variant == ModelVariant::dfn2) {
         // DFN2 reacts badly to post dry/wet recombination, so Guard should
         // mainly back off the model drive rather than reintroduce dry signal.
@@ -141,16 +141,20 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
 
     if (processed) {
         ensureLatencyAlignedListenDry(numSamples);
-        const float guardRecovery = variant == ModelVariant::dfn2
-            ? 0.0f
-            : vxsuite::clamp01(0.18f * smoothedGuard);
-        const auto& alignedDryScratch = getLatencyAlignedListenDryBuffer();
-        for (int ch = 0; ch < numChannels; ++ch) {
-            auto* wet = buffer.getWritePointer(ch);
-            const auto* dry = alignedDryScratch.getReadPointer(ch);
-            for (int i = 0; i < numSamples; ++i)
-                wet[i] = wet[i] + (dry[i] - wet[i]) * guardRecovery;
-        }
+        blendProcessedWithDry(buffer, wetMix);
+    }
+}
+
+void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<float>& buffer, const float wetMix) {
+    const auto& alignedDryScratch = getLatencyAlignedListenDryBuffer();
+    const int channels = std::min(buffer.getNumChannels(), alignedDryScratch.getNumChannels());
+    const int samples = std::min(buffer.getNumSamples(), alignedDryScratch.getNumSamples());
+    const float wet = vxsuite::clamp01(wetMix);
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* processed = buffer.getWritePointer(ch);
+        const auto* dry = alignedDryScratch.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i)
+            processed[i] = dry[i] + (processed[i] - dry[i]) * wet;
     }
 }
 

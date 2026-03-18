@@ -7,8 +7,8 @@
 
 #include <juce_dsp/juce_dsp.h>
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 namespace vxsuite::deverb {
 
@@ -199,7 +199,7 @@ private:
     std::vector<ChannelState> chans; ///< one entry per audio channel
 
     // ── Löllmann blind RT60 estimator (shared across channels) ───────────────
-    LollmannRt60Estimator rt60Estimator;
+    std::vector<LollmannRt60Estimator> rt60Estimators;
 
     // ── WPE scratch (pre-allocated in prepare(), no audio-thread allocation) ─
     std::vector<float> wpeReScratch;

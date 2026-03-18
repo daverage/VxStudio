@@ -400,11 +400,6 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const bool voiceMode = options.isVoiceMode;
     const float wetCore  = labRaw ? wet : vxsuite::clamp01(wet * (1.0f - 0.10f * wet));
     const bool subtractEnabled = subMixGlobal > 1.0e-4f && learnedProfileReady;
-    // Allow one transition block when learning just stopped so the frozen
-    // profile can finalize even if wet amount is zero (subtract-only workflows).
-    if (wet <= 0.0f && !learning && !subtractEnabled && !learningPrev)
-        return false;
-
     // Learn phase transitions
     if (learning && !learningPrev) {
         std::fill(learnAccum.begin(), learnAccum.end(), 0.0f);

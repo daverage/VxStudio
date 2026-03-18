@@ -6,9 +6,11 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -56,8 +58,12 @@ public:
     RealtimeCapability realtimeCapability() const noexcept { return rtCapability; }
     RealtimeBackend realtimeBackend() const noexcept { return rtBackend; }
     const juce::String& realtimeBackendTag() const noexcept { return rtBackendTag; }
-    void setModelVariant(ModelVariant v) noexcept { modelVariant = v; }
-    ModelVariant getModelVariant() const noexcept { return modelVariant; }
+    void setModelVariant(ModelVariant v) noexcept {
+        requestedVariant.store(static_cast<int>(v), std::memory_order_relaxed);
+    }
+    ModelVariant getModelVariant() const noexcept {
+        return static_cast<ModelVariant>(requestedVariant.load(std::memory_order_relaxed));
+    }
 
 private:
     enum class StatusCode {
@@ -99,36 +105,51 @@ private:
         std::vector<float> resampleOut;
     };
 
-    void releaseRuntime();
+    struct RuntimeBundle {
+        std::array<ChannelState, rtMaxChannels> channels {};
+        double sampleRate = 48000.0;
+        int blockSize = 0;
+        int frameLength = 480;
+        int latencySamples = 0;
+        bool ready = false;
+        juce::File modelFile;
+        juce::String backendTag { "none" };
+        RealtimeCapability capability = RealtimeCapability::unavailable;
+        RealtimeBackend backend = RealtimeBackend::none;
+        RuntimeApi runtimeApi = RuntimeApi::none;
+        ModelVariant preparedVariant = ModelVariant::dfn3;
+    };
+
+    void releaseBundle(RuntimeBundle& bundle);
+    bool prepareBundle(RuntimeBundle& bundle, double sampleRate, int maxBlockSize, ModelVariant variant);
+    void waitForReaders(int bundleIndex) const noexcept;
     void setStatus(StatusCode code) noexcept { statusCode.store(code, std::memory_order_relaxed); }
-    bool prepareModelFile();
-    bool prepareChannel(ChannelState& channel, int maxBlockSize);
-    int latencySamplesForCurrentVariant() const noexcept;
-    RuntimeApi selectedRuntimeApi() const noexcept;
-    void* createRuntime(const juce::String& modelPath, float attenuationLimitDb) const;
-    void destroyRuntime(void* runtime) const;
-    int runtimeFrameLength(void* runtime) const;
-    void setRuntimeAttenuation(void* runtime, float attenuationLimitDb) const;
-    float processRuntimeFrame(void* runtime, float* input, float* output) const;
+    bool prepareModelFile(ModelVariant variant, juce::File& modelFileOut);
+    bool prepareChannel(ChannelState& channel, const RuntimeBundle& bundle);
+    int latencySamplesForVariant(ModelVariant variant, double sampleRate) const noexcept;
+    RuntimeApi selectedRuntimeApi(ModelVariant variant) const noexcept;
+    void* createRuntime(RuntimeApi api, const juce::String& modelPath, float attenuationLimitDb) const;
+    void destroyRuntime(RuntimeApi api, void* runtime) const;
+    int runtimeFrameLength(RuntimeApi api, void* runtime) const;
+    void setRuntimeAttenuation(RuntimeApi api, void* runtime, float attenuationLimitDb) const;
+    float processRuntimeFrame(RuntimeApi api, void* runtime, float* input, float* output) const;
     juce::File modelAssetForVariant(ModelVariant variant) const;
     juce::String binaryDataNameForVariant(ModelVariant variant) const;
-    bool extractEmbeddedModel(const juce::File& destination);
+    bool extractEmbeddedModel(ModelVariant variant, const juce::File& destination);
     float attenuationLimitForStrength(float strength) const noexcept;
 
-    std::array<ChannelState, rtMaxChannels> channels {};
-    double rtSampleRate = 48000.0;
-    int rtBlockSize = 0;
-    int rtFrameLength = 480;
+    std::array<RuntimeBundle, 2> bundles {};
+    std::array<std::atomic<int>, 2> bundleReaders { 0, 0 };
+    std::atomic<int> activeBundleIndex { -1 };
+    std::atomic<int> requestedVariant { static_cast<int>(ModelVariant::dfn3) };
     int latencySamples = 0;
     float tailPrior = 0.0f;
     bool rtReady = false;
-    juce::File extractedModelFile;
     juce::String rtBackendTag { "none" };
     RealtimeCapability rtCapability = RealtimeCapability::unavailable;
     RealtimeBackend rtBackend = RealtimeBackend::none;
-    RuntimeApi rtRuntimeApi = RuntimeApi::none;
+    std::atomic<bool> resetRequested { false };
     std::atomic<StatusCode> statusCode { StatusCode::idle };
-    ModelVariant modelVariant = ModelVariant::dfn3;
     ModelVariant rtPreparedVariant = ModelVariant::dfn3;
 };
 

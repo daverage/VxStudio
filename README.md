@@ -1,7 +1,7 @@
 # VX Suite
 
 > **Focused, realtime-safe audio processors for voice and vocal production.**
-> Seven plugins. One shared framework. One job each.
+> Ten plugins. One shared framework. One job each.
 
 VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
 
@@ -22,7 +22,10 @@ This repo contains one of the few implementations of de-reverb or deverb / rever
 | **VXDeverb** | Room tail and reverb removal | `Reduce` · `Blend` | Echoey rooms, distant speech, reverberant dialogue |
 | **VXProximity** | Close-mic tone shaping | `Closer` · `Air` | Intimacy, warmth, fullness after cleanup |
 | **VXCleanup** | Corrective voice cleanup | `Cleanup` · `Body` · `Focus` | Mud, harshness, breaths, plosives, sibilance |
+| **VXTone** | Bass and treble tone shaping | `Bass` · `Treble` | Warmth, brightness, tonal balance after cleanup |
 | **VXFinish** | Smart finish and level control | `Finish` · `Body` · `Gain` | Compression, recovery lift, controlled loudness, final polish |
+| **VXOptoComp** | LA2A-style opto compression | `Peak Red.` · `Body` · `Gain` | Natural levelling, limiting, smooth dynamic control |
+| **VXStudioAnalyser** | Chain analyser | — | Inspecting the VX chain, dry input, per-stage traces, and final wet result |
 
 ---
 
@@ -31,7 +34,7 @@ This repo contains one of the few implementations of de-reverb or deverb / rever
 VX Suite is designed around composability. Each plugin complements the others without duplicating them. When a recording has multiple problems, this order works best:
 
 ```
-VXDeepFilterNet / VXDenoiser / VXSubtract  →  VXDeverb  →  VXCleanup  →  VXProximity  →  VXFinish
+VXDeepFilterNet / VXDenoiser / VXSubtract  →  VXDeverb  →  VXCleanup  →  VXProximity  →  VXTone  →  VXFinish / VXOptoComp  [→  VXStudioAnalyser]
 ```
 
 **Why this order:**
@@ -40,16 +43,21 @@ VXDeepFilterNet / VXDenoiser / VXSubtract  →  VXDeverb  →  VXCleanup  →  V
 2. **Remove room tail before tone-shaping** — proximity or polish moves can emphasize reverberant smear if applied to an untreated room recording.
 3. **Clean up tone before enhancement** — subtractive cleanup prevents later processors from lifting mud, breaths, or harshness back up.
 4. **Add closeness after cleanup** — proximity-style shaping works better on a stable, already-cleaner source.
-5. **Finish last** — compression, recovery, and smart gain are safest once the signal is already controlled.
+5. **Shape tone after proximity** — VXTone shelves work best on a signal that already has the right spatial character.
+6. **Compress and finish last** — VXFinish or VXOptoComp are safest once the signal is already clean and shaped. Use VXFinish for smart recovery and gain, VXOptoComp when you want opto-style levelling or limiting character.
+7. **VXStudioAnalyser at the very end** — insert it last in the chain to inspect dry input, matched per-plugin traces, and the final wet result simultaneously. It is pass-through and adds no colouration.
 
 ### Practical Examples
 
 ```
 Heavy street noise, reflective room:
-  VXDeepFilterNet → VXDeverb → VXCleanup → VXFinish
+  VXDeepFilterNet → VXDeverb → VXCleanup → VXFinish → VXStudioAnalyser
 
 HVAC noise, thin and distant vocal:
-  VXSubtract → VXDeverb → VXCleanup → VXProximity → VXFinish
+  VXSubtract → VXDeverb → VXCleanup → VXProximity → VXTone → VXFinish
+
+Levelling and polish after a clean recording:
+  VXCleanup → VXTone → VXOptoComp
 ```
 
 ### Denoiser Choice
@@ -60,6 +68,25 @@ HVAC noise, thin and distant vocal:
 | General steady broadband noise (hiss, fans) | **VXDenoiser** |
 | Noise with a learnable spectral fingerprint | **VXSubtract** |
 | Both present | Use ML isolation first, then target remaining steady beds |
+
+### REAPER Preset Pack
+
+The repo now includes a REAPER-facing preset pack under [`assets/reaper/`](assets/reaper/):
+
+- [`assets/reaper/RPL Files/`](assets/reaper/RPL%20Files) contains one `.RPL` library per VX effect.
+- [`assets/reaper/FX Chains/`](assets/reaper/FX%20Chains) contains full `.RfxChain` starting chains for the shared scenarios below.
+- [`tools/reaper/generate_vx_reaper_presets.lua`](tools/reaper/generate_vx_reaper_presets.lua) regenerates both from the current VX Suite plug-ins inside REAPER.
+
+Each effect library uses the same four preset names so a REAPER user can pick the same scenario title in every tool when building a chain manually:
+
+| Preset | Use Case | Recommended Chain |
+|---|---|---|
+| `Camera Review - Far Phone` | Slightly noisy review-to-camera audio from a phone a few meters from the presenter. This is the strongest full-stack voice-repair example. | `VXSubtract → VXCleanup → VXDenoiser → VXDeepFilterNet → VXDeverb → VXProximity → VXTone → VXOptoComp → VXFinish` |
+| `Live Music - Front Of Room` | Single-point live music or rehearsal capture where preserving the whole mix matters more than voice isolation. | `VXCleanup → VXTone → VXOptoComp → VXFinish` |
+| `Podcast Finishing - Clean Voice` | Already-decent spoken-word capture that mainly needs polish, density, and tonal finishing. | `VXCleanup → VXProximity → VXTone → VXOptoComp → VXFinish` |
+| `Mixed Audio - Voice + Guitar` | One track containing both voice and live instrument at the same time, where aggressive voice-specific denoise would damage the instrument. | `VXCleanup → VXTone → VXOptoComp → VXFinish` |
+
+These scenario names are intentionally shared across all `.RPL` files, but not every processor is meant to be equally active in every scenario. For example, the `Live Music` and `Mixed Audio` presets keep `VXSubtract`, `VXDenoiser`, `VXDeepFilterNet`, and `VXDeverb` very conservative or effectively neutral because those source types do not tolerate speech-only cleanup well.
 
 ---
 
@@ -204,17 +231,101 @@ Final shaping and level processor. Handles the restorative and dynamic side afte
 
 ---
 
+### VXTone
+
+Bass and treble tone shaper using biquad shelf filters. Mode changes the shelf frequencies to suit the signal type — Vocal mode positions the shelves outside the critical 200 Hz–6 kHz speech band so tone adjustments do not colour consonants or fundamentals.
+
+**Controls:**
+
+`Bass` — Low shelf boost or cut. Centre is neutral.
+
+`Treble` — High shelf boost or cut. Centre is neutral.
+
+**Mode differences:**
+- `Vocal`: bass shelf at 200 Hz, treble at 6 kHz, ±5 dB — leaves the speech band untouched.
+- `General`: bass shelf at 120 Hz, treble at 8 kHz, ±6 dB — full-range shaping with more headroom.
+
+---
+
+### VXOptoComp
+
+LA2A-style opto compressor and limiter. Uses the same DSP core as VXFinish but tuned for opto character: slower, program-dependent gain reduction with a smooth knee. In Vocal mode it targets levelling; in General mode it biases toward limiting. Exposes compression, gain reduction, and limiter activity lights for visual feedback.
+
+**Controls:**
+
+`Peak Red.` — Drive the opto gain reduction. Higher values level harder.
+
+`Body` — Light post-compressor body shaping. Centre is neutral.
+
+`Gain` — Final output gain. Centre is neutral; left reduces, right increases.
+
+**Mode differences:**
+- `Vocal`: opto compression levelling — controlled dynamic smoothing for voice.
+- `General`: opto limiting — harder gain ceiling, more aggressive transient catch.
+
+---
+
+### VXStudioAnalyser
+
+Chain analyser. A pass-through plugin that reads telemetry published by other VX Suite processors in the same session and renders dry input, matched upstream stage traces, and the final wet result together. Bypassed plugins are hidden automatically. Insert it last in the chain.
+
+No controls. The right panel shows all active VX processors in host chain order; each trace can be toggled on or off individually.
+
+---
+
 ## 🏗 Build
 
 The project uses CMake and JUCE. A pre-configured JUCE submodule is included.
 
+### macOS
+
+**Prerequisites:**
+- Xcode Command Line Tools (`xcode-select --install`)
+- CMake 3.20+ (`brew install cmake`)
+- Rust (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`) — required only for VXDeepFilterNet
+
 ```bash
+# Clone with submodules (JUCE is a submodule)
+git clone --recurse-submodules <repo-url>
+cd VxStudio
+
 # Configure
 cmake -S . -B build
 
-# Build everything
+# Build all plugins
 cmake --build build -j$(nproc)
+
+# Or build a single plugin
+cmake --build build --target VXDenoiser_VST3 -j$(nproc)
 ```
+
+Built `.vst3` bundles are staged automatically into `Source/vxsuite/vst/`.
+
+VXDeepFilterNet additionally requires model files in `assets/deepfilternet/models/`. Without them the plugin builds but will report no model available at runtime. All other plugins have no extra dependencies.
+
+### Windows
+
+> **Windows support is theoretical at the moment — the build system is fully wired up for it, but it has not been tested end-to-end. If you try it, please open an issue with your results.**
+
+The main unknown is whether the Rust `tract-onnx` crate inside libDF compiles cleanly against the MSVC toolchain. Everything else in the codebase is cross-platform through JUCE.
+
+**Prerequisites:**
+- Visual Studio 2022 with the "Desktop development with C++" workload (MSVC v143)
+- CMake 3.20+
+- Rust with the MSVC target: `rustup target add x86_64-pc-windows-msvc`
+
+```bat
+:: Configure (x64)
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+:: Build all plugins
+cmake --build build --config Release -- /m
+
+:: Or build a single plugin
+cmake --build build --config Release --target VXDenoiser_VST3
+```
+
+Staging copies `.vst3` bundles into `Source/vxsuite/vst/` the same as macOS.
 
 ### Targets
 
@@ -226,7 +337,10 @@ cmake --build build -j$(nproc)
 | `VXDeverb_VST3` | Deverb plugin |
 | `VXProximity_VST3` | Proximity plugin |
 | `VXCleanup_VST3` | Cleanup plugin |
+| `VXTone_VST3` | Tone shaper plugin |
 | `VXFinish_VST3` | Finish plugin |
+| `VXOptoComp_VST3` | Opto compressor plugin |
+| `VXStudioAnalyser_VST3` | Chain analyser |
 
 ---
 
@@ -242,9 +356,12 @@ Source/
       subtract/       VXSubtract processor + DSP
       deverb/         VXDeverb processor + DSP
       proximity/      VXProximity processor + DSP
-      cleanup/        VXCleanup processor
-      finish/         VXFinish processor
-      polish/         VXPolish processor + DSP
+      cleanup/        VXCleanup processor + DSP
+      tone/           VXTone processor
+      finish/         VXFinish processor + DSP
+      OptoComp/       VXOptoComp processor (uses finish DSP)
+      analyser/       VXStudioAnalyser (pass-through, telemetry UI)
+      polish/         Shared corrective DSP (used internally)
   dsp/                Shared subtractive DSP used by VXSubtract
 tests/                Measurement and behaviour tests
 cmake/                Project CMake helpers
@@ -255,4 +372,4 @@ docs/                 Framework and product reference
 
 ## 🚥 Status
 
-VST3 on macOS. All seven plugins build, stage, and present a consistent VX Suite framework contract. VXDeepFilterNet requires ONNX Runtime and valid model files in the `assets/` directory.
+VST3 on macOS — confirmed working. Windows build system is fully wired up but untested end-to-end; see the Windows build section for caveats. All ten plugins build and stage on macOS. VXDeepFilterNet requires Rust and model files in `assets/` — all other plugins have no extra dependencies beyond CMake and a C++20 compiler.

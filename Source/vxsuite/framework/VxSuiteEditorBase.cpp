@@ -10,6 +10,10 @@ EditorBase::EditorBase(ProcessorBase& owner)
       processor(owner),
       lookAndFeel(owner.getProductIdentity().theme),
       tooltipWindow(this, 700) {
+    auto makeMouseTransparent = [](auto& component) {
+        component.setInterceptsMouseClicks(false, false);
+    };
+
     setLookAndFeel(&lookAndFeel);
     setResizable(true, false);
     const bool hasTertiary = owner.getProductIdentity().supportsTertiaryControl();
@@ -25,30 +29,36 @@ EditorBase::EditorBase(ProcessorBase& owner)
     suiteLabel.setText(toJuceString(identity.suiteName), juce::dontSendNotification);
     suiteLabel.setFont(juce::FontOptions().withHeight(17.0f).withKerningFactor(0.16f));
     suiteLabel.setJustificationType(juce::Justification::centredLeft);
+    makeMouseTransparent(suiteLabel);
     addAndMakeVisible(suiteLabel);
 
     productLabel.setText(toJuceString(identity.productName), juce::dontSendNotification);
     productLabel.setFont(juce::FontOptions().withHeight(38.0f).withStyle("Bold"));
     productLabel.setJustificationType(juce::Justification::centredLeft);
+    makeMouseTransparent(productLabel);
     addAndMakeVisible(productLabel);
 
     modeLabel.setText(toJuceString(identity.selectorLabel.empty() ? "Mode" : identity.selectorLabel),
                       juce::dontSendNotification);
     modeLabel.setFont(juce::FontOptions().withHeight(14.0f).withKerningFactor(0.08f));
+    makeMouseTransparent(modeLabel);
     if (identity.supportsModeSwitch())
         addAndMakeVisible(modeLabel);
 
     statusLabel.setJustificationType(juce::Justification::centredRight);
     statusLabel.setFont(juce::FontOptions().withHeight(13.0f));
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.62f));
+    makeMouseTransparent(statusLabel);
     addAndMakeVisible(statusLabel);
 
     learnMeterLabel.setJustificationType(juce::Justification::centredLeft);
     learnMeterLabel.setFont(juce::FontOptions().withHeight(12.0f).withKerningFactor(0.05f));
     learnMeterLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.74f));
+    makeMouseTransparent(learnMeterLabel);
     learnMeterBar.setColour(juce::ProgressBar::backgroundColourId, juce::Colour(0xff14141c));
     learnMeterBar.setColour(juce::ProgressBar::foregroundColourId,
                             lookAndFeel.findColour(juce::Slider::rotarySliderFillColourId).withAlpha(0.92f));
+    makeMouseTransparent(learnMeterBar);
     if (identity.supportsLearnButton()) {
         addAndMakeVisible(learnMeterLabel);
         addAndMakeVisible(learnMeterBar);
@@ -413,6 +423,7 @@ void EditorBase::configureKnob(juce::Slider& slider,
     label.setText(toJuceString(text), juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centredLeft);
     label.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(20))).withStyle("Bold"));
+    label.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(label);
 
     juce::Label* hintLabel = &secondaryHint;
@@ -426,6 +437,7 @@ void EditorBase::configureKnob(juce::Slider& slider,
     hintLabel->setJustificationType(juce::Justification::centredLeft);
     hintLabel->setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(13))));
     hintLabel->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.72f));
+    hintLabel->setInterceptsMouseClicks(false, false);
 }
 
 juce::String EditorBase::footerText() const {

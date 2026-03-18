@@ -12,6 +12,8 @@ constexpr std::string_view kProtectParam = "protect";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
 constexpr std::string_view kLearnParam = "learn";
+constexpr int kProfileFftSize = 1 << 11;
+constexpr int kProfileHopSize = kProfileFftSize / 4;
 
 } // namespace
 
@@ -85,7 +87,10 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
     }
     stageChain.prepare(currentSampleRateHz, samplesPerBlock);
     // prepare() clears the learned profile — restore it if we have one saved
-    if (!savedLearnProfile.empty()) {
+    if (!savedLearnProfile.empty()
+        && std::abs(savedLearnProfileSampleRate - currentSampleRateHz) <= 1.0
+        && savedLearnProfileFftSize == kProfileFftSize
+        && savedLearnProfileHopSize == kProfileHopSize) {
         subtractDsp.restoreLearnedProfile(savedLearnProfile, savedLearnConfidence);
         learnReady.store(true, std::memory_order_relaxed);
         learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
@@ -100,7 +105,8 @@ void VXSubtractAudioProcessor::resetSuite() {
     smoothedProtect = 0.5f;
     controlsPrimed = false;
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
-    learnActive.store(false, std::memory_order_relaxed);
+    subtractDsp.setLearning(learnToggleLatched);
+    learnActive.store(learnToggleLatched, std::memory_order_relaxed);
     // learnReady / learnProgress / learnConfidence / learnObservedSeconds are
     // intentionally preserved — the learned noise profile survives playback stops.
 }
@@ -165,6 +171,16 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                                 : (learnedReady ? 0.0f
                                                                 : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
                                                                           * subtractStrength));
+
+    if (!learningActiveNow && subtractStrength <= 1.0e-4f) {
+        ensureLatencyAlignedListenDry(numSamples);
+        const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        return;
+    }
+
     stageChain.processInPlace(buffer, { blindAmount }, options);
 
     learnProgress.store(subtractDsp.getLearnProgress(), std::memory_order_relaxed);
@@ -187,6 +203,9 @@ void VXSubtractAudioProcessor::getStateInformation(juce::MemoryBlock& destData) 
     if (subtractDsp.getLearnedProfileData(profile, confidence)) {
         auto* el = xml->createNewChildElement("LearnedProfile");
         el->setAttribute("confidence", static_cast<double>(confidence));
+        el->setAttribute("sampleRate", currentSampleRateHz);
+        el->setAttribute("fftSize", kProfileFftSize);
+        el->setAttribute("hopSize", kProfileHopSize);
         juce::MemoryBlock blob(profile.data(), profile.size() * sizeof(float));
         el->setAttribute("data", blob.toBase64Encoding());
     }
@@ -204,9 +223,15 @@ void VXSubtractAudioProcessor::setStateInformation(const void* data, const int s
 
     savedLearnProfile.clear();
     savedLearnConfidence = 0.0f;
+    savedLearnProfileSampleRate = 0.0;
+    savedLearnProfileFftSize = 0;
+    savedLearnProfileHopSize = 0;
 
     if (auto* el = xml->getChildByName("LearnedProfile")) {
         const float confidence = static_cast<float>(el->getDoubleAttribute("confidence", 0.0));
+        savedLearnProfileSampleRate = el->getDoubleAttribute("sampleRate", 0.0);
+        savedLearnProfileFftSize = el->getIntAttribute("fftSize", 0);
+        savedLearnProfileHopSize = el->getIntAttribute("hopSize", 0);
         juce::MemoryBlock blob;
         if (blob.fromBase64Encoding(el->getStringAttribute("data"))) {
             const size_t count = blob.getSize() / sizeof(float);
@@ -215,9 +240,18 @@ void VXSubtractAudioProcessor::setStateInformation(const void* data, const int s
                 std::memcpy(savedLearnProfile.data(), blob.getData(), blob.getSize());
                 savedLearnConfidence = confidence;
                 // Apply immediately if already prepared
-                subtractDsp.restoreLearnedProfile(savedLearnProfile, savedLearnConfidence);
-                learnReady.store(subtractDsp.hasLearnedProfile(), std::memory_order_relaxed);
-                learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
+                if (std::abs(savedLearnProfileSampleRate - currentSampleRateHz) <= 1.0
+                    && savedLearnProfileFftSize == kProfileFftSize
+                    && savedLearnProfileHopSize == kProfileHopSize) {
+                    subtractDsp.restoreLearnedProfile(savedLearnProfile, savedLearnConfidence);
+                    learnReady.store(subtractDsp.hasLearnedProfile(), std::memory_order_relaxed);
+                    learnConfidence.store(savedLearnConfidence, std::memory_order_relaxed);
+                } else {
+                    savedLearnProfile.clear();
+                    savedLearnConfidence = 0.0f;
+                    learnReady.store(false, std::memory_order_relaxed);
+                    learnConfidence.store(0.0f, std::memory_order_relaxed);
+                }
             }
         }
     } else {

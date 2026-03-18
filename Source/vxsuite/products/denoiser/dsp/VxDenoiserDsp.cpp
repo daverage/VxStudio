@@ -173,16 +173,8 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     if (numCh <= 0 || numSmp <= 0 || !fft.isReady()) return false;
 
     const float wet = juce::jlimit(0.0f, 1.0f, amount);
-    if (wet <= 0.0f) {
-        fifoLive = false;  // mark FIFO as stale so next active call resets cleanly
-        return false;
-    }
-    // Re-enable after bypass (wet was 0, FIFO/OLA frozen): reset STFT state to
-    // avoid reading old frames that were accumulated before the bypass period.
-    if (!fifoLive) {
-        reset();
+    if (!fifoLive)
         fifoLive = true;
-    }
 
     const int accSz = olaAccumSize;
 

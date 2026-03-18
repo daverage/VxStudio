@@ -15,9 +15,13 @@ constexpr std::string_view kListenParam = "listen";
 constexpr std::string_view kHpfOnParam = "hpf_on";
 constexpr std::string_view kHiShelfOnParam = "hishelf_on";
 
-int chooseSpectralOrder() {
-    // Keep Cleanup's event-classifier window host-buffer invariant.
-    return 10; // 1024-point analysis
+int chooseSpectralOrder(const double sampleRate) {
+    const double sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    constexpr double targetWindowSeconds = 1024.0 / 48000.0;
+    int order = 9;
+    while ((1 << order) < static_cast<int>(std::ceil(sr * targetWindowSeconds)) && order < 12)
+        ++order;
+    return order;
 }
 
 struct SpectralFeatures {
@@ -98,7 +102,7 @@ std::string_view VXCleanupAudioProcessor::getActivityLightLabel(int index) const
 
 void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    spectralOrder = chooseSpectralOrder();
+    spectralOrder = chooseSpectralOrder(currentSampleRateHz);
     spectralFft.prepare(spectralOrder);
     spectralSize = spectralFft.size();
     spectralFifo.assign(static_cast<size_t>(spectralSize), 0.0f);

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <random>
+#include <vector>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -85,6 +86,39 @@ inline juce::AudioBuffer<float> render(Processor& processor,
         processor.processBlock(block, midi);
         for (int ch = 0; ch < rendered.getNumChannels(); ++ch)
             rendered.copyFrom(ch, start, block, ch, 0, num);
+    }
+
+    juce::AudioBuffer<float> output(input.getNumChannels(), input.getNumSamples());
+    for (int ch = 0; ch < output.getNumChannels(); ++ch)
+        output.copyFrom(ch, 0, rendered, ch, latency, input.getNumSamples());
+    return output;
+}
+
+template <typename Processor>
+inline juce::AudioBuffer<float> renderWithBlocks(Processor& processor,
+                                                 const juce::AudioBuffer<float>& input,
+                                                 const std::vector<int>& blockSizes) {
+    const int latency = std::max(0, processor.getLatencySamples());
+    juce::AudioBuffer<float> staged(input.getNumChannels(), input.getNumSamples() + latency);
+    staged.clear();
+    for (int ch = 0; ch < input.getNumChannels(); ++ch)
+        staged.copyFrom(ch, 0, input, ch, 0, input.getNumSamples());
+
+    juce::AudioBuffer<float> rendered(input.getNumChannels(), staged.getNumSamples());
+    juce::MidiBuffer midi;
+    int start = 0;
+    size_t patternIndex = 0;
+    while (start < staged.getNumSamples()) {
+        const int requested = blockSizes.empty() ? 256 : std::max(1, blockSizes[patternIndex % blockSizes.size()]);
+        const int num = std::min(requested, staged.getNumSamples() - start);
+        juce::AudioBuffer<float> block(staged.getNumChannels(), num);
+        for (int ch = 0; ch < staged.getNumChannels(); ++ch)
+            block.copyFrom(ch, 0, staged, ch, start, num);
+        processor.processBlock(block, midi);
+        for (int ch = 0; ch < rendered.getNumChannels(); ++ch)
+            rendered.copyFrom(ch, start, block, ch, 0, num);
+        start += num;
+        ++patternIndex;
     }
 
     juce::AudioBuffer<float> output(input.getNumChannels(), input.getNumSamples());

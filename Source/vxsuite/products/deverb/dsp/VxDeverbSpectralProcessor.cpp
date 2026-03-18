@@ -29,15 +29,18 @@ void SpectralProcessor::setChannelCount(const int numChannels) {
 
 void SpectralProcessor::setRt60PresetSeconds(const float rt60Seconds) {
     rt60PresetSeconds = std::max(0.0f, rt60Seconds);
-    if (rt60PresetSeconds > 0.0f)
-        rt60Estimator.setFixedRt60(rt60PresetSeconds);
-    else
-        rt60Estimator.clearFixedRt60();
+    for (auto& estimator : rt60Estimators) {
+        if (rt60PresetSeconds > 0.0f)
+            estimator.setFixedRt60(rt60PresetSeconds);
+        else
+            estimator.clearFixedRt60();
+    }
 }
 
 void SpectralProcessor::clearRt60Preset() {
     rt60PresetSeconds = 0.0f;
-    rt60Estimator.clearFixedRt60();
+    for (auto& estimator : rt60Estimators)
+        estimator.clearFixedRt60();
 }
 
 void SpectralProcessor::setDeterministicReset(const bool shouldUseDefaultRt60) noexcept {
@@ -48,8 +51,10 @@ void SpectralProcessor::setOverSubtract(const float newOverSubtract) noexcept {
     overSubtract = juce::jlimit(1.0f, 2.5f, newOverSubtract);
 }
 
-float SpectralProcessor::getTrackedRt60Seconds([[maybe_unused]] const int channel) const noexcept {
-    return rt60Estimator.getEstimatedRt60();
+float SpectralProcessor::getTrackedRt60Seconds(const int channel) const noexcept {
+    if (channel < 0 || channel >= static_cast<int>(rt60Estimators.size()))
+        return rt60PresetSeconds > 0.0f ? rt60PresetSeconds : 0.0f;
+    return rt60Estimators[static_cast<size_t>(channel)].getEstimatedRt60();
 }
 
 // ── prepare ───────────────────────────────────────────────────────────────────
@@ -113,14 +118,17 @@ void SpectralProcessor::prepare(const double sampleRate, const int maxBlockSize)
     wpeReScratch.assign(static_cast<size_t>(numBins), 0.0f);
     wpeImScratch.assign(static_cast<size_t>(numBins), 0.0f);
 
-    rt60Estimator.prepare(sr);
-    if (rt60PresetSeconds > 0.0f)
-        rt60Estimator.setFixedRt60(rt60PresetSeconds);
-
     // Pre-compute speech-range bin boundaries for voice protection.
     // kVoiceFloor is applied to these bins when voiceMode is active.
     speechBinLo = std::max(0, static_cast<int>(200.0f * static_cast<float>(fftSize) / static_cast<float>(sr)));
     speechBinHi = std::min(numBins - 1, static_cast<int>(4000.0f * static_cast<float>(fftSize) / static_cast<float>(sr)));
+
+    rt60Estimators.assign(static_cast<size_t>(std::max(0, preparedChannels)), {});
+    for (auto& estimator : rt60Estimators) {
+        estimator.prepare(sr);
+        if (rt60PresetSeconds > 0.0f)
+            estimator.setFixedRt60(rt60PresetSeconds);
+    }
 
     allocateChannels(preparedChannels);
 }
@@ -162,9 +170,11 @@ void SpectralProcessor::allocateAndResetChannel(ChannelState& ch) const {
 // ── reset ─────────────────────────────────────────────────────────────────────
 
 void SpectralProcessor::reset() {
-    rt60Estimator.reset();
-    if (rt60PresetSeconds > 0.0f)
-        rt60Estimator.setFixedRt60(rt60PresetSeconds);
+    for (auto& estimator : rt60Estimators) {
+        estimator.reset();
+        if (rt60PresetSeconds > 0.0f)
+            estimator.setFixedRt60(rt60PresetSeconds);
+    }
     for (auto& ch : chans) allocateAndResetChannel(ch);
 }
 
@@ -184,16 +194,16 @@ bool SpectralProcessor::processInPlace(juce::AudioBuffer<float>& buffer,
 
     const float amt = juce::jlimit(0.0f, 1.0f, amount);
 
-    // Feed channel-0 input into the shared RT60 estimator before processing.
-    rt60Estimator.pushSamples(buffer.getReadPointer(0), numSmp);
-
-    // Compute shared LRSV coefficient from the estimator.
-    const float lrsvCoeff = lrsvCoeffFromRt60(rt60Estimator.getEstimatedRt60());
-
     for (int c = 0; c < numCh; ++c) {
         auto& ch        = chans[static_cast<size_t>(c)];
         const float* in = buffer.getReadPointer(c);
         float*       out = buffer.getWritePointer(c);
+        if (c < static_cast<int>(rt60Estimators.size()))
+            rt60Estimators[static_cast<size_t>(c)].pushSamples(in, numSmp);
+        const float lrsvCoeff = lrsvCoeffFromRt60(
+            c < static_cast<int>(rt60Estimators.size())
+                ? rt60Estimators[static_cast<size_t>(c)].getEstimatedRt60()
+                : (rt60PresetSeconds > 0.0f ? rt60PresetSeconds : 0.50f));
 
         // ── Phase 1: push input into ring buffer, trigger frames every hop ───
         //

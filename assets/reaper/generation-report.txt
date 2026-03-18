@@ -1,0 +1,13 @@
+Generated RPL for VXCleanup
+Generated RPL for VXDeepFilterNet
+Generated RPL for VXDenoiser
+Generated RPL for VXDeverb
+Generated RPL for VXFinish
+Generated RPL for VXOptoComp
+Generated RPL for VXProximity
+Generated RPL for VXSubtract
+Generated RPL for VXTone
+Generated FX chain for Camera Review - Far Phone
+Generated FX chain for Live Music - Front Of Room
+Generated FX chain for Podcast Finishing - Clean Voice
+Generated FX chain for Mixed Audio - Voice + Guitar

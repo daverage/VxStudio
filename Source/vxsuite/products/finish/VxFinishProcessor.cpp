@@ -27,6 +27,9 @@ vxsuite::ProductIdentity VXFinishAudioProcessor::makeIdentity() {
     identity.primaryLabel = "Finish";
     identity.secondaryLabel = "Body";
     identity.tertiaryLabel = "Gain";
+    identity.primaryDefaultValue = 0.0f;
+    identity.secondaryDefaultValue = 0.5f;
+    identity.tertiaryDefaultValue = 0.5f;
     identity.primaryHint = "Peak reduction and levelling. Push higher for firmer opto control.";
     identity.secondaryHint = "Light body enhancement only. Keep it subtle and post-cleanup.";
     identity.tertiaryHint = "Final output gain. Middle is neutral, left reduces, right increases.";
@@ -109,7 +112,7 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const float gainSigned = juce::jlimit(-1.0f, 1.0f, (smoothedGain - 0.5f) / 0.5f);
-    const float outputGainDb = juce::jmap(gainSigned, -6.0f, 6.0f);
+    const float outputGainDb = gainSigned * 6.0f;
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
@@ -124,14 +127,7 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
 void VXFinishAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                                 const juce::AudioBuffer<float>& inputBuffer) {
-    const int channels = std::min(outputBuffer.getNumChannels(), inputBuffer.getNumChannels());
-    const int samples = std::min(outputBuffer.getNumSamples(), inputBuffer.getNumSamples());
-    for (int ch = 0; ch < channels; ++ch) {
-        auto* out = outputBuffer.getWritePointer(ch);
-        const auto* in = inputBuffer.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = out[i] - in[i];
-    }
+    renderAddedDeltaOutput(outputBuffer, inputBuffer);
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)

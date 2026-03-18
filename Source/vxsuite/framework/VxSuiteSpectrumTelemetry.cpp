@@ -1,4 +1,5 @@
 #include "VxSuiteSpectrumTelemetry.h"
+#include "VxSuiteBlockSmoothing.h"
 
 #include <algorithm>
 #include <atomic>
@@ -8,6 +9,12 @@
 #include <memory>
 
 #include <juce_core/juce_core.h>
+
+#if JUCE_WINDOWS
+#include <processthreadsapi.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace vxsuite::spectrum {
 
@@ -372,7 +379,6 @@ void SnapshotPublisher::ensureRegistered() noexcept {
 
 void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
                                 const juce::AudioBuffer<float>& wetBuffer) noexcept {
-    ensureRegistered();
     if (slotIndex < 0)
         return;
 
@@ -403,7 +409,6 @@ void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
 }
 
 void SnapshotPublisher::publishSilence() noexcept {
-    ensureRegistered();
     if (slotIndex < 0)
         return;
 
@@ -480,3 +485,741 @@ float SnapshotPublisher::computeRms(const std::array<float, kHistorySamples>& hi
 }
 
 } // namespace vxsuite::spectrum
+
+namespace vxsuite::analysis {
+
+namespace {
+
+constexpr std::uint32_t kAnalysisSharedMagic = 0x5658414Eu; // VXAN
+constexpr std::uint32_t kAnalysisSharedVersion = 1u;
+constexpr auto kAnalysisSharedLockName = "vxsuite-analysis-telemetry-lock";
+constexpr auto kAnalysisSharedFileName = "vxsuite-analysis-telemetry.bin";
+constexpr auto kDomainSharedFileName = "vxsuite-analysis-domains.bin";
+constexpr std::int64_t kStageSlotReuseMs = 1500;
+constexpr int kTargetPublishHz = 15;
+constexpr int kDomainRefreshSamples = 4096;
+constexpr float kEnvelopeWindowSeconds = 0.25f;
+constexpr float kPeakDecayDbPerSecond = 12.0f;
+
+std::uint64_t osCurrentProcessId() noexcept {
+#if JUCE_WINDOWS
+    return static_cast<std::uint64_t>(::GetCurrentProcessId());
+#else
+    return static_cast<std::uint64_t>(::getpid());
+#endif
+}
+
+template <typename Value>
+std::atomic_ref<Value> analysisAtomicRef(Value& value) noexcept {
+    return std::atomic_ref<Value>(value);
+}
+
+template <typename ArrayType>
+void clearNumericArray(ArrayType& values) noexcept {
+    values.fill(0);
+}
+
+struct SharedDomainSlot {
+    std::uint32_t version = 0;
+    std::uint32_t active = 0;
+    std::uint64_t analysisDomainId = 0;
+    std::uint64_t hostProcessId = 0;
+    std::uint64_t creationTimeMs = 0;
+};
+
+struct SharedDomainState {
+    std::uint32_t magic = 0;
+    std::uint32_t version = 0;
+    std::uint64_t nextDomainId = 1;
+    std::uint64_t reserved = 0;
+    std::array<SharedDomainSlot, kMaxDomains> slots {};
+};
+
+struct SharedStageSlot {
+    std::uint32_t version = 0;
+    std::uint32_t active = 0;
+    std::uint64_t analysisDomainId = 0;
+    StageTelemetry telemetry {};
+};
+
+struct SharedAnalysisState {
+    std::uint32_t magic = 0;
+    std::uint32_t version = 0;
+    std::uint64_t nextInstanceId = 1;
+    std::uint64_t reserved = 0;
+    std::array<std::uint64_t, kMaxDomains> nextLocalOrderIds {};
+    std::array<SharedStageSlot, kMaxStageSlots> slots {};
+};
+
+class AnalysisMappedRegion {
+public:
+    AnalysisMappedRegion(const char* lockName, const char* fileName)
+        : lock(juce::String(lockName)),
+          fileBasename(fileName) {}
+
+    template <typename StateType>
+    StateType* state(const std::uint32_t magic, const std::uint32_t version) {
+        initialiseIfNeeded<StateType>(magic, version);
+        return reinterpret_cast<StateType*>(mapping != nullptr ? mapping->getData() : nullptr);
+    }
+
+    juce::InterProcessLock& processLock() noexcept { return lock; }
+
+private:
+    template <typename StateType>
+    void initialiseIfNeeded(const std::uint32_t magic, const std::uint32_t version) {
+        const juce::ScopedLock scoped(localLock);
+        if (mapping != nullptr)
+            return;
+
+        sharedFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                         .getChildFile("VXSuiteShared")
+                         .getChildFile(fileBasename);
+        sharedFile.getParentDirectory().createDirectory();
+
+        if (!sharedFile.existsAsFile())
+            sharedFile.create();
+
+        const auto expectedBytes = static_cast<std::int64_t>(sizeof(StateType));
+        if (sharedFile.getSize() != expectedBytes) {
+            juce::FileOutputStream stream(sharedFile);
+            if (stream.openedOk()) {
+                stream.setPosition(expectedBytes - 1);
+                stream.writeByte(0);
+                stream.flush();
+            }
+        }
+
+        mapping = std::make_unique<juce::MemoryMappedFile>(sharedFile, juce::MemoryMappedFile::readWrite);
+        auto* shared = reinterpret_cast<StateType*>(mapping != nullptr ? mapping->getData() : nullptr);
+        if (shared == nullptr)
+            return;
+
+        juce::InterProcessLock::ScopedLockType processScoped(lock);
+        if (!processScoped.isLocked())
+            return;
+
+        if (shared->magic != magic || shared->version != version) {
+            std::memset(shared, 0, sizeof(StateType));
+            shared->magic = magic;
+            shared->version = version;
+        }
+    }
+
+    juce::CriticalSection localLock;
+    juce::InterProcessLock lock;
+    const juce::String fileBasename;
+    juce::File sharedFile;
+    std::unique_ptr<juce::MemoryMappedFile> mapping;
+};
+
+AnalysisMappedRegion& domainRegion() {
+    static AnalysisMappedRegion region(kAnalysisSharedLockName, kDomainSharedFileName);
+    return region;
+}
+
+AnalysisMappedRegion& stageRegion() {
+    static AnalysisMappedRegion region(kAnalysisSharedLockName, kAnalysisSharedFileName);
+    return region;
+}
+
+SharedDomainState* domainState() {
+    auto* state = domainRegion().state<SharedDomainState>(kAnalysisSharedMagic, kAnalysisSharedVersion);
+    if (state != nullptr && state->nextDomainId == 0)
+        state->nextDomainId = 1;
+    return state;
+}
+
+SharedAnalysisState* analysisState() {
+    auto* state = stageRegion().state<SharedAnalysisState>(kAnalysisSharedMagic, kAnalysisSharedVersion);
+    if (state == nullptr)
+        return nullptr;
+    if (state->nextInstanceId == 0)
+        state->nextInstanceId = 1;
+    for (auto& nextLocalOrderId : state->nextLocalOrderIds)
+        if (nextLocalOrderId == 0)
+            nextLocalOrderId = 1;
+    return state;
+}
+
+int domainIndexFor(const std::uint64_t analysisDomainId) noexcept {
+    if (analysisDomainId == 0)
+        return 0;
+    return static_cast<int>(analysisDomainId % static_cast<std::uint64_t>(kMaxDomains));
+}
+
+SharedStageSlot* stageSlotAt(const int slotIndex) noexcept {
+    auto* state = analysisState();
+    if (state == nullptr || slotIndex < 0 || slotIndex >= static_cast<int>(state->slots.size()))
+        return nullptr;
+    return &state->slots[static_cast<std::size_t>(slotIndex)];
+}
+
+void copyFixedLabel(std::string_view source, char* dest, const std::size_t destSize) noexcept {
+    if (dest == nullptr || destSize == 0)
+        return;
+
+    std::fill(dest, dest + destSize, '\0');
+    const auto copyCount = std::min(source.size(), destSize - 1);
+    std::copy_n(source.data(), static_cast<std::ptrdiff_t>(copyCount), dest);
+}
+
+void setStageIdentityFromProduct(StageIdentity& out,
+                                 const ProductIdentity& identity,
+                                 const std::uint64_t instanceId,
+                                 const std::uint64_t localOrderId) noexcept {
+    copyFixedLabel(identity.stageId.empty() ? identity.productName : identity.stageId,
+                   out.stageId.data(),
+                   out.stageId.size());
+    out.instanceId = instanceId;
+    out.localOrderId = localOrderId;
+    copyFixedLabel(identity.productName, out.stageName.data(), out.stageName.size());
+    out.stageType = identity.stageType;
+    out.chainOrderHint = static_cast<std::uint32_t>(localOrderId);
+    copyFixedLabel("VXSuite", out.pluginFamily.data(), out.pluginFamily.size());
+    out.semanticFlags = identity.semanticFlags;
+    out.telemetryFlags = identity.telemetryFlags;
+}
+
+} // namespace
+
+void SummaryAccumulator::prepare(const double sampleRate, const int publishIntervalSamples) noexcept {
+    this->sampleRate = static_cast<float>(sampleRate > 1000.0 ? sampleRate : 48000.0);
+    juce::ignoreUnused(publishIntervalSamples);
+    shortWindowSamples = std::max(1, static_cast<int>(this->sampleRate * 0.010f));
+    longWindowSamples = std::max(1, static_cast<int>(this->sampleRate * 0.100f));
+    envelopeSamplesPerBucket = std::max(1, static_cast<int>((this->sampleRate * kEnvelopeWindowSeconds)
+                                                             / static_cast<float>(kSummaryEnvelopeBins)));
+    fftHopSize = std::max(1, kSummarySpectrumFftSize / 4);
+    fft.prepare(kSummarySpectrumFftOrder);
+    for (int i = 0; i < kSummarySpectrumFftSize; ++i) {
+        const float phase = juce::MathConstants<float>::twoPi * static_cast<float>(i)
+            / static_cast<float>(kSummarySpectrumFftSize - 1);
+        spectrumWindow[static_cast<std::size_t>(i)] = 0.5f - 0.5f * std::cos(phase);
+    }
+    reset();
+}
+
+void SummaryAccumulator::reset() noexcept {
+    envelope.fill(0.0f);
+    blockSumSquares.fill(0.0);
+    blockPeaks.fill(0.0f);
+    blockSampleCounts.fill(0);
+    metricWriteIndex = 0;
+    metricCount = 0;
+    shortMetricReadIndex = 0;
+    longMetricReadIndex = 0;
+    shortSumSquares = 0.0;
+    longSumSquares = 0.0;
+    shortSamples = 0;
+    longSamples = 0;
+    heldPeakDb = -120.0f;
+    envelopeWriteIndex = 0;
+    envelopeFilled = 0;
+    envelopeSampleCounter = 0;
+    fftSamplesSinceUpdate = 0;
+    midEnergy = 0.0;
+    sideEnergy = 0.0;
+    leftEnergy = 0.0;
+    rightEnergy = 0.0;
+    lrDot = 0.0;
+    stereoSamples = 0;
+    monoHistoryWriteIndex = 0;
+    monoHistory.fill(0.0f);
+    fftData.fill(0.0f);
+    spectrum.fill(0.0f);
+}
+
+void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept {
+    const int channels = buffer.getNumChannels();
+    const int samples = buffer.getNumSamples();
+    if (channels <= 0 || samples <= 0)
+        return;
+
+    const float monoScale = 1.0f / static_cast<float>(channels);
+    double blockSumSquaresValue = 0.0;
+    float blockPeak = 0.0f;
+    for (int sampleIndex = 0; sampleIndex < samples; ++sampleIndex) {
+        float mono = 0.0f;
+        for (int channel = 0; channel < channels; ++channel)
+            mono += buffer.getSample(channel, sampleIndex);
+        mono *= monoScale;
+
+        const float absMono = std::abs(mono);
+        blockSumSquaresValue += static_cast<double>(mono) * static_cast<double>(mono);
+        blockPeak = std::max(blockPeak, absMono);
+        monoHistory[static_cast<std::size_t>(monoHistoryWriteIndex)] = mono;
+        monoHistoryWriteIndex = (monoHistoryWriteIndex + 1) % kSummarySpectrumFftSize;
+        ++fftSamplesSinceUpdate;
+
+        const float left = buffer.getSample(0, sampleIndex);
+        const float right = buffer.getSample(std::min(1, channels - 1), sampleIndex);
+        leftEnergy += static_cast<double>(left) * static_cast<double>(left);
+        rightEnergy += static_cast<double>(right) * static_cast<double>(right);
+        lrDot += static_cast<double>(left) * static_cast<double>(right);
+        const float mid = 0.5f * (left + right);
+        const float side = 0.5f * (left - right);
+        midEnergy += static_cast<double>(mid) * static_cast<double>(mid);
+        sideEnergy += static_cast<double>(side) * static_cast<double>(side);
+        ++stereoSamples;
+    }
+
+    const int writeIndex = metricWriteIndex;
+    blockSumSquares[static_cast<std::size_t>(writeIndex)] = blockSumSquaresValue;
+    blockPeaks[static_cast<std::size_t>(writeIndex)] = blockPeak;
+    blockSampleCounts[static_cast<std::size_t>(writeIndex)] = samples;
+
+    metricWriteIndex = (metricWriteIndex + 1) % kMetricHistoryBlocks;
+    if (metricCount < kMetricHistoryBlocks)
+        ++metricCount;
+
+    shortSumSquares += blockSumSquaresValue;
+    longSumSquares += blockSumSquaresValue;
+    shortSamples += samples;
+    longSamples += samples;
+
+    while (shortSamples > shortWindowSamples && metricCount > 0) {
+        const int index = shortMetricReadIndex;
+        shortSumSquares -= blockSumSquares[static_cast<std::size_t>(index)];
+        shortSamples -= blockSampleCounts[static_cast<std::size_t>(index)];
+        shortMetricReadIndex = (shortMetricReadIndex + 1) % kMetricHistoryBlocks;
+    }
+
+    while (longSamples > longWindowSamples && metricCount > 0) {
+        const int index = longMetricReadIndex;
+        longSumSquares -= blockSumSquares[static_cast<std::size_t>(index)];
+        longSamples -= blockSampleCounts[static_cast<std::size_t>(index)];
+        longMetricReadIndex = (longMetricReadIndex + 1) % kMetricHistoryBlocks;
+    }
+
+    const float blockPeakDb = juce::Decibels::gainToDecibels(std::max(1.0e-6f, blockPeak), -120.0f);
+    if (blockPeakDb > heldPeakDb) {
+        heldPeakDb = blockPeakDb;
+    } else {
+        const float elapsedSeconds = static_cast<float>(samples) / sampleRate;
+        heldPeakDb = std::max(-120.0f, heldPeakDb - kPeakDecayDbPerSecond * elapsedSeconds);
+    }
+
+    envelopeSampleCounter += samples;
+    const float longRms = longSamples > 0 ? static_cast<float>(std::sqrt(longSumSquares / static_cast<double>(longSamples))) : 0.0f;
+    while (envelopeSampleCounter >= envelopeSamplesPerBucket) {
+        envelope[static_cast<std::size_t>(envelopeWriteIndex)] = longRms;
+        envelopeWriteIndex = (envelopeWriteIndex + 1) % kSummaryEnvelopeBins;
+        envelopeFilled = std::min(kSummaryEnvelopeBins, envelopeFilled + 1);
+        envelopeSampleCounter -= envelopeSamplesPerBucket;
+    }
+
+    while (fftSamplesSinceUpdate >= fftHopSize) {
+        fftSamplesSinceUpdate -= fftHopSize;
+        if (!fft.isReady())
+            continue;
+
+        auto fftScratch = fftData;
+        int readIndex = monoHistoryWriteIndex;
+        for (int i = 0; i < kSummarySpectrumFftSize; ++i) {
+            fftScratch[static_cast<std::size_t>(i)] =
+                monoHistory[static_cast<std::size_t>(readIndex)] * spectrumWindow[static_cast<std::size_t>(i)];
+            readIndex = (readIndex + 1) % kSummarySpectrumFftSize;
+        }
+        std::fill(fftScratch.begin() + kSummarySpectrumFftSize, fftScratch.end(), 0.0f);
+        fft.performForward(fftScratch.data());
+
+        constexpr float kMinFreq = 20.0f;
+        constexpr float kMaxFreq = 20000.0f;
+        const float nyquist = std::max(200.0f, sampleRate * 0.5f);
+        const float upperFreq = std::min(kMaxFreq, nyquist);
+        const float fftScale = 2.0f / static_cast<float>(kSummarySpectrumFftSize);
+
+        for (int band = 0; band < kSummarySpectrumBins; ++band) {
+            const float startNorm = static_cast<float>(band) / static_cast<float>(kSummarySpectrumBins);
+            const float endNorm = static_cast<float>(band + 1) / static_cast<float>(kSummarySpectrumBins);
+            const float startFreq = kMinFreq * std::pow(upperFreq / kMinFreq, startNorm);
+            const float endFreq = kMinFreq * std::pow(upperFreq / kMinFreq, endNorm);
+
+            const int startBin = juce::jlimit(1,
+                                              kSummarySpectrumFftSize / 2,
+                                              static_cast<int>(std::floor(startFreq * kSummarySpectrumFftSize / sampleRate)));
+            const int endBin = juce::jlimit(startBin,
+                                            kSummarySpectrumFftSize / 2,
+                                            static_cast<int>(std::ceil(endFreq * kSummarySpectrumFftSize / sampleRate)));
+
+            double powerSum = 0.0;
+            double weightSum = 0.0;
+            for (int bin = startBin; bin <= endBin; ++bin) {
+                const float re = fftScratch[static_cast<std::size_t>(bin * 2)];
+                const float im = fftScratch[static_cast<std::size_t>(bin * 2 + 1)];
+                const double magnitude = std::sqrt(static_cast<double>(re) * re + static_cast<double>(im) * im) * fftScale;
+                powerSum += magnitude * magnitude;
+                weightSum += 1.0;
+            }
+
+            spectrum[static_cast<std::size_t>(band)] =
+                weightSum > 0.0 ? static_cast<float>(std::sqrt(powerSum / weightSum)) : 0.0f;
+        }
+    }
+}
+
+AnalysisSummary SummaryAccumulator::summary() const noexcept {
+    AnalysisSummary out;
+    if (envelopeFilled > 0) {
+        const int start = envelopeFilled < kSummaryEnvelopeBins ? 0 : envelopeWriteIndex;
+        for (int i = 0; i < kSummaryEnvelopeBins; ++i) {
+            const int sourceIndex = (start + i) % kSummaryEnvelopeBins;
+            out.envelope[static_cast<std::size_t>(i)] = envelope[static_cast<std::size_t>(sourceIndex)];
+        }
+        if (envelopeFilled < kSummaryEnvelopeBins) {
+            const float latest = envelopeFilled > 0
+                ? envelope[static_cast<std::size_t>((envelopeWriteIndex + kSummaryEnvelopeBins - 1) % kSummaryEnvelopeBins)]
+                : 0.0f;
+            const int padCount = kSummaryEnvelopeBins - envelopeFilled;
+            for (int i = 0; i < padCount; ++i)
+                out.envelope[static_cast<std::size_t>(i)] = latest;
+        }
+    } else {
+        out.envelope.fill(0.0f);
+    }
+
+    out.rms = longSamples > 0 ? static_cast<float>(std::sqrt(longSumSquares / static_cast<double>(longSamples))) : 0.0f;
+    out.peak = juce::Decibels::decibelsToGain(heldPeakDb, -120.0f);
+    out.crestFactor = out.rms > 1.0e-6f ? out.peak / out.rms : 0.0f;
+    const float shortRms = shortSamples > 0 ? static_cast<float>(std::sqrt(shortSumSquares / static_cast<double>(shortSamples))) : 0.0f;
+    out.transientScore =
+        juce::Decibels::gainToDecibels(std::max(1.0e-6f, shortRms), -120.0f)
+        - juce::Decibels::gainToDecibels(std::max(1.0e-6f, out.rms), -120.0f);
+    out.stereoWidth = static_cast<float>(sideEnergy / std::max(1.0, midEnergy));
+    const double corrDenom = std::sqrt(std::max(1.0e-12, leftEnergy * rightEnergy));
+    out.correlation = static_cast<float>(lrDot / corrDenom);
+    out.spectrum = spectrum;
+
+    return out;
+}
+
+DomainRegistry& DomainRegistry::instance() noexcept {
+    static DomainRegistry registry;
+    return registry;
+}
+
+std::uint64_t DomainRegistry::registerAnalyserDomain() noexcept {
+    auto* state = domainState();
+    if (state == nullptr)
+        return 0;
+
+    juce::InterProcessLock::ScopedLockType scoped(domainRegion().processLock());
+    if (!scoped.isLocked())
+        return 0;
+
+    const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
+    const auto pid = osCurrentProcessId();
+    for (auto& slot : state->slots) {
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) != 0u)
+            continue;
+
+        analysisAtomicRef(slot.version).store(1u, std::memory_order_release);
+        slot.analysisDomainId = state->nextDomainId++;
+        slot.hostProcessId = pid;
+        slot.creationTimeMs = nowMs;
+        analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
+        analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
+        return slot.analysisDomainId;
+    }
+
+    return 0;
+}
+
+void DomainRegistry::unregisterAnalyserDomain(const std::uint64_t analysisDomainId) noexcept {
+    auto* state = domainState();
+    if (state == nullptr || analysisDomainId == 0)
+        return;
+
+    juce::InterProcessLock::ScopedLockType scoped(domainRegion().processLock());
+    if (!scoped.isLocked())
+        return;
+
+    for (auto& slot : state->slots) {
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u
+            || slot.analysisDomainId != analysisDomainId) {
+            continue;
+        }
+
+        const auto version = analysisAtomicRef(slot.version).load(std::memory_order_acquire);
+        analysisAtomicRef(slot.version).store(version + 1u, std::memory_order_release);
+        analysisAtomicRef(slot.active).store(0u, std::memory_order_release);
+        slot.analysisDomainId = 0;
+        slot.hostProcessId = 0;
+        slot.creationTimeMs = 0;
+        analysisAtomicRef(slot.version).store(version + 2u, std::memory_order_release);
+        return;
+    }
+}
+
+bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, DomainView& out) const noexcept {
+    auto* state = domainState();
+    if (state == nullptr)
+        return false;
+
+    bool found = false;
+    for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+        auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if (slot.hostProcessId != hostProcessId)
+            continue;
+        if (!found || slot.creationTimeMs > out.creationTimeMs) {
+            out.active = true;
+            out.slotIndex = slotIndex;
+            out.analysisDomainId = slot.analysisDomainId;
+            out.hostProcessId = slot.hostProcessId;
+            out.creationTimeMs = slot.creationTimeMs;
+            found = true;
+        }
+    }
+    return found;
+}
+
+std::uint64_t DomainRegistry::currentProcessId() const noexcept {
+    return osCurrentProcessId();
+}
+
+StageRegistry& StageRegistry::instance() noexcept {
+    static StageRegistry registry;
+    return registry;
+}
+
+int StageRegistry::registerStage(const ProductIdentity& identity,
+                                 const std::uint64_t analysisDomainId,
+                                 std::uint64_t& instanceIdOut,
+                                 std::uint64_t& localOrderIdOut) noexcept {
+    auto* state = analysisState();
+    if (state == nullptr) {
+        instanceIdOut = 0;
+        localOrderIdOut = 0;
+        return -1;
+    }
+
+    juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
+    if (!scoped.isLocked()) {
+        instanceIdOut = 0;
+        localOrderIdOut = 0;
+        return -1;
+    }
+
+    const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
+    const int domainIndex = domainIndexFor(analysisDomainId);
+    auto allocateSlot = [&](SharedStageSlot& slot) {
+        analysisAtomicRef(slot.version).store(1u, std::memory_order_release);
+        instanceIdOut = state->nextInstanceId++;
+        localOrderIdOut = state->nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
+        slot.analysisDomainId = analysisDomainId;
+        setStageIdentityFromProduct(slot.telemetry.identity, identity, instanceIdOut, localOrderIdOut);
+        slot.telemetry.state.timestampMs = nowMs;
+        slot.telemetry.state.isLive = true;
+        slot.telemetry.state.isSilent = true;
+        analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
+        analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
+    };
+
+    for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+        auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) != 0u)
+            continue;
+        allocateSlot(slot);
+        return slotIndex;
+    }
+
+    for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+        auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if ((nowMs - slot.telemetry.state.timestampMs) < static_cast<std::uint64_t>(kStageSlotReuseMs))
+            continue;
+        allocateSlot(slot);
+        return slotIndex;
+    }
+
+    instanceIdOut = 0;
+    localOrderIdOut = 0;
+    return -1;
+}
+
+void StageRegistry::unregisterStage(const int slotIndex, const std::uint64_t instanceId) noexcept {
+    auto* slot = stageSlotAt(slotIndex);
+    if (slot == nullptr)
+        return;
+
+    juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
+    if (!scoped.isLocked())
+        return;
+
+    if (analysisAtomicRef(slot->active).load(std::memory_order_acquire) == 0u
+        || slot->telemetry.identity.instanceId != instanceId) {
+        return;
+    }
+
+    const auto version = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
+    analysisAtomicRef(slot->version).store(version + 1u, std::memory_order_release);
+    analysisAtomicRef(slot->active).store(0u, std::memory_order_release);
+    slot->analysisDomainId = 0;
+    slot->telemetry = {};
+    analysisAtomicRef(slot->version).store(version + 2u, std::memory_order_release);
+}
+
+bool StageRegistry::publish(const int slotIndex,
+                            const std::uint64_t instanceId,
+                            const std::uint64_t analysisDomainId,
+                            const StageTelemetry& telemetry) noexcept {
+    auto* slot = stageSlotAt(slotIndex);
+    if (slot == nullptr)
+        return false;
+    if (analysisAtomicRef(slot->active).load(std::memory_order_acquire) == 0u
+        || slot->telemetry.identity.instanceId != instanceId) {
+        return false;
+    }
+
+    const auto version = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
+    analysisAtomicRef(slot->version).store(version + 1u, std::memory_order_release);
+    slot->analysisDomainId = analysisDomainId;
+    slot->telemetry = telemetry;
+    analysisAtomicRef(slot->version).store(version + 2u, std::memory_order_release);
+    return true;
+}
+
+bool StageRegistry::readStage(const int slotIndex, StageView& out) const noexcept {
+    auto* slot = stageSlotAt(slotIndex);
+    if (slot == nullptr)
+        return false;
+
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        const auto versionStart = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
+        if ((versionStart & 1u) != 0u)
+            continue;
+        if (analysisAtomicRef(slot->active).load(std::memory_order_acquire) == 0u)
+            return false;
+
+        out.active = true;
+        out.slotIndex = slotIndex;
+        out.analysisDomainId = slot->analysisDomainId;
+        out.telemetry = slot->telemetry;
+
+        const auto versionEnd = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
+        if (versionStart == versionEnd && (versionEnd & 1u) == 0u)
+            return true;
+    }
+
+    return false;
+}
+
+StagePublisher::StagePublisher(const ProductIdentity& identity)
+    : identityDescriptor(identity),
+      inputAccumulator(std::make_unique<SummaryAccumulator>()),
+      outputAccumulator(std::make_unique<SummaryAccumulator>()) {
+    refreshDomainBinding(true);
+    ensureRegistered();
+}
+
+StagePublisher::~StagePublisher() {
+    StageRegistry::instance().unregisterStage(slotIndex, instanceIdValue);
+}
+
+void StagePublisher::prepare(const double sampleRate, const int maxBlockSize) noexcept {
+    juce::ignoreUnused(maxBlockSize);
+    currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    publishIntervalSamples = std::max(256, static_cast<int>(currentSampleRate / static_cast<double>(kTargetPublishHz)));
+    samplesUntilPublish = publishIntervalSamples;
+    domainRefreshCountdown = kDomainRefreshSamples;
+    inputAccumulator->prepare(currentSampleRate, publishIntervalSamples);
+    outputAccumulator->prepare(currentSampleRate, publishIntervalSamples);
+    ensureRegistered();
+}
+
+void StagePublisher::reset() noexcept {
+    if (inputAccumulator != nullptr)
+        inputAccumulator->reset();
+    if (outputAccumulator != nullptr)
+        outputAccumulator->reset();
+    samplesUntilPublish = publishIntervalSamples;
+    domainRefreshCountdown = kDomainRefreshSamples;
+}
+
+void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
+                             const juce::AudioBuffer<float>& outputBuffer,
+                             const bool bypassed) noexcept {
+    refreshDomainBinding();
+    ensureRegistered();
+    if (slotIndex < 0 || inputAccumulator == nullptr || outputAccumulator == nullptr)
+        return;
+
+    inputAccumulator->update(inputBuffer);
+    outputAccumulator->update(outputBuffer);
+    samplesUntilPublish -= std::min(inputBuffer.getNumSamples(), outputBuffer.getNumSamples());
+    domainRefreshCountdown -= std::min(inputBuffer.getNumSamples(), outputBuffer.getNumSamples());
+    maybePublish(bypassed, std::max(inputBuffer.getNumChannels(), outputBuffer.getNumChannels()));
+}
+
+void StagePublisher::publishBypassed(const juce::AudioBuffer<float>& buffer) noexcept {
+    publish(buffer, buffer, true);
+}
+
+void StagePublisher::ensureRegistered() noexcept {
+    if (slotIndex >= 0)
+        return;
+
+    slotIndex = StageRegistry::instance().registerStage(identityDescriptor,
+                                                        analysisDomainIdValue,
+                                                        instanceIdValue,
+                                                        localOrderIdValue);
+}
+
+void StagePublisher::refreshDomainBinding(const bool force) noexcept {
+    if (!force && domainRefreshCountdown > 0)
+        return;
+
+    domainRefreshCountdown = kDomainRefreshSamples;
+    DomainView domain;
+    const auto newDomainId =
+        DomainRegistry::instance().latestDomainForProcess(DomainRegistry::instance().currentProcessId(), domain)
+            ? domain.analysisDomainId
+            : 0;
+
+    if (!force && newDomainId == analysisDomainIdValue)
+        return;
+
+    if (slotIndex >= 0)
+        StageRegistry::instance().unregisterStage(slotIndex, instanceIdValue);
+
+    slotIndex = -1;
+    instanceIdValue = 0;
+    localOrderIdValue = 0;
+    analysisDomainIdValue = newDomainId;
+}
+
+void StagePublisher::maybePublish(const bool bypassed, const int numChannels) noexcept {
+    if (slotIndex < 0 || samplesUntilPublish > 0)
+        return;
+
+    StageTelemetry telemetry;
+    setStageIdentityFromProduct(telemetry.identity, identityDescriptor, instanceIdValue, localOrderIdValue);
+    telemetry.state.timestampMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
+    telemetry.state.isLive = true;
+    telemetry.state.isBypassed = bypassed;
+    telemetry.state.detailLevel = DetailLevel::tier1;
+    telemetry.state.sampleRate = static_cast<float>(currentSampleRate);
+    telemetry.state.numChannels = static_cast<std::uint8_t>(juce::jlimit(0, 255, numChannels));
+    telemetry.inputSummary = inputAccumulator->summary();
+    telemetry.outputSummary = outputAccumulator->summary();
+    telemetry.state.isSilent = telemetry.inputSummary.rms <= 1.0e-6f && telemetry.outputSummary.rms <= 1.0e-6f;
+
+    if (!StageRegistry::instance().publish(slotIndex, instanceIdValue, analysisDomainIdValue, telemetry)) {
+        slotIndex = -1;
+        instanceIdValue = 0;
+        localOrderIdValue = 0;
+        return;
+    }
+
+    samplesUntilPublish = publishIntervalSamples;
+}
+
+void StagePublisher::copyLabel(std::string_view source, char* dest, const std::size_t destSize) noexcept {
+    copyFixedLabel(source, dest, destSize);
+}
+
+} // namespace vxsuite::analysis

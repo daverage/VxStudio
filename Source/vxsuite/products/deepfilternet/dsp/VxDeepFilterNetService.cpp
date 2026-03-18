@@ -65,7 +65,8 @@ void DeepFilterService::SampleFifo::pop(float* dest, const int count) {
 }
 
 DeepFilterService::~DeepFilterService() {
-    releaseRuntime();
+    for (auto& bundle : bundles)
+        releaseBundle(bundle);
 }
 
 juce::String DeepFilterService::lastStatus() const {
@@ -81,31 +82,38 @@ juce::String DeepFilterService::lastStatus() const {
     return "idle";
 }
 
-DeepFilterService::RuntimeApi DeepFilterService::selectedRuntimeApi() const noexcept {
-    return modelVariant == ModelVariant::dfn2 ? RuntimeApi::dfn2 : RuntimeApi::dfn3;
+DeepFilterService::RuntimeApi DeepFilterService::selectedRuntimeApi(const ModelVariant variant) const noexcept {
+    return variant == ModelVariant::dfn2 ? RuntimeApi::dfn2 : RuntimeApi::dfn3;
 }
 
-int DeepFilterService::latencySamplesForCurrentVariant() const noexcept {
-    const int latency48k = modelVariant == ModelVariant::dfn2 ? kDfn2LowLatency48k : kDfn3Latency48k;
-    return juce::roundToInt(static_cast<double>(latency48k) * rtSampleRate / kEngineSampleRate);
+int DeepFilterService::latencySamplesForVariant(const ModelVariant variant, const double sampleRate) const noexcept {
+    const int latency48k = variant == ModelVariant::dfn2 ? kDfn2LowLatency48k : kDfn3Latency48k;
+    return juce::roundToInt(static_cast<double>(latency48k) * sampleRate / kEngineSampleRate);
 }
 
 bool DeepFilterService::needsRealtimePrepare(const double sampleRate, const int maxBlockSize) const {
     if (sampleRate <= 1000.0 || maxBlockSize <= 0)
         return false;
-    if (!rtReady)
+    const int activeIndex = activeBundleIndex.load(std::memory_order_acquire);
+    if (activeIndex < 0 || !rtReady)
         return true;
-    if (rtPreparedVariant != modelVariant)
+    const auto& active = bundles[static_cast<size_t>(activeIndex)];
+    if (!active.ready)
         return true;
-    if (std::abs(rtSampleRate - sampleRate) > 1.0)
+    const auto variant = getModelVariant();
+    if (active.preparedVariant != variant)
         return true;
-    return rtBlockSize < maxBlockSize;
+    if (std::abs(active.sampleRate - sampleRate) > 1.0)
+        return true;
+    if (active.blockSize < maxBlockSize)
+        return true;
+    return resetRequested.load(std::memory_order_relaxed);
 }
 
-void DeepFilterService::releaseRuntime() {
-    for (auto& channel : channels) {
+void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
+    for (auto& channel : bundle.channels) {
         if (channel.runtime != nullptr) {
-            destroyRuntime(channel.runtime);
+            destroyRuntime(bundle.runtimeApi, channel.runtime);
             channel.runtime = nullptr;
         }
         channel.resampler.reset();
@@ -114,16 +122,21 @@ void DeepFilterService::releaseRuntime() {
         std::fill(channel.frameIn.begin(), channel.frameIn.end(), 0.0f);
         std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
     }
-    extractedModelFile = juce::File();
-    rtReady = false;
-    rtCapability = RealtimeCapability::unavailable;
-    rtBackend = RealtimeBackend::none;
-    rtBackendTag = "none";
-    rtRuntimeApi = RuntimeApi::none;
+    bundle.modelFile = juce::File();
+    bundle.ready = false;
+    bundle.capability = RealtimeCapability::unavailable;
+    bundle.backend = RealtimeBackend::none;
+    bundle.backendTag = "none";
+    bundle.runtimeApi = RuntimeApi::none;
+    bundle.blockSize = 0;
+    bundle.frameLength = kDefaultFrameLength;
+    bundle.latencySamples = 0;
 }
 
-void* DeepFilterService::createRuntime(const juce::String& modelPath, const float attenuationLimitDb) const {
-    switch (selectedRuntimeApi()) {
+void* DeepFilterService::createRuntime(const RuntimeApi api,
+                                       const juce::String& modelPath,
+                                       const float attenuationLimitDb) const {
+    switch (api) {
         case RuntimeApi::dfn2:
             return df2_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
         case RuntimeApi::dfn3:
@@ -134,11 +147,11 @@ void* DeepFilterService::createRuntime(const juce::String& modelPath, const floa
     return nullptr;
 }
 
-void DeepFilterService::destroyRuntime(void* runtime) const {
+void DeepFilterService::destroyRuntime(const RuntimeApi api, void* runtime) const {
     if (runtime == nullptr)
         return;
 
-    switch (rtRuntimeApi) {
+    switch (api) {
         case RuntimeApi::dfn2:
             df2_free(static_cast<DF2State*>(runtime));
             return;
@@ -150,11 +163,11 @@ void DeepFilterService::destroyRuntime(void* runtime) const {
     }
 }
 
-int DeepFilterService::runtimeFrameLength(void* runtime) const {
+int DeepFilterService::runtimeFrameLength(const RuntimeApi api, void* runtime) const {
     if (runtime == nullptr)
         return 0;
 
-    switch (rtRuntimeApi) {
+    switch (api) {
         case RuntimeApi::dfn2:
             return static_cast<int>(df2_get_frame_length(static_cast<DF2State*>(runtime)));
         case RuntimeApi::dfn3:
@@ -165,11 +178,11 @@ int DeepFilterService::runtimeFrameLength(void* runtime) const {
     return 0;
 }
 
-void DeepFilterService::setRuntimeAttenuation(void* runtime, const float attenuationLimitDb) const {
+void DeepFilterService::setRuntimeAttenuation(const RuntimeApi api, void* runtime, const float attenuationLimitDb) const {
     if (runtime == nullptr)
         return;
 
-    switch (rtRuntimeApi) {
+    switch (api) {
         case RuntimeApi::dfn2:
             df2_set_atten_lim(static_cast<DF2State*>(runtime), attenuationLimitDb);
             return;
@@ -181,11 +194,11 @@ void DeepFilterService::setRuntimeAttenuation(void* runtime, const float attenua
     }
 }
 
-float DeepFilterService::processRuntimeFrame(void* runtime, float* input, float* output) const {
+float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime, float* input, float* output) const {
     if (runtime == nullptr || input == nullptr || output == nullptr)
         return 0.0f;
 
-    switch (rtRuntimeApi) {
+    switch (api) {
         case RuntimeApi::dfn2:
             return df2_process_frame(static_cast<DF2State*>(runtime), input, output);
         case RuntimeApi::dfn3:
@@ -231,9 +244,9 @@ juce::String DeepFilterService::binaryDataNameForVariant(const ModelVariant vari
         : "DeepFilterNet3_onnx_tar_gz";
 }
 
-bool DeepFilterService::extractEmbeddedModel(const juce::File& destination) {
+bool DeepFilterService::extractEmbeddedModel(const ModelVariant variant, const juce::File& destination) {
     int dataSize = 0;
-    const auto resourceName = binaryDataNameForVariant(modelVariant);
+    const auto resourceName = binaryDataNameForVariant(variant);
     const char* bytes = BinaryData::getNamedResource(resourceName.toRawUTF8(), dataSize);
     if (bytes == nullptr || dataSize <= 0)
         return false;
@@ -248,10 +261,10 @@ bool DeepFilterService::extractEmbeddedModel(const juce::File& destination) {
     return false;
 }
 
-bool DeepFilterService::prepareModelFile() {
-    auto modelFile = modelAssetForVariant(modelVariant);
+bool DeepFilterService::prepareModelFile(const ModelVariant variant, juce::File& modelFileOut) {
+    auto modelFile = modelAssetForVariant(variant);
     if (modelFile.existsAsFile()) {
-        extractedModelFile = modelFile;
+        modelFileOut = modelFile;
         return true;
     }
 
@@ -260,82 +273,106 @@ bool DeepFilterService::prepareModelFile() {
     if (!tempDirectory.createDirectory())
         return false;
 
-    const auto tempModel = tempDirectory.getChildFile(modelVariant == ModelVariant::dfn2
+    const auto tempModel = tempDirectory.getChildFile(variant == ModelVariant::dfn2
         ? "DeepFilterNet2_onnx_ll.tar.gz"
         : "DeepFilterNet3_onnx.tar.gz");
-    if (!tempModel.existsAsFile() && !extractEmbeddedModel(tempModel))
+    if (!tempModel.existsAsFile() && !extractEmbeddedModel(variant, tempModel))
         return false;
 
-    extractedModelFile = tempModel;
-    return extractedModelFile.existsAsFile();
+    modelFileOut = tempModel;
+    return modelFileOut.existsAsFile();
 }
 
-bool DeepFilterService::prepareChannel(ChannelState& channel, const int maxBlockSize) {
-    if (!prepareModelFile())
-        return false;
-
-    channel.runtime = createRuntime(extractedModelFile.getFullPathName(), 24.0f);
+bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundle& bundle) {
+    channel.runtime = createRuntime(bundle.runtimeApi, bundle.modelFile.getFullPathName(), 24.0f);
     if (channel.runtime == nullptr)
         return false;
 
-    channel.resampler = std::make_unique<Resampler<1, 1>>(rtSampleRate, kEngineSampleRate);
+    channel.resampler = std::make_unique<Resampler<1, 1>>(bundle.sampleRate, kEngineSampleRate);
     channel.inputFifo.reset(kFifoCapacity48k);
     channel.outputFifo.reset(kFifoCapacity48k);
 
-    const int frameLength = runtimeFrameLength(channel.runtime);
-    rtFrameLength = std::max(1, frameLength);
-    channel.frameIn.assign(static_cast<size_t>(rtFrameLength), 0.0f);
-    channel.frameOut.assign(static_cast<size_t>(rtFrameLength), 0.0f);
+    const int frameLength = runtimeFrameLength(bundle.runtimeApi, channel.runtime);
+    const int safeFrameLength = std::max(1, frameLength);
+    channel.frameIn.assign(static_cast<size_t>(safeFrameLength), 0.0f);
+    channel.frameOut.assign(static_cast<size_t>(safeFrameLength), 0.0f);
 
-    const auto maxRatio = std::max(1.0, kEngineSampleRate / rtSampleRate);
-    const auto maxResampledSize = std::max(rtFrameLength, static_cast<int>(std::ceil(maxBlockSize * maxRatio)) + 128);
+    const auto maxRatio = std::max(1.0, kEngineSampleRate / bundle.sampleRate);
+    const auto maxResampledSize = std::max(safeFrameLength, static_cast<int>(std::ceil(bundle.blockSize * maxRatio)) + 128);
     channel.resampleIn.assign(static_cast<size_t>(maxResampledSize), 0.0f);
     channel.resampleOut.assign(static_cast<size_t>(maxResampledSize), 0.0f);
     return true;
 }
 
-void DeepFilterService::prepareRealtime(const double sampleRate, const int maxBlockSize) {
-    setStatus(StatusCode::rtPreparing);
-    releaseRuntime();
+void DeepFilterService::waitForReaders(const int bundleIndex) const noexcept {
+    if (bundleIndex < 0 || bundleIndex >= static_cast<int>(bundleReaders.size()))
+        return;
+    while (bundleReaders[static_cast<size_t>(bundleIndex)].load(std::memory_order_acquire) > 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+}
 
-    rtSampleRate = sampleRate > 1000.0 ? sampleRate : kEngineSampleRate;
-    rtBlockSize = std::max(1, maxBlockSize);
-    rtRuntimeApi = selectedRuntimeApi();
-    rtPreparedVariant = modelVariant;
-    rtFrameLength = kDefaultFrameLength;
-    latencySamples = latencySamplesForCurrentVariant();
+bool DeepFilterService::prepareBundle(RuntimeBundle& bundle,
+                                      const double sampleRate,
+                                      const int maxBlockSize,
+                                      const ModelVariant variant) {
+    releaseBundle(bundle);
 
-    for (auto& channel : channels) {
-        if (!prepareChannel(channel, rtBlockSize)) {
-            releaseRuntime();
-            setStatus(extractedModelFile.existsAsFile() ? StatusCode::rtInitFailed : StatusCode::rtMissingModel);
-            return;
+    bundle.sampleRate = sampleRate > 1000.0 ? sampleRate : kEngineSampleRate;
+    bundle.blockSize = std::max(1, maxBlockSize);
+    bundle.runtimeApi = selectedRuntimeApi(variant);
+    bundle.preparedVariant = variant;
+    bundle.frameLength = kDefaultFrameLength;
+    bundle.latencySamples = latencySamplesForVariant(variant, bundle.sampleRate);
+
+    if (!prepareModelFile(variant, bundle.modelFile))
+        return false;
+
+    for (auto& channel : bundle.channels) {
+        if (!prepareChannel(channel, bundle)) {
+            releaseBundle(bundle);
+            return false;
         }
+        bundle.frameLength = std::max(bundle.frameLength, static_cast<int>(channel.frameIn.size()));
     }
 
+    bundle.ready = true;
+    bundle.capability = RealtimeCapability::embeddedRuntime;
+    bundle.backend = RealtimeBackend::cpu;
+    bundle.backendTag = bundle.runtimeApi == RuntimeApi::dfn2 ? "libdf031:cpu" : "libdf:cpu";
+    return true;
+}
+
+void DeepFilterService::prepareRealtime(const double sampleRate, const int maxBlockSize) {
+    setStatus(StatusCode::rtPreparing);
+    const auto variant = getModelVariant();
+    const int currentActive = activeBundleIndex.load(std::memory_order_acquire);
+    const int prepareIndex = currentActive == 0 ? 1 : 0;
+
+    waitForReaders(prepareIndex);
+    auto& bundle = bundles[static_cast<size_t>(prepareIndex)];
+    if (!prepareBundle(bundle, sampleRate, maxBlockSize, variant)) {
+        setStatus(bundle.modelFile.existsAsFile() ? StatusCode::rtInitFailed : StatusCode::rtMissingModel);
+        return;
+    }
+
+    const int previousActive = activeBundleIndex.exchange(prepareIndex, std::memory_order_acq_rel);
+    if (previousActive >= 0 && previousActive != prepareIndex) {
+        waitForReaders(previousActive);
+        releaseBundle(bundles[static_cast<size_t>(previousActive)]);
+    }
+
+    latencySamples = bundle.latencySamples;
+    rtPreparedVariant = bundle.preparedVariant;
     rtReady = true;
-    rtCapability = RealtimeCapability::embeddedRuntime;
-    rtBackend = RealtimeBackend::cpu;
-    rtBackendTag = rtRuntimeApi == RuntimeApi::dfn2 ? "libdf031:cpu" : "libdf:cpu";
+    rtCapability = bundle.capability;
+    rtBackend = bundle.backend;
+    rtBackendTag = bundle.backendTag;
+    resetRequested.store(false, std::memory_order_relaxed);
     setStatus(StatusCode::rtReady);
 }
 
 void DeepFilterService::resetRealtime() {
-    for (auto& channel : channels) {
-        if (channel.runtime != nullptr) {
-            destroyRuntime(channel.runtime);
-            channel.runtime = createRuntime(extractedModelFile.getFullPathName(), 24.0f);
-        }
-        if (channel.runtime != nullptr)
-            setRuntimeAttenuation(channel.runtime, 24.0f);
-        if (channel.resampler != nullptr)
-            channel.resampler = std::make_unique<Resampler<1, 1>>(rtSampleRate, kEngineSampleRate);
-        channel.inputFifo.clear();
-        channel.outputFifo.clear();
-        std::fill(channel.frameIn.begin(), channel.frameIn.end(), 0.0f);
-        std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
-    }
-    tailPrior = 0.0f;
+    resetRequested.store(true, std::memory_order_relaxed);
 }
 
 float DeepFilterService::attenuationLimitForStrength(const float strength) const noexcept {
@@ -348,27 +385,27 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                                         const uint64_t key) {
     juce::ignoreUnused(key);
 
-    if (!rtReady || !hasRealtimeBackend())
+    const int activeIndex = activeBundleIndex.load(std::memory_order_acquire);
+    if (activeIndex < 0 || !rtReady || !hasRealtimeBackend())
         return false;
-    if (needsRealtimePrepare(sampleRate, buffer.getNumSamples())) {
-        setStatus(StatusCode::rtReprepareNeeded);
+    auto& bundle = bundles[static_cast<size_t>(activeIndex)];
+    if (!bundle.ready)
         return false;
-    }
 
     const int numChannels = std::min(buffer.getNumChannels(), rtMaxChannels);
     const int numSamples = buffer.getNumSamples();
     if (numChannels <= 0 || numSamples <= 0)
         return false;
 
+    bundleReaders[static_cast<size_t>(activeIndex)].fetch_add(1, std::memory_order_acq_rel);
     const auto attenuationLimitDb = attenuationLimitForStrength(strength);
-    const float wet = vxsuite::clamp01(strength);
 
     for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
-        auto& channel = channels[static_cast<size_t>(channelIndex)];
+        auto& channel = bundle.channels[static_cast<size_t>(channelIndex)];
         if (channel.runtime == nullptr || channel.resampler == nullptr)
-            return false;
+            continue;
 
-        setRuntimeAttenuation(channel.runtime, attenuationLimitDb);
+        setRuntimeAttenuation(bundle.runtimeApi, channel.runtime, attenuationLimitDb);
 
         float* sourceInput[] = { buffer.getWritePointer(channelIndex) };
         float* sourceOutput[] = { buffer.getWritePointer(channelIndex) };
@@ -385,31 +422,23 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                 auto* input48k = inputBuffers[0];
                 auto* output48k = outputBuffers[0];
 
-                channel.inputFifo.push(input48k, sampleCount48k);
+                    channel.inputFifo.push(input48k, sampleCount48k);
 
-                while (channel.inputFifo.available >= rtFrameLength) {
-                    channel.inputFifo.pop(channel.frameIn.data(), rtFrameLength);
-                    processRuntimeFrame(channel.runtime, channel.frameIn.data(), channel.frameOut.data());
-                    channel.outputFifo.push(channel.frameOut.data(), rtFrameLength);
-                }
+                    while (channel.inputFifo.available >= bundle.frameLength) {
+                        channel.inputFifo.pop(channel.frameIn.data(), bundle.frameLength);
+                        processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
+                        channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
+                    }
 
                 const int outputCount = std::min(channel.outputFifo.available, sampleCount48k);
                 channel.outputFifo.pop(output48k, outputCount);
                 if (outputCount < sampleCount48k)
                     juce::FloatVectorOperations::clear(output48k + outputCount, sampleCount48k - outputCount);
-            });
+                });
     }
 
-    for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
-        auto* samples = buffer.getWritePointer(channelIndex);
-        for (int i = 0; i < numSamples; ++i)
-            samples[i] *= wet;
-    }
-
-    if (buffer.getNumChannels() > 1 && numChannels == 1)
-        buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
-
-    tailPrior = 0.92f * tailPrior + 0.08f * wet;
+    tailPrior = 0.92f * tailPrior + 0.08f * vxsuite::clamp01(strength);
+    bundleReaders[static_cast<size_t>(activeIndex)].fetch_sub(1, std::memory_order_acq_rel);
     setStatus(StatusCode::rtReady);
     return true;
 }

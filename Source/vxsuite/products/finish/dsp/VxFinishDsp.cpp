@@ -1,20 +1,11 @@
 #include "VxFinishDsp.h"
 
+#include "../../../framework/VxSuiteBlockSmoothing.h"
+
 #include <algorithm>
 #include <cmath>
 
 namespace vxsuite::finish {
-
-namespace {
-
-float blockBlendAlpha(const double sampleRate, const int numSamples, const float seconds) {
-    if (sampleRate <= 1000.0 || numSamples <= 0 || seconds <= 0.0f)
-        return 1.0f;
-
-    return 1.0f - std::exp(-static_cast<float>(numSamples) / (seconds * static_cast<float>(sampleRate)));
-}
-
-} // namespace
 
 void Dsp::prepare(const double sampleRate, const int maxBlockSize, const int numChannels) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
@@ -42,13 +33,23 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
 
     const bool voiceMode = params.contentMode == 0;
     const float peakReduction = juce::jlimit(0.0f, 1.0f, params.peakReduction);
+    const bool finishStageEnabled = peakReduction > 1.0e-4f;
 
     const float autoMakeupMaxDb = voiceMode ? 4.0f : 3.0f;
     const float autoMakeupTargetDb = autoMakeupMaxDb * std::pow(peakReduction, 0.85f);
-    smoothedAutoMakeupDb += blockBlendAlpha(sr, numSamples, 0.18f) * (autoMakeupTargetDb - smoothedAutoMakeupDb);
+    smoothedAutoMakeupDb += vxsuite::blockBlendAlpha(sr, numSamples, 0.18f)
+        * (autoMakeupTargetDb - smoothedAutoMakeupDb);
 
     updateOptoParams(smoothedAutoMakeupDb + params.outputGainDb);
     opto.process(buffer);
+
+    if (!finishStageEnabled) {
+        limitEnv = 0.0f;
+        limitGain = 1.0f;
+        limiterActivity = 0.0f;
+        return;
+    }
+
     processLimiter(buffer);
 }
 

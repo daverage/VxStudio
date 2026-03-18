@@ -99,6 +99,15 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                       : vxsuite::clamp01(0.35f + 0.50f * smoothedGuard * policy.guardStrictness);
     opts.speechFocus        = isVoice ? juce::jmax(0.78f, policy.speechFocus) : juce::jmax(0.18f, policy.speechFocus);
 
+    if (effectiveClean <= 1.0e-4f) {
+        ensureLatencyAlignedListenDry(numSamples);
+        const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        return;
+    }
+
     stageChain.processInPlace(buffer, { effectiveClean }, opts);
 
     ensureLatencyAlignedListenDry(numSamples);

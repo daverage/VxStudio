@@ -26,6 +26,7 @@ private:
     void prepareEngineIfNeeded();
     ModelVariant selectedModelVariant() const noexcept;
     void timerCallback() override;
+    void blendProcessedWithDry(juce::AudioBuffer<float>& buffer, float wetMix);
 
     vxsuite::deepfilternet::DeepFilterService engine;
 

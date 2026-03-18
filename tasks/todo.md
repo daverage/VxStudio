@@ -1,4 +1,172 @@
+# Analyzer smoothing + render contract — 2026-03-18
+
+## Problem
+`VX Studio Analyser` still had the right stage-aware structure but the underlying cadence, smoothing, and render model were too raw, so the plots read like unstable debug telemetry instead of an industry-standard explanation tool. The user provided exact smoothing constants, FFT settings, RMS/peak rules, and a definitive visualization contract that now needs to become the implementation target.
+
+## Plan
+- [x] Update framework telemetry accumulation to match the requested analyzer defaults: 15 Hz publish cadence, 2048 Hann tone analysis with 75% overlap semantics, rolling RMS/peak/transient calculations, and stable dry-baseline summaries.
+- [x] Rebuild the analyzer backend/editor flow around a staged render model with 20 Hz backend updates, 30 Hz UI repaint, smoothed summary metrics, and the exact Tone/Dynamics presentation contract.
+- [x] Verify the analyzer build and document the resulting behavior, limits, and any residual calibration work.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.*` now treats stage summaries as rolling state instead of one isolated publish frame. Tier 1 tone telemetry moved to 32 log-spaced bands driven by a 2048-sample Hann analysis window with quarter-hop updates, and the publish cadence is now 15 Hz.
+- The framework dynamics summary is now more analyzer-like: rolling 100 ms RMS, 10 ms versus 100 ms transient contrast, decaying held peak, and a 250 ms RMS history feeding the dynamics graph. `StagePublisher` no longer resets accumulators after every publish, so snapshots stay temporally stable.
+- `VXStudioAnalyserProcessor` now publishes its own pass-through stage telemetry as a dry baseline. The editor excludes that analyzer stage from the visible chain, but uses it when there are no active upstream VX processors so the UI shows a stable dry/zero-change state instead of looking empty.
+- `VXStudioAnalyserEditor` was split into a backend/render pipeline: a `HighResolutionTimer` builds the render model at 20 Hz, a UI timer applies it at 30 Hz, and `paint()` now only draws the already-prepared model. Telemetry reads, scope resolution, smoothing, and summary generation are out of the paint path.
+- Tone rendering now follows the requested contract more closely: log-frequency axis, centered dB range, delta-first fill, faint before/after context, largest-change marker, and summary-strip language derived from smoothed values. Dynamics now shows RMS-over-time in dBFS with proper meter-style axes instead of unlabeled abstract traces.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `cmake --build build --target VXCleanupPlugin -j4`.
+- Remaining caveat: this pass is compile-verified and architecture-aligned, but not yet visually calibrated in-host after the new smoothing constants landed. The next likely refinement, if needed, is tuning summary wording or graph normalization from real screenshots rather than changing the transport again.
+
+# VX Analyzer rebuild spec - 2026-03-18
+
+## Problem
+Replace `VXSpectrum` with `VX Studio Analyser`, rebuilding the analyzer around a separate analysis layer instead of asking each DSP plugin to own rich inspection logic. The current `VXSpectrum` path is still a spectrum-first v1 that infers chain structure from waveform correlation and shared slot registration order, which is too fragile for reliable stage/group/full-chain inspection.
+
+## Plan
+- [x] Re-read the framework docs, research notes, and project lessons that constrain shared analysis and realtime telemetry work.
+- [x] Inspect the current `VXSpectrum` and framework telemetry implementation to identify the exact seams a rebuild should replace.
+- [x] Write a concrete technical spec for a two-tier telemetry model, analyzer responsibilities, transport semantics, and UI states.
+- [x] Add a review section that calls out why the new design is more robust than the current inferred-chain model and what implementation phases should follow.
+- [x] Tighten the spec with domain authority, explicit `StageTelemetry`, deterministic ordering, and incremental summary rules.
+- [x] Start the framework implementation by introducing the new telemetry ABI and domain registry primitives.
+- [x] Wire the new telemetry publisher through `ProcessorBase` without breaking current buildability.
+- [x] Build the affected targets and document the first implementation checkpoint.
+- [x] Replace the old `VXSpectrum` product target/files with `VXStudioAnalyser` in the build and staged plugin output.
+- [x] Replace the carried-over spectrum UI with a real stage-based `VXStudioAnalyser` shell built on the new analysis telemetry.
+
+## Review
+- Added `docs/VX_ANALYZER_REBUILD_SPEC.md` to define `VX Studio Analyser` as a separate analysis layer built on thin per-stage telemetry rather than product-local visualization logic.
+- The spec replaces the current spectrum-centric `SnapshotView` model with a stage-oriented schema that separates identity, live state, bypass state, silence, lightweight summaries, capabilities, and deep-inspection requests.
+- The design keeps `ProcessorBase` as the framework injection point, which means the rebuild stays aligned with VX Suite's shared-framework rule instead of creating new product-specific telemetry paths.
+- The proposed two-tier model is safer than extending the current analyzer because it removes dependence on registration order and waveform-correlation heuristics as the primary chain model. Those can remain as fallback confidence tools rather than being treated as truth.
+- The product direction is now explicit: this is a replacement of `VXSpectrum`, not a light refresh. The rewrite should land as `VX Studio Analyser` with a new product contract and UI model.
+- The implementation sequence is intentionally phased: schema/transport first, framework publisher second, analyzer backend third, UI fourth, and deep inspection last. That should let us migrate without trying to replace the whole analyzer stack in one unsafe pass.
+- First implementation checkpoint is in place: `ProductIdentity` now carries stage-analysis metadata, the framework has a new `vxsuite::analysis` telemetry ABI/domain registry/stage registry beside the legacy spectrum transport, and `ProcessorBase` now auto-publishes the new stage telemetry through `analysis::StagePublisher`.
+- The new Tier 1 summary path is intentionally foundational rather than final-quality: it publishes aligned input/output summaries with incremental envelope/RMS/peak/transient/stereo metrics, while coarse spectrum bins are still placeholder-filled pending the dedicated band accumulator pass.
+- Verified with `cmake --build build --target VXSpectrumPlugin VXCleanupPlugin -j4`. Both rebuilt successfully; the only output noise was the existing ad-hoc code-signing/staging warning during VST3 restaging.
+- Replaced the old `Source/vxsuite/products/spectrum/` product with `Source/vxsuite/products/analyser/`, switched the CMake target/bundle from `VXSpectrum` to `VXStudioAnalyser`, registered analyzer-domain authority in the analyzer processor, and removed the staged `Source/vxsuite/vst/VXSpectrum.vst3` bundle.
+- Verified the replacement with `cmake -S . -B build`, `cmake --build build --target VXStudioAnalyserPlugin -j4`, and `cmake --build build --target VXSuite_VST3 -j4`. The suite now stages `VXStudioAnalyser.vst3` instead of `VXSpectrum.vst3`.
+- Rewrote `Source/vxsuite/products/analyser/VXStudioAnalyserProcessor.*` and `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.*` so the product is no longer the old spectrum overlay view under a new name. The analyzer is now domain-scoped, stage-list driven, and shows `Before / After / Delta` scopes across `Tone`, `Dynamics`, and `Diagnostics`.
+- The new analyzer shell reads `vxsuite::analysis::StageRegistry` instead of the legacy `spectrum::SnapshotRegistry`, orders stages by domain + `localOrderId`, supports single-stage or full-chain scope, and derives stage impact/class labels from the new Tier 1 summaries.
+- Verified the rewritten analyzer with `cmake --build build --target VXStudioAnalyserPlugin -j4`. Current known limitation: the Tone view is structurally correct but still depends on placeholder Tier 1 spectrum bins from the first-pass accumulator, so the next cleanup should upgrade those bins from flat placeholders to proper coarse-band energy summaries.
+- Replaced the placeholder spectrum fill in `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` with a preallocated coarse FFT summary over a rolling mono window. Tier 1 spectrum bins are now derived from real band energy rather than `out.rms` replicated across every bin, so the analyzer traces can reflect actual tonal shape changes.
+- Verified the spectrum summary upgrade with `cmake --build build --target VXStudioAnalyserPlugin VXCleanupPlugin -j4`.
+- Rebuilt `VXStudioAnalyserEditor` around the definitive UI model: deterministic stage chain on the left, summary strip as the primary explanation surface, exactly one graph at a time, `Tone` and `Dynamics` tabs only, and diagnostics moved into a collapsible bottom panel.
+- Tone now renders like a proper change-view: log-frequency x-axis, centered dB y-axis, delta-first filled presentation, faint before/after context, low/mid/high guides, and a largest-change marker. Dynamics now renders as before/after dBFS level history instead of an unlabeled abstract line plot.
+- Verified the spec-driven UI rewrite with `cmake --build build --target VXStudioAnalyserPlugin -j4`.
+
+# Finish/Opto idle telemetry fix — 2026-03-18
+
+## Problem
+`VXFinish` and `VXOptoComp` showed the `Opto` activity LED as active even in their nominal idle/open state. The shared compressor stage was still eligible to compute gain reduction at zero amount, and both products also inherited the framework's default `primaryDefaultValue = 0.5f`, so they opened half-engaged.
+
+## Plan
+- [x] Inspect the shared opto telemetry path and confirm whether the issue lived in DSP logic, product defaults, or both.
+- [x] Patch the shared opto stage and product identities so zero amount is truly idle and telemetry reflects actual engaged compression.
+- [x] Add or update regression coverage, build the affected targets, and document the result.
+
+## Review
+- Set `VXFinish` and `VXOptoComp` primary defaults to `0.0f` so both products now open with zero compression instead of inheriting the framework's generic midpoint default.
+- Patched `Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp` so `Peak Reduction = 0` forces zero target gain reduction and zero activity telemetry, while still allowing neutral gain/body handling to remain transparent.
+- Fixed the centered `Gain` mapping in both processors so `0.5` is truly neutral; they were previously using the wrong `juce::jmap` overload and landing at `-6 dB` in the default state.
+- Added focused regression coverage for zero-amount transparency and zero telemetry in both `Finish` and `OptoComp`, and updated the regression target to link the standalone `VXOptoComp` wrapper.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4 && ./build/VXSuitePluginRegressionTests` plus `cmake --build build --target VXFinishPlugin VXOptoCompPlugin -j4`. Both plugin targets rebuilt and restaged successfully, with only the existing ad-hoc code-signing warnings during VST3 staging.
+
+# Cleanup slope toggle fix — 2026-03-18
+
+## Problem
+The `VXCleanup` slope icons were not reliably clickable because the shared editor rendered them in the label area, but those non-interactive labels and meter widgets could still intercept mouse events before the editor-level hit test ran.
+
+## Plan
+- [x] Inspect the shared editor hit-testing path and confirm whether child components were blocking the slope icon clicks.
+- [x] Patch the shared framework editor so display-only widgets stay mouse-transparent and do not break shelf/slope toggles.
+- [x] Build and verify the affected target or framework path, then document the result.
+
+## Review
+- Patched `Source/vxsuite/framework/VxSuiteEditorBase.cpp` so display-only labels and the learn meter explicitly call `setInterceptsMouseClicks(false, false)`, allowing editor-level shelf-icon hit testing to work as intended.
+- The fix stays in the shared editor rather than adding a `VXCleanup`-specific workaround, so any current or future products using inline shelf icons inherit the corrected behavior.
+- Verified with `cmake --build build --target VXCleanupPlugin -j4`; the plugin rebuilt and restaged successfully, with only the existing ad-hoc code-signing warning during VST3 staging.
+
 # VX Spectrum implementation — 2026-03-17
+
+# Per-effect audit fix pass — 2026-03-18
+
+## Problem
+Implement the audit fixes across each VX Suite effect individually, keeping changes consistent with the shared framework and with the expectation that the products work well together in a chain. Leave `VXDeepFilterNet` until last because its lifecycle/threading work is the riskiest.
+
+## Plan
+- [x] Update the task log and re-read the framework/lessons that constrain the fix pass.
+- [x] Patch shared framework issues first: aligned-dry handling for oversized blocks, bypass-state behavior, and any helper cleanup needed by multiple products.
+- [x] Fix `VXDeverb` against the updated framework and add focused regression coverage.
+- [x] Fix `VXDenoiser` and `VXSubtract` latency/state correctness issues and add focused regression coverage.
+- [x] Fix additive/listen/headroom consistency in `VXTone`, `VXProximity`, `VXFinish`, `VXOptoComp`, and any `VXCleanup` cleanup that should be aligned with framework usage.
+- [x] Fix `VXDeepFilterNet` last: runtime lifecycle, thread safety, and wet/dry semantics.
+- [x] Build and run the affected regression targets, then document the final results and residual risks.
+
+## Spec Notes
+- Framework changes should solve shared problems centrally rather than adding per-product defensive hacks where possible.
+- Additive products should share consistent listen and headroom semantics.
+- Output trimming remains an emergency guard, not the primary fix for gain-staging issues.
+- DeepFilterNet work should preserve suite conventions where possible, but correctness and realtime safety take priority.
+
+## Review
+- Implemented the shared framework fix in `ProcessorBase` so oversized host blocks are chunked through the prepared scratch/block-size contract, bypass continues to advance latency-aligned dry state, and additive products can render consistent delta-audition output via a shared helper.
+- Fixed `VXDeverb` by removing dead stage plumbing, moving RT60 tracking to per-channel estimators, and replacing the unstable-output fallback with a deterministic dry fallback for the offending block.
+- Fixed `VXDenoiser` and `VXSubtract` so zero-strength paths explicitly return the framework-aligned dry signal, preserving reported latency/PDC behaviour instead of relying on latent DSP to reconstruct dry. `VXSubtract` state restore now rejects incompatible learned-profile formats and keeps Learn armed across reset.
+- Aligned additive/listen semantics across `VXTone`, `VXProximity`, `VXFinish`, and `VXOptoComp` with the framework additive-delta helper, and reduced product-specific gain ranges where the audit showed output-trim-dependent headroom.
+- Adjusted `VXCleanup` FFT-order selection to scale with sample rate instead of assuming a fixed 48 kHz analysis window.
+- Fixed `VXDeepFilterNet` last by refactoring the service onto double-buffered runtime bundles, making model/runtime swaps API-consistent, avoiding audio-thread runtime teardown/reset, and restoring proper low-strength wet/dry behaviour with latency-aligned dry blending.
+- Added regression coverage for zero-strength PDC alignment, mismatched Subtract profile restore, Learn-after-reset, Tone additive listen semantics, and oversized host-block processing through the shared framework path.
+- Verification completed with `cmake --build build --target VXSuitePluginRegressionTests -j4`, `./build/VXSuitePluginRegressionTests`, and a full `cmake --build build -j4` project build. Residual note: the full build emits the existing macOS ad-hoc signing warnings while staging VST3 bundles, but the build completed successfully.
+
+# REAPER preset pack — 2026-03-18
+
+## Problem
+Add a documented REAPER-facing preset pack for VX Suite: per-effect `.RPL` preset libraries with the same scenario names across products, plus matching `.RfxChain` scenario chains and README guidance for when to use each one.
+
+## Plan
+- [x] Add the task log entry and capture the REAPER API lesson from the failed probe.
+- [x] Define four shared scenarios and per-effect starting values that stay consistent with the framework and with realistic chain usage.
+- [x] Add a reproducible generator for REAPER `.RPL` libraries and `.RfxChain` files.
+- [x] Generate and commit the preset pack outputs under a stable repo path.
+- [x] Update `README.md` with scenario descriptions, recommended signal chains, and preset-pack usage notes.
+
+## Review
+- Added a repo-local REAPER preset generator at `tools/reaper/generate_vx_reaper_presets.lua` that uses the installed/staged VX Suite VST3s inside REAPER to emit per-effect `.RPL` libraries and scenario `.RfxChain` files.
+- Generated the preset pack under `assets/reaper/`, with one `.RPL` file per effect in `assets/reaper/RPL Files/` and four scenario chains in `assets/reaper/FX Chains/`.
+- Standardized four shared scenario names across all effect libraries: `Camera Review - Far Phone`, `Live Music - Front Of Room`, `Podcast Finishing - Clean Voice`, and `Mixed Audio - Voice + Guitar`.
+- Updated `README.md` and added `assets/reaper/README.md` so the repo now documents what each scenario is for and which chain to start with.
+- Captured the REAPER API lesson from the failed probe: REAPER Lua parameter/preset helpers do not always mirror the return conventions implied by generic docs or other language bindings, so probing return values directly is safer than assuming tuple layouts.
+
+# Full per-effect audit sweep — 2026-03-18
+
+## Problem
+Review every VX Suite effect individually against the strict JUCE/VST3 + VX Suite audit prompt, then produce a separate report for each effect covering correctness, safety, efficiency, framework usage, host behavior, and validation gaps.
+
+## Plan
+- [x] Re-read the relevant project lessons and VX Suite framework rules, then inventory every effect target and its DSP/framework dependencies.
+- [x] Audit the shared VX Suite framework paths that affect all effects: lifecycle, smoothing, listen, output trim, latency, buffer handling, and state/host semantics.
+- [x] Perform an individual code audit for each effect product: `VXCleanup`, `VXDeverb`, `VXDenoiser`, `VXDeepFilterNet`, `VXFinish`, `VXOptoComp`, `VXProximity`, `VXSubtract`, and `VXTone`.
+- [x] Decide whether `VXSpectrum` belongs in the effect audit set; if not, exclude it explicitly from the reports with a reason.
+- [x] Write one report per audited effect in the requested format: executive summary, findings table, framework cleanup list, test matrix, and patch recommendations.
+- [x] Review the reports for consistency, rank the highest-severity risks, and document any cross-product framework drift or repeated failure patterns.
+
+## Spec Notes
+- Release readiness is the bar; missing verification counts as risk, not a pass.
+- Reports should stay effect-specific even when the root cause lives in shared framework code.
+- Framework responsibilities must not be re-audited as if each product were raw JUCE unless the product is bypassing the framework.
+- Minimal, surgical remediation suggestions come first; redesigns should be called out separately.
+
+## Review
+- Reports added under `tasks/reports/effect-audits/` for `Cleanup`, `Deverb`, `Denoiser`, `DeepFilterNet`, `Finish`, `OptoComp`, `Proximity`, `Subtract`, and `Tone`.
+- `VXSpectrum` was explicitly excluded because it is an analysis product rather than an audio effect, though the shared framework review still flagged its telemetry path as a realtime risk.
+- Highest-severity cross-product issues:
+- The framework dry/aligned-listen path is not safe when hosts deliver larger-than-prepared blocks, which becomes a release-blocking bug in `VXDeverb` and a stale-state risk for other latency-bearing products.
+- `VXDeepFilterNet` has release-blocking thread-safety and lifecycle issues around runtime preparation/reset.
+- `VXDenoiser` and `VXSubtract` both have host-PDC mismatches when their effective wet amount reaches zero while latency remains reported.
+- Repeated architecture drift:
+- Output trimming is being used in multiple products as a secondary safety net without proof that the main DSP path is already gain-stable.
+- Additive-product listen and wrapper logic are still duplicated instead of centralized.
 
 # Cleanup + Finish opto integration review — 2026-03-18
 
@@ -34,6 +202,24 @@ Review the new `optocomp` compressor integration for `VXFinish`, identify any co
 - `cmake --build build --target VXFinishPlugin -j4`
 - Residual risk:
 - `Finish` now follows the requested architecture much more closely, but the adaptive makeup stage is intentionally simple and heuristic rather than analysis-driven. That keeps the new compressor path intact and predictable, but there is still room for future tuning by ear in-host.
+
+# OptoComp standalone plugin — 2026-03-18
+
+## Problem
+Expose the new opto compressor as its own VX Suite plugin as well, without forking the compressor DSP away from the `Finish` path.
+
+## Plan
+- [x] Inspect the existing VX plugin shell pattern and choose the lightest reusable wrapper shape.
+- [x] Add a dedicated `OptoComp` processor that reuses the shared finish/opto DSP path.
+- [x] Register a new `VXOptoComp` VST3 target and include it in suite staging.
+- [x] Build and stage the standalone plugin.
+
+## Review
+- Added a new thin product wrapper at `Source/vxsuite/products/OptoComp/VxOptoCompProcessor.{h,cpp}` instead of copying DSP code.
+- `VXOptoComp` reuses `vxsuite::finish::Dsp`, so the compressor behavior stays shared between the standalone compressor and `Finish`.
+- The standalone plugin exposes dedicated product identity and wording: `Peak Red.`, `Body`, and `Gain`, with the same vocal/general mode mapping and listen-delta semantics.
+- Registered the new VST3 target in `CMakeLists.txt`, added it to the suite aggregate target, and staged it to `Source/vxsuite/vst/VXOptoComp.vst3`.
+- Verified with `cmake -S . -B build && cmake --build build --target VXOptoCompPlugin -j4`.
 
 ## Problem
 Build a dedicated VX analyzer plugin that can show dry/wet spectrum overlays plus one coloured trace per active VX-family plugin, while moving the shared snapshot engine into the framework so current and future plugins can publish telemetry without duplicating analysis code.

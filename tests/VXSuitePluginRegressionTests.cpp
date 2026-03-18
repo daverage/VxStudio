@@ -1,6 +1,7 @@
 #include "../Source/vxsuite/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxsuite/products/deverb/VxDeverbProcessor.h"
 #include "../Source/vxsuite/products/denoiser/VxDenoiserProcessor.h"
+#include "../Source/vxsuite/products/OptoComp/VxOptoCompProcessor.h"
 #include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
 #include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
@@ -468,6 +469,62 @@ bool testFinishResetIsDeterministic() {
     return true;
 }
 
+bool testFinishZeroAmountIsIdleAndTransparent() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+    input.applyGain(0.18f);
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    if (auto* finishParam = finish.getValueTreeState().getParameter("finish")) {
+        if (std::abs(finishParam->getValue()) > 1.0e-6f) {
+            std::cerr << "[VXSuitePluginRegression] Finish default amount is no longer zero\n";
+            return false;
+        }
+    }
+    const auto out = render(finish, input, 256);
+
+    const float diff = maxAbsDiff(input, out);
+    if (diff > 1.0e-5f) {
+        std::cerr << "[VXSuitePluginRegression] Finish default state is no longer transparent at zero amount: diff="
+                  << diff << "\n";
+        return false;
+    }
+    if (finish.getActivityLight(0) > 1.0e-4f || finish.getActivityLight(1) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Finish opto telemetry stayed active at zero amount\n";
+        return false;
+    }
+    return true;
+}
+
+bool testOptoCompZeroAmountIsIdleAndTransparent() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+    input.applyGain(0.18f);
+
+    VXOptoCompAudioProcessor opto;
+    opto.prepareToPlay(sr, 256);
+    if (auto* peakReductionParam = opto.getValueTreeState().getParameter("peak_reduction")) {
+        if (std::abs(peakReductionParam->getValue()) > 1.0e-6f) {
+            std::cerr << "[VXSuitePluginRegression] OptoComp default amount is no longer zero\n";
+            return false;
+        }
+    }
+    const auto out = render(opto, input, 256);
+
+    const float diff = maxAbsDiff(input, out);
+    if (diff > 1.0e-5f) {
+        std::cerr << "[VXSuitePluginRegression] OptoComp default state is no longer transparent at zero amount: diff="
+                  << diff << "\n";
+        return false;
+    }
+    if (opto.getActivityLight(0) > 1.0e-4f || opto.getActivityLight(1) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] OptoComp telemetry stayed active at zero amount\n";
+        return false;
+    }
+    return true;
+}
+
 bool testToneCenterIsIdentityAndExtremesStayBounded() {
     constexpr double sr = 48000.0;
     auto input = makeSpeechLike(sr, 1.0f);
@@ -543,6 +600,45 @@ bool testDenoiserStrongSettingStaysCoherentAndBounded() {
     return true;
 }
 
+bool testDenoiserZeroCleanKeepsPdcAlignedIdentity() {
+    constexpr double sr = 48000.0;
+    auto input = addBuffers(makeSpeechLike(sr, 0.8f), makeNoise(sr, 0.8f, 0.04f));
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    setParamNormalized(denoiser, "clean", 0.0f);
+    setParamNormalized(denoiser, "guard", 0.65f);
+    const auto out = render(denoiser, input, 256);
+
+    const float diff = maxAbsDiff(input, out);
+    if (diff > 1.0e-3f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser clean=0 no longer returns a PDC-aligned dry path: diff="
+                  << diff << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractZeroKeepsPdcAlignedIdentity() {
+    constexpr double sr = 48000.0;
+    auto input = addBuffers(makeSpeechLike(sr, 0.8f), makeNoise(sr, 0.8f, 0.04f));
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(sr, 256);
+    setParamNormalized(subtract, "subtract", 0.0f);
+    setParamNormalized(subtract, "protect", 0.5f);
+    setParamNormalized(subtract, "learn", 0.0f);
+    const auto out = render(subtract, input, 256);
+
+    const float diff = maxAbsDiff(input, out);
+    if (diff > 1.0e-3f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract subtract=0 no longer returns a PDC-aligned dry path: diff="
+                  << diff << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool testLifecycleAndStateRestore() {
     constexpr double srA = 48000.0;
     constexpr double srB = 44100.0;
@@ -581,6 +677,54 @@ bool testLifecycleAndStateRestore() {
     auto third = render(restored, addBuffers(makeSpeechLike(srB, 0.7f), makeNoise(srB, 0.7f, 0.05f)), 512);
     if (!allFinite(third)) {
         std::cerr << "[VXSuitePluginRegression] Sample-rate reprepare produced non-finite output\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractStateRestoreRejectsMismatchedProfileFormat() {
+    constexpr double srSaved = 48000.0;
+    constexpr double srRestore = 44100.0;
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(srSaved, 256);
+    if (!primeSubtractLearn(subtract, srSaved))
+        return false;
+
+    juce::MemoryBlock state;
+    subtract.getStateInformation(state);
+
+    VXSubtractAudioProcessor restored;
+    restored.prepareToPlay(srRestore, 256);
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+
+    if (restored.isLearnReady()) {
+        std::cerr << "[VXSuitePluginRegression] Subtract restored a learned profile across an incompatible sample-rate format\n";
+        return false;
+    }
+    if (restored.getLearnConfidence() > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract kept non-zero confidence after rejecting a mismatched learned profile\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractResetKeepsLearningArmed() {
+    constexpr double sr = 48000.0;
+    auto noise = makeNoise(sr, 0.2f, 0.08f);
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(sr, 256);
+    setParamNormalized(subtract, "learn", 1.0f);
+    subtract.reset();
+
+    juce::AudioBuffer<float> block(2, 256);
+    for (int ch = 0; ch < 2; ++ch)
+        block.copyFrom(ch, 0, noise, ch, 0, 256);
+    processSingleBlock(subtract, block);
+
+    if (!subtract.isLearnActive()) {
+        std::cerr << "[VXSuitePluginRegression] Subtract reset dropped an armed Learn state\n";
         return false;
     }
     return true;
@@ -641,6 +785,52 @@ bool testListenSemanticsAcrossPlugins() {
     const auto finishListen = render(finish, speech);
     if (maxAbsDiffSkip(finishWet, addBuffers(speech, finishListen), 128) > 1.0e-3f) {
         std::cerr << "[VXSuitePluginRegression] Finish listen no longer behaves like finish-delta audition\n";
+        return false;
+    }
+
+    VXToneAudioProcessor tone;
+    tone.prepareToPlay(sr, 256);
+    setParamNormalized(tone, "bass", 0.78f);
+    setParamNormalized(tone, "treble", 0.28f);
+    setParamNormalized(tone, "listen", 0.0f);
+    const auto toneWet = render(tone, speech);
+    tone.reset();
+    setParamNormalized(tone, "bass", 0.78f);
+    setParamNormalized(tone, "treble", 0.28f);
+    setParamNormalized(tone, "listen", 1.0f);
+    const auto toneListen = render(tone, speech);
+    if (maxAbsDiffSkip(toneWet, addBuffers(speech, toneListen), 128) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Tone listen no longer behaves like additive tone-delta audition\n";
+        return false;
+    }
+    return true;
+}
+
+bool testOversizedHostBlocksStayConsistent() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+    std::vector<int> oversizedBlocks { 2048, 1536, 3072, 1024 };
+
+    VXDeverbAudioProcessor reference;
+    reference.prepareToPlay(sr, 256);
+    setParamNormalized(reference, "reduce", 0.72f);
+    setParamNormalized(reference, "body", 0.35f);
+    const auto refOut = render(reference, input, 256);
+
+    VXDeverbAudioProcessor oversized;
+    oversized.prepareToPlay(sr, 256);
+    setParamNormalized(oversized, "reduce", 0.72f);
+    setParamNormalized(oversized, "body", 0.35f);
+    const auto oversizedOut = renderWithBlocks(oversized, input, oversizedBlocks);
+
+    if (!allFinite(oversizedOut)) {
+        std::cerr << "[VXSuitePluginRegression] Oversized host-block deverb output became non-finite\n";
+        return false;
+    }
+    const float corr = bufferCorrelationSkip(refOut, oversizedOut, 4096);
+    if (corr < 0.985f) {
+        std::cerr << "[VXSuitePluginRegression] Oversized host blocks changed deverb behaviour too much: corr="
+                  << corr << "\n";
         return false;
     }
     return true;
@@ -771,13 +961,20 @@ int main() {
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
     ok &= testFinishResetIsDeterministic();
+    ok &= testFinishZeroAmountIsIdleAndTransparent();
+    ok &= testOptoCompZeroAmountIsIdleAndTransparent();
     ok &= testToneCenterIsIdentityAndExtremesStayBounded();
     ok &= testProximityExtremeIsBoundedAndAdditive();
     ok &= testDenoiserStrongSettingStaysCoherentAndBounded();
+    ok &= testDenoiserZeroCleanKeepsPdcAlignedIdentity();
+    ok &= testSubtractZeroKeepsPdcAlignedIdentity();
     ok &= testCleanupBlockSizeInvariance();
     ok &= testFullChainBlockSizeInvariance();
     ok &= testLifecycleAndStateRestore();
+    ok &= testSubtractStateRestoreRejectsMismatchedProfileFormat();
+    ok &= testSubtractResetKeepsLearningArmed();
     ok &= testListenSemanticsAcrossPlugins();
+    ok &= testOversizedHostBlocksStayConsistent();
     ok &= testMultiRateAndBufferCoverage();
     ok &= testMonoStereoConsistency();
     ok &= testNoSteadyStateAllocationsOnAudioThread();

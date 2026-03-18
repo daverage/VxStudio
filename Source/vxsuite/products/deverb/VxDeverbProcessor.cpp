@@ -164,14 +164,6 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
 
     vxsuite::ProcessOptions options {};
-    options.isVoiceMode = false;
-    options.voiceProtect = 0.0f;
-    options.sourceProtect = 0.0f;
-    options.lateTailAggression = 1.0f;
-    options.stereoWidthProtect = 0.0f;
-    options.guardStrictness = 0.0f;
-    options.speechFocus = 0.0f;
-    options.isPrimary = true;
     options.labRawMode = true;
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
@@ -193,11 +185,8 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     renderWet(reduce);
     if (!bufferIsStable(wetScratch, 4.0f)) {
         deverbProcessor.reset();
-        renderWet(std::min(reduce, 0.55f));
-        if (!bufferIsStable(wetScratch, 4.0f)) {
-            deverbProcessor.reset();
-            renderWet(std::min(reduce, 0.35f));
-        }
+        for (int ch = 0; ch < outputChannels; ++ch)
+            wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
     }
     ensureLatencyAlignedListenDry(numSamples);
 

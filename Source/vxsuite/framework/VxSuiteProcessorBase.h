@@ -65,6 +65,8 @@ protected:
     virtual void processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) = 0;
     virtual void renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                     const juce::AudioBuffer<float>& inputBuffer);
+    void renderAddedDeltaOutput(juce::AudioBuffer<float>& outputBuffer,
+                                const juce::AudioBuffer<float>& inputBuffer) const noexcept;
 
     const ModePolicy& currentModePolicy() const noexcept;
     bool isListenEnabled() const noexcept;
@@ -84,8 +86,11 @@ protected:
     juce::AudioProcessorValueTreeState parameters;
     VoiceAnalysisState voiceAnalysis;
     spectrum::SnapshotPublisher spectrumPublisher;
+    analysis::StagePublisher stagePublisher;
 
 private:
+    void processPreparedBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi);
+    void processPreparedBypassedBlock(juce::AudioBuffer<float>& buffer) noexcept;
     juce::AudioBuffer<float> listenInputScratch;
     ProcessCoordinator processCoordinator;
 };

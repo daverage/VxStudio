@@ -8,7 +8,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(JUCE)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt")
+if(APPLE)
+  list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt")
+endif()
 include(VxSuitePlugin)
 
 set(VXSUITE_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxsuite/vst")
@@ -263,6 +265,34 @@ target_link_libraries(VXFinish PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXFinishPlugin ALL DEPENDS VXFinish_VST3)
 vxsuite_stage_vst3_bundle(VXFinish_VST3 "VXFinish")
 
+juce_add_plugin(VXOptoComp
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxoptocomp"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXOC"
+)
+target_compile_definitions(VXOptoComp PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXOptoComp)
+target_sources(VXOptoComp PRIVATE
+  Source/vxsuite/products/OptoComp/VxOptoCompProcessor.cpp
+  Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp
+)
+target_include_directories(VXOptoComp PRIVATE Source)
+target_link_libraries(VXOptoComp PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXOptoCompPlugin ALL DEPENDS VXOptoComp_VST3)
+vxsuite_stage_vst3_bundle(VXOptoComp_VST3 "VXOptoComp")
+
 juce_add_plugin(VXSubtract
   FORMATS VST3
   COMPANY_NAME "VX Suite"
@@ -377,32 +407,32 @@ target_link_libraries(VXTone PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxsuite_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
-juce_add_plugin(VXSpectrum
+juce_add_plugin(VXStudioAnalyser
   FORMATS VST3
   COMPANY_NAME "VX Suite"
-  BUNDLE_ID "com.vxsuite.vxspectrum"
+  BUNDLE_ID "com.vxsuite.vxstudioanalyser"
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   PLUGIN_MANUFACTURER_CODE "VXS1"
-  PLUGIN_CODE "VXSP"
+  PLUGIN_CODE "VXSA"
 )
-target_compile_definitions(VXSpectrum PRIVATE
+target_compile_definitions(VXStudioAnalyser PRIVATE
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
   JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
   JUCE_WEB_BROWSER=0
 )
-juce_generate_juce_header(VXSpectrum)
-target_sources(VXSpectrum PRIVATE
-  Source/vxsuite/products/spectrum/VxSpectrumProcessor.cpp
-  Source/vxsuite/products/spectrum/VxSpectrumEditor.cpp
+juce_generate_juce_header(VXStudioAnalyser)
+target_sources(VXStudioAnalyser PRIVATE
+  Source/vxsuite/products/analyser/VXStudioAnalyserProcessor.cpp
+  Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp
 )
-target_include_directories(VXSpectrum PRIVATE Source)
-target_link_libraries(VXSpectrum PRIVATE VxSuiteFramework juce::juce_dsp)
-add_custom_target(VXSpectrumPlugin ALL DEPENDS VXSpectrum_VST3)
-vxsuite_stage_vst3_bundle(VXSpectrum_VST3 "VXSpectrum")
+target_include_directories(VXStudioAnalyser PRIVATE Source)
+target_link_libraries(VXStudioAnalyser PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXStudioAnalyserPlugin ALL DEPENDS VXStudioAnalyser_VST3)
+vxsuite_stage_vst3_bundle(VXStudioAnalyser_VST3 "VXStudioAnalyser")
 
 add_custom_target(VXSuite_VST3
   DEPENDS
@@ -410,18 +440,22 @@ add_custom_target(VXSuite_VST3
     VXProximity_VST3
     VXCleanup_VST3
     VXFinish_VST3
+    VXOptoComp_VST3
     VXSubtract_VST3
     VXDenoiser_VST3
     VXDeepFilterNet_VST3
-    VXSpectrum_VST3
+    VXTone_VST3
+    VXStudioAnalyser_VST3
     VXDeverbStage
     VXProximityStage
     VXCleanupStage
     VXFinishStage
+    VXOptoCompStage
     VXSubtractStage
     VXDenoiserStage
     VXDeepFilterNetStage
-    VXSpectrumStage
+    VXToneStage
+    VXStudioAnalyserStage
   COMMENT "Building all VX Suite VST3 products")
 
 add_executable(VXDeverbTests
@@ -476,6 +510,7 @@ add_executable(VXSuitePluginRegressionTests
   Source/vxsuite/products/finish/VxFinishProcessor.cpp
   Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
   Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp
+  Source/vxsuite/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxsuite/products/proximity/VxProximityProcessor.cpp
   Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp

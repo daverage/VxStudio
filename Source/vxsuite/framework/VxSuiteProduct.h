@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string_view>
 
 namespace vxsuite {
@@ -8,6 +9,14 @@ namespace vxsuite {
 enum class Mode : int {
     vocal = 0,
     general = 1
+};
+
+enum class StageType : std::uint8_t {
+    unknown = 0,
+    spectral,
+    dynamic,
+    spatial,
+    mixed
 };
 
 struct ProductTheme {
@@ -22,6 +31,7 @@ struct ProductIdentity {
     std::string_view suiteName = "VX Suite";
     std::string_view productName;
     std::string_view shortTag;
+    std::string_view stageId;
     std::string_view primaryParamId;
     std::string_view secondaryParamId;
     std::string_view tertiaryParamId;
@@ -54,6 +64,9 @@ struct ProductIdentity {
     bool defaultLowShelf  = true;
     bool defaultHighShelf = true;
     Mode defaultMode = Mode::vocal;
+    StageType stageType = StageType::unknown;
+    std::uint32_t semanticFlags = 0;
+    std::uint32_t telemetryFlags = 0;
     ProductTheme theme {};
 
     bool supportsModeSwitch() const noexcept {

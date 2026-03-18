@@ -1,9 +1,11 @@
 #pragma once
 
+#include "VxSuiteFft.h"
 #include "VxSuiteProduct.h"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string_view>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -103,3 +105,180 @@ private:
 };
 
 } // namespace vxsuite::spectrum
+
+namespace vxsuite::analysis {
+
+constexpr int kMaxDomains = 8;
+constexpr int kMaxStageSlots = 48;
+constexpr int kSummarySpectrumBins = 32;
+constexpr int kSummaryEnvelopeBins = 96;
+constexpr int kSummarySpectrumFftOrder = 11;
+constexpr int kSummarySpectrumFftSize = 1 << kSummarySpectrumFftOrder;
+
+enum class DetailLevel : std::uint8_t {
+    tier1 = 0,
+    tier2 = 1
+};
+
+struct DomainView {
+    bool active = false;
+    int slotIndex = -1;
+    std::uint64_t analysisDomainId = 0;
+    std::uint64_t hostProcessId = 0;
+    std::uint64_t creationTimeMs = 0;
+};
+
+struct AnalysisSummary {
+    std::array<float, kSummarySpectrumBins> spectrum {};
+    std::array<float, kSummaryEnvelopeBins> envelope {};
+    float rms = 0.0f;
+    float peak = 0.0f;
+    float crestFactor = 0.0f;
+    float transientScore = 0.0f;
+    float stereoWidth = 0.0f;
+    float correlation = 0.0f;
+};
+
+struct StageIdentity {
+    std::array<char, 32> stageId {};
+    std::uint64_t instanceId = 0;
+    std::uint64_t localOrderId = 0;
+    std::array<char, 64> stageName {};
+    StageType stageType = StageType::unknown;
+    std::uint32_t chainOrderHint = 0;
+    std::array<char, 16> pluginFamily {};
+    std::uint32_t semanticFlags = 0;
+    std::uint32_t telemetryFlags = 0;
+};
+
+struct StageState {
+    std::uint64_t timestampMs = 0;
+    bool isLive = false;
+    bool isBypassed = false;
+    bool isSilent = true;
+    DetailLevel detailLevel = DetailLevel::tier1;
+    float sampleRate = 48000.0f;
+    std::uint8_t numChannels = 0;
+};
+
+struct StageTelemetry {
+    StageIdentity identity;
+    StageState state;
+    AnalysisSummary inputSummary;
+    AnalysisSummary outputSummary;
+};
+
+struct StageView {
+    bool active = false;
+    int slotIndex = -1;
+    std::uint64_t analysisDomainId = 0;
+    StageTelemetry telemetry;
+};
+
+struct SummaryAccumulator {
+    static constexpr int kMetricHistoryBlocks = 256;
+
+    std::array<float, kSummaryEnvelopeBins> envelope {};
+    std::array<double, kMetricHistoryBlocks> blockSumSquares {};
+    std::array<float, kMetricHistoryBlocks> blockPeaks {};
+    std::array<int, kMetricHistoryBlocks> blockSampleCounts {};
+    int metricWriteIndex = 0;
+    int metricCount = 0;
+    int shortMetricReadIndex = 0;
+    int longMetricReadIndex = 0;
+    double shortSumSquares = 0.0;
+    double longSumSquares = 0.0;
+    int shortWindowSamples = 1;
+    int longWindowSamples = 1;
+    int shortSamples = 0;
+    int longSamples = 0;
+    float heldPeakDb = -120.0f;
+    int envelopeWriteIndex = 0;
+    int envelopeFilled = 0;
+    int envelopeSamplesPerBucket = 1;
+    int envelopeSampleCounter = 0;
+    int fftHopSize = 512;
+    int fftSamplesSinceUpdate = 0;
+    double midEnergy = 0.0;
+    double sideEnergy = 0.0;
+    double leftEnergy = 0.0;
+    double rightEnergy = 0.0;
+    double lrDot = 0.0;
+    int stereoSamples = 0;
+    float sampleRate = 48000.0f;
+    int monoHistoryWriteIndex = 0;
+    std::array<float, kSummarySpectrumFftSize> monoHistory {};
+    std::array<float, kSummarySpectrumFftSize> spectrumWindow {};
+    std::array<float, kSummarySpectrumFftSize * 2> fftData {};
+    std::array<float, kSummarySpectrumBins> spectrum {};
+    vxsuite::RealFft fft;
+
+    void prepare(double sampleRate, int publishIntervalSamples) noexcept;
+    void reset() noexcept;
+    void update(const juce::AudioBuffer<float>& buffer) noexcept;
+    [[nodiscard]] AnalysisSummary summary() const noexcept;
+};
+
+class DomainRegistry {
+public:
+    static DomainRegistry& instance() noexcept;
+
+    std::uint64_t registerAnalyserDomain() noexcept;
+    void unregisterAnalyserDomain(std::uint64_t analysisDomainId) noexcept;
+    [[nodiscard]] bool latestDomainForProcess(std::uint64_t hostProcessId, DomainView& out) const noexcept;
+    [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
+};
+
+class StageRegistry {
+public:
+    static StageRegistry& instance() noexcept;
+
+    int registerStage(const ProductIdentity& identity,
+                      std::uint64_t analysisDomainId,
+                      std::uint64_t& instanceIdOut,
+                      std::uint64_t& localOrderIdOut) noexcept;
+    void unregisterStage(int slotIndex, std::uint64_t instanceId) noexcept;
+    [[nodiscard]] bool publish(int slotIndex,
+                               std::uint64_t instanceId,
+                               std::uint64_t analysisDomainId,
+                               const StageTelemetry& telemetry) noexcept;
+    [[nodiscard]] bool readStage(int slotIndex, StageView& out) const noexcept;
+    [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
+};
+
+class StagePublisher {
+public:
+    explicit StagePublisher(const ProductIdentity& identity);
+    ~StagePublisher();
+
+    void prepare(double sampleRate, int maxBlockSize) noexcept;
+    void reset() noexcept;
+    void publish(const juce::AudioBuffer<float>& inputBuffer,
+                 const juce::AudioBuffer<float>& outputBuffer,
+                 bool bypassed = false) noexcept;
+    void publishBypassed(const juce::AudioBuffer<float>& buffer) noexcept;
+
+    [[nodiscard]] std::uint64_t instanceId() const noexcept { return instanceIdValue; }
+    [[nodiscard]] std::uint64_t analysisDomainId() const noexcept { return analysisDomainIdValue; }
+    [[nodiscard]] std::uint64_t localOrderId() const noexcept { return localOrderIdValue; }
+
+private:
+    void ensureRegistered() noexcept;
+    void refreshDomainBinding(bool force = false) noexcept;
+    void maybePublish(bool bypassed, int numChannels) noexcept;
+    static void copyLabel(std::string_view source, char* dest, std::size_t destSize) noexcept;
+
+    ProductIdentity identityDescriptor;
+    int slotIndex = -1;
+    std::uint64_t instanceIdValue = 0;
+    std::uint64_t localOrderIdValue = 0;
+    std::uint64_t analysisDomainIdValue = 0;
+    double currentSampleRate = 48000.0;
+    int publishIntervalSamples = 2400;
+    int samplesUntilPublish = 2400;
+    int domainRefreshCountdown = 0;
+    std::unique_ptr<SummaryAccumulator> inputAccumulator;
+    std::unique_ptr<SummaryAccumulator> outputAccumulator;
+};
+
+} // namespace vxsuite::analysis
