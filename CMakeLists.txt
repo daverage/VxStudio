@@ -5,6 +5,8 @@ project(VxStudio VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+enable_testing()
+
 add_subdirectory(JUCE)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -12,6 +14,7 @@ if(APPLE)
   list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt")
 endif()
 include(VxSuitePlugin)
+include(VxSuiteValidation)
 
 set(VXSUITE_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxsuite/vst")
 
@@ -494,6 +497,7 @@ target_link_libraries(VXDeverbTests PRIVATE
   juce::juce_dsp
   juce::juce_audio_processors
 )
+vxsuite_add_executable_test(VXDeverbTests)
 
 add_executable(VXDeverbMeasure
   tests/VXDeverbMeasure.cpp
@@ -509,6 +513,7 @@ target_link_libraries(VXDeverbMeasure PRIVATE
   juce::juce_dsp
   juce::juce_audio_processors
 )
+vxsuite_add_executable_test(VXDeverbMeasure)
 
 add_executable(VxSuiteVoiceAnalysisTests
   tests/VxSuiteVoiceAnalysisTests.cpp
@@ -518,6 +523,7 @@ target_link_libraries(VxSuiteVoiceAnalysisTests PRIVATE
   VxSuiteFramework
   juce::juce_audio_basics
 )
+vxsuite_add_executable_test(VxSuiteVoiceAnalysisTests)
 
 add_executable(VXSuitePluginRegressionTests
   tests/VXSuitePluginRegressionTests.cpp
@@ -547,6 +553,7 @@ target_link_libraries(VXSuitePluginRegressionTests PRIVATE
   juce::juce_audio_processors
 )
 target_compile_definitions(VXSuitePluginRegressionTests PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxsuite_add_executable_test(VXSuitePluginRegressionTests)
 
 add_executable(VXSuiteProfile
   tests/VXSuiteProfile.cpp
@@ -568,3 +575,15 @@ target_link_libraries(VXSuiteProfile PRIVATE
   juce::juce_audio_processors
 )
 target_compile_definitions(VXSuiteProfile PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxsuite_add_executable_test(VXSuiteProfile)
+
+vxsuite_add_pluginval_test(VXCleanup)
+vxsuite_add_pluginval_test(VXDeepFilterNet)
+vxsuite_add_pluginval_test(VXDenoiser)
+vxsuite_add_pluginval_test(VXDeverb)
+vxsuite_add_pluginval_test(VXFinish)
+vxsuite_add_pluginval_test(VXOptoComp)
+vxsuite_add_pluginval_test(VXProximity)
+vxsuite_add_pluginval_test(VXStudioAnalyser)
+vxsuite_add_pluginval_test(VXSubtract)
+vxsuite_add_pluginval_test(VXTone)

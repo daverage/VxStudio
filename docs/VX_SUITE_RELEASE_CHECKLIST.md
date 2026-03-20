@@ -18,6 +18,11 @@
 - Test sample-rate changes between sessions.
 - Test offline bounce versus realtime playback.
 
+## Packaging and release
+- Run `tools/release/sign_and_notarize_vst3.sh` with `APPLE_DEVELOPER_IDENTITY` set for macOS release candidates.
+- If notarizing, also set `APPLE_NOTARY_PROFILE` so the script submits, staples, and validates each staged `.vst3` bundle.
+- Verify the staged DeepFilterNet bundle includes its model archives in `Contents/Resources/`.
+
 ## Chain behavior
 - Validate recommended chains:
   - `DeepFilterNet -> Deverb -> Cleanup -> Finish`
