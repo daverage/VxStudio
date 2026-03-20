@@ -4,8 +4,9 @@
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteProcessorBase.h"
-#include "../../framework/VxSuiteStageChain.h"
 #include "dsp/VxDenoiserDsp.h"
+
+#include <array>
 
 class VXDenoiserAudioProcessor final : public vxsuite::ProcessorBase {
 public:
@@ -21,14 +22,19 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
+    float aggregatedSignalPresence(int numChannels) const noexcept;
 
-    vxsuite::denoiser::DenoiserDsp denoiserDsp;
-    vxsuite::StageChain<1> stageChain { denoiserDsp };
+    vxsuite::denoiser::DenoiserDsp denoiserDspMono;
+    vxsuite::denoiser::DenoiserDsp denoiserDspLeft;
+    vxsuite::denoiser::DenoiserDsp denoiserDspRight;
     vxsuite::OutputTrimmer outputTrimmer;
+    juce::AudioBuffer<float> leftScratch;
+    juce::AudioBuffer<float> rightScratch;
 
     double currentSampleRateHz = 48000.0;
     float  smoothedClean       = 0.0f;
     float  smoothedGuard       = 0.5f;
     float  smoothedMakeupGain  = 1.0f;
+    std::array<float, 2> smoothedStereoMakeupGain { 1.0f, 1.0f };
     bool   controlsPrimed      = false;
 };

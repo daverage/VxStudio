@@ -31,6 +31,20 @@ float computeBufferRms(const juce::AudioBuffer<float>& buffer) {
     return count > 0 ? static_cast<float>(std::sqrt(sumSquares / static_cast<double>(count))) : 0.0f;
 }
 
+float computeChannelRms(const juce::AudioBuffer<float>& buffer, const int channel) {
+    if (channel < 0 || channel >= buffer.getNumChannels() || buffer.getNumSamples() <= 0)
+        return 0.0f;
+
+    double sumSquares = 0.0;
+    const auto* data = buffer.getReadPointer(channel);
+    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+        const double sample = data[i];
+        sumSquares += sample * sample;
+    }
+
+    return static_cast<float>(std::sqrt(sumSquares / static_cast<double>(buffer.getNumSamples())));
+}
+
 } // namespace
 
 VXDenoiserAudioProcessor::VXDenoiserAudioProcessor()
@@ -72,16 +86,23 @@ juce::String VXDenoiserAudioProcessor::getStatusText() const {
 void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
                                              const int    samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    stageChain.prepare(currentSampleRateHz, samplesPerBlock);
-    setReportedLatencySamples(stageChain.totalLatencySamples());
+    denoiserDspMono.prepare(currentSampleRateHz, samplesPerBlock);
+    denoiserDspLeft.prepare(currentSampleRateHz, samplesPerBlock);
+    denoiserDspRight.prepare(currentSampleRateHz, samplesPerBlock);
+    leftScratch.setSize(1, std::max(1, samplesPerBlock), false, false, true);
+    rightScratch.setSize(1, std::max(1, samplesPerBlock), false, false, true);
+    setReportedLatencySamples(denoiserDspMono.getLatencySamples());
     resetSuite();
 }
 
 void VXDenoiserAudioProcessor::resetSuite() {
-    stageChain.reset();
+    denoiserDspMono.reset();
+    denoiserDspLeft.reset();
+    denoiserDspRight.reset();
     smoothedClean  = 0.0f;
     smoothedGuard  = 0.5f;
     smoothedMakeupGain = 1.0f;
+    smoothedStereoMakeupGain = { 1.0f, 1.0f };
     outputTrimmer.reset();
     controlsPrimed = false;
 }
@@ -132,37 +153,86 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         return;
     }
 
-    stageChain.processInPlace(buffer, { effectiveClean }, opts);
     ensureLatencyAlignedListenDry(numSamples);
-
-    const float wetRms = computeBufferRms(buffer);
-    const float speechPresence = juce::jlimit(0.0f, 1.0f, denoiserDsp.getSignalPresence());
-    if (dryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
-        const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);
-        const float retentionTarget = isVoice
-            ? juce::jlimit(0.76f, 0.90f, (0.76f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight)
-            : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
-        const float targetRms = dryRms * retentionTarget;
-        const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 2.5f : 2.0f);
-        const float compensationTarget = juce::jlimit(1.0f,
-                                                      maxCompensation,
-                                                      targetRms / std::max(wetRms, 1.0e-6f));
-        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain,
-                                                       compensationTarget,
-                                                       currentSampleRateHz,
-                                                       numSamples,
-                                                       0.180f);
-        if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f)
-            buffer.applyGain(smoothedMakeupGain);
+    const bool stereo = buffer.getNumChannels() >= 2;
+    if (stereo) {
+        leftScratch.setSize(1, numSamples, false, false, true);
+        rightScratch.setSize(1, numSamples, false, false, true);
+        leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
+        rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
+        denoiserDspLeft.processInPlace(leftScratch, effectiveClean, opts);
+        denoiserDspRight.processInPlace(rightScratch, effectiveClean, opts);
+        buffer.copyFrom(0, 0, leftScratch, 0, 0, numSamples);
+        buffer.copyFrom(1, 0, rightScratch, 0, 0, numSamples);
     } else {
-        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain,
-                                                       1.0f,
-                                                       currentSampleRateHz,
-                                                       numSamples,
-                                                       0.120f);
+        denoiserDspMono.processInPlace(buffer, effectiveClean, opts);
+    }
+
+    const int channels = buffer.getNumChannels();
+    const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 2.5f : 2.0f);
+    if (channels >= 2) {
+        for (int ch = 0; ch < 2; ++ch) {
+            const float wetRms = computeChannelRms(buffer, ch);
+            const float channelDryRms = computeChannelRms(getLatencyAlignedListenDryBuffer(), ch);
+            const auto& dsp = (ch == 0) ? denoiserDspLeft : denoiserDspRight;
+            const float speechPresence = juce::jlimit(0.0f, 1.0f, dsp.getSignalPresence());
+            float compensationTarget = 1.0f;
+            if (channelDryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
+                const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);
+                const float retentionTarget = isVoice
+                    ? juce::jlimit(0.76f, 0.90f, (0.76f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight)
+                    : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
+                const float targetRms = channelDryRms * retentionTarget;
+                compensationTarget = juce::jlimit(1.0f, maxCompensation, targetRms / std::max(wetRms, 1.0e-6f));
+            }
+
+            auto& smoothedGain = smoothedStereoMakeupGain[static_cast<size_t>(ch)];
+            smoothedGain = vxsuite::smoothBlockValue(smoothedGain,
+                                                     compensationTarget,
+                                                     currentSampleRateHz,
+                                                     numSamples,
+                                                     compensationTarget > 1.0f ? 0.180f : 0.120f);
+            if (std::abs(smoothedGain - 1.0f) > 1.0e-4f)
+                buffer.applyGain(ch, 0, numSamples, smoothedGain);
+        }
+    } else {
+        const float wetRms = computeBufferRms(buffer);
+        const float speechPresence = aggregatedSignalPresence(channels);
+        if (dryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
+            const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);
+            const float retentionTarget = isVoice
+                ? juce::jlimit(0.76f, 0.90f, (0.76f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight)
+                : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
+            const float targetRms = dryRms * retentionTarget;
+            const float compensationTarget = juce::jlimit(1.0f,
+                                                          maxCompensation,
+                                                          targetRms / std::max(wetRms, 1.0e-6f));
+            smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain,
+                                                           compensationTarget,
+                                                           currentSampleRateHz,
+                                                           numSamples,
+                                                           0.180f);
+            if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f)
+                buffer.applyGain(smoothedMakeupGain);
+        } else {
+            smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain,
+                                                           1.0f,
+                                                           currentSampleRateHz,
+                                                           numSamples,
+                                                           0.120f);
+        }
     }
 
     outputTrimmer.process(buffer, currentSampleRateHz);
+}
+
+float VXDenoiserAudioProcessor::aggregatedSignalPresence(const int numChannels) const noexcept {
+    if (numChannels >= 2) {
+        const float left = juce::jlimit(0.0f, 1.0f, denoiserDspLeft.getSignalPresence());
+        const float right = juce::jlimit(0.0f, 1.0f, denoiserDspRight.getSignalPresence());
+        return juce::jlimit(0.0f, 1.0f, 0.5f * (left + right));
+    }
+    return juce::jlimit(0.0f, 1.0f, denoiserDspMono.getSignalPresence());
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
