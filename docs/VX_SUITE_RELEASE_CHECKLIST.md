@@ -30,6 +30,12 @@
 - Expect some macOS users to need to bypass Gatekeeper manually on first launch/open.
 - If distributing unsigned builds, be explicit in release notes that the plugins are not notarized and may require manual approval in macOS Security & Privacy settings.
 
+## Windows distribution
+- Copy release `.vst3` bundles into `C:\Program Files\Common Files\VST3\` when doing manual install validation.
+- Test on a machine that does not already have a full Visual Studio toolchain installed, so missing MSVC runtime dependencies show up before release.
+- If shipping `.zip` archives, mention that Windows may mark downloaded archives as coming from the internet and some users may need to unblock the zip before extracting.
+- Be explicit in release notes whether the build is only lightly tested on Windows or fully host-validated.
+
 ## Chain behavior
 - Validate recommended chains:
   - `DeepFilterNet -> Deverb -> Cleanup -> Finish`

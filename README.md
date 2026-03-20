@@ -353,6 +353,26 @@ cmake --build build --config Release --target VXDenoiser_VST3
 
 Staging copies `.vst3` bundles into `Source/vxsuite/vst/` the same as macOS.
 
+### Installing Built Plugins
+
+After building, the staged `.vst3` bundles in `Source/vxsuite/vst/` are the files you copy into your DAW's VST3 location.
+
+### Install on macOS
+
+- Copy the desired `.vst3` bundles into `/Library/Audio/Plug-Ins/VST3/` for all users, or `~/Library/Audio/Plug-Ins/VST3/` for the current user only.
+- If you distribute unsigned or ad-hoc signed builds, macOS may block them the first time. In that case:
+  - move the plugin into the VST3 folder
+  - rescan in your DAW
+  - if macOS blocks the plugin, approve it in `System Settings -> Privacy & Security`
+- Expect a little more friction for unsigned builds than for notarized ones. That is normal for this project's current distribution model.
+
+### Install on Windows
+
+- Copy the desired `.vst3` bundles into `C:\Program Files\Common Files\VST3\`.
+- Rescan plugins in your DAW after copying.
+- If a plugin fails to load on a fresh machine, install the Microsoft Visual C++ 2015-2022 Redistributable before debugging further.
+- If you distribute builds in a `.zip`, Windows may mark the downloaded archive as coming from the internet. If users hit odd load/open issues, tell them to unblock the zip in file properties before extracting.
+
 ### Targets
 
 | Target | Description |
@@ -398,4 +418,4 @@ docs/                 Framework and product reference
 
 ## 🚥 Status
 
-VST3 on macOS — confirmed working. Windows build system is fully wired up but untested end-to-end; see the Windows build section for caveats. All ten plugins build and stage on macOS. VXDeepFilterNet requires Rust and model files in `assets/` — all other plugins have no extra dependencies beyond CMake and a C++20 compiler.
+VST3 on macOS — confirmed working. Windows build system is fully wired up but still needs more end-to-end host validation; see the Windows build section for caveats. All ten plugins build and stage on macOS. VXDeepFilterNet requires Rust and model files in `assets/` — all other plugins have no extra dependencies beyond CMake and a C++20 compiler.
