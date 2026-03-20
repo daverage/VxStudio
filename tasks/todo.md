@@ -1546,3 +1546,20 @@ The shared regression suite was still failing on `Deverb tail window was unexpec
 - `Source/vxsuite/framework/VxSuiteProcessorBase.*` no longer inflates `tailLengthSeconds` from reported latency. Host PDC/latency reporting remains intact, but JUCE tail length now means actual post-input carryover only.
 - `tests/VXSuitePluginRegressionTests.cpp` now checks that Deverb, Denoiser, and Subtract report latency without pretending that latency is tail, and the rendered-tail verification now only runs for processors that explicitly report non-zero tail length.
 - Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`, which now passes end-to-end.
+
+---
+
+# Post-fix validation closure — 2026-03-20
+
+## Problem
+After the Cleanup distortion/plosive fixes and the latency-vs-tail reporting fix, the remaining task was to rerun the available local validation lanes and record the final repo-local status before closing this pass out.
+
+## Plan
+- [x] Re-run the key local regression/unit tests after the latest DSP/framework fixes.
+- [x] Re-run the registered pluginval lane across all staged bundles.
+- [x] Record the post-fix validation status and commit the closure note.
+
+## Review
+- Re-ran `ctest --output-on-failure -R '^(VXSuitePluginRegressionTests|VXDeverbTests|VxSuiteVoiceAnalysisTests)$'` from `build/`; all three tests passed.
+- Re-ran `ctest --output-on-failure -R '^pluginval_'` from `build/`; all 10 pluginval checks passed: `VXCleanup`, `VXDeepFilterNet`, `VXDenoiser`, `VXDeverb`, `VXFinish`, `VXOptoComp`, `VXProximity`, `VXStudioAnalyser`, `VXSubtract`, and `VXTone`.
+- Repo-local conclusion for this pass: source fixes are committed, the local regression suite is green, and the full available pluginval lane is green. Remaining follow-up work is external/in-host validation rather than another known code repair.
