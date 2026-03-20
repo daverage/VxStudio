@@ -82,22 +82,31 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
     const bool hiShelfConfigChanged = newParams.hiShelfOn != params.hiShelfOn
         || newParams.contentMode != params.contentMode
         || std::abs(newParams.deEss - params.deEss) > 1.0e-4f
-        || std::abs(newParams.troubleSmooth - params.troubleSmooth) > 1.0e-4f;
+        || std::abs(newParams.troubleSmooth - params.troubleSmooth) > 1.0e-4f
+        || std::abs(newParams.voicePreserve - params.voicePreserve) > 1.0e-4f
+        || std::abs(newParams.speechPresence - params.speechPresence) > 1.0e-4f;
     if (hiShelfConfigChanged) {
         if (newParams.hiShelfOn) {
             const bool voiceMode = newParams.contentMode == 0;
-            const float fc = voiceMode ? 5600.0f : 6800.0f;
+            const float fc = voiceMode ? 6200.0f : 7200.0f;
             const float q = 0.66f;
-            const float gainDb = -(voiceMode ? 2.5f : 1.5f)
-                - 5.5f * juce::jlimit(0.0f, 1.0f, newParams.deEss)
-                - 3.5f * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth);
+            const float shelfProtect = juce::jlimit(0.38f, 1.0f,
+                1.0f - 0.62f * juce::jlimit(0.0f, 1.0f, newParams.voicePreserve)
+                    * juce::jlimit(0.0f, 1.0f, newParams.speechPresence));
+            const float gainDb = (-(voiceMode ? 1.25f : 1.0f)
+                - 3.0f * juce::jlimit(0.0f, 1.0f, newParams.deEss)
+                - 2.0f * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth)) * shelfProtect;
             hiShelfCoeffs = detail::makeHighShelf(sr, fc, q, gainDb);
         } else {
             hiShelfCoeffs = {};
         }
 
-        std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
-        std::fill(hiShelfZ2.begin(), hiShelfZ2.end(), 0.0f);
+        const bool hiShelfNeedsStateReset = newParams.hiShelfOn != params.hiShelfOn
+            || newParams.contentMode != params.contentMode;
+        if (hiShelfNeedsStateReset) {
+            std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+            std::fill(hiShelfZ2.begin(), hiShelfZ2.end(), 0.0f);
+        }
     }
 
     params = newParams;

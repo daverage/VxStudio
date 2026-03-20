@@ -1563,3 +1563,21 @@ After the Cleanup distortion/plosive fixes and the latency-vs-tail reporting fix
 - Re-ran `ctest --output-on-failure -R '^(VXSuitePluginRegressionTests|VXDeverbTests|VxSuiteVoiceAnalysisTests)$'` from `build/`; all three tests passed.
 - Re-ran `ctest --output-on-failure -R '^pluginval_'` from `build/`; all 10 pluginval checks passed: `VXCleanup`, `VXDeepFilterNet`, `VXDenoiser`, `VXDeverb`, `VXFinish`, `VXOptoComp`, `VXProximity`, `VXStudioAnalyser`, `VXSubtract`, and `VXTone`.
 - Repo-local conclusion for this pass: source fixes are committed, the local regression suite is green, and the full available pluginval lane is green. Remaining follow-up work is external/in-host validation rather than another known code repair.
+
+---
+
+# Cleanup high-shelf distortion follow-up — 2026-03-20
+
+## Problem
+The remaining user report narrowed the residual Cleanup distortion down further: it only seemed to happen when the Cleanup amount was engaged and the high shelf was enabled. That pointed to the `hishelf_on` path rather than the broader corrective chain.
+
+## Plan
+- [x] Isolate the Cleanup high-shelf path on a voiced edge-case and confirm whether enabling the shelf adds disproportionate damage.
+- [x] Make the high shelf gentler and more stable on voiced material, then add a regression that compares shelf-off versus shelf-on on the same signal.
+- [x] Rebuild, rerun the full regression executable, document the result, and commit the fix.
+
+## Review
+- `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp` now computes a gentler, higher-frequency high shelf for voiced Cleanup material, scales it back with `voicePreserve`/`speechPresence`, and stops clearing the shelf filter state on every coefficient retune.
+- `tests/VXSuitePluginRegressionTests.cpp` now includes `testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase()`, which compares the same voiced edge-case with `hishelf_on` off versus on and fails if the shelf path adds too much extra residual damage.
+- Before the fix, the isolated shelf probe measured `off residual=0.0738695`, `on residual=0.0985489`, and `onOffResidual=0.0684699`. After the fix, that same probe measured `off residual=0.0738695`, `on residual=0.0748042`, and `onOffResidual=0.0144093`.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`, which passed cleanly after the shelf-path change.

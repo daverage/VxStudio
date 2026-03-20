@@ -593,6 +593,42 @@ bool testCleanupVoicedEdgeCaseStaysClean() {
     return true;
 }
 
+bool testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase() {
+    constexpr double sr = 48000.0;
+    const auto input = makeCleanupVoicedEdgeCaseInput(sr, 1.0f);
+
+    VXCleanupAudioProcessor cleanupOff;
+    cleanupOff.prepareToPlay(sr, 256);
+    setParamNormalized(cleanupOff, "cleanup", 1.0f);
+    setParamNormalized(cleanupOff, "body", 0.2f);
+    setParamNormalized(cleanupOff, "focus", 0.8f);
+    const auto outOff = render(cleanupOff, input, 256);
+
+    VXCleanupAudioProcessor cleanupOn;
+    cleanupOn.prepareToPlay(sr, 256);
+    setParamNormalized(cleanupOn, "cleanup", 1.0f);
+    setParamNormalized(cleanupOn, "body", 0.2f);
+    setParamNormalized(cleanupOn, "focus", 0.8f);
+    setParamNormalized(cleanupOn, "hishelf_on", 1.0f);
+    const auto outOn = render(cleanupOn, input, 256);
+
+    const float shelfResidual = bestGainResidualRatioSkip(outOff, outOn, 2048);
+    if (shelfResidual > 0.052f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup high shelf still changes voiced material too aggressively: residualRatio="
+                  << shelfResidual << "\n";
+        return false;
+    }
+
+    const float onResidual = bestGainResidualRatioSkip(input, outOn, 2048);
+    if (onResidual > 0.088f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup high shelf still adds too much voiced edge-case damage: residualRatio="
+                  << onResidual << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial() {
     constexpr double sr = 48000.0;
 
@@ -1529,6 +1565,7 @@ int main() {
     ok &= testCleanupDeEssAndPlosivesStayHeadroomSafe();
     ok &= testCleanupVoicedMaterialStaysClean();
     ok &= testCleanupVoicedEdgeCaseStaysClean();
+    ok &= testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase();
     ok &= testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
