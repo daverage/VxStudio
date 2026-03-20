@@ -226,6 +226,25 @@ The repo now has a formal v2 audit baseline covering plugin validation, framewor
 - Built and ran `VXSuitePluginRegressionTests`, `VXDeverbTests`, `VxSuiteVoiceAnalysisTests`, and `VXSuiteProfile`; all completed successfully. `VXSuiteProfile` showed the sampled Cleanup/Proximity/Finish/Subtract chain remaining comfortably below realtime cost on this machine, including at `96 kHz`.
 - The audit report is in `tasks/reports/VX_SUITE_FULL_AUDIT_2026-03-20.md` and records the main confirmed findings: zero tail-length reporting across framework-based products, `VXDeepFilterNet` model/resource staging and lookup issues, missing pluginval/CTest integration, duplicate `VXDeverb` CMake source entries, ad-hoc/non-notarized macOS bundles, and arm64-only staged artifacts.
 
+# Verification coverage expansion — 2026-03-20
+
+## Problem
+The audit follow-up still had several verification gaps: no-allocation checks only covered Cleanup, tail reporting was only asserted at the metadata level, and there were no objective frequency-shape regressions for the clearly spectral products.
+
+## Plan
+- [x] Add shared test utilities for post-input tail rendering and sine-based response measurements.
+- [x] Expand steady-state no-allocation checks across the processors already covered by the regression target.
+- [x] Add tail-window behavior tests for latency/tail-bearing processors in the regression target.
+- [x] Add basic frequency-response regression checks for Tone, Proximity, and Finish body shaping.
+- [x] Rebuild and rerun `VXSuitePluginRegressionTests`.
+
+## Review
+- `tests/VxSuiteProcessorTestUtils.h` now provides `makeSine(...)`, `renderWithTail(...)`, and `rmsSkip(...)` so regression tests can measure simple spectral and tail behavior without duplicating harness code.
+- `tests/VXSuitePluginRegressionTests.cpp` now checks steady-state audio-thread allocations for Cleanup, Denoiser, Deverb, Subtract, Finish, OptoComp, Proximity, and Tone instead of only Cleanup.
+- The same regression file now verifies that Deverb, Denoiser, and Subtract produce meaningful output within their reported tail window and decay after it, rather than only reporting a non-zero tail length.
+- Added basic frequency-shape regression checks that confirm `VXTone` bass/treble controls, `VXProximity` closer/air controls, and `VXFinish` body shaping still bias the expected frequency regions.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+
 # Analyzer readability fixes — 2026-03-18
 
 ## Problem

@@ -53,6 +53,21 @@ inline juce::AudioBuffer<float> makeNoise(const double sampleRate, const float s
     return buffer;
 }
 
+inline juce::AudioBuffer<float> makeSine(const double sampleRate,
+                                         const float seconds,
+                                         const float frequencyHz,
+                                         const float gain = 0.1f) {
+    const int samples = static_cast<int>(sampleRate * seconds);
+    juce::AudioBuffer<float> buffer(2, samples);
+    for (int i = 0; i < samples; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+        const float sample = gain * std::sin(2.0f * juce::MathConstants<float>::pi * frequencyHz * t);
+        buffer.setSample(0, i, sample);
+        buffer.setSample(1, i, sample);
+    }
+    return buffer;
+}
+
 inline juce::AudioBuffer<float> addBuffers(const juce::AudioBuffer<float>& a,
                                            const juce::AudioBuffer<float>& b) {
     const int channels = std::min(a.getNumChannels(), b.getNumChannels());
@@ -128,6 +143,36 @@ inline juce::AudioBuffer<float> renderWithBlocks(Processor& processor,
 }
 
 template <typename Processor>
+inline juce::AudioBuffer<float> renderWithTail(Processor& processor,
+                                               const juce::AudioBuffer<float>& input,
+                                               const int tailSamples,
+                                               const int blockSize = 256) {
+    const int latency = std::max(0, processor.getLatencySamples());
+    juce::AudioBuffer<float> staged(input.getNumChannels(),
+                                    input.getNumSamples() + std::max(0, tailSamples) + latency);
+    staged.clear();
+    for (int ch = 0; ch < input.getNumChannels(); ++ch)
+        staged.copyFrom(ch, 0, input, ch, 0, input.getNumSamples());
+
+    juce::AudioBuffer<float> rendered(input.getNumChannels(), staged.getNumSamples());
+    juce::MidiBuffer midi;
+    for (int start = 0; start < staged.getNumSamples(); start += blockSize) {
+        const int num = std::min(blockSize, staged.getNumSamples() - start);
+        juce::AudioBuffer<float> block(staged.getNumChannels(), num);
+        for (int ch = 0; ch < staged.getNumChannels(); ++ch)
+            block.copyFrom(ch, 0, staged, ch, start, num);
+        processor.processBlock(block, midi);
+        for (int ch = 0; ch < rendered.getNumChannels(); ++ch)
+            rendered.copyFrom(ch, start, block, ch, 0, num);
+    }
+
+    juce::AudioBuffer<float> output(input.getNumChannels(), input.getNumSamples() + std::max(0, tailSamples));
+    for (int ch = 0; ch < output.getNumChannels(); ++ch)
+        output.copyFrom(ch, 0, rendered, ch, latency, output.getNumSamples());
+    return output;
+}
+
+template <typename Processor>
 inline void processSingleBlock(Processor& processor, juce::AudioBuffer<float>& block) {
     juce::MidiBuffer midi;
     processor.processBlock(block, midi);
@@ -144,6 +189,20 @@ inline float rms(const juce::AudioBuffer<float>& buffer) {
         }
     }
     return std::sqrt(energy / std::max(1, count));
+}
+
+inline float rmsSkip(const juce::AudioBuffer<float>& buffer, const int skipSamples) {
+    double energy = 0.0;
+    int count = 0;
+    const int start = juce::jlimit(0, buffer.getNumSamples(), skipSamples);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = start; i < buffer.getNumSamples(); ++i) {
+            energy += static_cast<double>(data[i]) * data[i];
+            ++count;
+        }
+    }
+    return count > 0 ? static_cast<float>(std::sqrt(energy / static_cast<double>(count))) : 0.0f;
 }
 
 inline float peakAbs(const juce::AudioBuffer<float>& buffer) {

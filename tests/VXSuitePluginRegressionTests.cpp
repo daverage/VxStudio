@@ -34,6 +34,28 @@ struct AllocationScope {
     }
 };
 
+template <typename Processor>
+bool expectNoSteadyStateAllocations(const char* label,
+                                    Processor& processor,
+                                    const juce::AudioBuffer<float>& input) {
+    {
+        auto warmup = input;
+        juce::MidiBuffer midi;
+        processor.processBlock(warmup, midi);
+    }
+
+    auto testBlock = input;
+    juce::MidiBuffer midi;
+    AllocationScope allocationScope;
+    processor.processBlock(testBlock, midi);
+    if (allocationScope.allocations() != 0) {
+        std::cerr << "[VXSuitePluginRegression] Audio-thread allocation detected during steady-state "
+                  << label << " processing: count=" << allocationScope.allocations() << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr);
 
 juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double sr,
@@ -1069,31 +1091,241 @@ bool testLatencyBearingProcessorsReportTailLength() {
     return true;
 }
 
+bool testTailReportingMatchesRenderedCarryover() {
+    constexpr double sr = 48000.0;
+    constexpr float renderSeconds = 0.22f;
+
+    auto speech = makeSpeechLike(sr, renderSeconds);
+    auto noisy = addBuffers(speech, makeNoise(sr, renderSeconds, 0.05f));
+
+    auto verifyTailWindow = [&](const char* label,
+                                auto& processor,
+                                const juce::AudioBuffer<float>& input,
+                                const int blockSize,
+                                const float minTailRms,
+                                const float maxLateTailRms) {
+        const int reportedTailSamples = std::max(1, juce::roundToInt(processor.getTailLengthSeconds() * sr));
+        const int extraTail = reportedTailSamples + static_cast<int>(sr * 0.10f);
+        const auto rendered = renderWithTail(processor, input, extraTail, blockSize);
+        const int start = input.getNumSamples();
+        const int activeTailSamples = std::min(reportedTailSamples, rendered.getNumSamples() - start);
+        if (activeTailSamples <= 0) {
+            std::cerr << "[VXSuitePluginRegression] " << label
+                      << " rendered no samples inside its reported tail window\n";
+            return false;
+        }
+
+        juce::AudioBuffer<float> tailWindow(rendered.getNumChannels(), activeTailSamples);
+        for (int ch = 0; ch < tailWindow.getNumChannels(); ++ch)
+            tailWindow.copyFrom(ch, 0, rendered, ch, start, activeTailSamples);
+
+        const float activeTailRms = rms(tailWindow);
+        if (activeTailRms < minTailRms) {
+            std::cerr << "[VXSuitePluginRegression] " << label
+                      << " tail window was unexpectedly empty: rms=" << activeTailRms << "\n";
+            return false;
+        }
+
+        const int lateStart = start + reportedTailSamples;
+        if (lateStart < rendered.getNumSamples()) {
+            juce::AudioBuffer<float> lateTail(rendered.getNumChannels(), rendered.getNumSamples() - lateStart);
+            for (int ch = 0; ch < lateTail.getNumChannels(); ++ch)
+                lateTail.copyFrom(ch, 0, rendered, ch, lateStart, lateTail.getNumSamples());
+            const float lateRms = rms(lateTail);
+            if (lateRms > maxLateTailRms) {
+                std::cerr << "[VXSuitePluginRegression] " << label
+                          << " stayed too active after its reported tail window: rms=" << lateRms << "\n";
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    VXDeverbAudioProcessor deverb;
+    deverb.prepareToPlay(sr, 256);
+    setParamNormalized(deverb, "reduce", 0.75f);
+    setParamNormalized(deverb, "body", 0.35f);
+    if (!verifyTailWindow("Deverb", deverb, speech, 256, 1.0e-3f, 1.5e-2f))
+        return false;
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    setParamNormalized(denoiser, "clean", 0.85f);
+    setParamNormalized(denoiser, "guard", 0.55f);
+    if (!verifyTailWindow("Denoiser", denoiser, noisy, 256, 1.0e-3f, 8.0e-3f))
+        return false;
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(sr, 256);
+    if (!primeSubtractLearn(subtract, sr))
+        return false;
+    setParamNormalized(subtract, "subtract", 0.75f);
+    setParamNormalized(subtract, "protect", 0.45f);
+    if (!verifyTailWindow("Subtract", subtract, noisy, 256, 1.0e-3f, 8.0e-3f))
+        return false;
+
+    return true;
+}
+
+bool testToneFrequencyResponseRegression() {
+    constexpr double sr = 48000.0;
+    constexpr int skip = 4096;
+
+    auto low = makeSine(sr, 0.8f, 80.0f, 0.08f);
+    auto mid = makeSine(sr, 0.8f, 1000.0f, 0.08f);
+    auto high = makeSine(sr, 0.8f, 10000.0f, 0.04f);
+
+    VXToneAudioProcessor bassBoost;
+    bassBoost.prepareToPlay(sr, 256);
+    setParamNormalized(bassBoost, "bass", 1.0f);
+    setParamNormalized(bassBoost, "treble", 0.5f);
+    const float lowBoost = rmsSkip(render(bassBoost, low, 256), skip) / std::max(rmsSkip(low, skip), 1.0e-6f);
+    bassBoost.reset();
+    setParamNormalized(bassBoost, "bass", 1.0f);
+    setParamNormalized(bassBoost, "treble", 0.5f);
+    const float midBoost = rmsSkip(render(bassBoost, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
+    if (!(lowBoost > midBoost * 1.20f)) {
+        std::cerr << "[VXSuitePluginRegression] Tone bass control no longer boosts low frequencies more than mids\n";
+        return false;
+    }
+
+    VXToneAudioProcessor trebleBoost;
+    trebleBoost.prepareToPlay(sr, 256);
+    setParamNormalized(trebleBoost, "bass", 0.5f);
+    setParamNormalized(trebleBoost, "treble", 1.0f);
+    const float highBoost = rmsSkip(render(trebleBoost, high, 256), skip) / std::max(rmsSkip(high, skip), 1.0e-6f);
+    trebleBoost.reset();
+    setParamNormalized(trebleBoost, "bass", 0.5f);
+    setParamNormalized(trebleBoost, "treble", 1.0f);
+    const float midTrebleBoost = rmsSkip(render(trebleBoost, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
+    if (!(highBoost > midTrebleBoost * 1.15f)) {
+        std::cerr << "[VXSuitePluginRegression] Tone treble control no longer boosts highs more than mids\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testProximityAndFinishFrequencyResponseRegression() {
+    constexpr double sr = 48000.0;
+    constexpr int skip = 4096;
+
+    auto low = makeSine(sr, 0.8f, 90.0f, 0.08f);
+    auto mid = makeSine(sr, 0.8f, 1000.0f, 0.08f);
+    auto high = makeSine(sr, 0.8f, 9000.0f, 0.04f);
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    setParamNormalized(proximity, "closer", 1.0f);
+    setParamNormalized(proximity, "air", 0.0f);
+    const float lowCloser = rmsSkip(render(proximity, low, 256), skip) / std::max(rmsSkip(low, skip), 1.0e-6f);
+    proximity.reset();
+    setParamNormalized(proximity, "closer", 1.0f);
+    setParamNormalized(proximity, "air", 0.0f);
+    const float midCloser = rmsSkip(render(proximity, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
+    if (!(lowCloser > midCloser * 1.20f)) {
+        std::cerr << "[VXSuitePluginRegression] Proximity closer control no longer favors low-frequency boost\n";
+        return false;
+    }
+
+    proximity.reset();
+    setParamNormalized(proximity, "closer", 0.0f);
+    setParamNormalized(proximity, "air", 1.0f);
+    const float highAir = rmsSkip(render(proximity, high, 256), skip) / std::max(rmsSkip(high, skip), 1.0e-6f);
+    proximity.reset();
+    setParamNormalized(proximity, "closer", 0.0f);
+    setParamNormalized(proximity, "air", 1.0f);
+    const float midAir = rmsSkip(render(proximity, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
+    if (!(highAir > midAir * 1.12f)) {
+        std::cerr << "[VXSuitePluginRegression] Proximity air control no longer favors high-frequency boost\n";
+        return false;
+    }
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    setParamNormalized(finish, "finish", 0.0f);
+    setParamNormalized(finish, "body", 1.0f);
+    setParamNormalized(finish, "gain", 0.5f);
+    const float lowBody = rmsSkip(render(finish, low, 256), skip) / std::max(rmsSkip(low, skip), 1.0e-6f);
+    finish.reset();
+    setParamNormalized(finish, "finish", 0.0f);
+    setParamNormalized(finish, "body", 1.0f);
+    setParamNormalized(finish, "gain", 0.5f);
+    const float midBody = rmsSkip(render(finish, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
+    if (!(lowBody > midBody * 1.08f)) {
+        std::cerr << "[VXSuitePluginRegression] Finish body control no longer favors low-frequency enhancement\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testNoSteadyStateAllocationsOnAudioThread() {
     constexpr double sr = 48000.0;
     auto noisy = addBuffers(makeSpeechLike(sr, 0.4f), makeNoise(sr, 0.4f, 0.05f));
+    auto speech = makeSpeechLike(sr, 0.4f);
 
     VXCleanupAudioProcessor cleanup;
     cleanup.prepareToPlay(sr, 256);
     setParamNormalized(cleanup, "cleanup", 0.55f);
     setParamNormalized(cleanup, "body", 0.45f);
     setParamNormalized(cleanup, "focus", 0.55f);
-
-    {
-        auto warmup = noisy;
-        juce::MidiBuffer midi;
-        cleanup.processBlock(warmup, midi);
-    }
-
-    auto testBlock = noisy;
-    juce::MidiBuffer midi;
-    AllocationScope allocationScope;
-    cleanup.processBlock(testBlock, midi);
-    if (allocationScope.allocations() != 0) {
-        std::cerr << "[VXSuitePluginRegression] Audio-thread allocation detected during steady-state cleanup processing: count="
-                  << allocationScope.allocations() << "\n";
+    if (!expectNoSteadyStateAllocations("cleanup", cleanup, noisy))
         return false;
-    }
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    setParamNormalized(denoiser, "clean", 0.70f);
+    setParamNormalized(denoiser, "guard", 0.55f);
+    if (!expectNoSteadyStateAllocations("denoiser", denoiser, noisy))
+        return false;
+
+    VXDeverbAudioProcessor deverb;
+    deverb.prepareToPlay(sr, 256);
+    setParamNormalized(deverb, "reduce", 0.72f);
+    setParamNormalized(deverb, "body", 0.35f);
+    if (!expectNoSteadyStateAllocations("deverb", deverb, speech))
+        return false;
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(sr, 256);
+    setParamNormalized(subtract, "subtract", 0.55f);
+    setParamNormalized(subtract, "protect", 0.45f);
+    setParamNormalized(subtract, "learn", 0.0f);
+    if (!expectNoSteadyStateAllocations("subtract", subtract, noisy))
+        return false;
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    setParamNormalized(finish, "finish", 0.45f);
+    setParamNormalized(finish, "body", 0.35f);
+    setParamNormalized(finish, "gain", 0.55f);
+    if (!expectNoSteadyStateAllocations("finish", finish, speech))
+        return false;
+
+    VXOptoCompAudioProcessor opto;
+    opto.prepareToPlay(sr, 256);
+    setParamNormalized(opto, "peak_reduction", 0.45f);
+    setParamNormalized(opto, "body", 0.55f);
+    setParamNormalized(opto, "gain", 0.55f);
+    if (!expectNoSteadyStateAllocations("optocomp", opto, speech))
+        return false;
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    setParamNormalized(proximity, "closer", 0.55f);
+    setParamNormalized(proximity, "air", 0.35f);
+    if (!expectNoSteadyStateAllocations("proximity", proximity, speech))
+        return false;
+
+    VXToneAudioProcessor tone;
+    tone.prepareToPlay(sr, 256);
+    setParamNormalized(tone, "bass", 0.72f);
+    setParamNormalized(tone, "treble", 0.34f);
+    if (!expectNoSteadyStateAllocations("tone", tone, speech))
+        return false;
+
     return true;
 }
 
@@ -1164,6 +1396,9 @@ int main() {
     ok &= testMultiRateAndBufferCoverage();
     ok &= testMonoStereoConsistency();
     ok &= testLatencyBearingProcessorsReportTailLength();
+    ok &= testTailReportingMatchesRenderedCarryover();
+    ok &= testToneFrequencyResponseRegression();
+    ok &= testProximityAndFinishFrequencyResponseRegression();
     ok &= testNoSteadyStateAllocationsOnAudioThread();
     ok &= testCombinedChainKeepsSilenceSilent();
     return ok ? 0 : 1;
