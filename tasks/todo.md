@@ -1529,3 +1529,20 @@ Ensure framework-based VX effects fit text cleanly, resize sensibly, and inherit
   - relinked `/tmp/cleanup_plosive_probe` against current objects, which measured `burstActivity=0.838522` and `voicedActivity=0.0770964`
   - `./build/VXSuitePluginRegressionTests`
 - The shared regression executable still exits on the pre-existing Deverb tail-window failure, but Cleanup no longer reports a plosive-related regression before that point.
+
+---
+
+# Deverb latency-vs-tail regression fix — 2026-03-20
+
+## Problem
+The shared regression suite was still failing on `Deverb tail window was unexpectedly empty`. The failure turned out not to be a Deverb DSP tail bug, but a framework/test contract bug: VX Suite was auto-reporting latency as if it were post-input tail audio.
+
+## Plan
+- [x] Reproduce the Deverb tail-window failure and inspect whether the processor really emits post-input tail audio or only host-reported latency.
+- [x] Fix the framework/test contract so latency-bearing processors do not report fake tail length unless they truly emit carryover after input stops.
+- [x] Rebuild and rerun the regression executable, then document the result and commit the fix.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteProcessorBase.*` no longer inflates `tailLengthSeconds` from reported latency. Host PDC/latency reporting remains intact, but JUCE tail length now means actual post-input carryover only.
+- `tests/VXSuitePluginRegressionTests.cpp` now checks that Deverb, Denoiser, and Subtract report latency without pretending that latency is tail, and the rendered-tail verification now only runs for processors that explicitly report non-zero tail length.
+- Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`, which now passes end-to-end.

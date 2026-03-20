@@ -1208,27 +1208,27 @@ bool testMonoStereoConsistency() {
     return true;
 }
 
-bool testLatencyBearingProcessorsReportTailLength() {
+bool testLatencyBearingProcessorsDoNotReportLatencyAsTail() {
     constexpr double sr = 48000.0;
 
     VXDeverbAudioProcessor deverb;
     deverb.prepareToPlay(sr, 256);
-    if (!(deverb.getLatencySamples() > 0 && deverb.getTailLengthSeconds() > 0.0)) {
-        std::cerr << "[VXSuitePluginRegression] Deverb should report non-zero tail length when latency is non-zero\n";
+    if (!(deverb.getLatencySamples() > 0 && deverb.getTailLengthSeconds() == 0.0)) {
+        std::cerr << "[VXSuitePluginRegression] Deverb should report latency without pretending it has post-input tail audio\n";
         return false;
     }
 
     VXDenoiserAudioProcessor denoiser;
     denoiser.prepareToPlay(sr, 256);
-    if (!(denoiser.getLatencySamples() > 0 && denoiser.getTailLengthSeconds() > 0.0)) {
-        std::cerr << "[VXSuitePluginRegression] Denoiser should report non-zero tail length when latency is non-zero\n";
+    if (!(denoiser.getLatencySamples() > 0 && denoiser.getTailLengthSeconds() == 0.0)) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser should report latency without pretending it has post-input tail audio\n";
         return false;
     }
 
     VXSubtractAudioProcessor subtract;
     subtract.prepareToPlay(sr, 256);
-    if (!(subtract.getLatencySamples() > 0 && subtract.getTailLengthSeconds() > 0.0)) {
-        std::cerr << "[VXSuitePluginRegression] Subtract should report non-zero tail length when latency is non-zero\n";
+    if (!(subtract.getLatencySamples() > 0 && subtract.getTailLengthSeconds() == 0.0)) {
+        std::cerr << "[VXSuitePluginRegression] Subtract should report latency without pretending it has post-input tail audio\n";
         return false;
     }
 
@@ -1255,6 +1255,8 @@ bool testTailReportingMatchesRenderedCarryover() {
                                 const int blockSize,
                                 const float minTailRms,
                                 const float maxLateTailRms) {
+        if (processor.getTailLengthSeconds() <= 0.0)
+            return true;
         const int reportedTailSamples = std::max(1, juce::roundToInt(processor.getTailLengthSeconds() * sr));
         const int extraTail = reportedTailSamples + static_cast<int>(sr * 0.10f);
         const auto rendered = renderWithTail(processor, input, extraTail, blockSize);
@@ -1549,7 +1551,7 @@ int main() {
     ok &= testOversizedHostBlocksStayConsistent();
     ok &= testMultiRateAndBufferCoverage();
     ok &= testMonoStereoConsistency();
-    ok &= testLatencyBearingProcessorsReportTailLength();
+    ok &= testLatencyBearingProcessorsDoNotReportLatencyAsTail();
     ok &= testTailReportingMatchesRenderedCarryover();
     ok &= testToneFrequencyResponseRegression();
     ok &= testProximityAndFinishFrequencyResponseRegression();

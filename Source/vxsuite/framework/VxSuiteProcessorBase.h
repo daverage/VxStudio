@@ -80,10 +80,6 @@ protected:
     void setReportedLatencyFromStages(const Stages&... stages) {
         processCoordinator.setLatencyFromStages(stages...);
         juce::AudioProcessor::setLatencySamples(processCoordinator.latencySamples());
-        const auto latencySeconds = currentSampleRateHz > 0.0
-            ? static_cast<double>(processCoordinator.latencySamples()) / currentSampleRateHz
-            : 0.0;
-        setReportedTailLengthSeconds(std::max(tailLengthSeconds, latencySeconds));
     }
     void ensureLatencyAlignedListenDry(int numSamples);
     const juce::AudioBuffer<float>& getLatencyAlignedListenDryBuffer() const noexcept;
