@@ -10,6 +10,7 @@ void CorrectiveStage::prepare(double sampleRate, int numChannels) {
 
     const float fsr = static_cast<float>(sr);
     cA180 = detail::onePoleCoeff(sr, 180.0f);
+    cPlosiveDetA = detail::onePoleCoeff(sr, 95.0f);
     cRmsA = std::exp(-1.0f / (0.008f * fsr));
     cDeMudAtk = std::exp(-1.0f / (0.050f * fsr));
     cDeMudRel = std::exp(-1.0f / (0.200f * fsr));
@@ -307,13 +308,16 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
         monoLinear /= static_cast<float>(numChannels);
         monoAbs /= static_cast<float>(numChannels);
 
-        plosiveMonoLp = a180 * plosiveMonoLp + (1.0f - a180) * monoAbs;
+        plosiveMonoLp = cPlosiveDetA * plosiveMonoLp + (1.0f - cPlosiveDetA) * monoAbs;
         const float lowAbs = std::abs(plosiveMonoLp);
         plosiveFast = cPlosiveFastA * plosiveFast + (1.0f - cPlosiveFastA) * lowAbs;
         plosiveSlow = cPlosiveSlowA * plosiveSlow + (1.0f - cPlosiveSlowA) * lowAbs;
         const float burstGate = 1.12f + 0.22f * loudNorm - 0.12f * proxCtx;
         const float burst = std::max(0.0f, (plosiveFast - burstGate * plosiveSlow) / (plosiveSlow + 1.0e-6f));
-        const float plosiveTarget = juce::jlimit(0.0f, 1.0f, burst) * plosiveAmt;
+        const float plosiveSpeechGuard = juce::jlimit(0.05f, 1.0f,
+            1.0f - (voiceMode ? 0.88f : 0.44f) * voicePreserve * speechPresence
+                * std::pow(juce::jlimit(0.0f, 1.0f, 1.0f - 1.5f * burst), 2.0f));
+        const float plosiveTarget = juce::jlimit(0.0f, 1.0f, burst) * plosiveAmt * plosiveSpeechGuard;
         const float plosiveA = plosiveTarget > plosiveEnv ? cPlosiveAtkA : cPlosiveRelA;
         plosiveEnv = plosiveA * plosiveEnv + (1.0f - plosiveA) * plosiveTarget;
         const float plosiveGain = juce::Decibels::decibelsToGain(-plosiveMaxCutDb * plosiveEnv);

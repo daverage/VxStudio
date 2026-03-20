@@ -58,6 +58,22 @@ bool expectNoSteadyStateAllocations(const char* label,
 
 bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr);
 
+float renderCleanupAndMeasureMaxPlosiveActivity(VXCleanupAudioProcessor& cleanup,
+                                                const juce::AudioBuffer<float>& input,
+                                                const int blockSize = 256) {
+    juce::MidiBuffer midi;
+    float maxActivity = 0.0f;
+    for (int start = 0; start < input.getNumSamples(); start += blockSize) {
+        const int num = std::min(blockSize, input.getNumSamples() - start);
+        juce::AudioBuffer<float> block(input.getNumChannels(), num);
+        for (int ch = 0; ch < input.getNumChannels(); ++ch)
+            block.copyFrom(ch, 0, input, ch, start, num);
+        cleanup.processBlock(block, midi);
+        maxActivity = std::max(maxActivity, cleanup.getActivityLight(2));
+    }
+    return maxActivity;
+}
+
 juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double sr,
                                                                    const int blockSize,
                                                                    const juce::AudioBuffer<float>& input) {
@@ -571,6 +587,41 @@ bool testCleanupVoicedEdgeCaseStaysClean() {
     if (residualRatio > 0.102f) {
         std::cerr << "[VXSuitePluginRegression] Cleanup added too much edge-case harmonic damage: residualRatio="
                   << residualRatio << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial() {
+    constexpr double sr = 48000.0;
+
+    VXCleanupAudioProcessor burstCleanup;
+    burstCleanup.prepareToPlay(sr, 256);
+    setParamNormalized(burstCleanup, "cleanup", 1.0f);
+    setParamNormalized(burstCleanup, "body", 0.0f);
+    setParamNormalized(burstCleanup, "focus", 0.05f);
+    const float burstActivity = renderCleanupAndMeasureMaxPlosiveActivity(burstCleanup,
+                                                                          makeCleanupStressInput(sr, 1.0f));
+
+    VXCleanupAudioProcessor voicedCleanup;
+    voicedCleanup.prepareToPlay(sr, 256);
+    setParamNormalized(voicedCleanup, "cleanup", 1.0f);
+    setParamNormalized(voicedCleanup, "body", 0.2f);
+    setParamNormalized(voicedCleanup, "focus", 0.8f);
+    setParamNormalized(voicedCleanup, "hishelf_on", 1.0f);
+    const float voicedActivity = renderCleanupAndMeasureMaxPlosiveActivity(voicedCleanup,
+                                                                           makeCleanupVoicedEdgeCaseInput(sr, 1.0f));
+
+    if (burstActivity < 0.18f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup plosive meter no longer reacts to explicit plosive bursts: activity="
+                  << burstActivity << "\n";
+        return false;
+    }
+
+    if (voicedActivity > 0.12f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup plosive meter still false-triggers too hard on voiced material: activity="
+                  << voicedActivity << "\n";
         return false;
     }
 
@@ -1476,6 +1527,7 @@ int main() {
     ok &= testCleanupDeEssAndPlosivesStayHeadroomSafe();
     ok &= testCleanupVoicedMaterialStaysClean();
     ok &= testCleanupVoicedEdgeCaseStaysClean();
+    ok &= testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
     ok &= testFinishResetIsDeterministic();

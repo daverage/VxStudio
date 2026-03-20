@@ -318,6 +318,10 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                                            harshnessEnv * (0.30f + 0.70f * highBias));
     const float voicedIntegrity = juce::jlimit(0.0f, 1.0f,
         0.60f * evidence.speechConfidence + 0.40f * harmonicity);
+    const float plosiveFocusGuard = juce::jlimit(0.08f, 1.0f,
+        0.08f + 0.92f * lowBias * lowBias);
+    const float plosiveVoicedGuard = juce::jlimit(0.05f, 1.0f,
+        1.0f - 0.92f * voicedIntegrity * std::pow(1.0f - plosiveTarget, 2.0f));
     const float voicedHighBandGuard = juce::jlimit(0.58f, 1.0f,
         1.0f - 0.34f * voicedIntegrity * (0.45f + 0.55f * highBias));
     const float voicedBreathGuard = juce::jlimit(0.55f, 1.0f,
@@ -339,7 +343,9 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                             * voicedBreathGuard);
     params.plosive = vxsuite::clamp01(cleanup * plosiveWeight
                              * (voiceMode ? 1.08f : 0.86f)
-                             * (1.0f - 0.15f * preserveBody));
+                             * (1.0f - 0.15f * preserveBody)
+                             * plosiveFocusGuard
+                             * plosiveVoicedGuard);
     params.compress = 0.0f;
     params.troubleSmooth = vxsuite::clamp01(cleanup * harshWeight
                                    * (0.56f + 0.94f * highBias)

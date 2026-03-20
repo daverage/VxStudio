@@ -30,6 +30,7 @@ private:
     int channels = 0;
 
     float cA180 = 0.0f;
+    float cPlosiveDetA = 0.0f;
     float cRmsA = 0.0f;
     float cDeMudAtk = 0.0f;
     float cDeMudRel = 0.0f;

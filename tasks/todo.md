@@ -1507,3 +1507,25 @@ Ensure framework-based VX effects fit text cleanly, resize sensibly, and inherit
 - Verified with:
   - `cmake --build build --target VXCleanupPlugin VXProximityPlugin VXFinishPlugin VXDenoiserPlugin -j4`
   - `./build/VXSuitePluginRegressionTests`
+
+---
+
+# Cleanup plosive false-trigger follow-up — 2026-03-20
+
+## Problem
+`VXCleanup` is still audibly distorting in a way that lines up with the plosive meter lighting. That suggests the remaining bug is not broad Cleanup harshness anymore, but false plosive detection on voiced material inside the Cleanup-only corrective path.
+
+## Plan
+- [x] Add a targeted regression that measures Cleanup plosive activity on real plosive material versus voiced edge-case material.
+- [x] Tighten the Cleanup plosive detector/mapping so voiced harmonic content does not trigger plosive removal while real plosive bursts still do.
+- [x] Rebuild, rerun the targeted verification, document the result, and commit the follow-up fix.
+
+## Review
+- `tests/VXSuitePluginRegressionTests.cpp` now includes `testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial()`, which measures the Cleanup plosive activity light directly instead of inferring false triggering only from output damage.
+- `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.*` now uses a lower detector lowpass for the plosive follower and applies an explicit speech-aware plosive guard, so bright voiced material no longer drives the internal plosive envelope like a real low-frequency burst.
+- `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp` now biases plosive correction much harder toward the low-focus side of Cleanup and further backs it off when the block looks strongly voiced/harmonic.
+- Verified with:
+  - `cmake --build build --target VXSuitePluginRegressionTests -j4`
+  - relinked `/tmp/cleanup_plosive_probe` against current objects, which measured `burstActivity=0.838522` and `voicedActivity=0.0770964`
+  - `./build/VXSuitePluginRegressionTests`
+- The shared regression executable still exits on the pre-existing Deverb tail-window failure, but Cleanup no longer reports a plosive-related regression before that point.
