@@ -20,10 +20,15 @@
 
 ## Packaging and release
 - Run `tools/release/release_preflight.sh` before release signing; it checks `pluginval`, signing identities, notary profile access, and DeepFilterNet bundle resources.
-- If the machine does not already have a notary keychain profile, create one with `tools/release/store_notary_profile.sh <profile-name>` and export `APPLE_NOTARY_PROFILE=<profile-name>`.
-- Run `tools/release/sign_and_notarize_vst3.sh` with `APPLE_DEVELOPER_IDENTITY` set for macOS release candidates.
-- If notarizing, also set `APPLE_NOTARY_PROFILE` so the script submits, staples, and validates each staged `.vst3` bundle.
+- If you want signed/notarized macOS builds, create a notary keychain profile with `tools/release/store_notary_profile.sh <profile-name>` and export `APPLE_NOTARY_PROFILE=<profile-name>`.
+- Run `tools/release/sign_and_notarize_vst3.sh` with `APPLE_DEVELOPER_IDENTITY` set only for signed macOS release candidates.
+- If `APPLE_NOTARY_PROFILE` is also set, the script submits, staples, and validates each staged `.vst3` bundle.
 - Verify the staged DeepFilterNet bundle includes its model archives in `Contents/Resources/`.
+
+## Unsigned macOS distribution
+- Unsigned or ad-hoc signed `.vst3` bundles are acceptable for this project when distributing directly instead of through an Apple Developer signing pipeline.
+- Expect some macOS users to need to bypass Gatekeeper manually on first launch/open.
+- If distributing unsigned builds, be explicit in release notes that the plugins are not notarized and may require manual approval in macOS Security & Privacy settings.
 
 ## Chain behavior
 - Validate recommended chains:

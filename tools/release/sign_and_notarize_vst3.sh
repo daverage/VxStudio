@@ -9,8 +9,9 @@ if [[ ! -d "${STAGE_DIR}" ]]; then
 fi
 
 if [[ -z "${APPLE_DEVELOPER_IDENTITY:-}" ]]; then
-  echo "APPLE_DEVELOPER_IDENTITY is required" >&2
-  exit 1
+  echo "APPLE_DEVELOPER_IDENTITY is not set; skipping signing/notarization."
+  echo "This is acceptable for local use or unsigned distribution, but macOS users may need to bypass Gatekeeper manually."
+  exit 0
 fi
 
 if ! command -v codesign >/dev/null 2>&1; then
@@ -46,4 +47,3 @@ if [[ -n "${APPLE_NOTARY_PROFILE:-}" ]]; then
 else
   echo "APPLE_NOTARY_PROFILE not set; signing completed but notarization was skipped"
 fi
-

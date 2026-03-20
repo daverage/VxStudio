@@ -33,7 +33,7 @@ if command -v security >/dev/null 2>&1; then
   echo "${identities}"
   if ! grep -q "Developer ID Application" <<<"${identities}"; then
     echo "[WARN] No Developer ID Application identity found in keychain"
-    status=1
+    echo "[INFO] This only matters if you want signed/notarized macOS distribution."
   else
     echo "[OK] Developer ID Application identity present"
   fi
@@ -45,12 +45,11 @@ if [[ -n "${PROFILE_NAME}" ]]; then
       echo "[OK] notary profile '${PROFILE_NAME}' is usable"
     else
       echo "[WARN] notary profile '${PROFILE_NAME}' is not usable yet"
-      status=1
     fi
   fi
 else
   echo "[WARN] APPLE_NOTARY_PROFILE is not set"
-  status=1
+  echo "[INFO] This is expected if you are distributing unsigned macOS builds."
 fi
 
 if [[ -d "${STAGE_DIR}/VXDeepFilterNet.vst3/Contents/Resources" ]]; then

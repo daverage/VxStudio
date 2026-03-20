@@ -66,7 +66,7 @@ These are audit blockers, not inferred passes.
 
 ## Findings
 
-### [P0] macOS staged bundles are not release-signed or notarized
+### [P2] macOS staged bundles are not release-signed or notarized
 
 Evidence:
 
@@ -75,13 +75,14 @@ Evidence:
 
 Impact:
 
-- These bundles do not meet the plan's macOS shipping bar.
-- Gatekeeper/notarization expectations for an end-user install are not satisfied.
+- These bundles do not meet a signed/notarized macOS distribution bar.
+- Gatekeeper/notarization expectations for a friction-free end-user install are not satisfied.
+- This is not a blocker for local use or intentional unsigned distribution.
 
 Recommended fix:
 
-- Add Developer ID signing and notarization/stapling to the release pipeline.
-- Treat notarization as a release gate for macOS artifacts.
+- If signed distribution is desired later, add Developer ID signing and notarization/stapling to the release pipeline.
+- Otherwise, document unsigned macOS installation expectations clearly for users.
 
 ### [P1] All framework-based products currently report zero tail length
 
@@ -212,4 +213,3 @@ Recommended fix:
 3. Fix `VXDeepFilterNet` bundle resource staging and resource-path resolution.
 4. Add pluginval/CTest integration.
 5. Clean up CMake duplication and document architecture support.
-
