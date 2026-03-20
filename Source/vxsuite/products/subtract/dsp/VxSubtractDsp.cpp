@@ -9,6 +9,7 @@ namespace vxsuite::subtract {
 
 namespace {
 constexpr float kEps = 1.0e-12f;
+constexpr float kMinimumLearnFramePower = 1.0e-6f;
 inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
 }
 
@@ -137,6 +138,7 @@ void SubtractDsp::reset() {
     learnedSensitivity  = 0.0f;
     learnedProfileConfidence = 0.0f;
     learnQualityAccum = 0.0f;
+    learnInputEnergyAccum = 0.0f;
     learnQualityFrames = 0;
 
     std::fill(frameBuffer.begin(), frameBuffer.end(), 0.0f);
@@ -216,6 +218,7 @@ void SubtractDsp::clearLearnedProfile() {
     learnedSensitivity = 0.0f;
     learnedProfileConfidence = 0.0f;
     learnQualityAccum = 0.0f;
+    learnInputEnergyAccum = 0.0f;
     learnQualityFrames = 0;
     learnFrames = 0;
     learnTargetFrames = 0;
@@ -306,6 +309,12 @@ void SubtractDsp::resetStreamingState() {
 
 bool SubtractDsp::finalizeLearnedProfile() {
     if (learnFrames <= 0) {
+        learningPrev = learning;
+        return learnedProfileReady;
+    }
+
+    const float averageLearnFramePower = learnInputEnergyAccum / static_cast<float>(learnFrames);
+    if (averageLearnFramePower < kMinimumLearnFramePower) {
         learningPrev = learning;
         return learnedProfileReady;
     }
@@ -408,6 +417,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
             history.clear();
         learnFrames = 0;
         learnQualityAccum = 0.0f;
+        learnInputEnergyAccum = 0.0f;
         learnQualityFrames = 0;
         learnTargetFrames = std::max(2, static_cast<int>(
             std::ceil(1.6f * static_cast<float>(sr) / static_cast<float>(hop))));
@@ -619,6 +629,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
             if (learning) {
                 ++learnFrames;
+                learnInputEnergyAccum += frameEnergy / static_cast<float>(fftSize);
                 const float noiseLike = vxsuite::clamp01((spectralFlatness - 0.12f) / 0.38f);
                 const float steady = vxsuite::clamp01(1.0f - std::abs(std::log(std::max(0.25f, std::min(4.0f, energyRatio)))) / 1.2f);
                 const float quietSpeech = 1.0f - vxsuite::clamp01(signalPresenceAvg);

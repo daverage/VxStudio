@@ -1,3 +1,37 @@
+# VX Perform implementation — 2026-03-20
+
+## Problem
+Build the new VX Suite plugin for mixed instrument-to-camera recordings where the instrument is consistently hotter than the spoken voice. The processor should keep levels more consistent without source splitting, with a v1 contract focused on speech recovery plus bright/transient containment.
+
+## Plan
+- [x] Review the existing VX product/build/test patterns and confirm the framework fit for `VX Perform`.
+- [x] Add the new product-local processor and DSP modules for `VX Perform`.
+- [x] Register the new plugin in CMake and add it to the regression/build lanes.
+- [x] Add focused regression coverage for zero-setting transparency and speech-recovery behaviour.
+- [x] Build the plugin and run the affected regression target.
+
+## Review
+- Added `VX Perform` under `Source/vxsuite/products/perform/` with a two-knob processor (`Clarity`, `Control`), a product-local detector, and a zero-latency DSP core that combines slow levelling, speech-band lift, and high-band transient containment.
+- Registered the plugin in `CMakeLists.txt`, added it to the staged VST3 aggregate target, and included it in pluginval plus the shared regression executable.
+- Added regression coverage for zero-setting transparency and a synthetic hot instrument-over-speech recovery case. The new plugin built successfully with `cmake --build build --target VXPerformPlugin VXSuitePluginRegressionTests -j4`.
+- Running `./build/VXSuitePluginRegressionTests` still fails, but the remaining failures are pre-existing unrelated regressions in `Subtract` state/learn behavior and `OptoComp` audio-thread allocation checks, not the newly added `VX Perform` checks.
+
+# Mixed speech + guitar balancer concept review — 2026-03-20
+
+## Problem
+We want to know whether the VX Suite framework can support a plugin for a single mixed track that keeps speech intelligible while preserving the expressiveness of an accompanying guitar. The concept depends on behavior-aware dynamics rather than source separation, so the key question is whether we can express that honestly within the framework's simple UI and realtime-safe DSP rules.
+
+## Plan
+- [x] Review the VX Suite framework/docs plus relevant existing dynamics products for fit.
+- [x] Translate the user concept into a framework-aligned product contract and decide whether it belongs as a VX Suite product.
+- [x] Define the recommended v1 DSP architecture, controls, and verification plan.
+- [x] Record the recommendation, risks, and next-step implementation shape.
+
+## Review
+- The concept fits VX Suite if we ship it as a narrow adaptive dynamics tool rather than a source-separation product. The recommended v1 is a zero-latency mixed-track balancer with two knobs (`Clarity`, `Control`), no mode switch, and no `Listen` toggle.
+- The proposed DSP shape is: slow broadband leveller, speech-band upward lift, high-band transient containment, and a smoothed behaviour detector that biases those stages based on speech-like versus guitar-like dominance rather than hard switching states.
+- The full framework-aligned product spec is documented in `docs/VX_PERFORM_BALANCER_SPEC.md`, including identity, UX contract, DSP rules, realtime constraints, and verification targets.
+
 # DSP hot-path pass (phase 1) — 2026-03-19
 
 ## Problem
@@ -1581,3 +1615,22 @@ The remaining user report narrowed the residual Cleanup distortion down further:
 - `tests/VXSuitePluginRegressionTests.cpp` now includes `testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase()`, which compares the same voiced edge-case with `hishelf_on` off versus on and fails if the shelf path adds too much extra residual damage.
 - Before the fix, the isolated shelf probe measured `off residual=0.0738695`, `on residual=0.0985489`, and `onOffResidual=0.0684699`. After the fix, that same probe measured `off residual=0.0738695`, `on residual=0.0748042`, and `onOffResidual=0.0144093`.
 - Verified with `cmake --build build --target VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`, which passed cleanly after the shelf-path change.
+
+---
+
+# Stereo-aware subtraction follow-up — 2026-03-20
+
+## Problem
+`VXSubtract` appears to be treating stereo input as one shared mono/mid denoise problem, then reconstructing stereo around that shared result. That is not acceptable when left and right channels have different noise content; each side needs its own noise estimation and subtraction path.
+
+## Plan
+- [x] Add a stereo-specific regression that fails if right-only learned noise removal bleeds incorrectly into the left channel or leaves asymmetric noise untreated.
+- [x] Rework `VXSubtract` from shared mono/mid subtraction toward true stereo-aware subtraction for standard stereo files.
+- [x] Re-run the relevant regression/pluginval lanes, document the result, and commit the fix.
+
+## Review
+- `Source/vxsuite/products/subtract/VxSubtractProcessor.*` now runs stereo `VXSubtract` through independent left/right DSP instances, restores stereo-only learned profiles correctly, and uses the framework latency-aligned dry path for channels that do not have a valid learned profile instead of forcing them through the subtract engine.
+- `Source/vxsuite/products/subtract/dsp/VxSubtractDsp.*` now rejects learned profiles captured from effectively silent input, which prevents a right-only learn pass from accidentally generating a bogus high-confidence left-channel profile.
+- `tests/VXSuitePluginRegressionTests.cpp` now includes a right-only stereo learn regression so asymmetric noise removal stays covered.
+- Verification: `cmake --build build --target VXSuitePluginRegressionTests -j4` succeeds. `./build/VXSuitePluginRegressionTests` no longer reports the subtract stereo/state-restore failures; the current remaining failure is an unrelated pre-existing `OptoComp` steady-state allocation regression.
+- Follow-up: `VXDenoiser` still processes stereo through a shared mono-mid noise path in `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp`, so it needs a matching stereo-aware audit/fix rather than being assumed correct.

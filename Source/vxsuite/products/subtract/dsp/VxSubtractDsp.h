@@ -58,6 +58,7 @@ private:
     float learnedSensitivity = 0.0f;
     float learnedProfileConfidence = 0.0f;
     float learnQualityAccum = 0.0f;
+    float learnInputEnergyAccum = 0.0f;
     int learnQualityFrames = 0;
 
     std::vector<float> monoIn, monoOut, alignedMidDry;

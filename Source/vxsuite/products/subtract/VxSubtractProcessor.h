@@ -7,6 +7,7 @@
 #include "dsp/VxSubtractDsp.h"
 
 #include <atomic>
+#include <array>
 #include <vector>
 
 class VXSubtractAudioProcessor final : public vxsuite::ProcessorBase {
@@ -31,17 +32,24 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
+    void updateLearnTelemetry(const int numChannels);
+    void applySavedProfiles();
 
-    vxsuite::subtract::SubtractDsp subtractDsp;
-    vxsuite::StageChain<1> stageChain { subtractDsp };
+    vxsuite::subtract::SubtractDsp subtractDspMono;
+    vxsuite::subtract::SubtractDsp subtractDspLeft;
+    vxsuite::subtract::SubtractDsp subtractDspRight;
 
     double currentSampleRateHz = 48000.0;
     float smoothedSubtract = 0.0f;
     float smoothedProtect = 0.5f;
     bool controlsPrimed = false;
     bool learnToggleLatched = false;
+    juce::AudioBuffer<float> leftScratch;
+    juce::AudioBuffer<float> rightScratch;
     std::vector<float> savedLearnProfile;
+    std::array<std::vector<float>, 2> savedStereoLearnProfiles;
     float savedLearnConfidence = 0.0f;
+    std::array<float, 2> savedStereoLearnConfidence { 0.0f, 0.0f };
     double savedLearnProfileSampleRate = 0.0;
     int savedLearnProfileFftSize = 0;
     int savedLearnProfileHopSize = 0;
