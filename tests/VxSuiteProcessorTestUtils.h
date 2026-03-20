@@ -312,4 +312,46 @@ inline float bufferCorrelationSkip(const juce::AudioBuffer<float>& a,
     return static_cast<float>(dot / std::sqrt(std::max(1.0e-12, aEnergy * bEnergy)));
 }
 
+inline float bestGainResidualRatioSkip(const juce::AudioBuffer<float>& ref,
+                                       const juce::AudioBuffer<float>& test,
+                                       const int skipSamples = 0) {
+    const int channels = std::min(ref.getNumChannels(), test.getNumChannels());
+    const int samples = std::min(ref.getNumSamples(), test.getNumSamples());
+    const int start = juce::jlimit(0, samples, skipSamples);
+
+    double dot = 0.0;
+    double refEnergy = 0.0;
+    for (int i = start; i < samples; ++i) {
+        float refMono = 0.0f;
+        float testMono = 0.0f;
+        for (int ch = 0; ch < channels; ++ch) {
+            refMono += ref.getSample(ch, i);
+            testMono += test.getSample(ch, i);
+        }
+        refMono /= static_cast<float>(channels);
+        testMono /= static_cast<float>(channels);
+        dot += static_cast<double>(refMono) * testMono;
+        refEnergy += static_cast<double>(refMono) * refMono;
+    }
+
+    const double gain = dot / std::max(1.0e-12, refEnergy);
+    double residualEnergy = 0.0;
+    double testEnergy = 0.0;
+    for (int i = start; i < samples; ++i) {
+        float refMono = 0.0f;
+        float testMono = 0.0f;
+        for (int ch = 0; ch < channels; ++ch) {
+            refMono += ref.getSample(ch, i);
+            testMono += test.getSample(ch, i);
+        }
+        refMono /= static_cast<float>(channels);
+        testMono /= static_cast<float>(channels);
+        const double residual = static_cast<double>(testMono) - gain * static_cast<double>(refMono);
+        residualEnergy += residual * residual;
+        testEnergy += static_cast<double>(testMono) * testMono;
+    }
+
+    return static_cast<float>(std::sqrt(residualEnergy / std::max(1.0e-12, testEnergy)));
+}
+
 } // namespace vxsuite::test

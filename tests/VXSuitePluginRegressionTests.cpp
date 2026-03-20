@@ -122,6 +122,23 @@ juce::AudioBuffer<float> makeCleanupStressInput(const double sr, const float sec
     return buffer;
 }
 
+juce::AudioBuffer<float> makeCleanupVoicedToneInput(const double sr, const float seconds) {
+    auto fundamental = makeSine(sr, seconds, 180.0f, 0.16f);
+    auto formant1 = makeSine(sr, seconds, 720.0f, 0.052f);
+    auto formant2 = makeSine(sr, seconds, 2340.0f, 0.020f);
+    auto buffer = addBuffers(addBuffers(fundamental, formant1), formant2);
+    buffer = addBuffers(buffer, makeNoise(sr, seconds, 0.008f));
+
+    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sr);
+        const float env = 0.72f + 0.28f * std::sin(2.0f * juce::MathConstants<float>::pi * 2.3f * t);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.setSample(ch, i, buffer.getSample(ch, i) * env);
+    }
+
+    return buffer;
+}
+
 bool testCleanupZeroIsIdentity() {
     constexpr double sr = 48000.0;
     auto dry = makeSpeechLike(sr, 1.0f);
@@ -472,6 +489,39 @@ bool testCleanupDeEssAndPlosivesStayHeadroomSafe() {
                       << inputPeak << " out=" << peakAbs(*candidate) << "\n";
             return false;
         }
+    }
+
+    return true;
+}
+
+bool testCleanupVoicedMaterialStaysClean() {
+    constexpr double sr = 48000.0;
+    const auto input = makeCleanupVoicedToneInput(sr, 1.0f);
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 0.90f);
+    setParamNormalized(cleanup, "body", 0.35f);
+    setParamNormalized(cleanup, "focus", 0.82f);
+    setParamNormalized(cleanup, "hishelf_on", 1.0f);
+    const auto out = render(cleanup, input, 256);
+
+    if (!allFinite(out) || peakAbs(out) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup voiced-material case became unstable\n";
+        return false;
+    }
+
+    const float corr = bufferCorrelationSkip(input, out, 2048);
+    if (corr < 0.997f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup damaged voiced-material coherence too much: corr=" << corr << "\n";
+        return false;
+    }
+
+    const float residualRatio = bestGainResidualRatioSkip(input, out, 2048);
+    if (residualRatio > 0.075f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup added too much non-gain harmonic damage on voiced material: residualRatio="
+                  << residualRatio << "\n";
+        return false;
     }
 
     return true;
@@ -1374,6 +1424,7 @@ int main() {
     ok &= testCleanupStrongSettingIsAudibleButBounded();
     ok &= testCleanupHighShelfStrongSettingStaysBounded();
     ok &= testCleanupDeEssAndPlosivesStayHeadroomSafe();
+    ok &= testCleanupVoicedMaterialStaysClean();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
     ok &= testFinishResetIsDeterministic();
