@@ -19,6 +19,8 @@
 - Test offline bounce versus realtime playback.
 
 ## Packaging and release
+- Run `tools/release/release_preflight.sh` before release signing; it checks `pluginval`, signing identities, notary profile access, and DeepFilterNet bundle resources.
+- If the machine does not already have a notary keychain profile, create one with `tools/release/store_notary_profile.sh <profile-name>` and export `APPLE_NOTARY_PROFILE=<profile-name>`.
 - Run `tools/release/sign_and_notarize_vst3.sh` with `APPLE_DEVELOPER_IDENTITY` set for macOS release candidates.
 - If notarizing, also set `APPLE_NOTARY_PROFILE` so the script submits, staples, and validates each staged `.vst3` bundle.
 - Verify the staged DeepFilterNet bundle includes its model archives in `Contents/Resources/`.
