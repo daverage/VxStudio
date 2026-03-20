@@ -380,6 +380,8 @@ void SnapshotPublisher::ensureRegistered() noexcept {
 void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
                                 const juce::AudioBuffer<float>& wetBuffer) noexcept {
     if (slotIndex < 0)
+        ensureRegistered();
+    if (slotIndex < 0)
         return;
 
     const int numSamples = std::min(dryBuffer.getNumSamples(), wetBuffer.getNumSamples());
@@ -404,11 +406,14 @@ void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
                                               wetWaveform)) {
         slotIndex = -1;
         instanceIdValue = 0;
+        ensureRegistered();
     }
     samplesUntilPublish = publishIntervalSamples;
 }
 
 void SnapshotPublisher::publishSilence() noexcept {
+    if (slotIndex < 0)
+        ensureRegistered();
     if (slotIndex < 0)
         return;
 
@@ -430,6 +435,7 @@ void SnapshotPublisher::publishSilence() noexcept {
                                               wetWaveform)) {
         slotIndex = -1;
         instanceIdValue = 0;
+        ensureRegistered();
     }
 }
 
@@ -814,15 +820,14 @@ void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept
         if (!fft.isReady())
             continue;
 
-        auto fftScratch = fftData;
         int readIndex = monoHistoryWriteIndex;
         for (int i = 0; i < kSummarySpectrumFftSize; ++i) {
-            fftScratch[static_cast<std::size_t>(i)] =
+            fftData[static_cast<std::size_t>(i)] =
                 monoHistory[static_cast<std::size_t>(readIndex)] * spectrumWindow[static_cast<std::size_t>(i)];
             readIndex = (readIndex + 1) % kSummarySpectrumFftSize;
         }
-        std::fill(fftScratch.begin() + kSummarySpectrumFftSize, fftScratch.end(), 0.0f);
-        fft.performForward(fftScratch.data());
+        std::fill(fftData.begin() + kSummarySpectrumFftSize, fftData.end(), 0.0f);
+        fft.performFrequencyOnlyForward(fftData.data());
 
         constexpr float kMinFreq = 20.0f;
         constexpr float kMaxFreq = 20000.0f;
@@ -836,20 +841,31 @@ void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept
             const float startFreq = kMinFreq * std::pow(upperFreq / kMinFreq, startNorm);
             const float endFreq = kMinFreq * std::pow(upperFreq / kMinFreq, endNorm);
 
-            const int startBin = juce::jlimit(1,
-                                              kSummarySpectrumFftSize / 2,
-                                              static_cast<int>(std::floor(startFreq * kSummarySpectrumFftSize / sampleRate)));
-            const int endBin = juce::jlimit(startBin,
-                                            kSummarySpectrumFftSize / 2,
-                                            static_cast<int>(std::ceil(endFreq * kSummarySpectrumFftSize / sampleRate)));
+            int startBin = juce::jlimit(1,
+                                        kSummarySpectrumFftSize / 2,
+                                        static_cast<int>(std::floor(startFreq * kSummarySpectrumFftSize / sampleRate)));
+            int endBin = juce::jlimit(startBin,
+                                      kSummarySpectrumFftSize / 2,
+                                      static_cast<int>(std::ceil(endFreq * kSummarySpectrumFftSize / sampleRate)));
+
+            // The lowest log bands can otherwise collapse to one or two FFT bins,
+            // which makes the analyser overreact to single-bin fluctuations and
+            // mis-shape the low end versus tools like SPAN.
+            constexpr int kMinBinsPerBand = 3;
+            if ((endBin - startBin + 1) < kMinBinsPerBand) {
+                const int centerBin = juce::jlimit(1,
+                                                   kSummarySpectrumFftSize / 2,
+                                                   static_cast<int>(std::lround(std::sqrt(startFreq * endFreq)
+                                                                                * kSummarySpectrumFftSize / sampleRate)));
+                startBin = juce::jlimit(1, kSummarySpectrumFftSize / 2, centerBin - 1);
+                endBin = juce::jlimit(startBin, kSummarySpectrumFftSize / 2, centerBin + 1);
+            }
 
             double powerSum = 0.0;
             double weightSum = 0.0;
             float peakMagnitude = 0.0f;
             for (int bin = startBin; bin <= endBin; ++bin) {
-                const float re = fftScratch[static_cast<std::size_t>(bin * 2)];
-                const float im = fftScratch[static_cast<std::size_t>(bin * 2 + 1)];
-                const double magnitude = std::sqrt(static_cast<double>(re) * re + static_cast<double>(im) * im) * fftScale;
+                const double magnitude = static_cast<double>(fftData[static_cast<std::size_t>(bin)]) * fftScale;
                 powerSum += magnitude * magnitude;
                 weightSum += 1.0;
                 peakMagnitude = std::max(peakMagnitude, static_cast<float>(magnitude));
@@ -857,8 +873,12 @@ void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept
 
             if (weightSum > 0.0) {
                 const float rmsMagnitude = static_cast<float>(std::sqrt(powerSum / weightSum));
-                // Preserve prominent partials instead of flattening each log bucket into a broad RMS hump.
-                spectrum[static_cast<std::size_t>(band)] = 0.75f * peakMagnitude + 0.25f * rmsMagnitude;
+                const int binCount = endBin - startBin + 1;
+                const float peakWeight = binCount <= kMinBinsPerBand ? 0.30f : 0.75f;
+                // Preserve prominent partials without letting single low-bin spikes
+                // dominate the whole low-end contour.
+                spectrum[static_cast<std::size_t>(band)] =
+                    peakWeight * peakMagnitude + (1.0f - peakWeight) * rmsMagnitude;
             } else {
                 spectrum[static_cast<std::size_t>(band)] = 0.0f;
             }

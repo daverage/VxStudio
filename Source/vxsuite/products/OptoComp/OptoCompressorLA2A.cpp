@@ -122,12 +122,27 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const float memRiseA = std::exp(-1.0f / (0.40f * static_cast<float>(sr)));   // ~0.4s TC
   const float memFallA = std::exp(-1.0f / (18.0f * static_cast<float>(sr)));   // ~18s TC
 
+  float scAbsEstimate = 0.0f;
+  float lfAbsEstimate = 0.0f;
+  for (int ch = 0; ch < numChannels; ++ch) {
+    scAbsEstimate += std::abs(y1[static_cast<size_t>(ch)]);
+    lfAbsEstimate += std::abs(lfLp1[static_cast<size_t>(ch)]);
+  }
+  scAbsEstimate /= static_cast<float>(numChannels);
+  lfAbsEstimate /= static_cast<float>(numChannels);
+
+  const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
+  const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
+  const float lfRatioEstimate = lfAbsEstimate / (scAbsEstimate + 1.0e-6f);
+  const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
+  const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01) * lfSlowFactor;
+  const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
+
   float grAcc = 0.0f;
 
   for (int i = 0; i < numSamples; ++i) {
     // Stereo-linked feedback detector
     float scAbs = 0.0f;
-    float lfAbs = 0.0f;
 
     if (p.stereoLink) {
       for (int ch = 0; ch < numChannels; ++ch) {
@@ -137,10 +152,8 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
         float lf = lfLp1[static_cast<size_t>(ch)];
         lf = lfA * lf + (1.0f - lfA) * yPrev;
         lfLp1[static_cast<size_t>(ch)] = lf;
-        lfAbs += std::abs(lf);
       }
       scAbs /= static_cast<float>(numChannels);
-      lfAbs /= static_cast<float>(numChannels);
     } else {
       // If not linked (rare): use channel 0 detector
       const float yPrev = y1[0];
@@ -148,7 +161,6 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
       float lf = lfLp1[0];
       lf = lfA * lf + (1.0f - lfA) * yPrev;
       lfLp1[0] = lf;
-      lfAbs = std::abs(lf);
     }
 
     // Avoid log blow-ups
@@ -171,19 +183,6 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
       mem01 = memRiseA * mem01 + (1.0f - memRiseA) * memTarget;
     else
       mem01 = memFallA * mem01 + (1.0f - memFallA) * memTarget;
-
-    // Frequency dependence factor: more LF dominance => slower tail.
-    const float lfRatio = lfAbs / (scAbs + 1.0e-6f); // ~0..1
-    const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatio);
-
-    // Slow release time range:
-    // Compress: 0.5..5s
-    // Limit:    1..15s
-    const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
-    const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
-    const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01) * lfSlowFactor;
-
-    const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
 
     // Dual ballistics on targetGrDb (in dB):
     // Attack: both use atkA.

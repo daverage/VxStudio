@@ -1,3 +1,68 @@
+# DSP hot-path pass (phase 1) — 2026-03-19
+
+## Problem
+The latest DSP review identified several confirmed hot-path issues. The highest-value ones to start with were `CorrectiveStage` rebuilding six peaking EQs on every sample and `OptoCompressorLA2A` doing a slow-release `std::exp` per sample.
+
+## Plan
+- [x] Move Cleanup/Polish trouble-band EQ coefficient generation out of the per-sample path.
+- [x] Reduce `OptoCompressorLA2A` per-sample transcendental work without changing the audible contract.
+- [x] Rebuild affected plugins and run the regression suite.
+- [ ] Tackle the bigger `SubtractDsp` memory-shift refactor in a dedicated follow-up pass.
+
+## Review
+- `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp` now runs the trouble-band detection over the block, accumulates per-band cut depth, and builds the six peaking EQ coefficient sets once per block instead of once per sample. That removes the worst repeated trig/pow work from Cleanup's hottest path while preserving the same trouble-smoothing role.
+- `Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp` now computes the slow-release coefficient once per block from the current optical-memory / LF state estimate instead of calling `std::exp` for it on every sample.
+- During verification, the earlier shared framework output trimmer change was corrected so the emergency trimmer protects normal processed output but does not touch listen-delta output. That keeps headroom safety while preserving subtract-style wet+listen recombination semantics.
+- The larger `SubtractDsp` ring-buffer conversion was started, exposed a behavior regression, and was intentionally backed out for this pass. It should come back as a dedicated refactor with targeted verification rather than being forced through alongside the safe CPU wins.
+- Verified with `cmake --build build --target VXCleanupPlugin VXOptoCompPlugin VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+
+# README refresh for analyser + framework behavior — 2026-03-19
+
+## Problem
+The root README and framework README had drifted behind the current implementation. They still described the analyser as having no controls, described listen as always outputting removed material, and implied output safety was only an optional product-local concern instead of part of the shared framework behavior.
+
+## Plan
+- [x] Review the root project README and framework README for outdated analyser, listen, and framework-behavior descriptions.
+- [x] Update both documents so they reflect the current analyser controls/telemetry model and the current framework output-safety/layout contract.
+- [x] Review the doc diff for clarity and consistency.
+
+## Review
+- `README.md` now describes `VXStudioAnalyser` as a chain-aware spectrum analyser with `Avg Time`, `Smoothing`, and `Hide Chain`, and explains the current full-chain / per-stage dry-vs-wet workflow.
+- The root README also now documents the current listen contract correctly: removal tools audition what was removed, while additive/finishing tools audition what they added.
+- `Source/vxsuite/framework/README.md` now documents the responsive shared editor behavior, automatic final output safety in `ProcessorBase`, optional product-local trimmers for extra discipline, and the shared telemetry path used by `VXStudioAnalyser`.
+- This was a documentation-only pass; no build was required.
+
+# Cleanup / suite headroom safety pass — 2026-03-19
+
+## Problem
+`Cleanup` could clip when De-Ess or Plosive correction were driven hard, and not every VX Suite product had a final output safety stage. The user asked for good headroom across the suite so no processor clips just by being active.
+
+## Plan
+- [x] Inspect the Cleanup corrective path and confirm where De-Ess / Plosive overshoot can occur.
+- [x] Add a shared suite-wide emergency output safety layer and a Cleanup-specific overshoot guard that preserves subtractive behavior.
+- [x] Add regression coverage for Cleanup De-Ess/Plosive stress, rebuild affected targets, and verify the fix.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteProcessorBase.*` now owns a shared emergency `OutputTrimmer` for every VX processor. It runs after normal product processing in non-listen mode and after listen rendering in listen mode, providing a final suite-wide headroom safeguard even for products that did not previously have local output trimming.
+- `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp` now measures dry versus post-corrective peak and reins the corrective chain back to a tiny margin above the dry peak before its local trimmer runs. That keeps Cleanup aligned with its subtractive intent: De-Ess, Plosive, and related corrective moves should not create new peak overs just because of filter-split recombination.
+- `tests/VXSuitePluginRegressionTests.cpp` now includes a dedicated Cleanup stress case with both low-frequency plosive bursts and aggressive high-frequency sibilance content at full settings. The regression asserts finite output, safe peak headroom, and no large peak inflation relative to the input.
+- Verified with `cmake --build build --target VXCleanupPlugin VXStudioAnalyserPlugin VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+
+# Analyzer low-band display regression — 2026-03-19
+
+## Problem
+The latest in-host analyser pass regressed at the bottom of the spectrum: low bins could dominate summary text with obviously wrong callouts like large `20 Hz` deltas, and the visible low-end contour diverged from the SPAN reference because the shared low-band reduction was still too spike-sensitive.
+
+## Plan
+- [x] Inspect the shared spectrum reduction and analyser summary-selection paths to find why very-low bands were over-winning both the plot and the readout.
+- [x] Make low-band reduction less sensitive to single-bin spikes and stop near-floor bands from being selected as the largest/dominant change.
+- [x] Rebuild `VXStudioAnalyserPlugin`, rerun regression coverage, and document the fix.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` now widens extremely small summary bands to a minimum three-bin neighborhood before reduction and uses a less peak-heavy blend for those tiny bands. That keeps one FFT bin at the edge of the log scale from distorting the whole low-end display.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now ignores near-floor bands when choosing the largest/dominant spectral delta for the summary text. The graph marker and readout should no longer jump to fake `20 Hz` wins when both dry and wet are effectively at the noise floor there.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+
 # Analyzer timing + spectrum fidelity pass — 2026-03-18
 
 ## Problem
@@ -218,6 +283,119 @@ Replace `VXSpectrum` with `VX Studio Analyser`, rebuilding the analyzer around a
 - [x] Tighten the spec with domain authority, explicit `StageTelemetry`, deterministic ordering, and incremental summary rules.
 - [x] Start the framework implementation by introducing the new telemetry ABI and domain registry primitives.
 - [x] Wire the new telemetry publisher through `ProcessorBase` without breaking current buildability.
+
+# Analyzer live-chain sidebar contract fix — 2026-03-19
+
+## Problem
+The analyser sidebar regressed after the timing/smoothing work. Instead of representing the live VX Studio plugins active in the FX chain, it was effectively telemetry-driven: rows could disappear, partially appear, or map to the wrong stage whenever per-stage telemetry coverage lagged behind the chain snapshots. That also let incomplete telemetry create misleading full-chain graphs and absurd per-stage deltas.
+
+## Plan
+- [x] Re-center the sidebar on live VX chain snapshots so active plugins stay visible even when telemetry is partial.
+- [x] Match stage telemetry onto snapshot rows with tolerant VX name normalization instead of brittle raw display-name equality.
+- [x] Keep full-chain comparison in analyser passthrough mode whenever chain coverage is incomplete, while still allowing a selected stage row to show real telemetry if that stage has arrived.
+- [x] Rebuild `VXStudioAnalyserPlugin` and rerun `VXDeverbTests`.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now builds the sidebar from `SnapshotRegistry` first, using that as the source of truth for which VX plugins are currently live in the chain. Stage telemetry now enriches those rows instead of determining whether the row exists.
+- Added VX-aware name normalization so snapshot product names like `VXSubtract` can reliably match telemetry stage names/IDs such as `Subtract` or similar framework identifiers.
+- Sidebar selection is now row-based and stable. Clicking a visible chain row selects that row directly; the analyser then resolves any matched stage telemetry behind it. This removes the old index mismatch where a sidebar row could silently point at the wrong telemetry stage.
+- Full-chain mode now only trusts the chain comparison when telemetry coverage is complete. If the live chain rows outnumber matched telemetry rows, the analyser falls back to its own passthrough view for the full-chain plot to avoid fake spikes. Individual rows with valid telemetry still show their own stage analysis while the rest of the chain catches up.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyzer sidebar stability + spectrum crossover pass — 2026-03-19
+
+## Problem
+The analyser is very close now, but the live chain list still flickers and occasionally drops visible VX stages, and the spectrum still diverges from SPAN in two practical ways: the low end is visually underrepresented, and the wet/dry crossover is harder to read than it should be.
+
+## Plan
+- [x] Add a short-lived sidebar snapshot cache so the live VX chain remains stable through brief publish gaps instead of flickering like raw telemetry.
+- [x] Correct the analyser display slope so low frequencies are not visually suppressed relative to the SPAN reference.
+- [x] Improve the spectrum overlay with clearer wet fill and additive/subtractive crossover shading.
+- [x] Rebuild `VXStudioAnalyserPlugin` and rerun `VXDeverbTests`.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.*` now keeps a short sidebar snapshot cache with a `3500 ms` hold, so brief snapshot dropouts no longer immediately remove a live VX stage row from the chain list.
+- The analyser display slope was corrected to apply in the same direction as a conventional analyzer tilt. The previous sign error visually pushed lows down and highs up, which is why the low end looked weaker than SPAN even when the underlying signal was present.
+- The spectrum paint path now adds a clearer wet fill plus differential crossover shading: additive regions are highlighted separately from subtractive regions, so it is much easier to see where wet rises above or falls below dry.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyzer snapshot robustness + FFT contour correction — 2026-03-19
+
+## Problem
+The analyser was still missing active VX effects in the left panel, and the spectrum contour remained materially different from the SPAN reference. The evidence pointed to two backend issues: snapshot publishing was less robust than stage telemetry and could fail to rejoin after an initial registration miss, and the spectrum path was still using a packed real-FFT interpretation that could skew the displayed contour.
+
+## Plan
+- [x] Make the shared snapshot publisher retry slot registration during normal publish/silence updates instead of only at construction/prepare time.
+- [x] Switch the analyser spectrum accumulation to JUCE's frequency-only FFT path so the display uses direct magnitude bins instead of hand-reading the packed real-transform buffer.
+- [x] Keep the sidebar as a union of snapshot rows plus any unmatched live telemetry rows so active/silent VX plugins are less likely to disappear from the chain list.
+- [x] Rebuild `VXStudioAnalyserPlugin` and rerun `VXDeverbTests`.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` now retries `SnapshotPublisher::ensureRegistered()` from both `publish()` and `publishSilence()` whenever the snapshot slot is unavailable, rather than silently staying missing for the rest of the session.
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` now uses `performFrequencyOnlyForwardTransform()` for the analyzer spectrum path and reads direct magnitude bins from that result. This removes the previous manual interpretation of the packed real FFT buffer, which was a plausible source of the contour mismatch versus SPAN.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now includes unmatched live telemetry stages in the sidebar even if there is no corresponding snapshot row, and silent stages are retained in the live stage pool instead of being dropped outright.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Cleanup high-shelf control fix — 2026-03-19
+
+## Problem
+The user reported that the `Cleanup` high-shelf control did not seem to do much. Inspection showed that the UI toggle and parameter wiring were present, but the shared corrective DSP never actually used `hiShelfOn`, so the control was effectively a no-op.
+
+## Plan
+- [x] Trace the `Cleanup` high-shelf toggle from processor params into the shared corrective DSP.
+- [x] Add a real high-shelf stage in the corrective DSP so enabling the control produces a meaningful top-end cleanup change.
+- [x] Rebuild `VXCleanupPlugin` and rerun the standing regression check.
+
+## Review
+- `Source/vxsuite/products/polish/dsp/VxPolishDspCommon.h` now provides a reusable RBJ-style high-shelf biquad helper.
+- `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.*` now owns a dedicated high-shelf filter/state and applies it when `params.hiShelfOn` is enabled. The shelf amount is derived from the current `deEss` and `troubleSmooth` drive, so the icon now has an audible cleanup effect instead of being dead wiring.
+- Verified with `cmake --build build --target VXCleanupPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyser CPU + memory efficiency pass — 2026-03-19
+
+## Problem
+The analyser is now functionally close, but the user explicitly asked to make it as CPU- and memory-efficient as possible. The hot paths still included avoidable work: copying the full FFT scratch buffer every analysis hop, allocating/sorting extra data in sparse-spectrum classification, repeated string normalization in sidebar matching, and redundant path/snapshot-string construction in the editor.
+
+## Plan
+- [x] Remove avoidable large-buffer copying from the shared spectrum telemetry FFT path.
+- [x] Trim editor-side allocations and repeated string/path work in the analyser refresh/paint loop.
+- [x] Rebuild `VXStudioAnalyserPlugin` and rerun the standing regression check.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp` no longer copies the entire `fftData` buffer into a scratch array on every FFT hop. The analyser now fills and transforms the persistent buffer in place, which removes one full-size copy from the hottest telemetry path.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now avoids the per-frame `std::vector` allocation/sort previously used to compute sparse-spectrum top energy. The classifier keeps the top four energies in a fixed array during a single pass instead.
+- The editor refresh path now reserves stage/snapshot vectors up front, precomputes normalized external-stage match keys once per refresh, skips building the joined snapshot diagnostics list unless diagnostics are actually open, and reuses dry/wet spectrum paths within `paint()` instead of rebuilding them multiple times per frame.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# Analyser responsive text/layout pass — 2026-03-19
+
+## Problem
+The user asked to make sure the analyser text fits inside its boxes and that the UI responds cleanly at different sizes. The editor still had a few fixed-height/fixed-row assumptions that could make summary text and controls feel cramped, especially in narrower layouts.
+
+## Plan
+- [x] Tighten the analyser label scaling and stage-row text layout so long text fits more reliably.
+- [x] Make the controls row wrap more gracefully in narrower content widths instead of crowding into one fixed strip.
+- [x] Rebuild `VXStudioAnalyserPlugin` and rerun the standing regression check.
+
+## Review
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` now gives the subtitle, status, selection, and summary labels more tolerant horizontal scaling so long strings stay within their cards more reliably.
+- Stage-row secondary text now uses a slightly smaller font and can wrap across two lines instead of truncating too aggressively in the rail.
+- The top summary card gains a little extra height in narrower layouts, and the analyser control strip now splits into two rows when the content area is tight instead of forcing `Avg Time`, `Smoothing`, and `Hide Chain` into one crowded line.
+- Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4` and `./build/VXDeverbTests`.
+
+# VXDenoiser vocal-mode amount fix — 2026-03-19
+
+## Problem
+The user reported that `VXDenoiser` in vocal mode appeared to do nothing. Inspection showed that the processor was scaling the vocal-mode clean amount down to only `8%` of the knob value before it ever reached the DSP, which effectively neutered the denoiser even at high settings.
+
+## Plan
+- [x] Inspect the vocal/general clean-amount mapping in `VXDenoiser`.
+- [x] Correct the vocal-mode amount law while preserving the existing vocal protection/guard behavior.
+- [x] Rebuild `VXDenoiserPlugin` and rerun the standing regression check.
+
+## Review
+- `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp` now maps vocal-mode `Clean` to `0.55 * smoothedClean` instead of `0.08 * smoothedClean`. The DSP is now fed a meaningful amount in vocal mode while the existing `sourceProtect`, `guardStrictness`, and `speechFocus` safeguards remain in place.
+- Verified with `cmake --build build --target VXDenoiserPlugin -j4` and `./build/VXDeverbTests`.
 - [x] Build the affected targets and document the first implementation checkpoint.
 - [x] Replace the old `VXSpectrum` product target/files with `VXStudioAnalyser` in the build and staged plugin output.
 - [x] Replace the carried-over spectrum UI with a real stage-based `VXStudioAnalyser` shell built on the new analysis telemetry.
@@ -1196,3 +1374,81 @@ Review the full audio chain of each VX plugin and verify the suite stays clean: 
   - `cmake --build build --target VXFinish_VST3 VXSuitePluginRegressionTests -j4`
   - `./build/VXSuitePluginRegressionTests`
 - The regression executable still fails, but the remaining reported failures are currently `VXDeverb` and `VXDenoiser`, not `VXFinish`.
+
+---
+
+# Vocal mode consistency audit — 2026-03-19
+
+## Problem
+Check how the shared framework defines `Vocal` mode, how each VX product actually handles it, and whether the suite is consistent with the intended "scalpel, not chainsaw" vocal behavior.
+
+## Plan
+- [x] Inspect the shared framework mode contract and common process-option plumbing.
+- [x] Review each major VX product's `Vocal` vs `General` behavior.
+- [x] Record consistency findings and concrete gaps.
+
+## Review
+- Framework contract is consistent in principle: `Source/vxsuite/framework/VxSuiteModePolicy.h` defines `Vocal` as higher source protection, stronger speech focus, higher guard strictness, and lower late-tail aggression than `General`.
+- `VXDenoiser`, `VXCleanup`, `VXSubtract`, `VXDeverb`, `VXTone`, `VXOptoComp`, and `VXFinish` all do change DSP behavior in response to `Vocal`, but they do so through different mechanisms and with uneven fidelity to the shared policy.
+- Strongest alignment with the framework contract:
+  - `VXDenoiser` maps the shared policy fields into `ProcessOptions` and its DSP uses those values for speech-band protection, transient guarding, and suppression depth.
+  - `VXCleanup` uses mode both in the processor mappings and in the shared corrective DSP via `contentMode`, producing more speech-aware thresholds/cuts in `Vocal`.
+  - `VXDeverb` uses `voiceMode` inside the spectral dereverb DSP to protect the speech band and enable speech-targeted WPE only in `Vocal`.
+- Partially consistent / custom interpretations:
+  - `VXSubtract` does become more protective and speech-focused in `Vocal`, but it hardcodes its own mapping instead of using `currentModePolicy()`, so it follows the suite intent without actually sharing the framework contract.
+  - `VXTone` and `VXProximity` switch to narrower, more speech-aware shaping in `Vocal`, but they use simple product-local mode branches rather than the framework policy fields.
+  - `VXOptoComp` and `VXFinish` switch between compressor-like `Vocal` behavior and limiter-like `General` behavior through `contentMode`, which is coherent, but much thinner than the framework's richer protection model.
+- Clear consistency gap:
+  - `VXDeepFilterNet` does not use the suite `Vocal/General` mode contract at all. Its `modeParamId` is repurposed as the model selector (`DeepFilterNet 3` vs `DeepFilterNet 2`), so there is no real `General` mode behavior to compare and no shared-policy mapping.
+- Overall conclusion: the suite is directionally consistent that `Vocal` should be more surgical and speech-aware, but implementation consistency is mixed. Some products honor the shared framework policy directly, some implement their own local "voice mode" interpretation, and `VXDeepFilterNet` currently breaks the contract by replacing mode with model selection entirely.
+
+---
+
+# Denoiser / analyser regression pass — 2026-03-19
+
+## Problem
+`VXDenoiser` was reading like a broad full-range level drop in both modes, and the analyser was still occasionally flipping into the sparse stem/bar render with orange dots.
+
+## Plan
+- [x] Inspect the Denoiser amount/protection path and analyser sparse-render switching logic.
+- [x] Implement targeted fixes for Denoiser specificity and analyser render stability.
+- [x] Rebuild the affected plugins, run focused regression coverage, and record the result.
+
+## Review
+- `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp` now uses `speechFocus` inside the gain law, adding explicit speech-band protection so vocal cleanup stays more surgical instead of broadly pulling down the whole vocal range.
+- The same DSP now slows upward motion in its per-bin noise estimate when speech presence is high, which reduces the tendency for the noise floor to chase live program material and turn the denoiser into broadband attenuation.
+- `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp` now applies bounded loudness-retention makeup after denoising, then runs the shared output trimmer. That keeps the result from feeling like simple volume loss without just blending the removed noise back in.
+- `Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp` no longer switches the spectrum plot into the sparse stem/orange-dot renderer; it stays in the normal overlay view even when the signal is narrowband, which removes the distracting bar-chart flash.
+- Added a denoiser regression in `tests/VXSuitePluginRegressionTests.cpp` to ensure strong settings in both vocal and general modes retain useful output level instead of collapsing excessively.
+- Verified with:
+  - `cmake --build build --target VXDenoiserPlugin VXStudioAnalyserPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXSuitePluginRegressionTests`
+- Follow-up pink-noise correction:
+  - `Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp` now only applies loudness-retention makeup when the DSP actually sees speech-like presence, so noise-only material is no longer “protected” back toward its original broadband level.
+  - Vocal and general clean-drive scaling were both increased so max settings can do real work on noise-only material instead of reading as near-bypass in vocal mode.
+  - `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp` now gates speech-band protection by per-bin speech presence instead of always protecting the vocal band, which prevents pink noise from being treated like protected voice content.
+  - Added a noise-only denoiser regression in `tests/VXSuitePluginRegressionTests.cpp` so both modes must measurably reduce noise-only input at full settings.
+  - Re-verified with:
+    - `cmake --build build --target VXDenoiserPlugin VXSuitePluginRegressionTests -j4`
+    - `./build/VXSuitePluginRegressionTests`
+
+---
+
+# Framework UI responsiveness pass — 2026-03-19
+
+## Problem
+Ensure framework-based VX effects fit text cleanly, resize sensibly, and inherit readable layout behavior at the shared editor level instead of relying on one-off per-plugin fixes.
+
+## Plan
+- [x] Inspect the shared framework editor and framework UI rules.
+- [x] Implement framework-level text-fitting and responsive layout improvements in the shared editor base.
+- [x] Rebuild representative plugins and run regression verification.
+
+## Review
+- `Source/vxsuite/framework/VxSuiteEditorBase.cpp` now uses more forgiving shared minimum editor sizes, stronger minimum horizontal scaling on title/status/knob text, and more generous shared vertical space for knob labels and hint text.
+- The shared header layout now tolerates narrower widths better by allowing the status line to fall to its own row when the control row gets tight, which prevents cramped header text across framework-based products.
+- Shared mode/listen/learn controls now reserve slightly more width, and learn meter text is less likely to truncate aggressively.
+- Updated `docs/VX_SUITE_FRAMEWORK.md` to make readable text and responsive shared layout part of the framework contract rather than an ad hoc cleanup item.
+- Verified with:
+  - `cmake --build build --target VXCleanupPlugin VXProximityPlugin VXFinishPlugin VXDenoiserPlugin -j4`
+  - `./build/VXSuitePluginRegressionTests`

@@ -143,6 +143,10 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     if (numSamples <= 0)
         return;
 
+    float dryPeak = 0.0f;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        dryPeak = std::max(dryPeak, buffer.getMagnitude(ch, 0, numSamples));
+
     const float cleanupTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
     const float focusTarget = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId, 0.5f);
@@ -361,6 +365,14 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
 
     polishChain.setParams(params);
     polishChain.processCorrective(buffer);
+
+    float wetPeak = 0.0f;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        wetPeak = std::max(wetPeak, buffer.getMagnitude(ch, 0, numSamples));
+
+    const float allowedPeak = juce::jmin(0.985f, juce::jmax(1.0e-4f, dryPeak * 1.02f + 1.0e-4f));
+    if (wetPeak > allowedPeak)
+        buffer.applyGain(allowedPeak / std::max(wetPeak, 1.0e-6f));
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

@@ -42,6 +42,8 @@ void CorrectiveStage::prepare(double sampleRate, int numChannels) {
 
     hpfZ1.assign(static_cast<size_t>(channels), 0.0f);
     hpfZ2.assign(static_cast<size_t>(channels), 0.0f);
+    hiShelfZ1.assign(static_cast<size_t>(channels), 0.0f);
+    hiShelfZ2.assign(static_cast<size_t>(channels), 0.0f);
     const auto mudBpf = detail::makeBandpass(sr, 300.0f, 1.2f);
     mudActBpfB0 = mudBpf.b0;
     mudActBpfA1 = mudBpf.a1;
@@ -74,6 +76,27 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
             std::fill(hpfZ1.begin(), hpfZ1.end(), 0.0f);
             std::fill(hpfZ2.begin(), hpfZ2.end(), 0.0f);
         }
+    }
+
+    const bool hiShelfConfigChanged = newParams.hiShelfOn != params.hiShelfOn
+        || newParams.contentMode != params.contentMode
+        || std::abs(newParams.deEss - params.deEss) > 1.0e-4f
+        || std::abs(newParams.troubleSmooth - params.troubleSmooth) > 1.0e-4f;
+    if (hiShelfConfigChanged) {
+        if (newParams.hiShelfOn) {
+            const bool voiceMode = newParams.contentMode == 0;
+            const float fc = voiceMode ? 5600.0f : 6800.0f;
+            const float q = 0.66f;
+            const float gainDb = -(voiceMode ? 2.5f : 1.5f)
+                - 5.5f * juce::jlimit(0.0f, 1.0f, newParams.deEss)
+                - 3.5f * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth);
+            hiShelfCoeffs = detail::makeHighShelf(sr, fc, q, gainDb);
+        } else {
+            hiShelfCoeffs = {};
+        }
+
+        std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+        std::fill(hiShelfZ2.begin(), hiShelfZ2.end(), 0.0f);
     }
 
     params = newParams;
@@ -117,6 +140,8 @@ void CorrectiveStage::reset() {
     troubleActivity = 0.0f;
     std::fill(hpfZ1.begin(), hpfZ1.end(), 0.0f);
     std::fill(hpfZ2.begin(), hpfZ2.end(), 0.0f);
+    std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+    std::fill(hiShelfZ2.begin(), hiShelfZ2.end(), 0.0f);
     troubleRefLp = 0.0f;
     troubleRefRms = 0.0f;
     troubleBandZ1.fill(0.0f);
@@ -213,19 +238,14 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
     float troubleAcc = 0.0f;
     float compGain = 1.0f;
 
-    for (int i = 0; i < numSamples; ++i) {
-        float monoLinear = 0.0f;
-        float monoAbs = 0.0f;
-        for (int ch = 0; ch < numChannels; ++ch) {
-            const float s = buffer.getReadPointer(ch)[i];
-            monoLinear += s;
-            monoAbs += std::abs(s);
-        }
-        monoLinear /= static_cast<float>(numChannels);
-        monoAbs /= static_cast<float>(numChannels);
+    if (troubleAmt > 1.0e-6f) {
+        std::array<float, 6> troubleCutDbAccum {};
+        for (int i = 0; i < numSamples; ++i) {
+            float monoLinear = 0.0f;
+            for (int ch = 0; ch < numChannels; ++ch)
+                monoLinear += buffer.getReadPointer(ch)[i];
+            monoLinear /= static_cast<float>(numChannels);
 
-        float troubleDbSample = 0.0f;
-        if (troubleAmt > 1.0e-6f) {
             troubleRefLp = cTroubleRefA * troubleRefLp + (1.0f - cTroubleRefA) * monoLinear;
             troubleRefRms = cRmsA * troubleRefRms + (1.0f - cRmsA) * (troubleRefLp * troubleRefLp);
             const float refEnv = std::sqrt(troubleRefRms + 1.0e-12f);
@@ -242,12 +262,31 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
                 const float excessDb = std::max(0.0f, ratioDb - troubleThresh[b]);
                 const float drive = juce::jlimit(0.0f, 1.0f, excessDb / troubleRange);
                 const float cutDb = -troubleMaxCut[b] * troubleAmt * drive * smoothCtx;
-                troubleCoeffs[b] = detail::makePeakingEq(sr, troubleCenters[b], troubleQVals[b], cutDb);
+                troubleCutDbAccum[b] += cutDb;
                 bandCutSum += troubleMaxCut[b] * troubleAmt * drive;
             }
-            troubleDbSample = bandCutSum / 6.0f;
-            troubleAcc += troubleDbSample;
+            troubleAcc += bandCutSum / 6.0f;
         }
+
+        const float invSamples = 1.0f / static_cast<float>(numSamples);
+        for (size_t b = 0; b < 6; ++b) {
+            troubleCoeffs[b] = detail::makePeakingEq(sr,
+                                                     troubleCenters[b],
+                                                     troubleQVals[b],
+                                                     troubleCutDbAccum[b] * invSamples);
+        }
+    }
+
+    for (int i = 0; i < numSamples; ++i) {
+        float monoLinear = 0.0f;
+        float monoAbs = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch) {
+            const float s = buffer.getReadPointer(ch)[i];
+            monoLinear += s;
+            monoAbs += std::abs(s);
+        }
+        monoLinear /= static_cast<float>(numChannels);
+        monoAbs /= static_cast<float>(numChannels);
 
         plosiveMonoLp = a180 * plosiveMonoLp + (1.0f - a180) * monoAbs;
         const float lowAbs = std::abs(plosiveMonoLp);
@@ -345,8 +384,8 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
             float breathLp = breathLpCh[static_cast<size_t>(ch)];
             breathLp = aBreath * breathLp + (1.0f - aBreath) * x;
             breathLpCh[static_cast<size_t>(ch)] = breathLp;
-            const float breathBand = x - breathLp;
             x = essLp + highBand * deEssGain;
+            const float breathBand = x - breathLp;
             x -= breathBand * (1.0f - breathGain);
 
             x *= compGain;
@@ -356,6 +395,13 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
                                                  troubleEqZ1[b][static_cast<size_t>(ch)],
                                                  troubleEqZ2[b][static_cast<size_t>(ch)]);
                 }
+            }
+
+            if (params.hiShelfOn) {
+                x = detail::processBiquadDf2(x,
+                                             hiShelfCoeffs,
+                                             hiShelfZ1[static_cast<size_t>(ch)],
+                                             hiShelfZ2[static_cast<size_t>(ch)]);
             }
 
             d[i] = x;

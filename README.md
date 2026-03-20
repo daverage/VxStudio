@@ -25,7 +25,7 @@ This repo contains one of the few implementations of de-reverb or deverb / rever
 | **VXTone** | Bass and treble tone shaping | `Bass` · `Treble` | Warmth, brightness, tonal balance after cleanup |
 | **VXFinish** | Smart finish and level control | `Finish` · `Body` · `Gain` | Compression, recovery lift, controlled loudness, final polish |
 | **VXOptoComp** | LA2A-style opto compression | `Peak Red.` · `Body` · `Gain` | Natural levelling, limiting, smooth dynamic control |
-| **VXStudioAnalyser** | Chain analyser | — | Inspecting the VX chain, dry input, per-stage traces, and final wet result |
+| **VXStudioAnalyser** | Chain-aware spectrum analyser | `Avg Time` · `Smoothing` | Comparing dry vs wet, inspecting per-stage spectral changes, and checking the final VX chain |
 
 ---
 
@@ -97,7 +97,7 @@ Every VX Suite plugin follows the same contract:
 - **One main job.** Each processor is designed around a single outcome. Scope boundaries are intentional.
 - **Minimal controls.** One or two headline controls, with an optional third only when it materially improves the result.
 - **Vocal and General modes.** Where the DSP genuinely benefits from different tuning, both modes are provided. Mode differences are always substantive, not cosmetic.
-- **Listen mode.** All plugins output the removed material rather than the processed result when Listen is engaged — useful for checking whether processing is targeting the right content.
+- **Listen mode.** Removal-style plugins audition what was removed; additive/finishing plugins audition what they added. The listen contract follows the product role rather than forcing one listen behavior on every DSP type.
 - **Realtime-safe.** No heap allocation or blocking work on the audio thread.
 - **Stable parameter contracts.** Parameter IDs and latency behaviour are designed to be deterministic and host-friendly.
 
@@ -116,11 +116,16 @@ Most products expose a `Vocal / General` mode switch. This is not a simple prese
 
 ### Listen
 
-All plugins support `Listen`. Enabling it routes the removed content — not the processed output — to your monitors or DAW track. This is useful for:
+All processing plugins support `Listen`, but the audition signal depends on the product role:
 
-- Verifying that processing targets noise, reverb, mud, or harshness rather than the wanted source.
-- Checking at what amount the plugin starts removing too much useful signal.
-- Dialing in just enough processing before switching back to normal output.
+- **Removal / corrective tools** such as `VXDenoiser`, `VXSubtract`, `VXDeverb`, and `VXCleanup` output the removed material so you can hear what is being taken away.
+- **Additive / finishing tools** such as `VXProximity`, `VXTone`, `VXFinish`, and `VXOptoComp` output the added delta so you can hear exactly what the processor is contributing.
+
+This is useful for:
+
+- Verifying that processing is targeting the right content.
+- Checking where a processor starts to become too aggressive.
+- Understanding what each stage is actually doing before switching back to the normal wet output.
 
 ### Shared Voice Analysis
 
@@ -267,9 +272,30 @@ LA2A-style opto compressor and limiter. Uses the same DSP core as VXFinish but t
 
 ### VXStudioAnalyser
 
-Chain analyser. A pass-through plugin that reads telemetry published by other VX Suite processors in the same session and renders dry input, matched upstream stage traces, and the final wet result together. Bypassed plugins are hidden automatically. Insert it last in the chain.
+Chain-aware pass-through analyser for VX Suite. Insert it last in the chain. It reads the shared dry/wet spectrum telemetry published by other VX processors in the same session and lets you inspect either the full chain or one matched stage at a time.
 
-No controls. The right panel shows all active VX processors in host chain order; each trace can be toggled on or off individually.
+**What it shows:**
+
+- `Full Chain` compares the dry signal entering the first visible VX stage against the wet signal leaving the last visible VX stage.
+- Clicking a stage in the left rail shows that stage's own dry vs wet spectrum instead of the whole chain.
+- The left rail is driven by the live VX chain order, not by arbitrary registration order, so it mirrors the active processors in the host.
+- Bypassed or missing stages drop out of the analysis view automatically.
+
+**Controls:**
+
+`Avg Time` — Temporal averaging of recent spectrum frames. Higher values stabilize the plot over time while keeping motion continuous.
+
+`Smoothing` — Frequency-domain smoothing in octave widths (`Off` through `1 OCT`). Higher values blur fine peaks into broader tonal shape.
+
+`Hide Chain` — Collapses the stage rail to give the spectrum plot more room.
+
+**Display behavior:**
+
+- Frequency range is `20 Hz` to `20 kHz` on a log axis.
+- The analyser uses a SPAN-style dry/wet overlay with additive/subtractive crossover shading so it is easy to see where wet is above or below dry.
+- Diagnostics can be expanded when you want to see telemetry coverage, chain matching, and other internal details.
+
+The analyser is intentionally measurement-led rather than descriptive now: it is primarily a dry-vs-wet spectrum view for the selected VX stage or the full chain, with `Avg Time` and `Smoothing` controls to tune readability.
 
 ---
 

@@ -2,6 +2,7 @@
 
 #include "VxSuiteParameters.h"
 #include "VxSuiteProcessCoordinator.h"
+#include "VxSuiteOutputTrimmer.h"
 #include "VxSuiteSpectrumTelemetry.h"
 #include "VxSuiteVoiceAnalysis.h"
 
@@ -93,6 +94,8 @@ private:
     void processPreparedBypassedBlock(juce::AudioBuffer<float>& buffer) noexcept;
     juce::AudioBuffer<float> listenInputScratch;
     ProcessCoordinator processCoordinator;
+    OutputTrimmer outputSafetyTrimmer;
+    double currentSampleRateHz = 48000.0;
 };
 
 } // namespace vxsuite

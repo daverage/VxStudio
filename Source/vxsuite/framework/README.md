@@ -2,7 +2,7 @@
 
 An open-source C++ / JUCE framework for building professional VST3 plugins. It turns an "audio DSP class" into a shippable VST3 with almost no boilerplate — so you can focus on the sound, not the plumbing.
 
-The framework is used internally to build the VX Suite of audio plugins and is released openly so that anyone can use it as a foundation for their own JUCE-based effects. Whether you are writing a simple EQ, a dynamics processor, or an ML-backed noise reducer, the same base classes handle parameter registration, UI layout, editor creation, and output safety for you.
+The framework is used internally to build the VX Suite of audio plugins and is released openly so that anyone can use it as a foundation for their own JUCE-based effects. Whether you are writing a simple EQ, a dynamics processor, or an ML-backed noise reducer, the same base classes handle parameter registration, responsive UI layout, editor creation, listen routing, telemetry publication, and output safety for you.
 
 ---
 
@@ -10,7 +10,7 @@ The framework is used internally to build the VX Suite of audio plugins and is r
 
 Writing a JUCE plugin from scratch means subclassing `AudioProcessor`, writing parameter layouts, wiring up `AudioProcessorValueTreeState`, creating an editor, overriding `getName`, `hasEditor`, `createEditor`, `prepareToPlay`, `processBlock`, … most of which is identical across every product.
 
-The framework collapses that to **three pure-virtual methods plus one identity descriptor**. Everything else — parameter registration, editor creation, output safety, plugin name, listen/bypass, per-block smoothing — is provided by the base classes.
+The framework collapses that to **three pure-virtual methods plus one identity descriptor**. Everything else — parameter registration, editor creation, output safety, plugin name, listen/bypass, telemetry publishing, and per-block smoothing — is provided by the base classes.
 
 ---
 
@@ -20,9 +20,11 @@ The framework collapses that to **three pure-virtual methods plus one identity d
 |---|---|
 | JUCE APVTS parameter layout | `createSimpleParameterLayout(identity)` |
 | Plugin name (`"VX Tone"` etc.) | `ProcessorBase::getName()` |
-| Default editor (knobs, mode selector, status bar) | `ProcessorBase::createEditor()` → `EditorBase` |
+| Default editor (knobs, mode selector, status bar, responsive text/layout) | `ProcessorBase::createEditor()` → `EditorBase` |
 | Per-block exponential parameter smoothing | `VxSuiteBlockSmoothing.h` |
-| Output safety trimmer (no unexpected gain) | `VxSuiteOutputTrimmer.h` |
+| Shared telemetry publishers for analysers | `VxSuiteSpectrumTelemetry.h` |
+| Suite-wide final output safety trimmer | `ProcessorBase` + `VxSuiteOutputTrimmer.h` |
+| Latency-aware listen routing | `ProcessorBase` internals |
 | Latency-aligned listen/diff buffer | `ProcessorBase` internals |
 | CMake plugin registration | `vxsuite_add_framework` / `juce_add_plugin` helpers in `CMakeLists.txt` |
 
@@ -80,21 +82,47 @@ The framework handles the rest.
 
 ### `EditorBase`  (`VxSuiteEditorBase.h`)
 
-You usually don't touch this. `ProcessorBase::createEditor()` returns `new EditorBase(*this)` automatically.  If you need a custom layout, override `createEditor()` and return your own subclass.
+You usually don't touch this. `ProcessorBase::createEditor()` returns `new EditorBase(*this)` automatically. If you need a custom layout, override `createEditor()` and return your own subclass.
+
+The shared editor is also where the current baseline resize/readability behavior lives:
+
+- fitted header, status, label, and hint text
+- roomier vertical spacing for labels
+- control/header wrapping when width gets tight
+- more forgiving framework-level minimum sizes
 
 ---
 
 ### `OutputTrimmer`  (`VxSuiteOutputTrimmer.h`)
 
-Instantaneous peak-limiting safety net: if any sample exceeds the ceiling the gain snaps down, then releases slowly back to unity. Use it at the end of `processProduct` if your DSP can produce unexpected peaks.
+Instantaneous peak-limiting safety net: if any sample exceeds the ceiling the gain snaps down, then releases slowly back to unity.
+
+Current framework behavior:
+
+- `ProcessorBase` now applies a final emergency output trimmer automatically for every VX processor.
+- Product-local trimmers are still useful when a specific DSP needs tighter local control before the shared final safety stage.
 
 ```cpp
-vxsuite::OutputTrimmer trimmer;
-// in prepareSuite: trimmer.setReleaseSeconds(0.18f);  // optional, default is fine
-// in resetSuite:   trimmer.reset();
+vxsuite::OutputTrimmer localTrimmer;
+// in prepareSuite: localTrimmer.setReleaseSeconds(0.18f);  // optional
+// in resetSuite:   localTrimmer.reset();
 // at end of processProduct:
-trimmer.process(buffer, currentSampleRateHz);
+localTrimmer.process(buffer, currentSampleRateHz);
 ```
+
+---
+
+### Shared telemetry  (`VxSuiteSpectrumTelemetry.h`)
+
+The framework can publish lightweight dry/wet spectrum and stage telemetry for analyser-style tools.
+
+This is the path used by `VXStudioAnalyser`:
+
+- each VX processor publishes dry-vs-wet spectrum snapshots after processing
+- processors can also publish ordered stage telemetry
+- the analyser reads the live chain and lets the user inspect either the full chain or one stage at a time
+
+The telemetry path is designed to stay realtime-safe and cheap enough for normal plugin use. It is meant for chain-aware inspection, not for embedding a full lab analyser inside every product.
 
 ---
 
@@ -312,7 +340,7 @@ The biquad filter state (`x1, x2, y1, y2`) is kept in `std::vector<BiquadState>`
 - **No JUCE DSP module dependency** for the filter — the biquad is three structs and two static functions, easy to unit-test in isolation.
 - **Per-block coefficient compute** — not per sample, so it's cheap even at high sample rates.
 - **Mode switch is instant but ramp-free** — the smoothed knob values bridge any discontinuity when the mode changes.
-- If you want per-block output safety, add `vxsuite::OutputTrimmer trimmer` and call `trimmer.process(buffer, sampleRate)` at the end of `processProduct`.
+- If your DSP needs extra local peak discipline, add a product-local `OutputTrimmer` before returning from `processProduct`. The framework already provides a final emergency safety trimmer in `ProcessorBase`.
 
 ---
 
@@ -322,7 +350,7 @@ All knob parameters are registered as `[0, 1]` floats. Your DSP maps `0.5` to ne
 
 Mode parameters are integers (`0`, `1`, …) registered as a choice list. Read them with `vxsuite::readMode(parameters, identity)`.
 
-The listen parameter is a `[0, 1]` boolean toggle. The base class handles the dry/wet diff routing automatically when it is on — you don't need to do anything extra.
+The listen parameter is a `[0, 1]` boolean toggle. By default the base class renders the removed delta. Additive products can override `renderListenOutput(...)` and call `renderAddedDeltaOutput(...)` so listen matches the product role.
 
 ---
 
@@ -353,6 +381,7 @@ Source/vxsuite/
 │   ├── VxSuiteEditorBase.h/.cpp       ← EditorBase
 │   ├── VxSuiteBlockSmoothing.h        ← smoothBlockValue / blockBlendAlpha
 │   ├── VxSuiteOutputTrimmer.h         ← OutputTrimmer
+│   ├── VxSuiteSpectrumTelemetry.h/.cpp← analyser telemetry + stage publishers
 │   └── VxSuiteParameters.h            ← readNormalized / readMode helpers
 └── products/
     ├── tone/                          ← VXTone example (bass/treble EQ)

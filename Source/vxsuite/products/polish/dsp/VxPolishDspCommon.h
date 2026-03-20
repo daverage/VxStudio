@@ -59,6 +59,43 @@ inline BiquadCoeffs makePeakingEq(const double sr, const float centerHz, const f
     return c;
 }
 
+inline BiquadCoeffs makeHighShelf(const double sr, const float centerHz, const float q, const float gainDb) {
+    BiquadCoeffs c {};
+    if (sr <= 0.0 || centerHz <= 0.0f || q <= 0.0f)
+        return c;
+
+    if (std::abs(gainDb) < 0.01f)
+        return c;
+
+    const float A = std::pow(10.0f, gainDb / 40.0f);
+    const float w0 = 2.0f * juce::MathConstants<float>::pi * centerHz / static_cast<float>(sr);
+    const float cw = std::cos(w0);
+    const float sw = std::sin(w0);
+    // Cleanup's top-end shaping should stay gentle and stable. Reuse the same
+    // RBJ shelf law that already behaves well in Tone instead of a steeper
+    // parametric variant that can momentarily ring up around the corner.
+    const float alpha = sw / std::sqrt(2.0f);
+    const float sqrtA = std::sqrt(A);
+    const float twoSqrtAAlpha = 2.0f * sqrtA * alpha;
+    const float aPlus1 = A + 1.0f;
+    const float aMinus1 = A - 1.0f;
+
+    const float b0 =    A * (aPlus1 + aMinus1 * cw + twoSqrtAAlpha);
+    const float b1 = -2.0f * A * (aMinus1 + aPlus1 * cw);
+    const float b2 =    A * (aPlus1 + aMinus1 * cw - twoSqrtAAlpha);
+    const float a0 =        aPlus1 - aMinus1 * cw + twoSqrtAAlpha;
+    const float a1 =  2.0f * (aMinus1 - aPlus1 * cw);
+    const float a2 =        aPlus1 - aMinus1 * cw - twoSqrtAAlpha;
+
+    const float invA0 = 1.0f / std::max(1.0e-12f, a0);
+    c.b0 = b0 * invA0;
+    c.b1 = b1 * invA0;
+    c.b2 = b2 * invA0;
+    c.a1 = a1 * invA0;
+    c.a2 = a2 * invA0;
+    return c;
+}
+
 inline float processBiquadDf2(const float x, const BiquadCoeffs& c, float& z1, float& z2) {
     const float y = c.b0 * x + z1;
     z1 = c.b1 * x - c.a1 * y + z2;

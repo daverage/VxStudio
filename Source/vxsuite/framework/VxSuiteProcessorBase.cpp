@@ -22,11 +22,15 @@ juce::AudioProcessorEditor* ProcessorBase::createEditor() {
 }
 
 void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
+    currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
     listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
     prepareProcessCoordinator(samplesPerBlock);
     spectrumPublisher.prepare(sampleRate, samplesPerBlock);
     stagePublisher.prepare(sampleRate, samplesPerBlock);
+    outputSafetyTrimmer.setCeiling(0.985f);
+    outputSafetyTrimmer.setReleaseSeconds(0.12f);
+    outputSafetyTrimmer.reset();
     prepareSuite(sampleRate, samplesPerBlock);
 }
 
@@ -36,6 +40,7 @@ void ProcessorBase::reset() {
     resetProcessCoordinator();
     spectrumPublisher.reset();
     stagePublisher.reset();
+    outputSafetyTrimmer.reset();
     resetSuite();
 }
 
@@ -45,6 +50,7 @@ void ProcessorBase::releaseResources() {
     releaseProcessCoordinator();
     spectrumPublisher.reset();
     stagePublisher.reset();
+    outputSafetyTrimmer.reset();
     resetSuite();
 }
 
@@ -94,6 +100,7 @@ void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce:
     const bool canRenderListen = isListenEnabled();
     processCoordinator.beginBlock(listenInputScratch, canRenderListen);
     processProduct(buffer, midi);
+    outputSafetyTrimmer.process(buffer, currentSampleRateHz);
     spectrumPublisher.publish(listenInputScratch, buffer);
     stagePublisher.publish(listenInputScratch, buffer, false);
     if (canRenderListen)

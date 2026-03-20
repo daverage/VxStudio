@@ -86,6 +86,13 @@ The visual template should stay recognizable across the suite:
 - no inspector panel
 - no meters unless they directly affect user decisions
 
+Framework readability/responsiveness expectations:
+
+- titles, status lines, knob labels, and hint text must tolerate narrower host widths without clipping
+- minimum editor sizes should be large enough that text still reads cleanly; do not rely on ultra-tight packing at the minimum size
+- shared layouts should prefer wrapping or extra vertical room over illegible one-line compression
+- products built on `EditorBase` should inherit text-fitting behavior from the framework rather than patching readability ad hoc per plugin
+
 ## Suggested First Products
 
 - `VX Deverb`

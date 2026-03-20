@@ -77,6 +77,29 @@ juce::AudioBuffer<float> makeMonoBuffer(const juce::AudioBuffer<float>& stereo) 
     return mono;
 }
 
+juce::AudioBuffer<float> makeCleanupStressInput(const double sr, const float seconds) {
+    auto buffer = addBuffers(makeSpeechLike(sr, seconds), makeNoise(sr, seconds, 0.06f));
+    const int samples = buffer.getNumSamples();
+    for (int i = 0; i < samples; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sr);
+        const float plosiveWindow = (t >= 0.18f && t <= 0.30f)
+            ? std::sin(juce::MathConstants<float>::pi * (t - 0.18f) / 0.12f)
+            : 0.0f;
+        const float sibilantWindow = (t >= 0.52f && t <= 0.66f)
+            ? std::sin(juce::MathConstants<float>::pi * (t - 0.52f) / 0.14f)
+            : 0.0f;
+        const float plosive = 0.42f * plosiveWindow * std::sin(2.0f * juce::MathConstants<float>::pi * 70.0f * t);
+        const float sibilant = 0.18f * sibilantWindow * std::sin(2.0f * juce::MathConstants<float>::pi * 7800.0f * t);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.setSample(ch, i, buffer.getSample(ch, i) + plosive + sibilant);
+    }
+
+    const float peak = peakAbs(buffer);
+    if (peak > 1.0e-6f)
+        buffer.applyGain(0.92f / peak);
+    return buffer;
+}
+
 bool testCleanupZeroIsIdentity() {
     constexpr double sr = 48000.0;
     auto dry = makeSpeechLike(sr, 1.0f);
@@ -372,6 +395,66 @@ bool testCleanupStrongSettingIsAudibleButBounded() {
     return true;
 }
 
+bool testCleanupHighShelfStrongSettingStaysBounded() {
+    constexpr double sr = 48000.0;
+    auto noisy = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.05f));
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 0.85f);
+    setParamNormalized(cleanup, "body", 0.35f);
+    setParamNormalized(cleanup, "focus", 0.78f);
+    setParamNormalized(cleanup, "hishelf_on", 1.0f);
+    auto out = render(cleanup, noisy, 256);
+
+    const float diff = maxAbsDiffSkip(noisy, out, 1024);
+    if (diff < 0.01f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup high-shelf strong setting is still too subtle\n";
+        return false;
+    }
+    if (!allFinite(out) || peakAbs(out) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup high-shelf strong setting clipped or became unstable\n";
+        return false;
+    }
+    return true;
+}
+
+bool testCleanupDeEssAndPlosivesStayHeadroomSafe() {
+    constexpr double sr = 48000.0;
+    const auto input = makeCleanupStressInput(sr, 1.0f);
+    const float inputPeak = peakAbs(input);
+
+    auto runCase = [&](const float mode, const float body, const float focus, const bool hiShelfOn) {
+        VXCleanupAudioProcessor cleanup;
+        cleanup.prepareToPlay(sr, 256);
+        setParamNormalized(cleanup, "mode", mode);
+        setParamNormalized(cleanup, "cleanup", 1.0f);
+        setParamNormalized(cleanup, "body", body);
+        setParamNormalized(cleanup, "focus", focus);
+        setParamNormalized(cleanup, "hishelf_on", hiShelfOn ? 1.0f : 0.0f);
+        return render(cleanup, input, 256);
+    };
+
+    const auto plosiveOut = runCase(0.0f, 0.0f, 0.05f, false);
+    const auto deEssOut = runCase(0.0f, 0.25f, 0.95f, true);
+    const auto generalOut = runCase(1.0f, 0.0f, 0.95f, true);
+
+    for (const auto* candidate : { &plosiveOut, &deEssOut, &generalOut }) {
+        if (!allFinite(*candidate) || peakAbs(*candidate) > 0.995f) {
+            std::cerr << "[VXSuitePluginRegression] Cleanup corrective path exceeded safe output headroom: peak="
+                      << peakAbs(*candidate) << "\n";
+            return false;
+        }
+        if (peakAbs(*candidate) > inputPeak + 0.02f) {
+            std::cerr << "[VXSuitePluginRegression] Cleanup corrective path added too much peak level: in="
+                      << inputPeak << " out=" << peakAbs(*candidate) << "\n";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool testFinishStrongSettingsAreAudibleButBounded() {
     constexpr double sr = 48000.0;
     auto input = makeSpeechLike(sr, 1.0f);
@@ -595,6 +678,71 @@ bool testDenoiserStrongSettingStaysCoherentAndBounded() {
     if (corr < 0.40f) {
         std::cerr << "[VXSuitePluginRegression] Denoiser strong setting damaged speech coherence too much: |corr|="
                   << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDenoiserStrongSettingRetainsUsefulLevelInBothModes() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noisy = addBuffers(speech, makeNoise(sr, 1.0f, 0.07f));
+    const float inputRms = rms(noisy);
+
+    VXDenoiserAudioProcessor vocal;
+    vocal.prepareToPlay(sr, 256);
+    setParamNormalized(vocal, "clean", 0.90f);
+    setParamNormalized(vocal, "guard", 0.65f);
+    setParamNormalized(vocal, "mode", 0.0f);
+    const auto vocalOut = render(vocal, noisy, 256);
+
+    VXDenoiserAudioProcessor general;
+    general.prepareToPlay(sr, 256);
+    setParamNormalized(general, "clean", 0.90f);
+    setParamNormalized(general, "guard", 0.65f);
+    setParamNormalized(general, "mode", 1.0f);
+    const auto generalOut = render(general, noisy, 256);
+
+    if (rms(vocalOut) < inputRms * 0.62f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser vocal mode collapsed level too far: in="
+                  << inputRms << " out=" << rms(vocalOut) << "\n";
+        return false;
+    }
+    if (rms(generalOut) < inputRms * 0.56f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser general mode collapsed level too far: in="
+                  << inputRms << " out=" << rms(generalOut) << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes() {
+    constexpr double sr = 48000.0;
+    auto noise = makeNoise(sr, 1.0f, 0.20f);
+    const float inputRms = rms(noise);
+
+    VXDenoiserAudioProcessor vocal;
+    vocal.prepareToPlay(sr, 256);
+    setParamNormalized(vocal, "clean", 1.0f);
+    setParamNormalized(vocal, "guard", 1.0f);
+    setParamNormalized(vocal, "mode", 0.0f);
+    const auto vocalOut = render(vocal, noise, 256);
+
+    VXDenoiserAudioProcessor general;
+    general.prepareToPlay(sr, 256);
+    setParamNormalized(general, "clean", 1.0f);
+    setParamNormalized(general, "guard", 1.0f);
+    setParamNormalized(general, "mode", 1.0f);
+    const auto generalOut = render(general, noise, 256);
+
+    if (rms(vocalOut) > inputRms * 0.92f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser vocal mode barely reduced noise-only input: in="
+                  << inputRms << " out=" << rms(vocalOut) << "\n";
+        return false;
+    }
+    if (rms(generalOut) > inputRms * 0.80f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser general mode barely reduced noise-only input: in="
+                  << inputRms << " out=" << rms(generalOut) << "\n";
         return false;
     }
     return true;
@@ -958,6 +1106,8 @@ int main() {
     ok &= testDeverbExtremeBlendStaysStable();
     ok &= testCleanupFinishSubtractChainStaysStable();
     ok &= testCleanupStrongSettingIsAudibleButBounded();
+    ok &= testCleanupHighShelfStrongSettingStaysBounded();
+    ok &= testCleanupDeEssAndPlosivesStayHeadroomSafe();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
     ok &= testFinishResetIsDeterministic();
@@ -966,6 +1116,8 @@ int main() {
     ok &= testToneCenterIsIdentityAndExtremesStayBounded();
     ok &= testProximityExtremeIsBoundedAndAdditive();
     ok &= testDenoiserStrongSettingStaysCoherentAndBounded();
+    ok &= testDenoiserStrongSettingRetainsUsefulLevelInBothModes();
+    ok &= testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes();
     ok &= testDenoiserZeroCleanKeepsPdcAlignedIdentity();
     ok &= testSubtractZeroKeepsPdcAlignedIdentity();
     ok &= testCleanupBlockSizeInvariance();

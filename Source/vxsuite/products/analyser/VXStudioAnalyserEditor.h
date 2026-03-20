@@ -47,6 +47,7 @@ private:
         std::array<juce::String, 4> summaryLines {};
         juce::String diagnosticsText;
         std::vector<ChainRow> chainRows;
+        std::vector<int> chainRowStageIndices;
         std::vector<int> sparseToneBands;
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterToneDb {};
@@ -99,6 +100,16 @@ private:
         float impactScore = 0.0f;
     };
 
+    struct SidebarSnapshotCacheEntry {
+        int order = 0;
+        juce::String productName;
+        juce::String displayName;
+        juce::String canonicalKey;
+        juce::String shortTag;
+        bool silent = true;
+        std::int64_t lastPublishMs = 0;
+    };
+
     void timerCallback() override;
     void refreshRenderModel();
     void applyPendingRenderModel();
@@ -133,6 +144,7 @@ private:
     std::uint64_t renderGeneration = 0;
     RenderModel currentRenderModel;
     BackendState backendState;
+    std::vector<SidebarSnapshotCacheEntry> sidebarSnapshotCache;
 
     juce::Label titleLabel;
     juce::Label suiteLabel;

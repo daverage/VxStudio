@@ -7,6 +7,16 @@
 
 namespace vxsuite::denoiser {
 
+namespace {
+
+float speechBandWeight(const float hz) noexcept {
+    const float lowRamp = spectral::clamp01((hz - 120.0f) / 180.0f);
+    const float highRamp = spectral::clamp01((5200.0f - hz) / 1400.0f);
+    return lowRamp * highRamp;
+}
+
+} // namespace
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 float DenoiserDsp::safe(float x) noexcept {
@@ -160,7 +170,13 @@ void DenoiserDsp::reset() {
 
 void DenoiserDsp::updateMinStats(const int k, const float p,
                                  const float presence) noexcept {
-    noisePow[k] = spectral::updateMinStats(msState[static_cast<size_t>(k)], p, presence, msL, msD, kMsAlpha, kBmin, kEps);
+    const float estimate = spectral::updateMinStats(msState[static_cast<size_t>(k)], p, presence, msL, msD, kMsAlpha, kBmin, kEps);
+    if (estimate > noisePow[k]) {
+        const float riseAlpha = presence > 0.55f ? 0.985f : 0.92f;
+        noisePow[k] = riseAlpha * noisePow[k] + (1.0f - riseAlpha) * estimate;
+    } else {
+        noisePow[k] = estimate;
+    }
 }
 
 // ── processInPlace ────────────────────────────────────────────────────────────
@@ -457,6 +473,8 @@ void DenoiserDsp::processFrame(const float amount,
 
     // ── 5. OM-LSA per bin ─────────────────────────────────────────────────────
     const bool  voiceMode     = options.isVoiceMode;
+    const float speechFocus   = juce::jlimit(0.0f, 1.0f, options.speechFocus);
+    const float binHz         = static_cast<float>(sr) / static_cast<float>(kFftSize);
     const float aggression    = juce::jlimit(0.3f, 2.5f,
                                     0.38f + amount * (options.lateTailAggression * 0.74f + 0.26f));
     const float guardLevel    = juce::jlimit(0.0f, 1.0f, options.sourceProtect);
@@ -466,6 +484,9 @@ void DenoiserDsp::processFrame(const float amount,
 
     for (int k = 0; k < kBins; ++k) {
         const float p = currPow[k];
+        const float hz = static_cast<float>(k) * binHz;
+        const float bandProtectBase = speechBandWeight(hz)
+            * (voiceMode ? speechFocus : 0.45f * speechFocus);
 
         updateMinStats(k, p, presenceProb[k]);
 
@@ -504,7 +525,9 @@ void DenoiserDsp::processFrame(const float amount,
         const float transProtect = inTransient
                                  ? (1.0f - 0.45f * guardStrict)
                                  : 1.0f;
-        const float strength = std::max(0.20f, (betaBin * transProtect) - 0.40f * tonalness[k]);
+        const float speechWeightedProtect = bandProtectBase * pSm;
+        const float speechGuard = 1.0f - 0.35f * speechWeightedProtect;
+        const float strength = std::max(0.20f, (betaBin * transProtect * speechGuard) - 0.40f * tonalness[k]);
 
         g = std::pow(std::max(0.0f, g), strength);
         g = 1.0f + (g - 1.0f) * amount;  // wet blend
@@ -519,7 +542,12 @@ void DenoiserDsp::processFrame(const float amount,
         const float maskHead = clamp01(snr_dB / 35.0f);
         const float minGain  = juce::jlimit(globalFloor, 0.18f,
                                             (0.03f + 0.08f * maskHead) * 0.85f);
-        g = std::max(clamp01(g), minGain);
+        const float speechFloor = juce::jlimit(0.0f, 0.22f,
+                                               (voiceMode ? 0.12f : 0.07f) * speechWeightedProtect * (0.75f + 0.25f * guardLevel));
+        g = std::max(clamp01(g), std::max(minGain, speechFloor));
+
+        if (speechWeightedProtect > 0.0f)
+            g = g + (1.0f - g) * (voiceMode ? 0.18f : 0.10f) * speechWeightedProtect;
 
         // Anti-flicker: slow-release suppression counter
         // Increment fast when suppressed; decrement slowly (every 4 frames).

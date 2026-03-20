@@ -33,6 +33,12 @@ public:
             fft->performRealOnlyForwardTransform(data);
     }
 
+    void performFrequencyOnlyForward(float* data) const noexcept {
+        jassert(fft != nullptr);
+        if (fft != nullptr)
+            fft->performFrequencyOnlyForwardTransform(data);
+    }
+
     void performInverse(float* data) const noexcept {
         jassert(fft != nullptr);
         if (fft != nullptr)

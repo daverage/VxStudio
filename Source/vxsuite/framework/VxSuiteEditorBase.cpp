@@ -18,29 +18,32 @@ EditorBase::EditorBase(ProcessorBase& owner)
     setResizable(true, false);
     const bool hasTertiary = owner.getProductIdentity().supportsTertiaryControl();
     const bool hasQuaternary = owner.getProductIdentity().supportsQuaternaryControl();
-    setResizeLimits(hasQuaternary ? 860 : (hasTertiary ? 760 : 620),
-                    hasQuaternary ? 560 : (hasTertiary ? 500 : 470),
+    setResizeLimits(hasQuaternary ? 920 : (hasTertiary ? 820 : 680),
+                    hasQuaternary ? 600 : (hasTertiary ? 540 : 500),
                     1280,
                     860);
-    setSize(hasQuaternary ? 1080 : (hasTertiary ? 920 : 720), hasQuaternary ? 600 : 520);
+    setSize(hasQuaternary ? 1100 : (hasTertiary ? 950 : 760), hasQuaternary ? 620 : 540);
 
     const auto& identity = processor.getProductIdentity();
 
     suiteLabel.setText(toJuceString(identity.suiteName), juce::dontSendNotification);
     suiteLabel.setFont(juce::FontOptions().withHeight(17.0f).withKerningFactor(0.16f));
     suiteLabel.setJustificationType(juce::Justification::centredLeft);
+    suiteLabel.setMinimumHorizontalScale(0.70f);
     makeMouseTransparent(suiteLabel);
     addAndMakeVisible(suiteLabel);
 
     productLabel.setText(toJuceString(identity.productName), juce::dontSendNotification);
     productLabel.setFont(juce::FontOptions().withHeight(38.0f).withStyle("Bold"));
     productLabel.setJustificationType(juce::Justification::centredLeft);
+    productLabel.setMinimumHorizontalScale(0.58f);
     makeMouseTransparent(productLabel);
     addAndMakeVisible(productLabel);
 
     modeLabel.setText(toJuceString(identity.selectorLabel.empty() ? "Mode" : identity.selectorLabel),
                       juce::dontSendNotification);
     modeLabel.setFont(juce::FontOptions().withHeight(14.0f).withKerningFactor(0.08f));
+    modeLabel.setMinimumHorizontalScale(0.72f);
     makeMouseTransparent(modeLabel);
     if (identity.supportsModeSwitch())
         addAndMakeVisible(modeLabel);
@@ -48,12 +51,14 @@ EditorBase::EditorBase(ProcessorBase& owner)
     statusLabel.setJustificationType(juce::Justification::centredRight);
     statusLabel.setFont(juce::FontOptions().withHeight(13.0f));
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.62f));
+    statusLabel.setMinimumHorizontalScale(0.55f);
     makeMouseTransparent(statusLabel);
     addAndMakeVisible(statusLabel);
 
     learnMeterLabel.setJustificationType(juce::Justification::centredLeft);
     learnMeterLabel.setFont(juce::FontOptions().withHeight(12.0f).withKerningFactor(0.05f));
     learnMeterLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.74f));
+    learnMeterLabel.setMinimumHorizontalScale(0.58f);
     makeMouseTransparent(learnMeterLabel);
     learnMeterBar.setColour(juce::ProgressBar::backgroundColourId, juce::Colour(0xff14141c));
     learnMeterBar.setColour(juce::ProgressBar::foregroundColourId,
@@ -240,7 +245,7 @@ void EditorBase::paint(juce::Graphics& g) {
 
 void EditorBase::resized() {
     auto bounds = getLocalBounds().reduced(scaled(20), scaled(16));
-    auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton() ? scaled(146) : scaled(118));
+    auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton() ? scaled(164) : scaled(132));
     auto body = bounds.reduced(0, scaled(10));
 
     suiteLabel.setBounds(header.removeFromTop(scaled(20)));
@@ -249,32 +254,37 @@ void EditorBase::resized() {
     header.removeFromTop(scaled(4));
     auto modeRow = header.removeFromTop(scaled(40));
     if (processor.getProductIdentity().supportsModeSwitch()) {
-        modeLabel.setBounds(modeRow.removeFromLeft(scaled(84)));
+        modeLabel.setBounds(modeRow.removeFromLeft(scaled(96)));
         modeRow.removeFromLeft(scaled(8));
-        modeBox.setBounds(modeRow.removeFromLeft(scaled(212)).reduced(0, scaled(2)));
+        modeBox.setBounds(modeRow.removeFromLeft(scaled(228)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
     }
     if (processor.getProductIdentity().supportsListenMode()) {
-        listenButton.setBounds(modeRow.removeFromLeft(scaled(110)).reduced(0, scaled(2)));
+        listenButton.setBounds(modeRow.removeFromLeft(scaled(116)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
     if (processor.getProductIdentity().supportsLearnButton()) {
-        learnButton.setBounds(modeRow.removeFromLeft(scaled(104)).reduced(0, scaled(2)));
+        learnButton.setBounds(modeRow.removeFromLeft(scaled(110)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
 
     const bool hasTertiary = processor.getProductIdentity().supportsTertiaryControl();
     const bool hasQuaternary = processor.getProductIdentity().supportsQuaternaryControl();
-    statusLabel.setBounds(modeRow);
+    const bool wrapStatusRow = modeRow.getWidth() < scaled(220);
+    if (wrapStatusRow) {
+        statusLabel.setBounds(header.removeFromTop(scaled(24)));
+    } else {
+        statusLabel.setBounds(modeRow);
+    }
     if (processor.getProductIdentity().supportsLearnButton()) {
         header.removeFromTop(scaled(6));
-        auto learnRow = header.removeFromTop(scaled(22));
-        learnMeterLabel.setBounds(learnRow.removeFromLeft(scaled(156)));
+        auto learnRow = header.removeFromTop(scaled(24));
+        learnMeterLabel.setBounds(learnRow.removeFromLeft(scaled(176)));
         learnRow.removeFromLeft(scaled(8));
-        learnMeterBar.setBounds(learnRow.removeFromLeft(scaled(240)));
+        learnMeterBar.setBounds(learnRow.removeFromLeft(juce::jmax(scaled(220), juce::jmin(scaled(320), learnRow.getWidth()))));
     }
 
-    const bool stacked = body.getWidth() < scaled(hasQuaternary ? 900 : (hasTertiary ? 760 : 560));
+    const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 800 : 600));
     activityLightCount = processor.getActivityLightCount();
     activityStripBounds = {};
     if (activityLightCount > 0) {
@@ -309,12 +319,12 @@ void EditorBase::resized() {
         auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
             auto section = area.reduced(scaled(26), scaled(20));
             const int dialSize = std::min(section.getWidth(), scaled(142));
-            label.setBounds(section.removeFromTop(scaled(32)));
+            label.setBounds(section.removeFromTop(scaled(36)));
             section.removeFromTop(scaled(6));
             auto dialRow = section.removeFromTop(dialSize);
             slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
             section.removeFromTop(scaled(10));
-            hint.setBounds(section.removeFromTop(scaled(56)));
+            hint.setBounds(section.removeFromTop(scaled(62)));
         };
 
         layoutKnob(body.removeFromTop(rowHeight), primarySlider, primaryLabel, primaryHint);
@@ -341,12 +351,12 @@ void EditorBase::resized() {
         const int dialSize = std::min({ c1.getWidth(), c2.getWidth(), c3.getWidth(), c4.getWidth(), scaled(132) });
 
         auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
-            label.setBounds(area.removeFromTop(scaled(32)));
+            label.setBounds(area.removeFromTop(scaled(36)));
             area.removeFromTop(scaled(8));
             auto dialRow = area.removeFromTop(dialSize);
             slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
             area.removeFromTop(scaled(12));
-            hint.setBounds(area.removeFromTop(scaled(68)));
+            hint.setBounds(area.removeFromTop(scaled(72)));
         };
 
         layoutKnob(c1, primarySlider, primaryLabel, primaryHint);
@@ -364,12 +374,12 @@ void EditorBase::resized() {
         const int dialSize = std::min({ left.getWidth(), center.getWidth(), right.getWidth(), scaled(136) });
 
         auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
-            label.setBounds(area.removeFromTop(scaled(32)));
+            label.setBounds(area.removeFromTop(scaled(36)));
             area.removeFromTop(scaled(8));
             auto dialRow = area.removeFromTop(dialSize);
             slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
             area.removeFromTop(scaled(12));
-            hint.setBounds(area.removeFromTop(scaled(56)));
+            hint.setBounds(area.removeFromTop(scaled(62)));
         };
 
         layoutKnob(left, primarySlider, primaryLabel, primaryHint);
@@ -383,19 +393,19 @@ void EditorBase::resized() {
     auto right = body.reduced(scaled(26), scaled(24));
     const int dialSize = std::min({ left.getWidth(), right.getWidth(), scaled(146) });
 
-    primaryLabel.setBounds(left.removeFromTop(scaled(32)));
+    primaryLabel.setBounds(left.removeFromTop(scaled(36)));
     left.removeFromTop(scaled(8));
     auto leftDialRow = left.removeFromTop(dialSize);
     primarySlider.setBounds(leftDialRow.withSizeKeepingCentre(dialSize, dialSize));
     left.removeFromTop(scaled(12));
-    primaryHint.setBounds(left.removeFromTop(scaled(56)));
+    primaryHint.setBounds(left.removeFromTop(scaled(62)));
 
-    secondaryLabel.setBounds(right.removeFromTop(scaled(32)));
+    secondaryLabel.setBounds(right.removeFromTop(scaled(36)));
     right.removeFromTop(scaled(8));
     auto rightDialRow = right.removeFromTop(dialSize);
     secondarySlider.setBounds(rightDialRow.withSizeKeepingCentre(dialSize, dialSize));
     right.removeFromTop(scaled(12));
-    secondaryHint.setBounds(right.removeFromTop(scaled(56)));
+    secondaryHint.setBounds(right.removeFromTop(scaled(62)));
     placeInlineShelfIcons(secondaryLabel.getBounds());
 }
 
@@ -423,6 +433,7 @@ void EditorBase::configureKnob(juce::Slider& slider,
     label.setText(toJuceString(text), juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centredLeft);
     label.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(20))).withStyle("Bold"));
+    label.setMinimumHorizontalScale(0.58f);
     label.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(label);
 
@@ -437,6 +448,7 @@ void EditorBase::configureKnob(juce::Slider& slider,
     hintLabel->setJustificationType(juce::Justification::centredLeft);
     hintLabel->setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(13))));
     hintLabel->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.72f));
+    hintLabel->setMinimumHorizontalScale(0.60f);
     hintLabel->setInterceptsMouseClicks(false, false);
 }
 

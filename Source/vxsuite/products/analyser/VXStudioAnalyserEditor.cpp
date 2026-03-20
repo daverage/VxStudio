@@ -10,6 +10,7 @@ namespace {
 
 constexpr std::uint64_t kStaleThresholdMs = 1500;
 constexpr std::uint64_t kFallbackStageThresholdMs = 5000;
+constexpr std::uint64_t kSidebarSnapshotHoldMs = 3500;
 constexpr int kUiRefreshHz = 24;
 constexpr float kSpectrumMinDb = -78.0f;
 constexpr float kSpectrumMaxDb = -18.0f;
@@ -32,6 +33,29 @@ int averageTimeMsFromIndex(const int index) noexcept {
 
 juce::String labelFromChars(const auto& chars) {
     return juce::String(chars.data());
+}
+
+juce::String canonicalStageKey(juce::String text) {
+    auto normalized = text.trim().toLowerCase();
+    normalized = normalized.removeCharacters(" _-()[]{}");
+    normalized = normalized.replace("vxsuite", "");
+    normalized = normalized.replace("vxstudio", "");
+    if (normalized.startsWith("vx") && normalized.length() > 2)
+        normalized = normalized.substring(2);
+    return normalized;
+}
+
+juce::String displayStageName(const juce::String& rawName) {
+    auto name = rawName.trim();
+    if (name.startsWithIgnoreCase("VX Studio "))
+        name = name.fromFirstOccurrenceOf("VX Studio ", false, false);
+    else if (name.startsWithIgnoreCase("VX"))
+        name = name.substring(2);
+
+    name = name.trimStart();
+    if (name.isEmpty())
+        return rawName;
+    return name;
 }
 
 float bandCenterHz(const int bandIndex) noexcept {
@@ -74,6 +98,12 @@ float toDb(const float linear, const float floorDb = -100.0f) noexcept {
 float applyDisplaySlope(const float valueDb, const float hz) noexcept {
     const float octavesFromReference = std::log2(std::max(20.0f, hz) / kDisplaySlopeReferenceHz);
     return valueDb + kDisplaySlopeDbPerOct * octavesFromReference;
+}
+
+bool hasMeaningfulBandEnergy(const float beforeLinear, const float afterLinear) noexcept {
+    constexpr float kMeaningfulBandFloorDb = -72.0f;
+    const float maxDb = std::max(toDb(beforeLinear, -120.0f), toDb(afterLinear, -120.0f));
+    return maxDb > kMeaningfulBandFloorDb;
 }
 
 juce::String impactLabel(const float score) {
@@ -162,21 +192,25 @@ SparseToneClassification classifySparseTone(
         return out;
 
     double totalEnergy = 0.0;
-    std::vector<float> sortedEnergy;
-    sortedEnergy.reserve(vxsuite::analysis::kSummarySpectrumBins);
+    std::array<float, 4> topEnergy { 0.0f, 0.0f, 0.0f, 0.0f };
     for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
         const float energy = bandEnergy[static_cast<std::size_t>(i)];
         totalEnergy += energy;
-        sortedEnergy.push_back(energy);
         if (energy >= maxEnergy * 0.15f)
             ++out.activeBands;
+
+        for (int slot = 0; slot < 4; ++slot) {
+            if (energy > topEnergy[static_cast<std::size_t>(slot)]) {
+                for (int move = 3; move > slot; --move)
+                    topEnergy[static_cast<std::size_t>(move)] = topEnergy[static_cast<std::size_t>(move - 1)];
+                topEnergy[static_cast<std::size_t>(slot)] = energy;
+                break;
+            }
+        }
     }
 
-    std::sort(sortedEnergy.begin(), sortedEnergy.end(), std::greater<float>());
-    const double topFourEnergy = sortedEnergy.size() >= 4
-        ? static_cast<double>(sortedEnergy[0] + sortedEnergy[1] + sortedEnergy[2] + sortedEnergy[3])
-        : 0.0;
-    out.peakDominance = static_cast<float>(sortedEnergy.front() / std::max(1.0e-12, totalEnergy));
+    const double topFourEnergy = static_cast<double>(topEnergy[0] + topEnergy[1] + topEnergy[2] + topEnergy[3]);
+    out.peakDominance = static_cast<float>(topEnergy[0] / std::max(1.0e-12, totalEnergy));
     out.topFourDominance = static_cast<float>(topFourEnergy / std::max(1.0, totalEnergy));
 
     for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
@@ -208,6 +242,8 @@ juce::String describeSparseBands(const std::vector<int>& bands,
 
 std::array<juce::String, 4> buildToneSummary(const juce::String& title,
                                              const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& deltaDb,
+                                             const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& beforeLinear,
+                                             const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& afterLinear,
                                              const int largestToneBand,
                                              const bool sparseTone,
                                              const std::vector<int>& sparseToneBands,
@@ -231,6 +267,9 @@ std::array<juce::String, 4> buildToneSummary(const juce::String& title,
     std::array<int, 3> strongestBands { 0, 0, 0 };
     std::array<float, 3> strongestMagnitudes { 0.0f, 0.0f, 0.0f };
     for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
+        if (! hasMeaningfulBandEnergy(beforeLinear[static_cast<std::size_t>(i)],
+                                      afterLinear[static_cast<std::size_t>(i)]))
+            continue;
         const float magnitude = std::abs(deltaDb[static_cast<std::size_t>(i)]);
         for (int slot = 0; slot < 3; ++slot) {
             if (magnitude > strongestMagnitudes[static_cast<std::size_t>(slot)]) {
@@ -313,19 +352,23 @@ VXStudioAnalyserEditor::VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor& o
     subtitleLabel.setText("Dry vs wet spectrum for the selected stage or full chain.", juce::dontSendNotification);
     subtitleLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.74f));
     subtitleLabel.setFont(juce::FontOptions().withHeight(14.0f));
+    subtitleLabel.setMinimumHorizontalScale(0.75f);
     addAndMakeVisible(subtitleLabel);
 
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.70f));
     statusLabel.setFont(juce::FontOptions().withHeight(12.5f));
+    statusLabel.setMinimumHorizontalScale(0.68f);
     addAndMakeVisible(statusLabel);
 
     selectionLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.94f));
     selectionLabel.setFont(juce::FontOptions().withHeight(22.0f).withStyle("Bold"));
+    selectionLabel.setMinimumHorizontalScale(0.62f);
     addAndMakeVisible(selectionLabel);
 
     summaryLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.92f));
-    summaryLabel.setFont(juce::FontOptions().withHeight(14.0f));
+    summaryLabel.setFont(juce::FontOptions().withHeight(13.5f));
     summaryLabel.setJustificationType(juce::Justification::topLeft);
+    summaryLabel.setMinimumHorizontalScale(0.60f);
     addAndMakeVisible(summaryLabel);
 
     averageTimeLabel.setText("Avg Time", juce::dontSendNotification);
@@ -481,11 +524,12 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
             g.fillRoundedRectangle(indicator.reduced(0.0f, 7.0f), 2.0f);
 
             auto content = rowBounds.reduced(14.0f, 8.0f);
-            auto top = content.removeFromTop(16.0f);
+            auto top = content.removeFromTop(20.0f);
+            const float statusWidth = std::min(88.0f, top.getWidth() * 0.28f);
             g.setColour(text.withAlpha(0.95f));
             g.setFont(juce::FontOptions().withHeight(16.0f).withStyle("Bold"));
             g.drawFittedText(row.stageName,
-                             top.removeFromLeft(content.getWidth() * 0.64f).toNearestInt(),
+                             top.removeFromLeft(top.getWidth() - statusWidth).toNearestInt(),
                              juce::Justification::centredLeft,
                              1);
             g.setColour(text.withAlpha(0.62f));
@@ -493,11 +537,11 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
             g.drawFittedText(row.stateText, top.toNearestInt(), juce::Justification::centredRight, 1);
 
             g.setColour(text.withAlpha(0.68f));
-            g.setFont(juce::FontOptions().withHeight(12.5f));
+            g.setFont(juce::FontOptions().withHeight(11.8f));
             g.drawFittedText(row.impactText + "  |  " + row.classText,
-                             content.toNearestInt(),
+                             content.withTrimmedTop(2.0f).toNearestInt(),
                              juce::Justification::centredLeft,
-                             1);
+                             2);
         }
     }
 
@@ -549,40 +593,52 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
         g.setColour(text.withAlpha(0.35f));
         g.drawHorizontalLine(juce::roundToInt(plot.getY()), plot.getX(), plot.getRight());
 
-        if (currentRenderModel.sparseTone) {
-            g.setColour(text.withAlpha(0.12f));
-            for (const int band : currentRenderModel.sparseToneBands) {
-                const float x = xForFrequency(bandCenterHz(band), plot);
-                g.drawVerticalLine(juce::roundToInt(x), plot.getY(), plot.getBottom());
-            }
+        auto dryStroke = makeTonePath(currentRenderModel.beforeToneDb, plot);
+        auto wetStroke = makeTonePath(currentRenderModel.afterToneDb, plot);
 
-            for (const int band : currentRenderModel.sparseToneBands) {
-                const auto index = static_cast<std::size_t>(band);
-                const float x = xForFrequency(bandCenterHz(band), plot);
-                const float beforeY = juce::jmap(currentRenderModel.beforeToneDb[index], kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
-                const float afterY = juce::jmap(currentRenderModel.afterToneDb[index], kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
+        juce::Path dryFill = dryStroke;
+        dryFill.lineTo(plot.getRight(), plot.getBottom());
+        dryFill.lineTo(plot.getX(), plot.getBottom());
+        dryFill.closeSubPath();
+        g.setColour(juce::Colour(0xffb8c2cf).withAlpha(0.06f));
+        g.fillPath(dryFill);
 
-                g.setColour(juce::Colour(0xffb8c2cf).withAlpha(0.45f));
-                g.fillEllipse(x - 2.0f, beforeY - 2.0f, 4.0f, 4.0f);
-                g.setColour(accent.withAlpha(0.85f));
-                g.fillEllipse(x - 2.5f, afterY - 2.5f, 5.0f, 5.0f);
+        juce::Path wetFill = wetStroke;
+        wetFill.lineTo(plot.getRight(), plot.getBottom());
+        wetFill.lineTo(plot.getX(), plot.getBottom());
+        wetFill.closeSubPath();
+        g.setColour(accent.withAlpha(0.16f));
+        g.fillPath(wetFill);
 
-                g.setColour(juce::Colour(0xffffa84f).withAlpha(0.60f));
-                g.drawLine(x, beforeY, x, afterY, 2.2f);
-            }
-        } else {
-            juce::Path wetFill = makeTonePath(currentRenderModel.afterToneDb, plot);
-            wetFill.lineTo(plot.getRight(), plot.getBottom());
-            wetFill.lineTo(plot.getX(), plot.getBottom());
-            wetFill.closeSubPath();
-            g.setColour(accent.withAlpha(0.18f));
-            g.fillPath(wetFill);
+        const auto additiveColour = juce::Colour(0xffa7df5a).withAlpha(0.18f);
+        const auto subtractiveColour = juce::Colour(0xffffa15e).withAlpha(0.18f);
+        for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins - 1; ++i) {
+            const auto indexA = static_cast<std::size_t>(i);
+            const auto indexB = static_cast<std::size_t>(i + 1);
+            const float x1 = xForFrequency(bandCenterHz(i), plot);
+            const float x2 = xForFrequency(bandCenterHz(i + 1), plot);
+            const float beforeY1 = juce::jmap(currentRenderModel.beforeToneDb[indexA], kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
+            const float beforeY2 = juce::jmap(currentRenderModel.beforeToneDb[indexB], kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
+            const float afterY1 = juce::jmap(currentRenderModel.afterToneDb[indexA], kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
+            const float afterY2 = juce::jmap(currentRenderModel.afterToneDb[indexB], kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
 
-            g.setColour(juce::Colour(0xffb8c2cf).withAlpha(0.50f));
-            g.strokePath(makeTonePath(currentRenderModel.beforeToneDb, plot), juce::PathStrokeType(1.6f));
-            g.setColour(accent.withAlpha(0.96f));
-            g.strokePath(makeTonePath(currentRenderModel.afterToneDb, plot), juce::PathStrokeType(2.1f));
+            juce::Path diffBand;
+            diffBand.startNewSubPath(x1, beforeY1);
+            diffBand.lineTo(x2, beforeY2);
+            diffBand.lineTo(x2, afterY2);
+            diffBand.lineTo(x1, afterY1);
+            diffBand.closeSubPath();
+
+            const float avgDelta = 0.5f * ((currentRenderModel.afterToneDb[indexA] - currentRenderModel.beforeToneDb[indexA])
+                                         + (currentRenderModel.afterToneDb[indexB] - currentRenderModel.beforeToneDb[indexB]));
+            g.setColour(avgDelta >= 0.0f ? additiveColour : subtractiveColour);
+            g.fillPath(diffBand);
         }
+
+        g.setColour(juce::Colour(0xffb8c2cf).withAlpha(0.50f));
+        g.strokePath(dryStroke, juce::PathStrokeType(1.6f));
+        g.setColour(accent.withAlpha(0.96f));
+        g.strokePath(wetStroke, juce::PathStrokeType(2.1f));
 
         const float markerX = xForFrequency(bandCenterHz(currentRenderModel.largestToneBand), plot);
         const float markerY = juce::jmap(currentRenderModel.afterToneDb[static_cast<std::size_t>(currentRenderModel.largestToneBand)],
@@ -614,18 +670,20 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
     if (diagnosticsExpanded) {
         auto diag = diagnosticsBounds.reduced(16, 12);
         g.setColour(text.withAlpha(0.82f));
-        g.setFont(juce::FontOptions().withHeight(13.0f));
-        g.drawFittedText(currentRenderModel.diagnosticsText, diag, juce::Justification::topLeft, 12);
+        const float diagFontHeight = diagnosticsBounds.getHeight() >= 180 ? 13.0f : 12.0f;
+        const int maxLines = diagnosticsBounds.getHeight() >= 180 ? 14 : 10;
+        g.setFont(juce::FontOptions().withHeight(diagFontHeight));
+        g.drawFittedText(currentRenderModel.diagnosticsText, diag, juce::Justification::topLeft, maxLines);
     }
 }
 
 void VXStudioAnalyserEditor::resized() {
     auto area = getLocalBounds().reduced(20, 18);
-    auto header = area.removeFromTop(84);
+    auto header = area.removeFromTop(88);
     suiteLabel.setBounds(header.removeFromTop(18));
     titleLabel.setBounds(header.removeFromTop(34));
     subtitleLabel.setBounds(header.removeFromTop(20));
-    statusLabel.setBounds(header.removeFromTop(18));
+    statusLabel.setBounds(header.removeFromTop(20));
 
     area.removeFromTop(8);
     const int availableWidth = area.getWidth();
@@ -643,12 +701,13 @@ void VXStudioAnalyserEditor::resized() {
         fullChainButton.setBounds(chainArea.removeFromTop(34));
         chainArea.removeFromTop(14);
         stageRowBounds.clear();
+        constexpr int kStageRowHeight = 58;
         for (std::size_t i = 0; i < currentRenderModel.chainRows.size(); ++i) {
-            if (chainArea.getHeight() < 32)
+            if (chainArea.getHeight() < 40)
                 break;
-            const auto rowBounds = chainArea.removeFromTop(48);
+            const auto rowBounds = chainArea.removeFromTop(kStageRowHeight);
             stageRowBounds.push_back(rowBounds);
-            chainArea.removeFromTop(8);
+            chainArea.removeFromTop(10);
         }
     } else {
         fullChainButton.setBounds({});
@@ -656,22 +715,41 @@ void VXStudioAnalyserEditor::resized() {
     }
 
     auto contentArea = contentBounds.reduced(22, 18);
-    selectionLabel.setBounds(contentArea.removeFromTop(32));
-    summaryBounds = contentArea.removeFromTop(74);
-    summaryLabel.setBounds(summaryBounds);
+    const bool compactControls = contentArea.getWidth() < 840;
+    selectionLabel.setBounds(contentArea.removeFromTop(compactControls ? 36 : 34));
+    const int summaryHeight = compactControls ? 96 : 82;
+    summaryBounds = contentArea.removeFromTop(summaryHeight);
+    summaryLabel.setBounds(summaryBounds.reduced(0, 2));
     tabsBounds = {};
     toneTabButton.setBounds({});
     dynamicsTabButton.setBounds({});
-    auto controlsRow = contentArea.removeFromTop(30);
-    averageTimeLabel.setBounds(controlsRow.removeFromLeft(74));
-    averageTimeBox.setBounds(controlsRow.removeFromLeft(110));
-    controlsRow.removeFromLeft(14);
-    smoothingLabel.setBounds(controlsRow.removeFromLeft(82));
-    smoothingBox.setBounds(controlsRow.removeFromLeft(110));
-    controlsRow.removeFromLeft(14);
-    chainToggleButton.setBounds(controlsRow.removeFromLeft(110));
+    auto controlsArea = contentArea.removeFromTop(compactControls ? 72 : 34);
+    if (compactControls) {
+        auto rowOne = controlsArea.removeFromTop(32);
+        averageTimeLabel.setBounds(rowOne.removeFromLeft(86));
+        averageTimeBox.setBounds(rowOne.removeFromLeft(146));
+        rowOne.removeFromLeft(16);
+        smoothingLabel.setBounds(rowOne.removeFromLeft(96));
+        smoothingBox.setBounds(rowOne.removeFromLeft(146));
+
+        controlsArea.removeFromTop(6);
+        auto rowTwo = controlsArea.removeFromTop(32);
+        chainToggleButton.setBounds(rowTwo.removeFromLeft(140));
+    } else {
+        auto controlsRow = controlsArea.removeFromTop(32);
+        averageTimeLabel.setBounds(controlsRow.removeFromLeft(86));
+        averageTimeBox.setBounds(controlsRow.removeFromLeft(144));
+        controlsRow.removeFromLeft(16);
+        smoothingLabel.setBounds(controlsRow.removeFromLeft(96));
+        smoothingBox.setBounds(controlsRow.removeFromLeft(144));
+        controlsRow.removeFromLeft(18);
+        chainToggleButton.setBounds(controlsRow.removeFromLeft(140));
+    }
     contentArea.removeFromTop(8);
-    diagnosticsBounds = contentArea.removeFromBottom(diagnosticsExpanded ? 136 : 28);
+    const int diagnosticsHeight = diagnosticsExpanded
+        ? juce::jlimit(136, 220, contentArea.getHeight() / 3)
+        : 28;
+    diagnosticsBounds = contentArea.removeFromBottom(diagnosticsHeight);
     diagnosticsToggleButton.setBounds(diagnosticsBounds.removeFromTop(28));
     if (!diagnosticsExpanded)
         diagnosticsBounds = {};
@@ -698,6 +776,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     struct SnapshotEntry {
         int order = 0;
         juce::String productName;
+        juce::String displayName;
+        juce::String canonicalKey;
         juce::String shortTag;
         bool silent = true;
         std::int64_t lastPublishMs = 0;
@@ -708,6 +788,9 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     std::vector<StageEntry> fallbackStages;
     std::vector<SnapshotEntry> snapshotStages;
     std::optional<StageEntry> analyserStage;
+    externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
+    fallbackStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
+    snapshotStages.reserve(vxsuite::spectrum::SnapshotRegistry::instance().maxSlots());
 
     for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
         vxsuite::analysis::StageView stage;
@@ -726,7 +809,9 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         entry.view = stage;
         entry.stageId = labelFromChars(stage.telemetry.identity.stageId);
         entry.stageName = labelFromChars(stage.telemetry.identity.stageName);
-        entry.stateText = stage.telemetry.state.isBypassed ? "Bypassed" : "Active";
+        entry.stateText = stage.telemetry.state.isBypassed ? "Bypassed"
+                        : stage.telemetry.state.isSilent ? "Silent"
+                                                         : "Active";
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> stageDeltaDb {};
         float spectralDeltaSum = 0.0f;
         float largestStageDelta = 0.0f;
@@ -747,7 +832,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         entry.stereoChange = std::abs(stage.telemetry.outputSummary.stereoWidth - stage.telemetry.inputSummary.stereoWidth)
                            + std::abs(stage.telemetry.outputSummary.correlation - stage.telemetry.inputSummary.correlation);
         entry.impactScore = 0.45f * entry.spectralChange + 0.45f * entry.dynamicChange + 0.10f * entry.stereoChange;
-        entry.impactText = signedDb(largestStageDelta);
+        entry.impactText = signedDb(juce::jlimit(-24.0f, 24.0f, largestStageDelta));
         const auto sparseStage = classifySparseTone(stage.telemetry.inputSummary.spectrum,
                                                     stage.telemetry.outputSummary.spectrum,
                                                     stageDeltaDb);
@@ -759,8 +844,6 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
             continue;
         }
 
-        if (stage.telemetry.state.isSilent)
-            continue;
         if (inCurrentDomain)
             externalStages.push_back(entry);
         fallbackStages.push_back(std::move(entry));
@@ -781,6 +864,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         snapshotStages.push_back({
             snapshot.order,
             labelFromChars(snapshot.productName),
+            displayStageName(labelFromChars(snapshot.productName)),
+            canonicalStageKey(labelFromChars(snapshot.productName)),
             shortTag,
             snapshot.silent,
             snapshot.lastPublishMs
@@ -789,6 +874,48 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
     std::sort(snapshotStages.begin(), snapshotStages.end(), [](const auto& a, const auto& b) {
         return a.order < b.order;
+    });
+
+    for (const auto& snapshot : snapshotStages) {
+        const auto existing = std::find_if(sidebarSnapshotCache.begin(),
+                                           sidebarSnapshotCache.end(),
+                                           [&](const SidebarSnapshotCacheEntry& cached) {
+                                               return cached.canonicalKey == snapshot.canonicalKey;
+                                           });
+        if (existing != sidebarSnapshotCache.end()) {
+            existing->order = snapshot.order;
+            existing->productName = snapshot.productName;
+            existing->displayName = snapshot.displayName;
+            existing->canonicalKey = snapshot.canonicalKey;
+            existing->shortTag = snapshot.shortTag;
+            existing->silent = snapshot.silent;
+            existing->lastPublishMs = snapshot.lastPublishMs;
+        } else {
+            sidebarSnapshotCache.push_back({
+                snapshot.order,
+                snapshot.productName,
+                snapshot.displayName,
+                snapshot.canonicalKey,
+                snapshot.shortTag,
+                snapshot.silent,
+                snapshot.lastPublishMs
+            });
+        }
+    }
+
+    sidebarSnapshotCache.erase(std::remove_if(sidebarSnapshotCache.begin(),
+                                              sidebarSnapshotCache.end(),
+                                              [&](const SidebarSnapshotCacheEntry& cached) {
+                                                  return (nowMs - static_cast<std::uint64_t>(
+                                                             std::max<std::int64_t>(0, cached.lastPublishMs)))
+                                                      > kSidebarSnapshotHoldMs;
+                                              }),
+                               sidebarSnapshotCache.end());
+
+    std::sort(sidebarSnapshotCache.begin(), sidebarSnapshotCache.end(), [](const auto& a, const auto& b) {
+        if (a.order != b.order)
+            return a.order < b.order;
+        return a.displayName < b.displayName;
     });
 
     bool usingFallbackStages = false;
@@ -801,9 +928,25 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
     });
 
+    struct StageMatchKey {
+        juce::String nameKey;
+        juce::String idKey;
+    };
+    std::vector<StageMatchKey> externalStageKeys;
+    externalStageKeys.reserve(externalStages.size());
+    for (const auto& stage : externalStages) {
+        externalStageKeys.push_back({
+            canonicalStageKey(stage.stageName),
+            canonicalStageKey(stage.stageId)
+        });
+    }
+
     int selectedIndexValue = selectedStageIndex.load();
     bool fullChain = fullChainSelected.load();
-    if (selectedIndexValue >= static_cast<int>(externalStages.size())) {
+    const int maxSelectableRows = !sidebarSnapshotCache.empty()
+        ? static_cast<int>(sidebarSnapshotCache.size())
+        : static_cast<int>(externalStages.size());
+    if (selectedIndexValue >= maxSelectableRows) {
         selectedIndexValue = -1;
         selectedStageIndex.store(-1);
         fullChain = true;
@@ -814,59 +957,134 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     model.fallbackStages = usingFallbackStages;
     model.snapshotFallback = externalStages.empty() && !snapshotStages.empty();
     model.generation = ++renderGeneration;
-    model.statusText =
-        "Domain " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
-        + " | live stages: " + juce::String(static_cast<int>(externalStages.size()))
-        + " | snapshots: " + juce::String(static_cast<int>(snapshotStages.size()))
-        + " | selection: "
-        + ((fullChain || selectedIndexValue < 0)
-               ? juce::String("Full Chain")
-               : externalStages[static_cast<std::size_t>(selectedIndexValue)].stageName);
+    int matchedTelemetryRows = 0;
 
-    if (!externalStages.empty()) {
-        model.chainRows.reserve(externalStages.size());
+    if (!sidebarSnapshotCache.empty() || !externalStages.empty()) {
+        model.chainRows.reserve(sidebarSnapshotCache.size() + externalStages.size());
+        model.chainRowStageIndices.reserve(sidebarSnapshotCache.size() + externalStages.size());
+        std::vector<bool> matchedExternalStages(static_cast<std::size_t>(externalStages.size()), false);
+        for (const auto& snapshot : sidebarSnapshotCache) {
+            int matchedStageIndex = -1;
+            for (int index = 0; index < static_cast<int>(externalStages.size()); ++index) {
+                const auto& stageNameKey = externalStageKeys[static_cast<std::size_t>(index)].nameKey;
+                const auto& stageIdKey = externalStageKeys[static_cast<std::size_t>(index)].idKey;
+                if (stageNameKey == snapshot.canonicalKey
+                    || stageIdKey == snapshot.canonicalKey
+                    || stageIdKey.contains(snapshot.canonicalKey)
+                    || snapshot.canonicalKey.contains(stageIdKey)) {
+                    matchedStageIndex = index;
+                    break;
+                }
+            }
+
+            if (matchedStageIndex >= 0) {
+                ++matchedTelemetryRows;
+                matchedExternalStages[static_cast<std::size_t>(matchedStageIndex)] = true;
+                const auto& stage = externalStages[static_cast<std::size_t>(matchedStageIndex)];
+                model.chainRows.push_back({
+                    snapshot.displayName,
+                    stage.stateText,
+                    stage.impactText,
+                    stage.classText,
+                    !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
+                });
+                model.chainRowStageIndices.push_back(matchedStageIndex);
+            } else {
+                model.chainRows.push_back({
+                    snapshot.displayName,
+                    (nowMs - static_cast<std::uint64_t>(std::max<std::int64_t>(0, snapshot.lastPublishMs))) > kStaleThresholdMs
+                        ? "Holding"
+                        : (snapshot.silent ? "Silent" : "Live"),
+                    snapshot.shortTag,
+                    "Waiting for telemetry",
+                    !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
+                });
+                model.chainRowStageIndices.push_back(-1);
+            }
+        }
+
         for (int index = 0; index < static_cast<int>(externalStages.size()); ++index) {
+            if (index < static_cast<int>(matchedExternalStages.size())
+                && matchedExternalStages[static_cast<std::size_t>(index)]) {
+                continue;
+            }
             const auto& stage = externalStages[static_cast<std::size_t>(index)];
             model.chainRows.push_back({
-                stage.stageName,
+                displayStageName(stage.stageName),
                 stage.stateText,
                 stage.impactText,
                 stage.classText,
-                !fullChain && index == selectedIndexValue
+                !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
             });
-        }
-    } else if (!snapshotStages.empty()) {
-        model.chainRows.reserve(snapshotStages.size());
-        for (const auto& snapshot : snapshotStages) {
-            model.chainRows.push_back({
-                snapshot.productName,
-                snapshot.silent ? "Silent" : "Active",
-                snapshot.shortTag,
-                "Snapshot only",
-                false
-            });
+            model.chainRowStageIndices.push_back(index);
         }
     }
+
+    juce::String selectedLabel = "Full Chain";
+    if (!fullChain && selectedIndexValue >= 0 && selectedIndexValue < static_cast<int>(model.chainRows.size()))
+        selectedLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName;
+    model.statusText =
+        "Domain " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
+        + " | live chain: " + juce::String(static_cast<int>(sidebarSnapshotCache.size()))
+        + " | telemetry: " + juce::String(matchedTelemetryRows)
+        + " | selection: " + selectedLabel;
+
+    const bool incompleteStageCoverage =
+        !sidebarSnapshotCache.empty() && matchedTelemetryRows < static_cast<int>(sidebarSnapshotCache.size());
 
     vxsuite::analysis::AnalysisSummary before {};
     vxsuite::analysis::AnalysisSummary after {};
     juce::String selectionKey = "empty";
     juce::String scopeLabel;
 
-    if (!externalStages.empty()) {
+    if (fullChain && incompleteStageCoverage && analyserStage.has_value()) {
+        before = analyserStage->view.telemetry.inputSummary;
+        after = analyserStage->view.telemetry.outputSummary;
+        scopeLabel = "Chain Syncing";
+        selectionKey = "partial-telemetry";
+        model.valid = true;
+    } else if (!externalStages.empty()) {
         if (fullChain || selectedIndexValue < 0) {
-            before = externalStages.front().view.telemetry.inputSummary;
-            after = externalStages.back().view.telemetry.outputSummary;
+            int firstMatchedStageIndex = -1;
+            int lastMatchedStageIndex = -1;
+            for (const int stageIndex : model.chainRowStageIndices) {
+                if (stageIndex < 0 || stageIndex >= static_cast<int>(externalStages.size()))
+                    continue;
+                if (firstMatchedStageIndex < 0)
+                    firstMatchedStageIndex = stageIndex;
+                lastMatchedStageIndex = stageIndex;
+            }
+
+            if (firstMatchedStageIndex >= 0 && lastMatchedStageIndex >= 0) {
+                before = externalStages[static_cast<std::size_t>(firstMatchedStageIndex)].view.telemetry.inputSummary;
+                after = externalStages[static_cast<std::size_t>(lastMatchedStageIndex)].view.telemetry.outputSummary;
+            } else {
+                before = externalStages.front().view.telemetry.inputSummary;
+                after = externalStages.back().view.telemetry.outputSummary;
+            }
             scopeLabel = "Full Chain";
             selectionKey = "full";
         } else {
-            const auto& stage = externalStages[static_cast<std::size_t>(selectedIndexValue)];
-            before = stage.view.telemetry.inputSummary;
-            after = stage.view.telemetry.outputSummary;
-            scopeLabel = stage.stageName;
-            selectionKey = "stage:" + stage.stageId + ":" + juce::String(selectedIndexValue);
+            int matchedStageIndex = -1;
+            if (selectedIndexValue >= 0
+                && selectedIndexValue < static_cast<int>(model.chainRowStageIndices.size())) {
+                matchedStageIndex = model.chainRowStageIndices[static_cast<std::size_t>(selectedIndexValue)];
+            }
+
+            if (matchedStageIndex >= 0 && matchedStageIndex < static_cast<int>(externalStages.size())) {
+                const auto& stage = externalStages[static_cast<std::size_t>(matchedStageIndex)];
+                before = stage.view.telemetry.inputSummary;
+                after = stage.view.telemetry.outputSummary;
+                scopeLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName;
+                selectionKey = "stage:" + stage.stageId + ":" + juce::String(selectedIndexValue);
+            } else if (analyserStage.has_value()) {
+                before = analyserStage->view.telemetry.inputSummary;
+                after = analyserStage->view.telemetry.outputSummary;
+                scopeLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName + " (Waiting)";
+                selectionKey = "waiting:" + juce::String(selectedIndexValue);
+            }
         }
-        model.valid = true;
+        model.valid = !selectionKey.isEmpty() && selectionKey != "empty";
     } else if (analyserStage.has_value()) {
         before = analyserStage->view.telemetry.inputSummary;
         after = analyserStage->view.telemetry.outputSummary;
@@ -948,18 +1166,20 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
         for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
             const float hz = bandCenterHz(i);
+            const float beforeLinear = backendState.beforeToneLinear[static_cast<std::size_t>(i)];
+            const float afterLinear = backendState.afterToneLinear[static_cast<std::size_t>(i)];
             const float beforeDb = juce::jlimit(kSpectrumMinDb,
                                                 kSpectrumMaxDb,
-                                                applyDisplaySlope(toDb(backendState.beforeToneLinear[static_cast<std::size_t>(i)], -120.0f),
+                                                applyDisplaySlope(toDb(beforeLinear, -120.0f),
                                                                   hz));
             const float afterDb = juce::jlimit(kSpectrumMinDb,
                                                kSpectrumMaxDb,
-                                               applyDisplaySlope(toDb(backendState.afterToneLinear[static_cast<std::size_t>(i)], -120.0f),
+                                               applyDisplaySlope(toDb(afterLinear, -120.0f),
                                                                  hz));
             const float deltaTarget = juce::jlimit(-24.0f,
                                                    24.0f,
-                                                   toDb(backendState.afterToneLinear[static_cast<std::size_t>(i)])
-                                                       - toDb(backendState.beforeToneLinear[static_cast<std::size_t>(i)]));
+                                                   toDb(afterLinear)
+                                                       - toDb(beforeLinear));
             if (resetSmoothing) {
                 backendState.deltaToneDb[static_cast<std::size_t>(i)] = deltaTarget;
             } else {
@@ -996,7 +1216,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 ++highCount;
             }
 
-            if (std::abs(smoothedDeltaTone[static_cast<std::size_t>(i)]) > std::abs(largestDelta)) {
+            if (hasMeaningfulBandEnergy(beforeLinear, afterLinear)
+                && std::abs(smoothedDeltaTone[static_cast<std::size_t>(i)]) > std::abs(largestDelta)) {
                 largestDelta = smoothedDeltaTone[static_cast<std::size_t>(i)];
                 largestBand = i;
             }
@@ -1073,34 +1294,60 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                                                      : smoothScalar(backendState.transientDelta, transientDeltaTarget, summarySmoothingSeconds);
 
         model.selectionTitle = "Spectrum  |  " + scopeLabel;
-        model.summaryLines = buildToneSummary("Spectrum -> " + scopeLabel,
-                                              model.deltaToneDb,
-                                              model.largestToneBand,
-                                              model.sparseTone,
-                                              model.sparseToneBands,
-                                              toDb(before.rms, -120.0f),
-                                              toDb(after.rms, -120.0f),
-                                              backendState.lowToneDeltaDb,
-                                              backendState.midToneDeltaDb,
-                                              backendState.highToneDeltaDb);
-        juce::StringArray snapshotNames;
-        for (const auto& snapshot : snapshotStages)
-            snapshotNames.add(snapshot.productName + " (" + snapshot.shortTag + ")");
+        if (selectionKey == "partial-telemetry") {
+            model.summaryLines = {
+                "Spectrum -> Chain Syncing",
+                "Visible telemetry " + juce::String(matchedTelemetryRows)
+                    + " / snapshots " + juce::String(static_cast<int>(sidebarSnapshotCache.size())),
+                "Waiting for complete stage telemetry before building full-chain comparison",
+                "Current graph is analyser passthrough only to avoid false spikes"
+            };
+        } else if (selectionKey.startsWith("waiting:")) {
+            model.summaryLines = {
+                "Spectrum -> Waiting for telemetry",
+                "Live chain row is present, but this stage has not published matched telemetry yet",
+                "Sidebar is driven by the active VX chain, analysis will appear as soon as telemetry arrives",
+                "Current graph is analyser passthrough only to avoid false spikes"
+            };
+        } else {
+            model.summaryLines = buildToneSummary("Spectrum -> " + scopeLabel,
+                                                  model.deltaToneDb,
+                                                  backendState.beforeToneLinear,
+                                                  backendState.afterToneLinear,
+                                                  model.largestToneBand,
+                                                  model.sparseTone,
+                                                  model.sparseToneBands,
+                                                  toDb(before.rms, -120.0f),
+                                                  toDb(after.rms, -120.0f),
+                                                  backendState.lowToneDeltaDb,
+                                                  backendState.midToneDeltaDb,
+                                                  backendState.highToneDeltaDb);
+        }
+        juce::String snapshotList = "hidden";
+        if (diagnosticsExpanded) {
+            juce::StringArray snapshotNames;
+            snapshotNames.ensureStorageAllocated(static_cast<int>(sidebarSnapshotCache.size()));
+            for (const auto& snapshot : sidebarSnapshotCache)
+                snapshotNames.add(snapshot.productName + " (" + snapshot.shortTag + ")");
+            snapshotList = snapshotNames.isEmpty() ? juce::String("none") : snapshotNames.joinIntoString(", ");
+        }
 
         model.diagnosticsText =
             "Domain: " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
             + "\nStage count: " + juce::String(static_cast<int>(externalStages.size()))
-            + "\nSnapshot count: " + juce::String(static_cast<int>(snapshotStages.size()))
+            + "\nSnapshot count: " + juce::String(static_cast<int>(sidebarSnapshotCache.size()))
+            + "\nMatched rows: " + juce::String(matchedTelemetryRows)
             + "\nStage source: " + juce::String(usingFallbackStages ? "Fallback registry scan" : "Current domain")
-            + "\nSidebar source: " + juce::String(model.snapshotFallback ? "Snapshot fallback" : "Stage telemetry")
+            + "\nSidebar source: Live chain snapshots"
+            + "\nCoverage: " + juce::String(incompleteStageCoverage ? "Partial" : "Complete")
             + "\nFreshness: <= " + juce::String(static_cast<int>(kStaleThresholdMs)) + " ms"
             + "\nOrder confidence: Deterministic via domain + localOrderId"
             + "\nCapabilities: Dry/Wet Spectrum Tier 1"
-            + "\nSpectrum render: " + juce::String(model.sparseTone ? "Sparse mode" : "Overlay mode")
+            + "\nSpectrum render: Overlay mode"
             + "\nAvg time: " + juce::String(averageSeconds, 2) + " s"
             + "\nSmoothing: " + juce::String(kSmoothingOptions[static_cast<std::size_t>(
                   juce::jlimit(0, static_cast<int>(kSmoothingOptions.size()) - 1, smoothingIndex.load()))])
-            + "\nSnapshots: " + (snapshotNames.isEmpty() ? juce::String("none") : snapshotNames.joinIntoString(", "))
+            + "\nSnapshots: " + snapshotList
             + "\nFallback mode: " + juce::String(selectionKey == "dry-only" ? "Analyser passthrough only" : "Normal stage comparison")
             + "\nSelection key: " + selectionKey;
     }

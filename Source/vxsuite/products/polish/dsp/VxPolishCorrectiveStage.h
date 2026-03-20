@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VxPolishDspCommon.h"
 #include "VxPolishSharedParams.h"
 
 #include <array>
@@ -52,6 +53,8 @@ private:
 
     float hpfB0 = 1.0f, hpfB1 = 0.0f, hpfB2 = 0.0f, hpfA1 = 0.0f, hpfA2 = 0.0f;
     std::vector<float> hpfZ1, hpfZ2;
+    detail::BiquadCoeffs hiShelfCoeffs {};
+    std::vector<float> hiShelfZ1, hiShelfZ2;
 
     std::array<float, 6> troubleDetBpfB0 {};
     std::array<float, 6> troubleDetBpfA1 {};

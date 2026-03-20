@@ -2,6 +2,7 @@
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
+#include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "../../framework/VxSuiteStageChain.h"
 #include "dsp/VxDenoiserDsp.h"
@@ -23,9 +24,11 @@ private:
 
     vxsuite::denoiser::DenoiserDsp denoiserDsp;
     vxsuite::StageChain<1> stageChain { denoiserDsp };
+    vxsuite::OutputTrimmer outputTrimmer;
 
     double currentSampleRateHz = 48000.0;
     float  smoothedClean       = 0.0f;
     float  smoothedGuard       = 0.5f;
+    float  smoothedMakeupGain  = 1.0f;
     bool   controlsPrimed      = false;
 };
