@@ -43,7 +43,7 @@ public:
     void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
 
-    double getTailLengthSeconds() const override { return 0.0; }
+    double getTailLengthSeconds() const override { return tailLengthSeconds; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -75,10 +75,15 @@ protected:
     void resetProcessCoordinator();
     void releaseProcessCoordinator();
     void setReportedLatencySamples(int latencySamples);
+    void setReportedTailLengthSeconds(double seconds) noexcept;
     template <typename... Stages>
     void setReportedLatencyFromStages(const Stages&... stages) {
         processCoordinator.setLatencyFromStages(stages...);
         juce::AudioProcessor::setLatencySamples(processCoordinator.latencySamples());
+        const auto latencySeconds = currentSampleRateHz > 0.0
+            ? static_cast<double>(processCoordinator.latencySamples()) / currentSampleRateHz
+            : 0.0;
+        setReportedTailLengthSeconds(std::max(tailLengthSeconds, latencySeconds));
     }
     void ensureLatencyAlignedListenDry(int numSamples);
     const juce::AudioBuffer<float>& getLatencyAlignedListenDryBuffer() const noexcept;
@@ -96,6 +101,7 @@ private:
     ProcessCoordinator processCoordinator;
     OutputTrimmer outputSafetyTrimmer;
     double currentSampleRateHz = 48000.0;
+    double tailLengthSeconds = 0.0;
 };
 
 } // namespace vxsuite

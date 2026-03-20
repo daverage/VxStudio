@@ -173,8 +173,6 @@ target_sources(VXDeverb PRIVATE
   Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
   Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
-  Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
-  Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
 )
 target_include_directories(VXDeverb PRIVATE Source)
 target_link_libraries(VXDeverb PRIVATE VxSuiteFramework Eigen3::Eigen juce::juce_dsp)

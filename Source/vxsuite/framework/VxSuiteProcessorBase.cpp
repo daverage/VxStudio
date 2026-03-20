@@ -23,6 +23,7 @@ juce::AudioProcessorEditor* ProcessorBase::createEditor() {
 
 void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    tailLengthSeconds = 0.0;
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
     listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
     prepareProcessCoordinator(samplesPerBlock);
@@ -86,6 +87,7 @@ void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce:
 }
 
 void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
+    juce::ScopedNoDenormals noDenormals;
     voiceAnalysis.update(buffer, buffer.getNumSamples());
 
     const bool hasDryScratch = listenInputScratch.getNumChannels() >= buffer.getNumChannels()
@@ -163,6 +165,14 @@ void ProcessorBase::releaseProcessCoordinator() {
 void ProcessorBase::setReportedLatencySamples(const int latencySamples) {
     processCoordinator.setLatencySamples(latencySamples);
     juce::AudioProcessor::setLatencySamples(processCoordinator.latencySamples());
+    const auto latencySeconds = currentSampleRateHz > 0.0
+        ? static_cast<double>(processCoordinator.latencySamples()) / currentSampleRateHz
+        : 0.0;
+    setReportedTailLengthSeconds(std::max(tailLengthSeconds, latencySeconds));
+}
+
+void ProcessorBase::setReportedTailLengthSeconds(const double seconds) noexcept {
+    tailLengthSeconds = std::max(0.0, seconds);
 }
 
 void ProcessorBase::ensureLatencyAlignedListenDry(const int numSamples) {

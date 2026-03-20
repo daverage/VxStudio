@@ -1035,6 +1035,40 @@ bool testMonoStereoConsistency() {
     return true;
 }
 
+bool testLatencyBearingProcessorsReportTailLength() {
+    constexpr double sr = 48000.0;
+
+    VXDeverbAudioProcessor deverb;
+    deverb.prepareToPlay(sr, 256);
+    if (!(deverb.getLatencySamples() > 0 && deverb.getTailLengthSeconds() > 0.0)) {
+        std::cerr << "[VXSuitePluginRegression] Deverb should report non-zero tail length when latency is non-zero\n";
+        return false;
+    }
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    if (!(denoiser.getLatencySamples() > 0 && denoiser.getTailLengthSeconds() > 0.0)) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser should report non-zero tail length when latency is non-zero\n";
+        return false;
+    }
+
+    VXSubtractAudioProcessor subtract;
+    subtract.prepareToPlay(sr, 256);
+    if (!(subtract.getLatencySamples() > 0 && subtract.getTailLengthSeconds() > 0.0)) {
+        std::cerr << "[VXSuitePluginRegression] Subtract should report non-zero tail length when latency is non-zero\n";
+        return false;
+    }
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    if (cleanup.getLatencySamples() != 0 || cleanup.getTailLengthSeconds() != 0.0) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup should remain zero-tail/zero-latency by default\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testNoSteadyStateAllocationsOnAudioThread() {
     constexpr double sr = 48000.0;
     auto noisy = addBuffers(makeSpeechLike(sr, 0.4f), makeNoise(sr, 0.4f, 0.05f));
@@ -1129,6 +1163,7 @@ int main() {
     ok &= testOversizedHostBlocksStayConsistent();
     ok &= testMultiRateAndBufferCoverage();
     ok &= testMonoStereoConsistency();
+    ok &= testLatencyBearingProcessorsReportTailLength();
     ok &= testNoSteadyStateAllocationsOnAudioThread();
     ok &= testCombinedChainKeepsSilenceSilent();
     return ok ? 0 : 1;

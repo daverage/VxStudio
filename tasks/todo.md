@@ -208,6 +208,24 @@ The current `VX Studio Analyser` tone view still lies on sparse or test-like mat
 - Verified with `cmake --build build --target VXStudioAnalyserPlugin -j4`. The existing ad-hoc code-signing replacement message appeared during VST3 staging, but the target completed successfully.
 - Remaining limitation: this is still a 32-band explanation view, not a full-resolution analyzer like SPAN. The sparse mode makes it materially more honest, but it will still summarize rather than measure every narrow peak.
 
+# Full VX Suite audit pass — 2026-03-20
+
+## Problem
+The repo now has a formal v2 audit baseline covering plugin validation, framework correctness, realtime safety, DSP correctness, REAPER host behavior, and release/build readiness. The suite needs that plan executed against the current codebase, with findings and coverage gaps documented from actual code and tooling results rather than assumptions.
+
+## Plan
+- [x] Capture the current environment, available validation tools, and shipping plugin inventory.
+- [x] Run available automated verification lanes (`cmake` tests/profile/build checks, and `pluginval` if available) and record blockers for any missing external tooling.
+- [x] Audit the shared framework against the v2 baseline: parameter/state contracts, denormal handling, latency/listen/tail behavior, oversized-block handling, and hot-path safety.
+- [x] Audit products in risk order with emphasis on DeepFilterNet, Subtract, Deverb, and Denoiser, then cover the remaining processors and analyser.
+- [x] Audit build/packaging metadata, bundle/resource layout, and platform/release readiness claims.
+- [x] Produce a written audit report with severity-ranked findings, verification evidence, and explicit test/tooling gaps.
+
+## Review
+- Environment captured on macOS 15.7.4 / Apple Silicon with a clean worktree and all staged VST3 bundles present under `Source/vxsuite/vst/`. `pluginval` and `reaper` were not available on `PATH`, so those lanes were documented as blocked rather than guessed.
+- Built and ran `VXSuitePluginRegressionTests`, `VXDeverbTests`, `VxSuiteVoiceAnalysisTests`, and `VXSuiteProfile`; all completed successfully. `VXSuiteProfile` showed the sampled Cleanup/Proximity/Finish/Subtract chain remaining comfortably below realtime cost on this machine, including at `96 kHz`.
+- The audit report is in `tasks/reports/VX_SUITE_FULL_AUDIT_2026-03-20.md` and records the main confirmed findings: zero tail-length reporting across framework-based products, `VXDeepFilterNet` model/resource staging and lookup issues, missing pluginval/CTest integration, duplicate `VXDeverb` CMake source entries, ad-hoc/non-notarized macOS bundles, and arm64-only staged artifacts.
+
 # Analyzer readability fixes — 2026-03-18
 
 ## Problem
