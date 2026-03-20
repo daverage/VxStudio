@@ -35,6 +35,29 @@ function(vxsuite_stage_vst3_bundle target_name bundle_name)
     COMMENT "Refreshing staged ${bundle_name}.vst3 in Source/vxsuite/vst")
 endfunction()
 
+function(vxsuite_copy_vst3_resources target_name bundle_name)
+  if(NOT ARGN)
+    return()
+  endif()
+
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(stage_bundle_dir "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3")
+
+  foreach(resource IN LISTS ARGN)
+    get_filename_component(resource_name "${resource}" NAME)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${bundle_source_dir}/Contents/Resources"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${resource}"
+              "${bundle_source_dir}/Contents/Resources/${resource_name}"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${stage_bundle_dir}/Contents/Resources"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${resource}"
+              "${stage_bundle_dir}/Contents/Resources/${resource_name}"
+      VERBATIM)
+  endforeach()
+endfunction()
+
 find_package(Eigen3 CONFIG QUIET)
 if(NOT TARGET Eigen3::Eigen)
   set(Eigen3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -378,6 +401,7 @@ target_link_libraries(VXDeepFilterNet PRIVATE
 vxsuite_link_df_models(VXDeepFilterNet)
 add_custom_target(VXDeepFilterNetPlugin ALL DEPENDS VXDeepFilterNet_VST3)
 vxsuite_stage_vst3_bundle(VXDeepFilterNet_VST3 "VXDeepFilterNet")
+vxsuite_copy_vst3_resources(VXDeepFilterNet_VST3 "VXDeepFilterNet" ${VXSUITE_DF_EMBED_MODEL_FILES})
 
 juce_add_plugin(VXTone
   FORMATS VST3

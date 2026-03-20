@@ -210,6 +210,21 @@ float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime
 }
 
 juce::File DeepFilterService::modelAssetForVariant(const ModelVariant variant) const {
+    if (const auto bundleResources = bundleResourcesDirectory(); bundleResources.isDirectory()) {
+        if (variant == ModelVariant::dfn2) {
+            const juce::String dfn2Names[] = { "DeepFilterNet2_onnx_ll.tar.gz", "DeepFilterNet2_onnx.tar.gz" };
+            for (const auto& fileName : dfn2Names) {
+                const auto bundledModel = bundleResources.getChildFile(fileName);
+                if (bundledModel.existsAsFile())
+                    return bundledModel;
+            }
+        } else {
+            const auto bundledModel = bundleResources.getChildFile("DeepFilterNet3_onnx.tar.gz");
+            if (bundledModel.existsAsFile())
+                return bundledModel;
+        }
+    }
+
     const auto currentWorkingDirectory = juce::File::getCurrentWorkingDirectory();
     if (variant == ModelVariant::dfn2) {
         const juce::String dfn2Names[] = { "DeepFilterNet2_onnx_ll.tar.gz", "DeepFilterNet2_onnx.tar.gz" };
@@ -234,6 +249,20 @@ juce::File DeepFilterService::modelAssetForVariant(const ModelVariant variant) c
     for (const auto& candidate : candidates) {
         if (candidate.existsAsFile())
             return candidate;
+    }
+    return {};
+}
+
+juce::File DeepFilterService::bundleResourcesDirectory() const {
+    auto current = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+    while (current.exists() && current != current.getParentDirectory()) {
+        if (current.getFileName() == "Contents") {
+            const auto resources = current.getChildFile("Resources");
+            if (resources.isDirectory())
+                return resources;
+            break;
+        }
+        current = current.getParentDirectory();
     }
     return {};
 }
