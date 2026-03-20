@@ -256,14 +256,12 @@ The audit follow-up still had several verification gaps: no-allocation checks on
 - [x] Rebuild and rerun the affected regression target, then document the result and capture the lesson.
 
 ## Review
-- `Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp` now uses `voicePreserve` and `denoiseAmount` to scale back the most distortion-prone corrective moves on clearly voiced material instead of computing those protection signals upstream and then ignoring them in the DSP.
-- The same corrective stage now applies breath reduction from the post-de-ess split (`breathLp` and `breathBand` derived from the current de-essed sample) so Cleanup no longer subtracts a stale pre-de-ess lowpass from a newer signal state.
-- `tests/VxSuiteProcessorTestUtils.h` now includes `bestGainResidualRatioSkip(...)`, and `tests/VXSuitePluginRegressionTests.cpp` now uses a brighter voiced-material Cleanup case with explicit coherence and residual thresholds, which would have been stricter than the old Cleanup-only headroom tests.
+- `Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp` now applies an explicit voiced-material guard before handing `deEss`, `breath`, and `troubleSmooth` to the shared corrective stage. Cleanup still acts on bright/noisy content, but it no longer asks the downstream DSP to push high-band removal as hard when the analysis says the block is clearly harmonic speech.
+- `tests/VXSuitePluginRegressionTests.cpp` now adds a second voiced edge-case regression with a sustained harmonic source plus strong upper-mid/top-end content. That complements the older voiced-material test and makes the distortion check much harder to accidentally satisfy with only peak/headroom safety.
 - Verified with:
   - `cmake --build build --target VXSuitePluginRegressionTests -j4`
-  - `/tmp/cleanup_verify` built from the current test objects to measure the new voiced-material case (`corr=0.997454`, `residualRatio=0.0713081`, finite output)
-  - `./build/VXSuitePluginRegressionTests`
-- The shared regression executable still exits on the pre-existing Deverb tail-window failure (`Deverb tail window was unexpectedly empty`), but Cleanup no longer reports a failure in that run.
+  - `/tmp/cleanup_verify` built from the current `VXSuitePluginRegressionTests` objects, which measured `voiced_tone corr=0.997552 residualRatio=0.0699273` and `voiced_edge corr=0.995491 residualRatio=0.0948516`, both finite and within the new thresholds
+  - `./build/VXSuitePluginRegressionTests` still stops on the pre-existing unrelated Deverb tail regression (`Deverb tail window was unexpectedly empty`), so the full suite is not green yet even though the Cleanup-specific verification passed
 
 # Analyzer readability fixes — 2026-03-18
 

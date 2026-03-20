@@ -316,6 +316,12 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                                            * (1.0f - 0.15f * evidence.speechConfidence));
     const float harshWeight = juce::jlimit(0.0f, 1.0f,
                                            harshnessEnv * (0.30f + 0.70f * highBias));
+    const float voicedIntegrity = juce::jlimit(0.0f, 1.0f,
+        0.60f * evidence.speechConfidence + 0.40f * harmonicity);
+    const float voicedHighBandGuard = juce::jlimit(0.58f, 1.0f,
+        1.0f - 0.34f * voicedIntegrity * (0.45f + 0.55f * highBias));
+    const float voicedBreathGuard = juce::jlimit(0.55f, 1.0f,
+        1.0f - 0.38f * voicedIntegrity * (0.55f + 0.45f * breathAir));
 
     const bool hpfOn = vxsuite::readBool(parameters, kHpfOnParam, false);
     const bool hiShelfOn = vxsuite::readBool(parameters, kHiShelfOnParam, false);
@@ -326,16 +332,19 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                            * (0.88f + 0.62f * lowBias)
                            * (1.0f - 0.18f * preserveBody));
     params.deEss = vxsuite::clamp01(cleanup * sibilanceWeight
-                           * (voiceMode ? 1.26f : 1.14f));
+                           * (voiceMode ? 1.26f : 1.14f)
+                           * voicedHighBandGuard);
     params.breath = vxsuite::clamp01(cleanup * breathWeight
-                            * (voiceMode ? 0.90f : 0.56f));
+                            * (voiceMode ? 0.90f : 0.56f)
+                            * voicedBreathGuard);
     params.plosive = vxsuite::clamp01(cleanup * plosiveWeight
                              * (voiceMode ? 1.08f : 0.86f)
                              * (1.0f - 0.15f * preserveBody));
     params.compress = 0.0f;
     params.troubleSmooth = vxsuite::clamp01(cleanup * harshWeight
                                    * (0.56f + 0.94f * highBias)
-                                   * (voiceMode ? 1.22f : 1.10f));
+                                   * (voiceMode ? 1.22f : 1.10f)
+                                   * voicedHighBandGuard);
     params.limit = 0.0f;
     params.recovery = 0.0f;
     params.smartGain = 0.0f;

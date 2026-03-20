@@ -139,6 +139,23 @@ juce::AudioBuffer<float> makeCleanupVoicedToneInput(const double sr, const float
     return buffer;
 }
 
+juce::AudioBuffer<float> makeCleanupVoicedEdgeCaseInput(const double sr, const float seconds) {
+    auto fundamental = makeSine(sr, seconds, 180.0f, 0.22f);
+    auto formant1 = makeSine(sr, seconds, 720.0f, 0.07f);
+    auto formant2 = makeSine(sr, seconds, 2340.0f, 0.035f);
+    auto ess = makeSine(sr, seconds, 6200.0f, 0.05f);
+    auto buffer = addBuffers(addBuffers(fundamental, formant1), addBuffers(formant2, ess));
+
+    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sr);
+        const float env = (t > 0.15f && t < (seconds - 0.15f)) ? 1.0f : 0.2f;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.setSample(ch, i, buffer.getSample(ch, i) * env);
+    }
+
+    return buffer;
+}
+
 bool testCleanupZeroIsIdentity() {
     constexpr double sr = 48000.0;
     auto dry = makeSpeechLike(sr, 1.0f);
@@ -520,6 +537,39 @@ bool testCleanupVoicedMaterialStaysClean() {
     const float residualRatio = bestGainResidualRatioSkip(input, out, 2048);
     if (residualRatio > 0.075f) {
         std::cerr << "[VXSuitePluginRegression] Cleanup added too much non-gain harmonic damage on voiced material: residualRatio="
+                  << residualRatio << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testCleanupVoicedEdgeCaseStaysClean() {
+    constexpr double sr = 48000.0;
+    const auto input = makeCleanupVoicedEdgeCaseInput(sr, 1.0f);
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 1.0f);
+    setParamNormalized(cleanup, "body", 0.2f);
+    setParamNormalized(cleanup, "focus", 0.8f);
+    setParamNormalized(cleanup, "hishelf_on", 1.0f);
+    const auto out = render(cleanup, input, 256);
+
+    if (!allFinite(out) || peakAbs(out) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup voiced edge case became unstable\n";
+        return false;
+    }
+
+    const float corr = bufferCorrelationSkip(input, out, 2048);
+    if (corr < 0.994f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup damaged voiced edge-case coherence too much: corr=" << corr << "\n";
+        return false;
+    }
+
+    const float residualRatio = bestGainResidualRatioSkip(input, out, 2048);
+    if (residualRatio > 0.102f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup added too much edge-case harmonic damage: residualRatio="
                   << residualRatio << "\n";
         return false;
     }
@@ -1425,6 +1475,7 @@ int main() {
     ok &= testCleanupHighShelfStrongSettingStaysBounded();
     ok &= testCleanupDeEssAndPlosivesStayHeadroomSafe();
     ok &= testCleanupVoicedMaterialStaysClean();
+    ok &= testCleanupVoicedEdgeCaseStaysClean();
     ok &= testFinishStrongSettingsAreAudibleButBounded();
     ok &= testFinishGainIsBipolarAroundCenter();
     ok &= testFinishResetIsDeterministic();
