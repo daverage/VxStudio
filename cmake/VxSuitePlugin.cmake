@@ -1,6 +1,7 @@
 function(vxsuite_add_framework target_name)
   add_library(${target_name} STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteLookAndFeel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteLevelTraceView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteProcessorBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteEditorBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp

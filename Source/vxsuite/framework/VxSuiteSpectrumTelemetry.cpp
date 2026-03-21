@@ -46,6 +46,8 @@ struct SharedSlot {
     std::int32_t order = 0;
     std::int64_t lastPublishMs = 0;
     double sampleRate = 48000.0;
+    float levelTraceSeconds = 0.0f;
+    std::int32_t levelTraceCount = 0;
     float dryRms = 0.0f;
     float wetRms = 0.0f;
     std::array<float, 3> accentRgb { 0.8f, 0.8f, 0.8f };
@@ -53,6 +55,8 @@ struct SharedSlot {
     std::array<char, 12> shortTag {};
     std::array<float, kWaveformSamples> dryWaveform {};
     std::array<float, kWaveformSamples> wetWaveform {};
+    std::array<float, kLevelTraceSamples> dryLevelTrace {};
+    std::array<float, kLevelTraceSamples> wetLevelTrace {};
 };
 
 struct SharedState {
@@ -171,6 +175,8 @@ int SnapshotRegistry::registerSlot(const ProductIdentity& identity,
         slot.instanceId = state->nextInstanceId++;
         slot.lastPublishMs = nowMs;
         slot.sampleRate = 48000.0;
+        slot.levelTraceSeconds = 0.0f;
+        slot.levelTraceCount = 0;
         slot.dryRms = 0.0f;
         slot.wetRms = 0.0f;
         slot.accentRgb = identity.theme.accentRgb;
@@ -178,6 +184,8 @@ int SnapshotRegistry::registerSlot(const ProductIdentity& identity,
         copyLabel(identity.shortTag, slot.shortTag.data(), slot.shortTag.size());
         clearArray(slot.dryWaveform);
         clearArray(slot.wetWaveform);
+        clearArray(slot.dryLevelTrace);
+        clearArray(slot.wetLevelTrace);
         atomicRef(slot.active).store(1u, std::memory_order_release);
         atomicRef(slot.version).store(2u, std::memory_order_release);
 
@@ -201,6 +209,8 @@ int SnapshotRegistry::registerSlot(const ProductIdentity& identity,
         slot.instanceId = state->nextInstanceId++;
         slot.lastPublishMs = nowMs;
         slot.sampleRate = 48000.0;
+        slot.levelTraceSeconds = 0.0f;
+        slot.levelTraceCount = 0;
         slot.dryRms = 0.0f;
         slot.wetRms = 0.0f;
         slot.accentRgb = identity.theme.accentRgb;
@@ -208,6 +218,8 @@ int SnapshotRegistry::registerSlot(const ProductIdentity& identity,
         copyLabel(identity.shortTag, slot.shortTag.data(), slot.shortTag.size());
         clearArray(slot.dryWaveform);
         clearArray(slot.wetWaveform);
+        clearArray(slot.dryLevelTrace);
+        clearArray(slot.wetLevelTrace);
         atomicRef(slot.active).store(1u, std::memory_order_release);
         atomicRef(slot.version).store(2u, std::memory_order_release);
 
@@ -240,10 +252,14 @@ void SnapshotRegistry::unregisterSlot(const int slotIndex, const std::uint64_t i
     slot->silent = 1u;
     slot->lastPublishMs = 0;
     slot->sampleRate = 48000.0;
+    slot->levelTraceSeconds = 0.0f;
+    slot->levelTraceCount = 0;
     slot->dryRms = 0.0f;
     slot->wetRms = 0.0f;
     clearArray(slot->dryWaveform);
     clearArray(slot->wetWaveform);
+    clearArray(slot->dryLevelTrace);
+    clearArray(slot->wetLevelTrace);
     atomicRef(slot->version).store(version + 2u, std::memory_order_release);
 }
 
@@ -268,6 +284,8 @@ bool SnapshotRegistry::readSlot(const int slotIndex, SnapshotView& out) const no
         out.instanceId = slot->instanceId;
         out.lastPublishMs = slot->lastPublishMs;
         out.sampleRate = slot->sampleRate;
+        out.levelTraceSeconds = slot->levelTraceSeconds;
+        out.levelTraceCount = slot->levelTraceCount;
         out.dryRms = slot->dryRms;
         out.wetRms = slot->wetRms;
         out.accentRgb = slot->accentRgb;
@@ -275,6 +293,8 @@ bool SnapshotRegistry::readSlot(const int slotIndex, SnapshotView& out) const no
         out.shortTag = slot->shortTag;
         out.dryWaveform = slot->dryWaveform;
         out.wetWaveform = slot->wetWaveform;
+        out.dryLevelTrace = slot->dryLevelTrace;
+        out.wetLevelTrace = slot->wetLevelTrace;
 
         const auto versionEnd = atomicRef(slot->version).load(std::memory_order_acquire);
         if (versionStart == versionEnd && (versionEnd & 1u) == 0u)
@@ -308,11 +328,15 @@ DebugInfo SnapshotRegistry::debugInfo() const noexcept {
 bool SnapshotRegistry::publish(int slotIndex,
                                const std::uint64_t instanceId,
                                const double sampleRate,
+                               const float levelTraceSeconds,
+                               const int levelTraceCount,
                                const float dryRms,
                                const float wetRms,
                                const bool silent,
                                const std::array<float, kWaveformSamples>& dryWaveform,
-                               const std::array<float, kWaveformSamples>& wetWaveform) noexcept {
+                               const std::array<float, kWaveformSamples>& wetWaveform,
+                               const std::array<float, kLevelTraceSamples>& dryLevelTrace,
+                               const std::array<float, kLevelTraceSamples>& wetLevelTrace) noexcept {
     auto* slot = sharedSlotAt(slotIndex);
     if (slot == nullptr)
         return false;
@@ -325,10 +349,14 @@ bool SnapshotRegistry::publish(int slotIndex,
     slot->silent = silent ? 1u : 0u;
     slot->lastPublishMs = juce::Time::currentTimeMillis();
     slot->sampleRate = sampleRate;
+    slot->levelTraceSeconds = levelTraceSeconds;
+    slot->levelTraceCount = levelTraceCount;
     slot->dryRms = dryRms;
     slot->wetRms = wetRms;
     slot->dryWaveform = dryWaveform;
     slot->wetWaveform = wetWaveform;
+    slot->dryLevelTrace = dryLevelTrace;
+    slot->wetLevelTrace = wetLevelTrace;
     atomicRef(slot->version).store(version + 2u, std::memory_order_release);
     return true;
 }
@@ -356,6 +384,7 @@ void SnapshotPublisher::prepare(const double sampleRate, const int maxBlockSize)
     ensureRegistered();
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     publishIntervalSamples = std::max(512, std::min(kHistorySamples, static_cast<int>(currentSampleRate / 30.0)));
+    levelTraceBucketSizeSamples = publishIntervalSamples;
     samplesUntilPublish = std::max(publishIntervalSamples, std::max(1, maxBlockSize));
     reset();
 }
@@ -364,10 +393,19 @@ void SnapshotPublisher::reset() noexcept {
     writeIndex = 0;
     historyCount = 0;
     samplesUntilPublish = publishIntervalSamples;
+    levelTraceWriteIndex = 0;
+    levelTraceCount = 0;
+    levelTraceBucketSampleCount = 0;
+    dryLevelBucketSumSquares = 0.0;
+    wetLevelBucketSumSquares = 0.0;
     clearArray(dryHistory);
     clearArray(wetHistory);
     clearArray(dryWaveform);
     clearArray(wetWaveform);
+    clearArray(dryLevelHistory);
+    clearArray(wetLevelHistory);
+    clearArray(dryLevelTrace);
+    clearArray(wetLevelTrace);
 }
 
 void SnapshotPublisher::ensureRegistered() noexcept {
@@ -396,14 +434,20 @@ void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
 
     buildWaveform(dryHistory, dryWaveform);
     buildWaveform(wetHistory, wetWaveform);
+    buildLevelTrace(dryLevelHistory, levelTraceCount, levelTraceWriteIndex, dryLevelTrace);
+    buildLevelTrace(wetLevelHistory, levelTraceCount, levelTraceWriteIndex, wetLevelTrace);
     if (!SnapshotRegistry::instance().publish(slotIndex,
                                               instanceIdValue,
                                               currentSampleRate,
+                                              static_cast<float>(levelTraceCount * levelTraceBucketSizeSamples / currentSampleRate),
+                                              levelTraceCount,
                                               computeRms(dryHistory),
                                               computeRms(wetHistory),
                                               false,
                                               dryWaveform,
-                                              wetWaveform)) {
+                                              wetWaveform,
+                                              dryLevelTrace,
+                                              wetLevelTrace)) {
         slotIndex = -1;
         instanceIdValue = 0;
         ensureRegistered();
@@ -421,18 +465,31 @@ void SnapshotPublisher::publishSilence() noexcept {
     clearArray(wetHistory);
     clearArray(dryWaveform);
     clearArray(wetWaveform);
+    clearArray(dryLevelHistory);
+    clearArray(wetLevelHistory);
+    clearArray(dryLevelTrace);
+    clearArray(wetLevelTrace);
     writeIndex = 0;
     historyCount = 0;
     samplesUntilPublish = publishIntervalSamples;
+    levelTraceWriteIndex = 0;
+    levelTraceCount = 0;
+    levelTraceBucketSampleCount = 0;
+    dryLevelBucketSumSquares = 0.0;
+    wetLevelBucketSumSquares = 0.0;
 
     if (!SnapshotRegistry::instance().publish(slotIndex,
                                               instanceIdValue,
                                               currentSampleRate,
                                               0.0f,
+                                              0,
+                                              0.0f,
                                               0.0f,
                                               true,
                                               dryWaveform,
-                                              wetWaveform)) {
+                                              wetWaveform,
+                                              dryLevelTrace,
+                                              wetLevelTrace)) {
         slotIndex = -1;
         instanceIdValue = 0;
         ensureRegistered();
@@ -460,6 +517,20 @@ void SnapshotPublisher::pushHistory(const juce::AudioBuffer<float>& dryBuffer,
 
         dryHistory[static_cast<std::size_t>(writeIndex)] = dryMono * dryScale;
         wetHistory[static_cast<std::size_t>(writeIndex)] = wetMono * wetScale;
+        dryLevelBucketSumSquares += static_cast<double>(dryMono * dryScale) * static_cast<double>(dryMono * dryScale);
+        wetLevelBucketSumSquares += static_cast<double>(wetMono * wetScale) * static_cast<double>(wetMono * wetScale);
+        ++levelTraceBucketSampleCount;
+        if (levelTraceBucketSampleCount >= levelTraceBucketSizeSamples) {
+            dryLevelHistory[static_cast<std::size_t>(levelTraceWriteIndex)] =
+                static_cast<float>(std::sqrt(dryLevelBucketSumSquares / static_cast<double>(levelTraceBucketSampleCount)));
+            wetLevelHistory[static_cast<std::size_t>(levelTraceWriteIndex)] =
+                static_cast<float>(std::sqrt(wetLevelBucketSumSquares / static_cast<double>(levelTraceBucketSampleCount)));
+            levelTraceWriteIndex = (levelTraceWriteIndex + 1) % kLevelTraceSamples;
+            levelTraceCount = std::min(kLevelTraceSamples, levelTraceCount + 1);
+            levelTraceBucketSampleCount = 0;
+            dryLevelBucketSumSquares = 0.0;
+            wetLevelBucketSumSquares = 0.0;
+        }
         writeIndex = (writeIndex + 1) % kHistorySamples;
     }
 }
@@ -488,6 +559,24 @@ float SnapshotPublisher::computeRms(const std::array<float, kHistorySamples>& hi
         energy += static_cast<double>(sample) * static_cast<double>(sample);
 
     return static_cast<float>(std::sqrt(energy / static_cast<double>(history.size())));
+}
+
+void SnapshotPublisher::buildLevelTrace(const std::array<float, kLevelTraceSamples>& history,
+                                        const int count,
+                                        const int writePos,
+                                        std::array<float, kLevelTraceSamples>& trace) const noexcept {
+    clearArray(trace);
+    if (count <= 0)
+        return;
+
+    const int start = count >= kLevelTraceSamples ? writePos : 0;
+    for (int i = 0; i < count; ++i) {
+        const int index = count >= kLevelTraceSamples ? (start + i) % kLevelTraceSamples : i;
+        trace[static_cast<std::size_t>(i)] = history[static_cast<std::size_t>(index)];
+    }
+    const float fill = count > 0 ? trace[static_cast<std::size_t>(count - 1)] : 0.0f;
+    for (int i = count; i < kLevelTraceSamples; ++i)
+        trace[static_cast<std::size_t>(i)] = fill;
 }
 
 } // namespace vxsuite::spectrum

@@ -35,6 +35,7 @@ public:
     virtual bool isLearnActive() const noexcept { return false; }
     virtual bool isLearnReady() const noexcept { return false; }
     VoiceAnalysisSnapshot getVoiceAnalysisSnapshot() const noexcept { return voiceAnalysis.snapshot(); }
+    bool getSpectrumSnapshotView(spectrum::SnapshotView& out) const noexcept;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void reset() override;

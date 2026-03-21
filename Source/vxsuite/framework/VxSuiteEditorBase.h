@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VxSuiteLookAndFeel.h"
+#include "VxSuiteLevelTraceView.h"
 #include "VxSuiteProcessorBase.h"
 
 #include <array>
@@ -46,6 +47,7 @@ private:
     juce::Label statusLabel;
     juce::Label learnMeterLabel;
     juce::ProgressBar learnMeterBar { learnMeterUi };
+    juce::ComboBox traceZoomBox;
     juce::ComboBox modeBox;
     juce::ToggleButton listenButton;
     juce::TextButton learnButton;
@@ -69,11 +71,14 @@ private:
     std::unique_ptr<ButtonAttachment> listenAttachment;
     std::unique_ptr<ButtonAttachment> learnAttachment;
     juce::TooltipWindow tooltipWindow;
+    LevelTraceView levelTraceView;
     juce::Rectangle<int> activityStripBounds;
+    juce::Rectangle<int> traceViewBounds;
     juce::Rectangle<int> lowShelfIconBounds;
     juce::Rectangle<int> highShelfIconBounds;
     bool lastLowShelfOn  = false;
     bool lastHighShelfOn = false;
+    int traceMissTicks = 0;
     juce::String transientStatusText;
     int transientStatusTicks = 0;
 };

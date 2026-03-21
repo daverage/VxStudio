@@ -16,6 +16,7 @@ namespace vxsuite::spectrum {
 constexpr int kMaxTelemetrySlots = 24;
 constexpr int kWaveformSamples = 512;
 constexpr int kHistorySamples = 2048;
+constexpr int kLevelTraceSamples = 512;
 
 struct SnapshotView {
     bool active = false;
@@ -26,6 +27,8 @@ struct SnapshotView {
     std::uint64_t instanceId = 0;
     std::int64_t lastPublishMs = 0;
     double sampleRate = 48000.0;
+    float levelTraceSeconds = 0.0f;
+    int levelTraceCount = 0;
     float dryRms = 0.0f;
     float wetRms = 0.0f;
     std::array<float, 3> accentRgb { 0.8f, 0.8f, 0.8f };
@@ -33,6 +36,8 @@ struct SnapshotView {
     std::array<char, 12> shortTag {};
     std::array<float, kWaveformSamples> dryWaveform {};
     std::array<float, kWaveformSamples> wetWaveform {};
+    std::array<float, kLevelTraceSamples> dryLevelTrace {};
+    std::array<float, kLevelTraceSamples> wetLevelTrace {};
 };
 
 struct DebugInfo {
@@ -57,11 +62,15 @@ public:
     [[nodiscard]] bool publish(int slotIndex,
                                std::uint64_t instanceId,
                                double sampleRate,
+                               float levelTraceSeconds,
+                               int levelTraceCount,
                                float dryRms,
                                float wetRms,
                                bool silent,
                                const std::array<float, kWaveformSamples>& dryWaveform,
-                               const std::array<float, kWaveformSamples>& wetWaveform) noexcept;
+                               const std::array<float, kWaveformSamples>& wetWaveform,
+                               const std::array<float, kLevelTraceSamples>& dryLevelTrace,
+                               const std::array<float, kLevelTraceSamples>& wetLevelTrace) noexcept;
 
 private:
     static void copyLabel(std::string_view source, char* dest, std::size_t destSize) noexcept;
@@ -87,6 +96,10 @@ private:
                      const juce::AudioBuffer<float>& wetBuffer) noexcept;
     void buildWaveform(const std::array<float, kHistorySamples>& history,
                        std::array<float, kWaveformSamples>& waveform) const noexcept;
+    void buildLevelTrace(const std::array<float, kLevelTraceSamples>& history,
+                         int count,
+                         int writePos,
+                         std::array<float, kLevelTraceSamples>& trace) const noexcept;
     [[nodiscard]] float computeRms(const std::array<float, kHistorySamples>& history) const noexcept;
 
     ProductIdentity identityDescriptor;
@@ -98,10 +111,20 @@ private:
     int historyCount = 0;
     int publishIntervalSamples = 1600;
     int samplesUntilPublish = 1600;
+    int levelTraceWriteIndex = 0;
+    int levelTraceCount = 0;
+    int levelTraceBucketSizeSamples = 1600;
+    int levelTraceBucketSampleCount = 0;
+    double dryLevelBucketSumSquares = 0.0;
+    double wetLevelBucketSumSquares = 0.0;
     std::array<float, kHistorySamples> dryHistory {};
     std::array<float, kHistorySamples> wetHistory {};
     std::array<float, kWaveformSamples> dryWaveform {};
     std::array<float, kWaveformSamples> wetWaveform {};
+    std::array<float, kLevelTraceSamples> dryLevelHistory {};
+    std::array<float, kLevelTraceSamples> wetLevelHistory {};
+    std::array<float, kLevelTraceSamples> dryLevelTrace {};
+    std::array<float, kLevelTraceSamples> wetLevelTrace {};
 };
 
 } // namespace vxsuite::spectrum

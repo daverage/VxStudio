@@ -1,3 +1,105 @@
+# VxLeveler state-machine refactor + mode split — 2026-03-20
+
+## Problem
+The current leveller behavior still reads mostly as broad attenuation instead of intentional adaptive levelling, and the user has now provided two missing layers: explicit runtime states for speech-aware handling and a proper top-level split between `Voice` and `General` modes. The product also needs to be renamed to `VxLeveler`, and the implementation must be verified against the reported pumping/non-adaptive behavior rather than assumed correct from earlier synthetic checks.
+
+## Plan
+- [x] Refactor the leveller DSP around explicit mix states and a separate decision block, keeping the existing band split and stereo-aware handling.
+- [x] Split runtime behaviour into separate `Voice` and `General` decision engines over shared DSP primitives.
+- [x] Make the `Level` control more assertive by driving relative levelling decisions instead of a mostly fixed target window.
+- [x] Rename the product/build-facing identity from `VX Perform` to `VxLeveler` without disturbing unrelated VX Suite products.
+- [x] Rebuild the renamed plugin and regression target, then run focused verification on the levelling regression.
+- [x] Record the review result and the new lesson from this correction.
+
+## Review
+- `VxLeveler` now uses the shared framework mode selector with explicit `Voice` and `General` modes. `Voice` keeps the speech-aware state machine and stereo-aware side taming, while `General` uses a simpler anchor-based leveller plus non-semantic transient containment.
+- The DSP now commits to explicit `MixState` transitions in voice mode and maps them through a dedicated decision layer before applying shared lookahead/band/tame primitives. The level ride is now relative to a moving anchor instead of a fixed target window.
+- The product, plugin target, staged VST3 bundle, processor class, and regression coverage were renamed from `VXPerform` / `Perform` to `VXLeveler` / `Leveler`.
+- Verification passed with `cmake -S . -B build`, `cmake --build build --target VXLevelerPlugin VXSuitePluginRegressionTests -j4`, and `./build/VXSuitePluginRegressionTests`.
+
+# VxLeveler voice-mode file tuning — 2026-03-20
+
+## Problem
+`VxLeveler` now has separate `Voice` and `General` modes, but `Voice` mode still needs tuning against the user's actual `loud_quiet.wav` example rather than only the synthetic regression signal. We need a small file-based render/measure loop so the tuning can be based on the real capture and not inferred from screenshots alone.
+
+## Plan
+- [x] Add a tiny `VxLeveler` file render/measure harness that can read a WAV, process it in `Voice` or `General` mode, and print before/after level-spread metrics.
+- [x] Run the harness on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav` in `Voice` mode and inspect the current result.
+- [x] Tune `Voice` mode against that real-file result, rebuild, and rerun the measurement.
+- [x] Record the review result in this task log.
+
+## Review
+- Added `tests/VXLevelerMeasure.cpp` plus the `VXLevelerMeasure` CMake target so `VxLeveler` can be run directly on real WAV files with a printed before/after level-spread metric and a rendered output file.
+- On `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, the initial full-strength `Voice` mode run measured `12.9225 dB` input spread and `12.1673 dB` output spread, which confirmed the mode was helping but not strongly enough.
+- After tuning `Voice` mode to enter buried/guitar-dominant states earlier and intervene more aggressively, the same file now measures `11.8955 dB` output spread at full `Voice` settings, and the rendered output was written to `/Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav`.
+- A follow-up pass fixed the trace view so short live history no longer stretches across the entire zoom window and the trace no longer disappears just because the latest snapshot is marked silent; the view now anchors real history against the selected zoom window instead.
+- I also tested a steeper top-end dial remap, but the first version made the real-file spread worse, so I backed that out and kept the stronger measured `Voice` behavior instead of leaving a “more active but less effective” mapping in place.
+- Verified with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`, and `./build/VXSuitePluginRegressionTests`.
+
+# VxLeveler intervention redesign — 2026-03-20
+
+## Problem
+`VxLeveler` still behaves too much like a smooth average-driven rider and not enough like an intelligent intervention tool. The user wants the high end of the controls to step in decisively, and the previous attempt to get that through simple top-end remapping made the real-file result worse. The fix needs to be structural: add a true intervention path rather than biasing the same smooth law harder.
+
+## Plan
+- [x] Add a dedicated intervention path in `VxLeveler` that can apply stronger downward control and band-targeted recovery at high settings.
+- [x] Tune that path against `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, especially in `Voice` mode.
+- [x] Rebuild, rerun the real-file measurement harness, and rerun the regression suite.
+- [x] Record the outcome and lesson from the redesign pass.
+
+## Review
+- `VxLeveler` now has a separate intervention lane in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp) alongside the existing smooth rider. At high settings it can clamp loud “wrong winner” moments more decisively and add extra speech-band recovery only when the detector and state say it is warranted.
+- The trace fix in [VxSuiteLevelTraceView.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteLevelTraceView.cpp) remains in place, so short live history is anchored correctly in the selected zoom window and no longer presents as if it is erasing itself.
+- On `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, the verified measurements are now `12.9225 dB` dry to `11.8811 dB` wet in `Voice` mode and `12.9225 dB` dry to `12.8836 dB` wet in `General` mode.
+- Verified with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_general_test.wav general 1.0 1.0`, and `./build/VXSuitePluginRegressionTests`.
+
+# VxLeveler radical non-ML redesign research — 2026-03-20
+
+## Problem
+The current `VxLeveler` still is not achieving the product goal strongly enough. We need to step back, research the best non-ML path for “make the track feel more even while keeping it dynamic and uncompressed,” and decide whether `Voice` mode should remain purely detector-driven or whether a voice-extraction-assisted branch like DeepFilter is justified only for that mode.
+
+## Plan
+- [ ] Research primary references for loudness-based adaptive leveling and dynamic preservation, plus inspect the local DeepFilter path for possible reuse.
+- [ ] Choose the strongest framework-compatible non-ML redesign, with a clear recommendation on whether DeepFilter-assisted voice isolation should be avoided or used only for `Voice` mode.
+- [ ] Implement the selected redesign in `VxLeveler`.
+- [ ] Verify against the real file and the regression suite, then document the outcome.
+
+# VxLeveler harder non-ML voice intervention — 2026-03-20
+
+## Problem
+The user chose the non-ML path, and the current `Voice` mode is still too graceful: on the real `loud_quiet.wav` file it mostly rides the whole track rather than stepping in hard enough when the instrument wins. We need a more asymmetrical `Voice`-only intervention branch that clamps loud masking moments decisively at the top of the dials while keeping `General` mode restrained.
+
+## Plan
+- [x] Refactor `Voice` mode so high `Level` / `Control` settings can trigger a stronger override lane than the smooth rider alone.
+- [x] Tune the new intervention path against `/Users/andrzejmarczewski/Downloads/loud_quiet.wav` and keep only measured improvements.
+- [x] Rebuild `VXLeveler`, rerun `VXLevelerMeasure` for `Voice` and `General`, and rerun `VXSuitePluginRegressionTests`.
+- [x] Document the outcome here and add a lesson if this pass fixes a repeated mistake.
+
+## Review
+- `VxLeveler` `Voice` mode now keeps the existing smooth rider but adds a separate fast override lane in `Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp`. At high settings that lane can pull overall gain down faster, add extra speech-band lift, and deepen transient taming only when the detector reports real masking pressure in `guitarDominant` or `voiceBuried` states.
+- I tested more radical variants of the override law, including a deeper dB-style clamp and a peak-surge biased trigger, but those made the real-file result worse. The kept version is the strongest branch that still measured better on the user file.
+- Verified on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav` with `./build/VXLevelerMeasure`:
+  - `Voice`: `12.9225 dB` dry to `11.8952 dB` wet
+  - `General`: `12.9225 dB` dry to `12.8924 dB` wet
+- Rebuilt and restaged with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, and the regression suite passed with `./build/VXSuitePluginRegressionTests`.
+
+# VX Perform v2 levelling + reusable trace view — 2026-03-20
+
+## Problem
+`VX Perform` needs to behave more like a true whole-track leveller, and the user wants visible proof that the track is being made more consistent over time while adjusting controls. The current visual telemetry is too short-lived for that job, so the framework needs a reusable dry/wet level-history display with zoom, and `VX Perform` should move straight to a short-lookahead v2 architecture.
+
+## Plan
+- [x] Inspect the shared editor and telemetry hooks to find a reusable path for a dry/wet level-history display.
+- [x] Extend the shared framework telemetry to publish longer dry/wet level traces suitable for zoomable UI display.
+- [x] Add a reusable framework `LevelTraceView` and integrate it into the shared editor layout.
+- [x] Upgrade `VX Perform` to a short-lookahead leveller with stronger whole-track balancing and retained spike control.
+- [x] Rebuild the affected targets and verify the new plugin still builds cleanly.
+
+## Review
+- The shared spectrum telemetry now carries a longer dry/wet level-history trace, and the framework exposes it through a reusable `LevelTraceView` with zoom options in the shared editor shell.
+- `VX Perform` now uses a short lookahead (`~10 ms`) with fixed reported latency, stronger whole-track levelling behavior, and the earlier zero-setting transparency issue was corrected so latency-compensated neutral settings stay clean.
+- Verified with `cmake -S . -B build`, `cmake --build build --target VXSuitePluginRegressionTests -j4`, `./build/VXSuitePluginRegressionTests`, and `cmake --build build --target VXPerformPlugin -j4`.
+
 # VX Perform implementation — 2026-03-20
 
 ## Problem
@@ -30,7 +132,7 @@ We want to know whether the VX Suite framework can support a plugin for a single
 ## Review
 - The concept fits VX Suite if we ship it as a narrow adaptive dynamics tool rather than a source-separation product. The recommended v1 is a zero-latency mixed-track balancer with two knobs (`Clarity`, `Control`), no mode switch, and no `Listen` toggle.
 - The proposed DSP shape is: slow broadband leveller, speech-band upward lift, high-band transient containment, and a smoothed behaviour detector that biases those stages based on speech-like versus guitar-like dominance rather than hard switching states.
-- The full framework-aligned product spec is documented in `docs/VX_PERFORM_BALANCER_SPEC.md`, including identity, UX contract, DSP rules, realtime constraints, and verification targets.
+- The full framework-aligned product spec is documented in `docs/VX_LEVELER_SPEC.md`, including identity, UX contract, DSP rules, realtime constraints, and verification targets.
 
 # DSP hot-path pass (phase 1) — 2026-03-19
 
@@ -1634,3 +1736,15 @@ The remaining user report narrowed the residual Cleanup distortion down further:
 - `tests/VXSuitePluginRegressionTests.cpp` now includes a right-only stereo learn regression so asymmetric noise removal stays covered.
 - Verification: `cmake --build build --target VXSuitePluginRegressionTests -j4` succeeds. `./build/VXSuitePluginRegressionTests` no longer reports the subtract stereo/state-restore failures; the current remaining failure is an unrelated pre-existing `OptoComp` steady-state allocation regression.
 - Follow-up: `VXDenoiser` still processes stereo through a shared mono-mid noise path in `Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp`, so it needs a matching stereo-aware audit/fix rather than being assumed correct.
+
+---
+
+# Stereo-aware denoiser follow-up — 2026-03-20
+
+## Problem
+`VXDenoiser` still denoises one shared mono/mid stream and reconstructs stereo around it. That is not acceptable for stereo files where left and right carry different noise beds or one side is noisier than the other.
+
+## Plan
+- [ ] Add a stereo-specific regression that fails if right-only added noise is not treated materially more strongly on the right channel than the left.
+- [ ] Rework `VXDenoiser` from shared mono/mid denoising toward independent stereo denoising in the processor shell.
+- [ ] Rebuild and rerun the relevant regression target, document the result, and commit the fix.

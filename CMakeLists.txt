@@ -432,6 +432,34 @@ target_link_libraries(VXTone PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxsuite_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
+juce_add_plugin(VXLeveler
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxleveler"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXLV"
+)
+target_compile_definitions(VXLeveler PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXLeveler)
+target_sources(VXLeveler PRIVATE
+  Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+)
+target_include_directories(VXLeveler PRIVATE Source)
+target_link_libraries(VXLeveler PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXLevelerPlugin ALL DEPENDS VXLeveler_VST3)
+vxsuite_stage_vst3_bundle(VXLeveler_VST3 "VXLeveler")
+
 juce_add_plugin(VXStudioAnalyser
   FORMATS VST3
   COMPANY_NAME "VX Suite"
@@ -470,6 +498,7 @@ add_custom_target(VXSuite_VST3
     VXDenoiser_VST3
     VXDeepFilterNet_VST3
     VXTone_VST3
+    VXLeveler_VST3
     VXStudioAnalyser_VST3
     VXDeverbStage
     VXProximityStage
@@ -480,6 +509,7 @@ add_custom_target(VXSuite_VST3
     VXDenoiserStage
     VXDeepFilterNetStage
     VXToneStage
+    VXLevelerStage
     VXStudioAnalyserStage
   COMMENT "Building all VX Suite VST3 products")
 
@@ -515,6 +545,22 @@ target_link_libraries(VXDeverbMeasure PRIVATE
 )
 vxsuite_add_executable_test(VXDeverbMeasure)
 
+add_executable(VXLevelerMeasure
+  tests/VXLevelerMeasure.cpp
+  Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+)
+target_include_directories(VXLevelerMeasure PRIVATE Source tests)
+target_link_libraries(VXLevelerMeasure PRIVATE
+  VxSuiteFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VXLevelerMeasure PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxsuite_add_executable_test(VXLevelerMeasure)
+
 add_executable(VxSuiteVoiceAnalysisTests
   tests/VxSuiteVoiceAnalysisTests.cpp
 )
@@ -544,6 +590,9 @@ add_executable(VXSuitePluginRegressionTests
   Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
   Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxsuite/products/tone/VxToneProcessor.cpp
+  Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
   Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXSuitePluginRegressionTests PRIVATE Source tests)
@@ -587,3 +636,4 @@ vxsuite_add_pluginval_test(VXProximity)
 vxsuite_add_pluginval_test(VXStudioAnalyser)
 vxsuite_add_pluginval_test(VXSubtract)
 vxsuite_add_pluginval_test(VXTone)
+vxsuite_add_pluginval_test(VXLeveler)

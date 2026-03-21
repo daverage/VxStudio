@@ -2,6 +2,7 @@
 #include "../Source/vxsuite/products/deverb/VxDeverbProcessor.h"
 #include "../Source/vxsuite/products/denoiser/VxDenoiserProcessor.h"
 #include "../Source/vxsuite/products/OptoComp/VxOptoCompProcessor.h"
+#include "../Source/vxsuite/products/leveler/VxLevelerProcessor.h"
 #include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
 #include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
@@ -172,6 +173,71 @@ juce::AudioBuffer<float> makeCleanupVoicedEdgeCaseInput(const double sr, const f
     return buffer;
 }
 
+juce::AudioBuffer<float> makePerformInstrumentInput(const double sr, const float seconds) {
+    const int samples = static_cast<int>(sr * seconds);
+    juce::AudioBuffer<float> buffer(2, samples);
+    buffer.clear();
+    for (int i = 0; i < samples; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sr);
+        float sectionEnv = 0.40f;
+        if (t >= seconds * 0.20f && t < seconds * 0.42f)
+            sectionEnv = 1.00f;
+        else if (t >= seconds * 0.42f && t < seconds * 0.58f)
+            sectionEnv = 0.55f;
+        else if (t >= seconds * 0.58f && t < seconds * 0.82f)
+            sectionEnv = 1.15f;
+        else if (t >= seconds * 0.82f)
+            sectionEnv = 0.50f;
+        const float pulse = 0.5f + 0.5f * std::sin(2.0f * juce::MathConstants<float>::pi * 2.1f * t);
+        const float body = 0.34f * std::sin(2.0f * juce::MathConstants<float>::pi * 110.0f * t)
+                         + 0.22f * std::sin(2.0f * juce::MathConstants<float>::pi * 220.0f * t)
+                         + 0.14f * std::sin(2.0f * juce::MathConstants<float>::pi * 330.0f * t);
+        const float bite = 0.12f * std::sin(2.0f * juce::MathConstants<float>::pi * 2900.0f * t)
+                         * (0.35f + 0.65f * pulse);
+        const float transient = 0.10f * std::sin(2.0f * juce::MathConstants<float>::pi * 6100.0f * t)
+                              * std::pow(pulse, 6.0f);
+        const float sample = sectionEnv * (0.78f * body + bite + transient);
+        buffer.setSample(0, i, sample);
+        buffer.setSample(1, i, sample * 0.98f);
+    }
+    return buffer;
+}
+
+float windowedLevelSpreadDb(const juce::AudioBuffer<float>& buffer,
+                            const double sr,
+                            const float windowSeconds = 0.10f) {
+    const int channels = buffer.getNumChannels();
+    const int windowSamples = std::max(1, static_cast<int>(std::round(sr * windowSeconds)));
+    std::vector<float> levels;
+    for (int start = 0; start < buffer.getNumSamples(); start += windowSamples) {
+        const int end = std::min(buffer.getNumSamples(), start + windowSamples);
+        double energy = 0.0;
+        int count = 0;
+        for (int ch = 0; ch < channels; ++ch) {
+            const auto* data = buffer.getReadPointer(ch);
+            for (int i = start; i < end; ++i) {
+                energy += static_cast<double>(data[i]) * data[i];
+                ++count;
+            }
+        }
+        const float rms = count > 0 ? static_cast<float>(std::sqrt(energy / static_cast<double>(count))) : 0.0f;
+        levels.push_back(juce::Decibels::gainToDecibels(std::max(rms, 1.0e-5f), -100.0f));
+    }
+    if (levels.size() < 2)
+        return 0.0f;
+    double mean = 0.0;
+    for (float v : levels)
+        mean += v;
+    mean /= static_cast<double>(levels.size());
+    double variance = 0.0;
+    for (float v : levels) {
+        const double d = static_cast<double>(v) - mean;
+        variance += d * d;
+    }
+    variance /= static_cast<double>(levels.size());
+    return static_cast<float>(std::sqrt(variance));
+}
+
 bool testCleanupZeroIsIdentity() {
     constexpr double sr = 48000.0;
     auto dry = makeSpeechLike(sr, 1.0f);
@@ -245,6 +311,34 @@ bool primeSubtractLearn(VXSubtractAudioProcessor& processor, const double sr) {
     return true;
 }
 
+bool primeSubtractLearnRightOnly(VXSubtractAudioProcessor& processor, const double sr) {
+    juce::AudioBuffer<float> warmup(2, 256);
+    warmup.clear();
+    setParamNormalized(processor, "learn", 0.0f);
+    processSingleBlock(processor, warmup);
+
+    auto noise = makeNoise(sr, 0.8f, 0.10f);
+    for (int i = 0; i < noise.getNumSamples(); ++i)
+        noise.setSample(0, i, 0.0f);
+
+    setParamNormalized(processor, "learn", 1.0f);
+    juce::MidiBuffer midi;
+    constexpr int blockSize = 256;
+    for (int start = 0; start < noise.getNumSamples(); start += blockSize) {
+        const int num = std::min(blockSize, noise.getNumSamples() - start);
+        juce::AudioBuffer<float> block(2, num);
+        for (int ch = 0; ch < 2; ++ch)
+            block.copyFrom(ch, 0, noise, ch, start, num);
+        processor.processBlock(block, midi);
+    }
+
+    setParamNormalized(processor, "learn", 0.0f);
+    juce::AudioBuffer<float> stopBlock(2, 256);
+    stopBlock.clear();
+    processSingleBlock(processor, stopBlock);
+    return processor.isLearnReady();
+}
+
 bool testSubtractLearnLifecycleMakesSense() {
     constexpr double sr = 48000.0;
     VXSubtractAudioProcessor processor;
@@ -303,6 +397,43 @@ bool testSubtractListenOutputsMeaningfulRemovedDelta() {
     if (recombineDiff > 5.0e-2f) {
         std::cerr << "[VXSuitePluginRegression] Subtract wet/listen steady-state no longer recombines close to dry input: diff="
                   << recombineDiff << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractStereoLearnTreatsChannelsIndependently() {
+    constexpr double sr = 48000.0;
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, 256);
+    if (!primeSubtractLearnRightOnly(processor, sr))
+        return false;
+
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noise = makeNoise(sr, 1.0f, 0.08f);
+    juce::AudioBuffer<float> input(2, speech.getNumSamples());
+    input.copyFrom(0, 0, speech, 0, 0, speech.getNumSamples());
+    input.copyFrom(1, 0, speech, 1, 0, speech.getNumSamples());
+    input.addFrom(1, 0, noise, 1, 0, noise.getNumSamples());
+
+    setParamNormalized(processor, "subtract", 0.82f);
+    setParamNormalized(processor, "protect", 0.45f);
+    const auto out = render(processor, input, 256);
+
+    juce::AudioBuffer<float> inLeft(1, input.getNumSamples()), inRight(1, input.getNumSamples());
+    juce::AudioBuffer<float> outLeft(1, out.getNumSamples()), outRight(1, out.getNumSamples());
+    for (int i = 0; i < input.getNumSamples(); ++i) {
+        inLeft.setSample(0, i, input.getSample(0, i));
+        inRight.setSample(0, i, input.getSample(1, i));
+        outLeft.setSample(0, i, out.getSample(0, i));
+        outRight.setSample(0, i, out.getSample(1, i));
+    }
+
+    const float leftResidual = bestGainResidualRatioSkip(inLeft, outLeft, 4096);
+    const float rightResidual = bestGainResidualRatioSkip(inRight, outRight, 4096);
+    if (!(rightResidual > leftResidual + 0.03f)) {
+        std::cerr << "[VXSuitePluginRegression] Subtract stereo learn is still not channel-aware enough: leftResidual="
+                  << leftResidual << " rightResidual=" << rightResidual << "\n";
         return false;
     }
     return true;
@@ -847,6 +978,65 @@ bool testToneCenterIsIdentityAndExtremesStayBounded() {
     return true;
 }
 
+bool testLevelerZeroIsTransparentAndIdle() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+    input.applyGain(0.22f);
+
+    VXLevelerAudioProcessor leveler;
+    leveler.prepareToPlay(sr, 256);
+    const auto out = render(leveler, input, 256);
+
+    const float diff = maxAbsDiff(input, out);
+    if (diff > 1.0e-5f) {
+        std::cerr << "[VXSuitePluginRegression] Perform default state is no longer transparent at zero settings: diff="
+                  << diff << "\n";
+        return false;
+    }
+    if (leveler.getActivityLight(0) > 1.0e-4f
+        || leveler.getActivityLight(1) > 1.0e-4f
+        || leveler.getActivityLight(2) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Leveler telemetry stayed active at zero settings\n";
+        return false;
+    }
+    return true;
+}
+
+bool testLevelerImprovesLevelConsistencyOnHotInstrumentMix() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 1.2f);
+    speech.applyGain(0.42f);
+    auto instrument = makePerformInstrumentInput(sr, 1.2f);
+    instrument.applyGain(0.92f);
+    auto mix = addBuffers(speech, instrument);
+
+    const float peak = peakAbs(mix);
+    if (peak > 1.0e-6f)
+        mix.applyGain(0.88f / peak);
+
+    VXLevelerAudioProcessor leveler;
+    leveler.prepareToPlay(sr, 256);
+    setParamNormalized(leveler, "mode", 0.0f);
+    setParamNormalized(leveler, "level", 1.0f);
+    setParamNormalized(leveler, "control", 0.85f);
+    const auto out = render(leveler, mix, 256);
+
+    if (!allFinite(out) || peakAbs(out) > 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Leveler hot-mix recovery path became unstable\n";
+        return false;
+    }
+
+    const float drySpread = windowedLevelSpreadDb(mix, sr);
+    const float wetSpread = windowedLevelSpreadDb(out, sr);
+    if (!(wetSpread < drySpread * 0.98f)) {
+        std::cerr << "[VXSuitePluginRegression] Leveler no longer improves level consistency on a hot instrument mix: drySpread="
+                  << drySpread << " wetSpread=" << wetSpread << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testProximityExtremeIsBoundedAndAdditive() {
     constexpr double sr = 48000.0;
     auto input = makeSpeechLike(sr, 1.0f);
@@ -952,6 +1142,47 @@ bool testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes() {
     if (rms(generalOut) > inputRms * 0.80f) {
         std::cerr << "[VXSuitePluginRegression] Denoiser general mode barely reduced noise-only input: in="
                   << inputRms << " out=" << rms(generalOut) << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDenoiserStereoTreatsChannelsIndependently() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noise = makeNoise(sr, 1.0f, 0.24f);
+    juce::AudioBuffer<float> input(2, speech.getNumSamples());
+    input.copyFrom(0, 0, speech, 0, 0, speech.getNumSamples());
+    input.copyFrom(1, 0, speech, 1, 0, speech.getNumSamples());
+    input.addFrom(1, 0, noise, 1, 0, noise.getNumSamples());
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    setParamNormalized(denoiser, "clean", 1.0f);
+    setParamNormalized(denoiser, "guard", 0.10f);
+    setParamNormalized(denoiser, "mode", 1.0f);
+    const auto out = render(denoiser, input, 256);
+
+    juce::AudioBuffer<float> inLeft(1, input.getNumSamples()), inRight(1, input.getNumSamples());
+    juce::AudioBuffer<float> outLeft(1, out.getNumSamples()), outRight(1, out.getNumSamples());
+    for (int i = 0; i < input.getNumSamples(); ++i) {
+        inLeft.setSample(0, i, input.getSample(0, i));
+        inRight.setSample(0, i, input.getSample(1, i));
+        outLeft.setSample(0, i, out.getSample(0, i));
+        outRight.setSample(0, i, out.getSample(1, i));
+    }
+
+    juce::AudioBuffer<float> leftDelta(1, input.getNumSamples()), rightDelta(1, input.getNumSamples());
+    for (int i = 0; i < input.getNumSamples(); ++i) {
+        leftDelta.setSample(0, i, outLeft.getSample(0, i) - inLeft.getSample(0, i));
+        rightDelta.setSample(0, i, outRight.getSample(0, i) - inRight.getSample(0, i));
+    }
+
+    const float leftResidual = rmsSkip(leftDelta, 4096);
+    const float rightResidual = rmsSkip(rightDelta, 4096);
+    if (!(rightResidual > leftResidual + 0.006f)) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser stereo path is still not channel-aware enough: leftResidual="
+                  << leftResidual << " rightResidual=" << rightResidual << "\n";
         return false;
     }
     return true;
@@ -1515,6 +1746,14 @@ bool testNoSteadyStateAllocationsOnAudioThread() {
     if (!expectNoSteadyStateAllocations("tone", tone, speech))
         return false;
 
+    VXLevelerAudioProcessor leveler;
+    leveler.prepareToPlay(sr, 256);
+    setParamNormalized(leveler, "mode", 1.0f);
+    setParamNormalized(leveler, "level", 0.72f);
+    setParamNormalized(leveler, "control", 0.58f);
+    if (!expectNoSteadyStateAllocations("leveler", leveler, noisy))
+        return false;
+
     return true;
 }
 
@@ -1558,6 +1797,7 @@ int main() {
     ok &= testSubtractLearnStartsOnFirstPress();
     ok &= testSubtractLearnLifecycleMakesSense();
     ok &= testSubtractListenOutputsMeaningfulRemovedDelta();
+    ok &= testSubtractStereoLearnTreatsChannelsIndependently();
     ok &= testDeverbExtremeBlendStaysStable();
     ok &= testCleanupFinishSubtractChainStaysStable();
     ok &= testCleanupStrongSettingIsAudibleButBounded();
@@ -1573,10 +1813,13 @@ int main() {
     ok &= testFinishZeroAmountIsIdleAndTransparent();
     ok &= testOptoCompZeroAmountIsIdleAndTransparent();
     ok &= testToneCenterIsIdentityAndExtremesStayBounded();
+    ok &= testLevelerZeroIsTransparentAndIdle();
+    ok &= testLevelerImprovesLevelConsistencyOnHotInstrumentMix();
     ok &= testProximityExtremeIsBoundedAndAdditive();
     ok &= testDenoiserStrongSettingStaysCoherentAndBounded();
     ok &= testDenoiserStrongSettingRetainsUsefulLevelInBothModes();
     ok &= testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes();
+    ok &= testDenoiserStereoTreatsChannelsIndependently();
     ok &= testDenoiserZeroCleanKeepsPdcAlignedIdentity();
     ok &= testSubtractZeroKeepsPdcAlignedIdentity();
     ok &= testCleanupBlockSizeInvariance();

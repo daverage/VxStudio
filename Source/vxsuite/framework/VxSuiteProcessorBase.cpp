@@ -197,4 +197,20 @@ void ProcessorBase::renderAddedDeltaOutput(juce::AudioBuffer<float>& outputBuffe
     }
 }
 
+bool ProcessorBase::getSpectrumSnapshotView(spectrum::SnapshotView& out) const noexcept {
+    if (!spectrumPublisher.isActive())
+        return false;
+
+    for (int slotIndex = 0; slotIndex < spectrum::SnapshotRegistry::instance().maxSlots(); ++slotIndex) {
+        spectrum::SnapshotView snapshot;
+        if (!spectrum::SnapshotRegistry::instance().readSlot(slotIndex, snapshot))
+            continue;
+        if (snapshot.instanceId != spectrumPublisher.instanceId())
+            continue;
+        out = snapshot;
+        return true;
+    }
+    return false;
+}
+
 } // namespace vxsuite

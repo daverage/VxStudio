@@ -9,7 +9,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
     : juce::AudioProcessorEditor(&owner),
       processor(owner),
       lookAndFeel(owner.getProductIdentity().theme),
-      tooltipWindow(this, 700) {
+      tooltipWindow(this, 700),
+      levelTraceView(owner.getProductIdentity().theme) {
     auto makeMouseTransparent = [](auto& component) {
         component.setInterceptsMouseClicks(false, false);
     };
@@ -19,10 +20,10 @@ EditorBase::EditorBase(ProcessorBase& owner)
     const bool hasTertiary = owner.getProductIdentity().supportsTertiaryControl();
     const bool hasQuaternary = owner.getProductIdentity().supportsQuaternaryControl();
     setResizeLimits(hasQuaternary ? 920 : (hasTertiary ? 820 : 680),
-                    hasQuaternary ? 600 : (hasTertiary ? 540 : 500),
+                    hasQuaternary ? 700 : (hasTertiary ? 640 : 600),
                     1280,
-                    860);
-    setSize(hasQuaternary ? 1100 : (hasTertiary ? 950 : 760), hasQuaternary ? 620 : 540);
+                    940);
+    setSize(hasQuaternary ? 1100 : (hasTertiary ? 950 : 760), hasQuaternary ? 740 : 660);
 
     const auto& identity = processor.getProductIdentity();
 
@@ -87,6 +88,23 @@ EditorBase::EditorBase(ProcessorBase& owner)
     learnButton.setWantsKeyboardFocus(true);
     if (identity.supportsLearnButton())
         addAndMakeVisible(learnButton);
+
+    traceZoomBox.addItem("1.5 s", 1);
+    traceZoomBox.addItem("3 s", 2);
+    traceZoomBox.addItem("6 s", 3);
+    traceZoomBox.addItem("12 s", 4);
+    traceZoomBox.setSelectedId(3, juce::dontSendNotification);
+    traceZoomBox.onChange = [this] {
+        switch (traceZoomBox.getSelectedId()) {
+            case 1: levelTraceView.setZoomSeconds(1.5f); break;
+            case 2: levelTraceView.setZoomSeconds(3.0f); break;
+            case 4: levelTraceView.setZoomSeconds(12.0f); break;
+            case 3:
+            default: levelTraceView.setZoomSeconds(6.0f); break;
+        }
+    };
+    addAndMakeVisible(traceZoomBox);
+    addAndMakeVisible(levelTraceView);
     learnButton.setTooltip("Capture pure background noise only for about 1 to 2 seconds, then press again to stop and lock the profile.");
     learnMeterBar.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
     learnMeterLabel.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
@@ -287,10 +305,16 @@ void EditorBase::resized() {
     const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 800 : 600));
     activityLightCount = processor.getActivityLightCount();
     activityStripBounds = {};
+    traceViewBounds = {};
     if (activityLightCount > 0) {
         activityStripBounds = body.removeFromTop(scaled(38)).reduced(scaled(20), 0);
         body.removeFromTop(scaled(4));
     }
+    traceViewBounds = body.removeFromTop(stacked ? scaled(164) : scaled(150)).reduced(scaled(18), scaled(4));
+    levelTraceView.setBounds(traceViewBounds);
+    auto zoomBounds = traceViewBounds.removeFromTop(scaled(26));
+    traceZoomBox.setBounds(zoomBounds.removeFromRight(scaled(104)).reduced(0, scaled(2)));
+    body.removeFromTop(scaled(6));
 
     lowShelfIconBounds  = {};
     highShelfIconBounds = {};
@@ -504,6 +528,13 @@ void EditorBase::timerCallback() {
     }
     updateActivityIndicators();
     updateLearnUi();
+    vxsuite::spectrum::SnapshotView snapshot;
+    if (processor.getSpectrumSnapshotView(snapshot)) {
+        traceMissTicks = 0;
+        levelTraceView.setSnapshot(snapshot);
+    } else if (++traceMissTicks > 12) {
+        levelTraceView.setUnavailable();
+    }
 
     const auto& id = processor.getProductIdentity();
     auto& state    = processor.getValueTreeState();
