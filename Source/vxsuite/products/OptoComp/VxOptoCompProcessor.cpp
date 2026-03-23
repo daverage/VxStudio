@@ -111,13 +111,25 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = voiceMode
+        ? vxsuite::clamp01(0.38f * voiceContext.vocalDominance
+                         + 0.26f * voiceContext.intelligibility
+                         + 0.18f * voiceContext.phraseActivity
+                         + 0.10f * voiceContext.speechPresence
+                         + 0.08f * voiceContext.centerConfidence)
+        : 0.0f;
     const float gainSigned = juce::jlimit(-1.0f, 1.0f, (smoothedGain - 0.5f) / 0.5f);
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
-    dspParams.peakReduction = vxsuite::clamp01(smoothedPeakReduction);
+    dspParams.peakReduction = vxsuite::clamp01(smoothedPeakReduction
+                            * (voiceMode
+                                ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
+                                : 1.0f));
     dspParams.outputGainDb = gainSigned * 6.0f;
-    dspParams.body = vxsuite::clamp01(smoothedBody);
+    dspParams.body = vxsuite::clamp01(smoothedBody
+                    + (voiceMode ? 0.10f * vocalPriority * smoothedPeakReduction : 0.0f));
 
     optoDsp.setParams(dspParams);
     optoDsp.process(buffer);

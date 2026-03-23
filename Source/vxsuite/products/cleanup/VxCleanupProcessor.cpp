@@ -165,6 +165,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto& modePolicy = currentModePolicy();
     const auto analysis = getVoiceAnalysisSnapshot();
+    const auto voiceContext = getVoiceContextSnapshot();
     const float cleanup = vxsuite::clamp01(smoothedCleanup);
     const float body = vxsuite::clamp01(smoothedBody);
     const float focus = vxsuite::clamp01(smoothedFocus);
@@ -243,7 +244,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         spectral.harmonicity = vxsuite::clamp01(harmonicPeakPower / voicedBandPower * 1.6f);
     }
 
-    const auto evidence = vxsuite::polish::deriveAnalysisEvidence(tonalAnalysis, analysis);
+    const auto evidence = vxsuite::polish::deriveAnalysisEvidence(tonalAnalysis, analysis, voiceContext);
     const float preserveBody = juce::jlimit(0.0f, 1.0f,
                                             0.30f + 0.70f * body + 0.10f * analysis.protectVoice);
     const float correctiveLean = juce::jlimit(0.65f, 1.15f,
@@ -355,14 +356,17 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     params.recovery = 0.0f;
     params.smartGain = 0.0f;
     params.voicePreserve = juce::jlimit(0.0f, 1.0f,
-        0.60f + 0.40f * (voiceMode ? modePolicy.sourceProtect : 0.55f * modePolicy.sourceProtect));
+        0.56f
+      + 0.30f * (voiceMode ? modePolicy.sourceProtect : 0.55f * modePolicy.sourceProtect)
+      + 0.14f * (voiceMode ? voiceContext.vocalDominance : 0.0f));
     params.denoiseAmount = vxsuite::clamp01(cleanup * juce::jmax(tonalMudWeight, juce::jmax(sibilanceWeight, breathWeight)));
     params.artifactRisk = evidence.artifactRisk;
     params.compSidechainBoostDb = 0.0f;
     params.speechLoudnessDb = evidence.speechLoudnessDb;
     params.proximityContext = juce::jlimit(0.0f, 1.0f,
         0.55f * lowBias + 0.45f * evidence.proximityContext);
-    params.speechPresence = evidence.speechConfidence;
+    params.speechPresence = juce::jlimit(0.0f, 1.0f,
+        0.75f * evidence.speechConfidence + 0.25f * voiceContext.intelligibility);
     params.noiseFloorDb = evidence.noiseFloorDb;
     params.hpfOn = hpfOn;
     params.hiShelfOn = hiShelfOn;

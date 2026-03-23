@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxSuiteVoiceContext.h"
 #include "../../framework/VxSuiteVoiceAnalysis.h"
 #include "VxPolishTonalAnalysis.h"
 
@@ -24,7 +25,8 @@ struct AnalysisEvidence {
 };
 
 inline AnalysisEvidence deriveAnalysisEvidence(const TonalAnalysisState& tonal,
-                                               const vxsuite::VoiceAnalysisSnapshot& analysis) noexcept {
+                                               const vxsuite::VoiceAnalysisSnapshot& analysis,
+                                               const vxsuite::VoiceContextSnapshot& voiceContext) noexcept {
     AnalysisEvidence evidence {};
     evidence.inputEnv = std::max(tonal.inputEnv, 1.0e-6f);
     evidence.lowMidRatio = juce::jlimit(0.0f, 1.5f, tonal.lowMidEnv / evidence.inputEnv);
@@ -37,15 +39,29 @@ inline AnalysisEvidence deriveAnalysisEvidence(const TonalAnalysisState& tonal,
                                         0.55f * evidence.harshExcess
                                       + 0.45f * evidence.sizzleExcess);
     evidence.speechConfidence = juce::jlimit(0.0f, 1.0f,
-                                             0.45f * analysis.speechPresence
-                                           + 0.25f * analysis.speechStability
-                                           + 0.30f * analysis.protectVoice);
+                                             0.28f * analysis.speechPresence
+                                           + 0.18f * analysis.speechStability
+                                           + 0.20f * analysis.protectVoice
+                                           + 0.12f * voiceContext.speechPresence
+                                           + 0.12f * voiceContext.vocalDominance
+                                           + 0.10f * voiceContext.intelligibility);
     evidence.artifactRisk = juce::jlimit(0.0f, 1.0f,
-                                         0.50f * analysis.transientRisk
-                                       + 0.25f * analysis.tailLikelihood
-                                       + 0.25f * (1.0f - analysis.speechStability));
-    evidence.proximityContext = juce::jlimit(0.0f, 1.0f, 0.55f + 0.25f * (1.0f - analysis.directness));
-    evidence.speechLoudnessDb = juce::Decibels::gainToDecibels(evidence.inputEnv, -120.0f);
+                                         0.36f * analysis.transientRisk
+                                       + 0.18f * analysis.tailLikelihood
+                                       + 0.16f * (1.0f - analysis.speechStability)
+                                       + 0.12f * voiceContext.transientRisk
+                                       + 0.10f * voiceContext.phraseActivity
+                                       + 0.08f * voiceContext.intelligibility);
+    evidence.proximityContext = juce::jlimit(0.0f, 1.0f,
+                                             0.42f
+                                           + 0.18f * (1.0f - analysis.directness)
+                                           + 0.18f * voiceContext.centerConfidence
+                                           + 0.12f * voiceContext.vocalDominance
+                                           + 0.10f * voiceContext.phraseActivity);
+    const float speechWeightedEnv = std::max(1.0e-6f,
+                                             0.68f * evidence.inputEnv
+                                           + 0.32f * std::max(voiceContext.speechBandEnergy, 0.0f));
+    evidence.speechLoudnessDb = juce::Decibels::gainToDecibels(speechWeightedEnv, -120.0f);
     evidence.noiseFloorDb = juce::jlimit(-96.0f, -36.0f, tonal.noiseFloorDb);
     return evidence;
 }

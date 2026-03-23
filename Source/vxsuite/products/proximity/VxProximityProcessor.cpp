@@ -84,10 +84,23 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = isVoice
+        ? vxsuite::clamp01(0.35f * voiceContext.vocalDominance
+                         + 0.25f * voiceContext.intelligibility
+                         + 0.20f * voiceContext.phraseActivity
+                         + 0.20f * voiceContext.transientRisk)
+        : 0.0f;
+    const float effectiveCloser = isVoice
+        ? vxsuite::clamp01(smoothedCloser * (1.0f + 0.12f * voiceContext.buriedSpeech + 0.04f * voiceContext.phraseActivity))
+        : vxsuite::clamp01(smoothedCloser);
+    const float effectiveAir = isVoice
+        ? vxsuite::clamp01(smoothedAir * (1.0f - 0.12f * vocalPriority + 0.08f * voiceContext.intelligibility))
+        : vxsuite::clamp01(smoothedAir);
 
     proximityDsp.processInPlace(buffer, numSamples,
-                                vxsuite::clamp01(smoothedCloser),
-                                vxsuite::clamp01(smoothedAir),
+                                effectiveCloser,
+                                effectiveAir,
                                 isVoice);
 }
 

@@ -130,19 +130,31 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const bool isVoice  = vxsuite::readMode(parameters, productIdentity)
                        == vxsuite::Mode::vocal;
     const auto& policy  = currentModePolicy();
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = isVoice
+        ? vxsuite::clamp01(0.40f * voiceContext.vocalDominance
+                         + 0.30f * voiceContext.intelligibility
+                         + 0.20f * voiceContext.phraseActivity
+                         + 0.10f * voiceContext.speechPresence)
+        : 0.0f;
 
     // Map user controls + ModePolicy onto ProcessOptions
     vxsuite::ProcessOptions opts;
     const float effectiveClean = isVoice
-        ? vxsuite::clamp01(0.55f * smoothedClean)
+        ? vxsuite::clamp01((0.68f - 0.08f * vocalPriority - 0.03f * voiceContext.buriedSpeech) * smoothedClean)
         : vxsuite::clamp01(0.78f * smoothedClean);
     opts.isVoiceMode        = isVoice;
-    opts.sourceProtect      = isVoice ? vxsuite::clamp01(0.55f + 0.45f * smoothedGuard * policy.sourceProtect)
+    opts.sourceProtect      = isVoice ? vxsuite::clamp01(0.48f
+                                                       + 0.40f * smoothedGuard * policy.sourceProtect
+                                                       + 0.16f * vocalPriority)
                                       : vxsuite::clamp01(0.28f + 0.52f * smoothedGuard * policy.sourceProtect);
     opts.lateTailAggression = policy.lateTailAggression;
-    opts.guardStrictness    = isVoice ? vxsuite::clamp01(0.55f + 0.45f * smoothedGuard * policy.guardStrictness)
+    opts.guardStrictness    = isVoice ? vxsuite::clamp01(0.55f
+                                                       + 0.45f * smoothedGuard * policy.guardStrictness
+                                                       + 0.15f * vocalPriority)
                                       : vxsuite::clamp01(0.35f + 0.50f * smoothedGuard * policy.guardStrictness);
-    opts.speechFocus        = isVoice ? juce::jmax(0.78f, policy.speechFocus) : juce::jmax(0.18f, policy.speechFocus);
+    opts.speechFocus        = isVoice ? juce::jmax(0.78f, juce::jlimit(0.0f, 1.0f, policy.speechFocus + 0.12f * vocalPriority))
+                                      : juce::jmax(0.18f, policy.speechFocus);
 
     if (effectiveClean <= 1.0e-4f) {
         ensureLatencyAlignedListenDry(numSamples);
@@ -179,8 +191,12 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
             float compensationTarget = 1.0f;
             if (channelDryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
                 const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);
+                const float contextWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.65f * vocalPriority + 0.35f * voiceContext.phraseActivity)
+                                                    : 0.0f;
+                const float retentionWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.75f * speechWeight + 0.25f * contextWeight)
+                                                      : speechWeight;
                 const float retentionTarget = isVoice
-                    ? juce::jlimit(0.76f, 0.90f, (0.76f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight)
+                    ? juce::jlimit(0.72f, 0.88f, (0.72f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
                     : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
                 const float targetRms = channelDryRms * retentionTarget;
                 compensationTarget = juce::jlimit(1.0f, maxCompensation, targetRms / std::max(wetRms, 1.0e-6f));
@@ -200,8 +216,12 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         const float speechPresence = aggregatedSignalPresence(channels);
         if (dryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
             const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);
+            const float contextWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.65f * vocalPriority + 0.35f * voiceContext.phraseActivity)
+                                                : 0.0f;
+            const float retentionWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.75f * speechWeight + 0.25f * contextWeight)
+                                                  : speechWeight;
             const float retentionTarget = isVoice
-                ? juce::jlimit(0.76f, 0.90f, (0.76f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight)
+                ? juce::jlimit(0.72f, 0.88f, (0.72f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
                 : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
             const float targetRms = dryRms * retentionTarget;
             const float compensationTarget = juce::jlimit(1.0f,

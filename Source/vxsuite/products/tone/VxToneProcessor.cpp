@@ -94,9 +94,22 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     }
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
-    const float maxGainDb    = voiceMode ? kVocalMaxGainDb    : kGeneralMaxGainDb;
-    const float bassFreqHz   = voiceMode ? kVocalBassFreqHz   : kGeneralBassFreqHz;
-    const float trebleFreqHz = voiceMode ? kVocalTrebleFreqHz : kGeneralTrebleFreqHz;
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = voiceMode
+        ? vxsuite::clamp01(0.40f * voiceContext.vocalDominance
+                         + 0.30f * voiceContext.intelligibility
+                         + 0.20f * voiceContext.transientRisk
+                         + 0.10f * voiceContext.speechPresence)
+        : 0.0f;
+    const float maxGainDb = voiceMode
+        ? kVocalMaxGainDb * (1.0f - 0.18f * vocalPriority)
+        : kGeneralMaxGainDb;
+    const float bassFreqHz = voiceMode
+        ? juce::jlimit(150.0f, 220.0f, kVocalBassFreqHz - 40.0f * vocalPriority)
+        : kGeneralBassFreqHz;
+    const float trebleFreqHz = voiceMode
+        ? juce::jlimit(6000.0f, 7200.0f, kVocalTrebleFreqHz + 900.0f * vocalPriority)
+        : kGeneralTrebleFreqHz;
 
     // Map [0,1] → [-maxGainDb, +maxGainDb] with 0.5 = neutral
     const float bassGainDb   = (smoothedBass   - 0.5f) * 2.0f * maxGainDb;

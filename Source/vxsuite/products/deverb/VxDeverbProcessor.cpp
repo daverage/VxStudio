@@ -201,13 +201,24 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     options.labRawMode = true;
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = voiceMode
+        ? vxsuite::clamp01(0.36f * voiceContext.vocalDominance
+                         + 0.28f * voiceContext.intelligibility
+                         + 0.18f * voiceContext.phraseActivity
+                         + 0.10f * voiceContext.speechPresence
+                         + 0.08f * voiceContext.centerConfidence)
+        : 0.0f;
     deverbProcessor.voiceMode = voiceMode;
 
     // Pass reduce directly as the Wiener amount — at reduce=0, amount=0 so all
     // Wiener gains collapse to 1.0 (true bypass with no dry blend needed).
     // overSubtract still scales with reduce so depth ramps up with the knob.
     const float reduce = vxsuite::clamp01(smoothedReduce);
-    deverbProcessor.setOverSubtract(1.0f + 1.5f * reduce);
+    const float effectiveReduce = voiceMode
+        ? vxsuite::clamp01(reduce * (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech))
+        : reduce;
+    deverbProcessor.setOverSubtract(1.0f + 1.5f * effectiveReduce);
 
     const auto renderWet = [&](const float amount) {
         for (int ch = 0; ch < outputChannels; ++ch)
@@ -216,7 +227,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         deverbProcessor.processInPlace(wetView, amount, options);
     };
 
-    renderWet(reduce);
+    renderWet(effectiveReduce);
     if (!bufferIsStable(wetScratch, 4.0f)) {
         deverbProcessor.reset();
         for (int ch = 0; ch < outputChannels; ++ch)
@@ -227,9 +238,12 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     for (int ch = 0; ch < outputChannels; ++ch)
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
-    if (smoothedBody > 1.0e-4f)
-        applyBodyRestore(getLatencyAlignedListenDryBuffer(), buffer, smoothedBody, isFirstBlock);
-    applyLoudnessCompensation(buffer, dryRms, reduce, isFirstBlock);
+    const float effectiveBody = voiceMode
+        ? vxsuite::clamp01(smoothedBody + 0.10f * vocalPriority)
+        : smoothedBody;
+    if (effectiveBody > 1.0e-4f)
+        applyBodyRestore(getLatencyAlignedListenDryBuffer(), buffer, effectiveBody, isFirstBlock);
+    applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock);
 }
 
 void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {

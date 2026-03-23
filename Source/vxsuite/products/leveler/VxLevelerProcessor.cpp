@@ -23,14 +23,15 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     identity.primaryParamId = kLevelParam;
     identity.secondaryParamId = kControlParam;
     identity.modeParamId = kModeParam;
-    identity.selectorChoiceLabels = { "Voice", "General" };
+    identity.selectorChoiceLabels = { "Vocal Rider", "Mix Leveler" };
     identity.defaultMode = vxsuite::Mode::general;
     identity.primaryLabel = "Level";
     identity.secondaryLabel = "Control";
     identity.primaryDefaultValue = 0.0f;
     identity.secondaryDefaultValue = 0.0f;
-    identity.primaryHint = "Ride the performance toward a more even overall level without splitting the track.";
-    identity.secondaryHint = "Firm up spikes and containment while keeping the performance feeling alive.";
+    identity.primaryHint = "Ride voice phrases or the full mix toward a more even perceived level.";
+    identity.secondaryHint = "Set how firmly peaks and harsh bursts are contained without flattening the take.";
+    identity.showLevelTrace = true;
     identity.stageType = vxsuite::StageType::mixed;
     identity.theme.accentRgb = { 0.82f, 0.64f, 0.24f };
     identity.theme.accent2Rgb = { 0.12f, 0.10f, 0.06f };
@@ -42,8 +43,8 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
 
 juce::String VXLevelerAudioProcessor::getStatusText() const {
     return vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal
-        ? "Speech-aware adaptive levelling for instrument-to-camera performances"
-        : "General adaptive levelling for whole-track consistency";
+        ? "Intelligent vocal rider for speech-led performance recordings"
+        : "Adaptive mix leveler for whole-track consistency";
 }
 
 int VXLevelerAudioProcessor::getActivityLightCount() const noexcept { return 3; }
@@ -59,11 +60,15 @@ float VXLevelerAudioProcessor::getActivityLight(int index) const noexcept {
 
 std::string_view VXLevelerAudioProcessor::getActivityLightLabel(int index) const noexcept {
     switch (index) {
-        case 0: return "Lift";
+        case 0: return "Ride";
         case 1: return "Level";
-        case 2: return "Tame";
+        case 2: return "Protect";
         default: return {};
     }
+}
+
+void VXLevelerAudioProcessor::setDebugTuning(const vxsuite::leveler::Dsp::Tuning& tuning) noexcept {
+    dsp.setTuning(tuning);
 }
 
 void VXLevelerAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
@@ -71,14 +76,12 @@ void VXLevelerAudioProcessor::prepareSuite(const double sampleRate, const int sa
     detector.prepare(currentSampleRateHz, samplesPerBlock);
     dsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     setReportedLatencySamples(dsp.latencySamples());
-    outputTrimmer.setReleaseSeconds(0.20f);
     resetSuite();
 }
 
 void VXLevelerAudioProcessor::resetSuite() {
     detector.reset();
     dsp.reset();
-    outputTrimmer.reset();
     smoothedLevel = 0.0f;
     smoothedControl = 0.0f;
     controlsPrimed = false;
@@ -109,10 +112,11 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     params.control = juce::jlimit(0.0f, 1.0f, smoothedControl);
     params.voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
 
-    const auto detectorSnapshot = detector.analyse(buffer, getVoiceAnalysisSnapshot());
+    const auto detectorSnapshot = detector.analyse(buffer,
+                                                   getVoiceAnalysisSnapshot(),
+                                                   getVoiceContextSnapshot());
     dsp.setParams(params);
     dsp.process(buffer, detectorSnapshot);
-    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)

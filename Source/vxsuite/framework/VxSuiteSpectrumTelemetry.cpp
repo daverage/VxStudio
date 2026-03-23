@@ -586,7 +586,7 @@ namespace vxsuite::analysis {
 namespace {
 
 constexpr std::uint32_t kAnalysisSharedMagic = 0x5658414Eu; // VXAN
-constexpr std::uint32_t kAnalysisSharedVersion = 2u;
+constexpr std::uint32_t kAnalysisSharedVersion = 3u;
 constexpr auto kAnalysisSharedLockName = "vxsuite-analysis-telemetry-lock";
 constexpr auto kAnalysisSharedFileName = "vxsuite-analysis-telemetry.bin";
 constexpr auto kDomainSharedFileName = "vxsuite-analysis-domains.bin";
@@ -620,7 +620,21 @@ struct SharedDomainSlot {
     std::uint64_t analysisDomainId = 0;
     std::uint64_t hostProcessId = 0;
     std::uint64_t creationTimeMs = 0;
+    std::array<char, 32> ownerStageId {};
 };
+
+float spectrumCosineSimilarity(
+    const std::array<float, kSummarySpectrumBins>& a,
+    const std::array<float, kSummarySpectrumBins>& b) noexcept {
+    double dot = 0.0, normA = 0.0, normB = 0.0;
+    for (std::size_t i = 0; i < kSummarySpectrumBins; ++i) {
+        dot   += static_cast<double>(a[i]) * b[i];
+        normA += static_cast<double>(a[i]) * a[i];
+        normB += static_cast<double>(b[i]) * b[i];
+    }
+    const double denom = std::sqrt(normA * normB);
+    return denom > 0.0 ? static_cast<float>(dot / denom) : 0.0f;
+}
 
 struct SharedDomainState {
     std::uint32_t magic = 0;
@@ -1015,7 +1029,7 @@ DomainRegistry& DomainRegistry::instance() noexcept {
     return registry;
 }
 
-std::uint64_t DomainRegistry::registerAnalyserDomain() noexcept {
+std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view ownerStageId) noexcept {
     auto* state = domainState();
     if (state == nullptr)
         return 0;
@@ -1034,6 +1048,9 @@ std::uint64_t DomainRegistry::registerAnalyserDomain() noexcept {
         slot.analysisDomainId = state->nextDomainId++;
         slot.hostProcessId = pid;
         slot.creationTimeMs = nowMs;
+        slot.ownerStageId.fill('\0');
+        const auto copyLen = std::min(ownerStageId.size(), slot.ownerStageId.size() - 1);
+        std::memcpy(slot.ownerStageId.data(), ownerStageId.data(), copyLen);
         analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
         return slot.analysisDomainId;
@@ -1112,6 +1129,39 @@ bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
         }
     }
     return found;
+}
+
+int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
+                                          std::array<std::uint64_t, kMaxDomains>& out) const noexcept {
+    auto* state = domainState();
+    if (state == nullptr)
+        return 0;
+    int count = 0;
+    for (auto& slot : state->slots) {
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if (slot.hostProcessId != hostProcessId)
+            continue;
+        if (count < static_cast<int>(out.size()))
+            out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
+    }
+    return count;
+}
+
+bool DomainRegistry::ownerStageIdForDomain(const std::uint64_t domainId,
+                                            std::array<char, 32>& out) const noexcept {
+    auto* state = domainState();
+    if (state == nullptr || domainId == 0)
+        return false;
+    for (auto& slot : state->slots) {
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if (slot.analysisDomainId != domainId)
+            continue;
+        out = slot.ownerStageId;
+        return true;
+    }
+    return false;
 }
 
 std::uint64_t DomainRegistry::currentProcessId() const noexcept {
@@ -1246,6 +1296,34 @@ bool StageRegistry::readStage(const int slotIndex, StageView& out) const noexcep
     return false;
 }
 
+bool StageRegistry::findStageByDomainAndStageId(const std::uint64_t domainId,
+                                                 const std::array<char, 32>& stageId,
+                                                 StageView& out) const noexcept {
+    auto* state = analysisState();
+    if (state == nullptr || domainId == 0)
+        return false;
+
+    const std::string_view target(stageId.data(),
+                                  strnlen(stageId.data(), stageId.size()));
+
+    for (int i = 0; i < static_cast<int>(state->slots.size()); ++i) {
+        auto& slot = state->slots[static_cast<std::size_t>(i)];
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if (slot.analysisDomainId != domainId)
+            continue;
+        const std::string_view slotStageId(slot.telemetry.identity.stageId.data(),
+                                           strnlen(slot.telemetry.identity.stageId.data(),
+                                                   slot.telemetry.identity.stageId.size()));
+        if (slotStageId != target)
+            continue;
+
+        if (readStage(i, out))
+            return true;
+    }
+    return false;
+}
+
 StagePublisher::StagePublisher(const ProductIdentity& identity)
     : identityDescriptor(identity),
       inputAccumulator(std::make_unique<SummaryAccumulator>()),
@@ -1313,12 +1391,59 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
         return;
 
     domainRefreshCountdown = kDomainRefreshSamples;
-    DomainView domain;
-    const auto& registry = DomainRegistry::instance();
-    const bool foundDomain =
-        registry.latestDomainForProcess(registry.currentProcessId(), domain)
-        || registry.latestActiveDomain(domain);
-    const auto newDomainId = foundDomain ? domain.analysisDomainId : 0;
+
+    const auto& domainReg = DomainRegistry::instance();
+    const auto& stageReg  = StageRegistry::instance();
+    const auto pid = domainReg.currentProcessId();
+
+    std::array<std::uint64_t, kMaxDomains> domainIds {};
+    const int domainCount = domainReg.allDomainsForProcess(pid, domainIds);
+
+    std::uint64_t newDomainId = 0;
+
+    if (domainCount == 1) {
+        newDomainId = domainIds[0];
+    } else if (domainCount > 1 && outputAccumulator != nullptr) {
+        const auto myOutput = outputAccumulator->summary();
+        const bool hasSignal = myOutput.rms > 1.0e-6f;
+
+        if (hasSignal) {
+            constexpr float kMatchThreshold = 0.90f;
+            float bestSim = kMatchThreshold;
+
+            for (int i = 0; i < domainCount; ++i) {
+                const auto domId = domainIds[static_cast<std::size_t>(i)];
+                std::array<char, 32> ownerStageId {};
+                if (!domainReg.ownerStageIdForDomain(domId, ownerStageId))
+                    continue;
+                StageView analyserStage;
+                if (!stageReg.findStageByDomainAndStageId(domId, ownerStageId, analyserStage))
+                    continue;
+                const float sim = spectrumCosineSimilarity(
+                    myOutput.spectrum,
+                    analyserStage.telemetry.inputSummary.spectrum);
+                if (sim > bestSim) {
+                    bestSim = sim;
+                    newDomainId = domId;
+                }
+            }
+        }
+
+        // No spectral match: if current binding is still valid in this process, keep it.
+        if (newDomainId == 0 && !force && analysisDomainIdValue != 0) {
+            for (int i = 0; i < domainCount; ++i) {
+                if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue)
+                    return;
+            }
+        }
+
+        // Fallback to the most recently created domain in this process.
+        if (newDomainId == 0) {
+            DomainView latest;
+            if (domainReg.latestDomainForProcess(pid, latest))
+                newDomainId = latest.analysisDomainId;
+        }
+    }
 
     if (!force && newDomainId == analysisDomainIdValue)
         return;

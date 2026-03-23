@@ -561,6 +561,22 @@ target_link_libraries(VXLevelerMeasure PRIVATE
 target_compile_definitions(VXLevelerMeasure PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxsuite_add_executable_test(VXLevelerMeasure)
 
+add_executable(VXLevelerTuneSearch
+  tests/VXLevelerTuneSearch.cpp
+  Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+)
+target_include_directories(VXLevelerTuneSearch PRIVATE Source tests)
+target_link_libraries(VXLevelerTuneSearch PRIVATE
+  VxSuiteFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VXLevelerTuneSearch PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxsuite_add_executable_test(VXLevelerTuneSearch)
+
 add_executable(VxSuiteVoiceAnalysisTests
   tests/VxSuiteVoiceAnalysisTests.cpp
 )
@@ -603,6 +619,41 @@ target_link_libraries(VXSuitePluginRegressionTests PRIVATE
 )
 target_compile_definitions(VXSuitePluginRegressionTests PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxsuite_add_executable_test(VXSuitePluginRegressionTests)
+
+add_executable(VXSuiteBatchAudioCheck
+  tests/VXSuiteBatchAudioCheck.cpp
+  Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp
+  Source/vxsuite/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxsuite/products/deverb/VxDeverbProcessor.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxsuite/products/deverb/dsp/VxDeverbWpeStage.cpp
+  Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp
+  Source/vxsuite/products/denoiser/dsp/VxDenoiserDsp.cpp
+  Source/vxsuite/products/finish/VxFinishProcessor.cpp
+  Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp
+  Source/vxsuite/products/OptoComp/OptoCompressorLA2A.cpp
+  Source/vxsuite/products/OptoComp/VxOptoCompProcessor.cpp
+  Source/vxsuite/products/proximity/VxProximityProcessor.cpp
+  Source/vxsuite/products/proximity/dsp/VxProximityDsp.cpp
+  Source/vxsuite/products/subtract/VxSubtractProcessor.cpp
+  Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp
+  Source/vxsuite/products/tone/VxToneProcessor.cpp
+  Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
+)
+target_include_directories(VXSuiteBatchAudioCheck PRIVATE Source tests)
+target_link_libraries(VXSuiteBatchAudioCheck PRIVATE
+  VxSuiteFramework
+  Eigen3::Eigen
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VXSuiteBatchAudioCheck PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxsuite_add_executable_test(VXSuiteBatchAudioCheck)
 
 add_executable(VXSuiteProfile
   tests/VXSuiteProfile.cpp

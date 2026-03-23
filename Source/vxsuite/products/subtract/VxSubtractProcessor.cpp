@@ -142,6 +142,13 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     }
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = isVoice
+        ? vxsuite::clamp01(0.40f * voiceContext.vocalDominance
+                         + 0.25f * voiceContext.intelligibility
+                         + 0.20f * voiceContext.phraseActivity
+                         + 0.15f * voiceContext.speechPresence)
+        : 0.0f;
     const bool learnRequested = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     const bool learnStartEdge = learnRequested && !learnToggleLatched;
     const bool learnStopEdge = !learnRequested && learnToggleLatched;
@@ -169,15 +176,15 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
 
     vxsuite::ProcessOptions options {};
     options.isVoiceMode = isVoice;
-    options.sourceProtect = isVoice ? vxsuite::clamp01(0.55f + 0.45f * protectStrength)
+    options.sourceProtect = isVoice ? vxsuite::clamp01(0.64f + 0.36f * protectStrength + 0.18f * vocalPriority)
                                     : vxsuite::clamp01(0.12f + 0.38f * protectStrength);
-    options.guardStrictness = isVoice ? vxsuite::clamp01(0.75f * protectStrength)
+    options.guardStrictness = isVoice ? vxsuite::clamp01(0.82f * protectStrength + 0.16f * vocalPriority)
                                       : vxsuite::clamp01(0.30f * protectStrength);
-    options.speechFocus = isVoice ? vxsuite::clamp01(0.72f + 0.28f * protectStrength) : 0.12f;
+    options.speechFocus = isVoice ? vxsuite::clamp01(0.78f + 0.22f * protectStrength + 0.12f * vocalPriority) : 0.12f;
     options.learningActive = learningActiveNow;
-    options.subtract = isVoice ? (4.15f * subtractStrength)
+    options.subtract = isVoice ? (3.45f * subtractStrength * (1.0f - 0.18f * vocalPriority))
                                : (5.00f * subtractStrength);
-    options.sensitivity = isVoice ? (0.85f + 0.50f * (1.0f - protectStrength))
+    options.sensitivity = isVoice ? ((0.78f + 0.42f * (1.0f - protectStrength)) * (1.0f - 0.08f * vocalPriority))
                                   : (1.10f + 0.55f * (1.0f - protectStrength));
     options.labRawMode = false;
 

@@ -21,6 +21,7 @@ constexpr float kMidHighBoundaryHz = 2000.0f;
 constexpr float kDisplaySlopeDbPerOct = 4.5f;
 constexpr float kDisplaySlopeReferenceHz = 1000.0f;
 
+constexpr int kMaxSpectrumHistoryFrames = 300;
 constexpr std::array<int, 9> kAverageTimeOptionsMs { 100, 250, 500, 1000, 1500, 2000, 3000, 5000, 10000 };
 constexpr std::array<const char*, 7> kSmoothingOptions {
     "Off", "1/12 OCT", "1/9 OCT", "1/6 OCT", "1/3 OCT", "1/2 OCT", "1 OCT"
@@ -329,6 +330,7 @@ std::array<juce::String, 4> buildDynamicsSummary(const juce::String& title,
     };
 }
 
+
 } // namespace
 
 VXStudioAnalyserEditor::VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor& owner)
@@ -516,9 +518,10 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
             g.drawRoundedRectangle(rowBounds, 12.0f, 1.0f);
 
             const auto indicator = rowBounds.removeFromLeft(5.0f);
-            const auto impactColour = row.classText == "Dynamic" ? juce::Colour(0xff63d0ff)
-                                     : row.classText == "Tone" ? juce::Colour(0xffffb15c)
-                                     : row.classText == "Sparse" ? juce::Colour(0xffd9d38b)
+            const auto impactColour = row.typeLabel == "Dynamic" ? juce::Colour(0xff63d0ff)
+                                     : row.typeLabel == "Tone"    ? juce::Colour(0xffffb15c)
+                                     : row.typeLabel == "Sparse"  ? juce::Colour(0xffd9d38b)
+                                     : row.typeLabel == "Waiting" ? juce::Colours::white.withAlpha(0.25f)
                                      : juce::Colour(0xff8cd9bf);
             g.setColour(impactColour.withAlpha(row.selected ? 0.90f : 0.55f));
             g.fillRoundedRectangle(indicator.reduced(0.0f, 7.0f), 2.0f);
@@ -536,9 +539,13 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
             g.setFont(juce::FontOptions().withHeight(12.0f));
             g.drawFittedText(row.stateText, top.toNearestInt(), juce::Justification::centredRight, 1);
 
+            const auto secondLine = row.typeLabel == "Waiting"
+                ? juce::String("Waiting for telemetry")
+                : row.impactText + "  |  " + row.typeLabel
+                    + (row.freqHint.isEmpty() ? "" : "  " + row.freqHint);
             g.setColour(text.withAlpha(0.68f));
             g.setFont(juce::FontOptions().withHeight(11.8f));
-            g.drawFittedText(row.impactText + "  |  " + row.classText,
+            g.drawFittedText(secondLine,
                              content.withTrimmedTop(2.0f).toNearestInt(),
                              juce::Justification::centredLeft,
                              2);
@@ -555,10 +562,14 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
     if (!currentRenderModel.valid) {
         g.setColour(text.withAlpha(0.84f));
         g.setFont(juce::FontOptions().withHeight(24.0f).withStyle("Bold"));
-        g.drawFittedText("Waiting for live signal", plotBounds.reduced(40, 80), juce::Justification::centred, 1);
+        const bool isBypassed = currentRenderModel.bypassed;
+        g.drawFittedText(isBypassed ? "Analyser is bypassed" : "Waiting for live signal",
+                         plotBounds.reduced(40, 80), juce::Justification::centred, 1);
         g.setFont(juce::FontOptions().withHeight(14.0f));
         g.setColour(text.withAlpha(0.60f));
-        g.drawFittedText("Insert VX Studio Analyser last in the chain. It will show the dry baseline even before other VX stages join.",
+        g.drawFittedText(isBypassed
+                             ? "Enable the plugin in the host to resume analysis."
+                             : "Insert VX Studio Analyser last in the chain. It will show the dry baseline even before other VX stages join.",
                          plotBounds.reduced(80, 130),
                          juce::Justification::centred,
                          2);
@@ -785,11 +796,9 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
     std::vector<StageEntry> externalStages;
-    std::vector<StageEntry> fallbackStages;
     std::vector<SnapshotEntry> snapshotStages;
     std::optional<StageEntry> analyserStage;
     externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
-    fallbackStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
     snapshotStages.reserve(vxsuite::spectrum::SnapshotRegistry::instance().maxSlots());
 
     for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
@@ -801,8 +810,9 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         if (labelFromChars(stage.telemetry.identity.pluginFamily) != "VXSuite")
             continue;
         const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
-        const bool inCurrentDomain = stage.analysisDomainId == processor.analysisDomainId();
-        if (stageAgeMs > (inCurrentDomain ? kStaleThresholdMs : kFallbackStageThresholdMs))
+        if (stageAgeMs > kStaleThresholdMs)
+            continue;
+        if (stage.analysisDomainId != processor.analysisDomainId())
             continue;
 
         StageEntry entry;
@@ -836,17 +846,16 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         const auto sparseStage = classifySparseTone(stage.telemetry.inputSummary.spectrum,
                                                     stage.telemetry.outputSummary.spectrum,
                                                     stageDeltaDb);
-        entry.classText = "@" + formatFrequency(bandCenterHz(largestStageBand))
-                        + (sparseStage.sparse ? "  Sparse" : "");
+        entry.typeLabel = sparseStage.sparse ? "Sparse"
+                                             : classLabel(entry.spectralChange, entry.dynamicChange, entry.stereoChange);
+        entry.freqHint = "@" + formatFrequency(bandCenterHz(largestStageBand));
 
         if (entry.stageId == processor.stageIdString()) {
             analyserStage = entry;
             continue;
         }
 
-        if (inCurrentDomain)
-            externalStages.push_back(entry);
-        fallbackStages.push_back(std::move(entry));
+        externalStages.push_back(std::move(entry));
     }
 
     for (int slotIndex = 0; slotIndex < vxsuite::spectrum::SnapshotRegistry::instance().maxSlots(); ++slotIndex) {
@@ -918,15 +927,32 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         return a.displayName < b.displayName;
     });
 
-    bool usingFallbackStages = false;
-    if (externalStages.empty() && !fallbackStages.empty()) {
-        externalStages = fallbackStages;
-        usingFallbackStages = true;
-    }
-
     std::sort(externalStages.begin(), externalStages.end(), [](const auto& a, const auto& b) {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
     });
+
+    const bool hasAnalyserSignal = analyserStage.has_value()
+        && analyserStage->view.telemetry.inputSummary.rms > 1.0e-6f;
+
+    // Build canonical key set from domain stages so we can filter the sidebar.
+    std::vector<juce::String> chainStageKeys;
+    chainStageKeys.reserve(externalStages.size() * 2);
+    for (const auto& stage : externalStages) {
+        chainStageKeys.push_back(canonicalStageKey(stage.stageName));
+        chainStageKeys.push_back(canonicalStageKey(stage.stageId));
+    }
+
+    // When we have a live signal, strip the sidebar of snapshots that don't belong
+    // to our domain (i.e. plugins from other tracks).
+    if (hasAnalyserSignal && !chainStageKeys.empty()) {
+        sidebarSnapshotCache.erase(
+            std::remove_if(sidebarSnapshotCache.begin(), sidebarSnapshotCache.end(),
+                [&](const SidebarSnapshotCacheEntry& cached) {
+                    return std::none_of(chainStageKeys.begin(), chainStageKeys.end(),
+                        [&](const juce::String& key) { return key == cached.canonicalKey; });
+                }),
+            sidebarSnapshotCache.end());
+    }
 
     struct StageMatchKey {
         juce::String nameKey;
@@ -953,10 +979,18 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         fullChainSelected.store(true);
     }
 
+    if (analyserStage.has_value() && analyserStage->view.telemetry.state.isBypassed) {
+        currentRenderModel = {};
+        currentRenderModel.bypassed = true;
+        currentRenderModel.valid = false;
+        currentRenderModel.selectionTitle = "Bypassed";
+        currentRenderModel.statusText = "Analyser is bypassed";
+        currentRenderModel.summaryLines = { "Analyser bypassed", "Plugin is disabled in the host", "", "" };
+        return;
+    }
+
     RenderModel model;
-    model.fallbackStages = usingFallbackStages;
     model.snapshotFallback = externalStages.empty() && !snapshotStages.empty();
-    model.generation = ++renderGeneration;
     int matchedTelemetryRows = 0;
 
     if (!sidebarSnapshotCache.empty() || !externalStages.empty()) {
@@ -969,9 +1003,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 const auto& stageNameKey = externalStageKeys[static_cast<std::size_t>(index)].nameKey;
                 const auto& stageIdKey = externalStageKeys[static_cast<std::size_t>(index)].idKey;
                 if (stageNameKey == snapshot.canonicalKey
-                    || stageIdKey == snapshot.canonicalKey
-                    || stageIdKey.contains(snapshot.canonicalKey)
-                    || snapshot.canonicalKey.contains(stageIdKey)) {
+                    || stageIdKey == snapshot.canonicalKey) {
                     matchedStageIndex = index;
                     break;
                 }
@@ -985,7 +1017,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                     snapshot.displayName,
                     stage.stateText,
                     stage.impactText,
-                    stage.classText,
+                    stage.typeLabel,
+                    stage.freqHint,
                     !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
                 });
                 model.chainRowStageIndices.push_back(matchedStageIndex);
@@ -995,8 +1028,9 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                     (nowMs - static_cast<std::uint64_t>(std::max<std::int64_t>(0, snapshot.lastPublishMs))) > kStaleThresholdMs
                         ? "Holding"
                         : (snapshot.silent ? "Silent" : "Live"),
-                    snapshot.shortTag,
-                    "Waiting for telemetry",
+                    "",
+                    "Waiting",
+                    "",
                     !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
                 });
                 model.chainRowStageIndices.push_back(-1);
@@ -1013,7 +1047,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 displayStageName(stage.stageName),
                 stage.stateText,
                 stage.impactText,
-                stage.classText,
+                stage.typeLabel,
+                stage.freqHint,
                 !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
             });
             model.chainRowStageIndices.push_back(index);
@@ -1057,10 +1092,14 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
             if (firstMatchedStageIndex >= 0 && lastMatchedStageIndex >= 0) {
                 before = externalStages[static_cast<std::size_t>(firstMatchedStageIndex)].view.telemetry.inputSummary;
-                after = externalStages[static_cast<std::size_t>(lastMatchedStageIndex)].view.telemetry.outputSummary;
+                after = analyserStage.has_value()
+                    ? analyserStage->view.telemetry.inputSummary
+                    : externalStages[static_cast<std::size_t>(lastMatchedStageIndex)].view.telemetry.outputSummary;
             } else {
                 before = externalStages.front().view.telemetry.inputSummary;
-                after = externalStages.back().view.telemetry.outputSummary;
+                after = analyserStage.has_value()
+                    ? analyserStage->view.telemetry.inputSummary
+                    : externalStages.back().view.telemetry.outputSummary;
             }
             scopeLabel = "Full Chain";
             selectionKey = "full";
@@ -1126,7 +1165,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
         const auto averageWindowMs = static_cast<std::uint64_t>(std::max(100.0f, averageSeconds * 1000.0f));
         while (backendState.spectrumHistory.size() > 1
-               && (nowMs - backendState.spectrumHistory.front().timestampMs) > averageWindowMs) {
+               && ((nowMs - backendState.spectrumHistory.front().timestampMs) > averageWindowMs
+                   || static_cast<int>(backendState.spectrumHistory.size()) > kMaxSpectrumHistoryFrames)) {
             const auto& expired = backendState.spectrumHistory.front();
             for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
                 backendState.beforeToneLinearSum[static_cast<std::size_t>(i)] -= expired.beforeLinear[static_cast<std::size_t>(i)];
@@ -1337,7 +1377,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
             + "\nStage count: " + juce::String(static_cast<int>(externalStages.size()))
             + "\nSnapshot count: " + juce::String(static_cast<int>(sidebarSnapshotCache.size()))
             + "\nMatched rows: " + juce::String(matchedTelemetryRows)
-            + "\nStage source: " + juce::String(usingFallbackStages ? "Fallback registry scan" : "Current domain")
+            + "\nStage source: Current domain"
             + "\nSidebar source: Live chain snapshots"
             + "\nCoverage: " + juce::String(incompleteStageCoverage ? "Partial" : "Complete")
             + "\nFreshness: <= " + juce::String(static_cast<int>(kStaleThresholdMs)) + " ms"
@@ -1352,24 +1392,10 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
             + "\nSelection key: " + selectionKey;
     }
 
-    {
-        const juce::SpinLock::ScopedLockType lock(renderModelLock);
-        pendingRenderModel = std::move(model);
-    }
-    pendingGeneration.store(renderGeneration);
+    currentRenderModel = std::move(model);
 }
 
 void VXStudioAnalyserEditor::applyPendingRenderModel() {
-    const auto latestGeneration = pendingGeneration.load();
-    if (latestGeneration == 0 || latestGeneration == appliedGeneration)
-        return;
-
-    {
-        const juce::SpinLock::ScopedLockType lock(renderModelLock);
-        currentRenderModel = pendingRenderModel;
-    }
-    appliedGeneration = latestGeneration;
-
     statusLabel.setText(currentRenderModel.statusText, juce::dontSendNotification);
     selectionLabel.setText(currentRenderModel.selectionTitle, juce::dontSendNotification);
     summaryLabel.setText(currentRenderModel.summaryLines[1] + "\n"
@@ -1384,7 +1410,11 @@ void VXStudioAnalyserEditor::rebuildStageButtons() {
     fullChainButton.setColour(juce::TextButton::buttonColourId,
                               fullChainSelected.load() ? colourFromRgb(processor.theme().accentRgb, 0.40f)
                                                        : juce::Colours::white.withAlpha(0.06f));
-    resized();
+    const auto newRowCount = currentRenderModel.chainRows.size();
+    if (newRowCount != prevChainRowCount) {
+        prevChainRowCount = newRowCount;
+        resized();
+    }
 }
 
 void VXStudioAnalyserEditor::selectStage(const int index) {

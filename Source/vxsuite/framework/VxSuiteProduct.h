@@ -54,6 +54,7 @@ struct ProductIdentity {
     std::array<std::string_view, 2> selectorChoiceLabels {};
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
+    bool showLevelTrace = false;
     // Decorative filter-curve icons drawn above the knobs (no interactivity).
     bool showLowShelfIcon  = false;   // HP/low-shelf shape
     bool showHighShelfIcon = false;   // LP/high-shelf shape

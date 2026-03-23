@@ -588,6 +588,21 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 if (subtractEnabled) {
                     const float mag = std::sqrt(std::max(kEps, p));
                     const float noiseMag = std::sqrt(std::max(kEps, noisePowFrozen[k]));
+                    const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(fftSize);
+                    const float speechBandRise = vxsuite::clamp01((hz - 120.0f) / 320.0f);
+                    const float speechBandFall = vxsuite::clamp01((4600.0f - hz) / 1400.0f);
+                    const float speechBandWeight = speechBandRise * speechBandFall;
+                    const float steadyVoicing = 1.0f - (binInTransient ? 1.0f : 0.0f);
+                    const float speechProtect = voiceMode
+                        ? juce::jlimit(0.0f,
+                                       1.0f,
+                                       options.sourceProtect
+                                           * speechBandWeight
+                                           * steadyVoicing
+                                           * std::pow(vxsuite::clamp01(presenceProb[k]), 1.35f)
+                                           * (0.35f + 0.65f * tonalnessByBin[k])
+                                           * (0.55f + 0.45f * options.speechFocus))
+                        : 0.0f;
                     // guardStrictness=0 (Protect=0) bypasses DSP-derived protection entirely.
                     const float rawMask = 0.52f * presenceProb[k]
                                         + 0.28f * tonalnessByBin[k]
@@ -597,12 +612,22 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                                            guardStrictness * rawMask
                                                                * (voiceMode ? 1.0f : 0.55f));
                     const float effectiveAlpha = subtractAlpha
-                                               * (1.0f - (voiceMode ? 0.60f : 0.32f) * protectMask);
+                                               * (1.0f
+                                                  - (voiceMode ? 0.48f : 0.32f) * protectMask
+                                                  - (voiceMode ? 0.34f : 0.0f) * speechProtect);
+                    const float speechFloor = voiceMode
+                        ? lerp(0.02f, 0.22f, speechProtect)
+                        : 1.0e-4f;
                     const float effectiveFloor = juce::jlimit(1.0e-4f, 0.12f,
-                                                              lerp(1.0e-4f, subtractFloor, protectMask));
-                    const float gSub = juce::jlimit(effectiveFloor, 1.0f,
-                                                    (mag - effectiveAlpha * noiseMag)
-                                                    / std::max(kEps, mag));
+                                                              std::max(lerp(1.0e-4f, subtractFloor, protectMask),
+                                                                       speechFloor));
+                    float gSub = juce::jlimit(effectiveFloor, 1.0f,
+                                              (mag - effectiveAlpha * noiseMag)
+                                              / std::max(kEps, mag));
+                    if (voiceMode) {
+                        const float speechRescue = juce::jlimit(0.0f, 0.35f, 0.30f * speechProtect);
+                        gSub = lerp(gSub, 1.0f, speechRescue);
+                    }
                     g = std::max(g * gSub, effectiveFloor);
                 }
 

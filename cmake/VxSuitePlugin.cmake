@@ -6,6 +6,7 @@ function(vxsuite_add_framework target_name)
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteEditorBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteVoiceAnalysis.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteVoiceContext.cpp
   )
 
   target_include_directories(${target_name} PUBLIC

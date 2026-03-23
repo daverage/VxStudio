@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../framework/VxSuiteVoiceContext.h"
 #include "../../../framework/VxSuiteVoiceAnalysis.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -11,6 +12,10 @@ struct DetectorSnapshot {
     float speechDominance = 0.0f;
     float instrumentDominance = 0.0f;
     float buriedSpeech = 0.0f;
+    float phraseActivity = 0.0f;
+    float phraseStart = 0.0f;
+    float phraseEnd = 0.0f;
+    float intelligibility = 0.0f;
     float brightness = 0.0f;
     float transientStrength = 0.0f;
     float stereoSpread = 0.0f;
@@ -22,7 +27,8 @@ public:
     void reset();
 
     DetectorSnapshot analyse(const juce::AudioBuffer<float>& input,
-                             const vxsuite::VoiceAnalysisSnapshot& voiceAnalysis);
+                             const vxsuite::VoiceAnalysisSnapshot& voiceAnalysis,
+                             const vxsuite::VoiceContextSnapshot& voiceContext);
 
 private:
     static float onePoleCoeff(double sampleRate, float cutoffHz) noexcept;

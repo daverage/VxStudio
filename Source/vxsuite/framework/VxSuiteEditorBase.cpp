@@ -103,8 +103,10 @@ EditorBase::EditorBase(ProcessorBase& owner)
             default: levelTraceView.setZoomSeconds(6.0f); break;
         }
     };
-    addAndMakeVisible(traceZoomBox);
-    addAndMakeVisible(levelTraceView);
+    if (identity.showLevelTrace) {
+        addAndMakeVisible(traceZoomBox);
+        addAndMakeVisible(levelTraceView);
+    }
     learnButton.setTooltip("Capture pure background noise only for about 1 to 2 seconds, then press again to stop and lock the profile.");
     learnMeterBar.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
     learnMeterLabel.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
@@ -310,11 +312,13 @@ void EditorBase::resized() {
         activityStripBounds = body.removeFromTop(scaled(38)).reduced(scaled(20), 0);
         body.removeFromTop(scaled(4));
     }
-    traceViewBounds = body.removeFromTop(stacked ? scaled(164) : scaled(150)).reduced(scaled(18), scaled(4));
-    levelTraceView.setBounds(traceViewBounds);
-    auto zoomBounds = traceViewBounds.removeFromTop(scaled(26));
-    traceZoomBox.setBounds(zoomBounds.removeFromRight(scaled(104)).reduced(0, scaled(2)));
-    body.removeFromTop(scaled(6));
+    if (processor.getProductIdentity().showLevelTrace) {
+        traceViewBounds = body.removeFromTop(stacked ? scaled(164) : scaled(150)).reduced(scaled(18), scaled(4));
+        levelTraceView.setBounds(traceViewBounds);
+        auto zoomBounds = traceViewBounds.removeFromTop(scaled(26));
+        traceZoomBox.setBounds(zoomBounds.removeFromRight(scaled(104)).reduced(0, scaled(2)));
+        body.removeFromTop(scaled(6));
+    }
 
     lowShelfIconBounds  = {};
     highShelfIconBounds = {};
@@ -528,12 +532,14 @@ void EditorBase::timerCallback() {
     }
     updateActivityIndicators();
     updateLearnUi();
-    vxsuite::spectrum::SnapshotView snapshot;
-    if (processor.getSpectrumSnapshotView(snapshot)) {
-        traceMissTicks = 0;
-        levelTraceView.setSnapshot(snapshot);
-    } else if (++traceMissTicks > 12) {
-        levelTraceView.setUnavailable();
+    if (processor.getProductIdentity().showLevelTrace) {
+        vxsuite::spectrum::SnapshotView snapshot;
+        if (processor.getSpectrumSnapshotView(snapshot)) {
+            traceMissTicks = 0;
+            levelTraceView.setSnapshot(snapshot);
+        } else if (++traceMissTicks > 12) {
+            levelTraceView.setUnavailable();
+        }
     }
 
     const auto& id = processor.getProductIdentity();

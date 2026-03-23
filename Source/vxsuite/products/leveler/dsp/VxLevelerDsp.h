@@ -29,8 +29,26 @@ public:
         float transientTame = 0.0f;
     };
 
+    struct Tuning final {
+        float mixTargetBlendBase = 0.309803f;
+        float mixTargetBlendLevelWeight = 0.239203f;
+        float mixDeadbandBase = 1.03139f;
+        float mixDeadbandLevelWeight = 0.16f;
+        float mixNormalizeShortThresholdBase = 0.518176f;
+        float mixNormalizeShortThresholdLevelWeight = 0.12f;
+        float mixNormalizeBaselineThresholdBase = 0.443115f;
+        float mixNormalizeBaselineThresholdLevelWeight = 0.08f;
+        float mixNormalizeShortScaleBase = 0.540052f;
+        float mixNormalizeShortScaleLevelWeight = 0.18f;
+        float mixNormalizeBaselineScaleBase = 0.785077f;
+        float mixNormalizeBaselineScaleLevelWeight = 0.14f;
+        float mixNormalizeMaxDb = 5.51886f;
+        float mixNormalizeSpikePenalty = 0.259307f;
+    };
+
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void setParams(const Params& p) noexcept { params = p; }
+    void setTuning(const Tuning& t) noexcept { tuning = t; }
     void reset();
     void process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector);
     [[nodiscard]] int latencySamples() const noexcept { return delaySamples; }
@@ -48,6 +66,7 @@ private:
 
     static float lowpassCoeff(double sampleRate, float cutoffHz) noexcept;
     static float timeCoeff(double sampleRate, float seconds) noexcept;
+    static float stepToward(float current, float target, float maxDelta) noexcept;
     static MixState detectState(const DetectorSnapshot& detector) noexcept;
     static MixDecision decide(MixState state,
                               const DetectorSnapshot& detector,
@@ -58,6 +77,7 @@ private:
                                      float amount) noexcept;
 
     Params params {};
+    Tuning tuning {};
     double sr = 48000.0;
     std::vector<ChannelState> channels;
     std::vector<float> delayLine;
@@ -68,6 +88,7 @@ private:
     float coeff2000 = 0.0f;
     float coeff4000 = 0.0f;
 
+    // Preserved vocal engine state.
     float levelEnv = 0.0f;
     float anchorEnv = 0.0f;
     float highEnv = 0.0f;
@@ -77,9 +98,21 @@ private:
     float overrideLiftGain = 1.0f;
     float highTameGain = 1.0f;
     float overrideTameGain = 1.0f;
+    float vocalPhraseAnchor = 0.0f;
     MixState activeState = MixState::neutral;
     MixState targetState = MixState::neutral;
     float stateTransition = 1.0f;
+
+    // Separate general loudness engine state.
+    float generalMomentary = 0.0f;
+    float generalShort = 0.0f;
+    float generalBaseline = 0.0f;
+    float generalWetShort = 0.0f;
+    float generalWetBaseline = 0.0f;
+    float generalRideGainDb = 0.0f;
+    float generalNormalizeGainDb = 0.0f;
+    float generalSpikeGain = 1.0f;
+    float generalHighEnv = 0.0f;
 
     float liftActivity = 0.0f;
     float levelActivity = 0.0f;

@@ -5,6 +5,7 @@
 #include "VxSuiteOutputTrimmer.h"
 #include "VxSuiteSpectrumTelemetry.h"
 #include "VxSuiteVoiceAnalysis.h"
+#include "VxSuiteVoiceContext.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -35,6 +36,7 @@ public:
     virtual bool isLearnActive() const noexcept { return false; }
     virtual bool isLearnReady() const noexcept { return false; }
     VoiceAnalysisSnapshot getVoiceAnalysisSnapshot() const noexcept { return voiceAnalysis.snapshot(); }
+    VoiceContextSnapshot getVoiceContextSnapshot() const noexcept { return voiceContext.snapshot(); }
     bool getSpectrumSnapshotView(spectrum::SnapshotView& out) const noexcept;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -88,6 +90,7 @@ protected:
     ProductIdentity productIdentity;
     juce::AudioProcessorValueTreeState parameters;
     VoiceAnalysisState voiceAnalysis;
+    VoiceContextState voiceContext;
     spectrum::SnapshotPublisher spectrumPublisher;
     analysis::StagePublisher stagePublisher;
 

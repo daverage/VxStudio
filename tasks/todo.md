@@ -83,6 +83,301 @@ The user chose the non-ML path, and the current `Voice` mode is still too gracef
   - `General`: `12.9225 dB` dry to `12.8924 dB` wet
 - Rebuilt and restaged with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, and the regression suite passed with `./build/VXSuitePluginRegressionTests`.
 
+# VxLeveler Voice Rider + Mix Leveller redesign — 2026-03-21
+
+## Problem
+`VXLeveler` now has the right product split conceptually, but the underlying DSP is still too close to one adaptive leveller with heuristics on top. We need to rebuild it so `Voice` behaves like an intelligent vocal rider and `General` behaves like a broader `Mix` leveller, both using a clearer multi-timescale analysis model and a strict separation between slow riding and fast peak protection.
+
+## Plan
+- [x] Refactor the leveler detector/DSP around shared micro, meso, and macro analysis with deterministic block-rate outputs.
+- [x] Implement `Voice` as a vocal-rider target engine and `Mix` as a general levelling target engine over the same slow-rider / fast-protector backend.
+- [x] Update `VXLeveler` labels and status text so the user-facing mode contract is `Voice` / `Mix`.
+- [x] Rebuild, rerun the real-file measure harness and regression suite, then document the outcome and lesson.
+
+## Review
+- I built a first full `Voice Rider / Mix Leveller` DSP rewrite with multi-timescale analysis and a clearer slow-rider / fast-protector split, then tuned it against `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`.
+- That redesign was directionally right architecturally, but it regressed the real-file result badly compared with the existing tuned core. The strongest tuned rewrite variant only reached `12.6244 dB` wet spread in `Voice`, which is materially worse than the existing verified `11.8952 dB`.
+- Because of that, I reverted the DSP back to the strongest verified leveller core instead of leaving the product on a weaker “new architecture” build.
+- I kept the user-facing contract update in `Source/vxsuite/products/leveler/VxLevelerProcessor.cpp`, so the mode selector and status text now read as `Voice` and `Mix` even though the underlying DSP remains the previously verified core for now.
+- Current kept verification on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`:
+  - `Voice`: `12.9225 dB` dry to `11.8952 dB` wet
+  - `Mix` (parameter value still `general` internally): `12.9225 dB` dry to `12.8924 dB` wet
+- Verified with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`, and `./build/VXSuitePluginRegressionTests`.
+
+# VxLeveler Voice speech-band anchor assist — 2026-03-21
+
+## Problem
+The cleaner `Voice` / `Mix` product wording is in place, but the kept DSP still leans on full-band level envelopes for most of its riding decisions. On the user's real file, `Voice` mode still needs a more direct way to recognise when the speech band is lagging behind its recent baseline and push it forward without destabilising `Mix` mode.
+
+## Plan
+- [x] Add a `Voice`-only speech-band envelope and anchor inside the current verified DSP core.
+- [x] Use that speech-band anchor to bias lift and/or override behaviour only when speech material falls behind its recent baseline.
+- [x] Rebuild, rerun `VXLevelerMeasure` on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, and rerun `VXSuitePluginRegressionTests`.
+- [x] Document the outcome here and add a lesson if the assist proves useful.
+
+## Review
+- I added a `Voice`-only speech-band anchor/lift assist inside the current DSP core, then measured it directly on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`.
+- The assist made `Voice` mode worse on the real file, moving the wet spread from the verified baseline `11.8952 dB` to `11.9158 dB`, so I reverted it instead of leaving the product on a regression.
+- The kept verified state remains:
+  - `Voice`: `12.9225 dB` dry to `11.8952 dB` wet
+  - `Mix`: `12.9225 dB` dry to `12.8924 dB` wet
+- Re-verified with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`, and `./build/VXSuitePluginRegressionTests`.
+
+# VxLeveler separate Vocal Rider path — 2026-03-21
+
+## Problem
+We agreed that `Voice` should not just be a tuned variant of the same leveller. It needs a separate `Vocal Rider` path, while `Mix Leveler` stays on the current proven mixed-track levelling code. The previous attempts kept mutating the shared core; this pass needs a true split inside the DSP.
+
+## Plan
+- [ ] Keep the current `Mix Leveler` path intact and verified.
+- [ ] Rename the user-facing mode labels/status text to `Vocal Rider` and `Mix Leveler`.
+- [ ] Implement a separate `Voice`-only rider/protector path inside `VxLevelerDsp` and compare it directly against the current verified baseline on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`.
+- [ ] Rebuild, rerun the real-file measure harness and regression suite, then document the kept outcome and lesson.
+
+# VxLeveler section-based Vocal Rider target engine — 2026-03-21
+
+## Problem
+The previous separate `Vocal Rider` attempts were still too sample-envelope-driven and regressed both the real file and the hot-mix regression. The next step needs to be a real block/section target engine: decide at a slower phrase-like timescale, then let a smoother ride toward that target while `Mix Leveler` remains on the proven path.
+
+## Plan
+- [ ] Keep `Mix Leveler` on the current verified path.
+- [ ] Add a separate `Vocal Rider` block/section target generator that updates per block from the detector snapshot instead of per-sample envelopes.
+- [ ] Rebuild, compare the new `Vocal Rider` against the current `11.8952 dB` voice baseline on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, and rerun `VXSuitePluginRegressionTests`.
+- [ ] Keep only the stronger verified version and document the outcome plus lesson.
+
+# VX Suite shared vocal context layer — 2026-03-21
+
+## Problem
+`Voice` mode quality should not depend on one plugin inventing its own heuristics. We need a shared, lightweight vocal-understanding layer in the framework so every VX product can make better `Voice`-mode decisions from the same signal evidence.
+
+## Plan
+- [x] Add a framework-level vocal context snapshot built from the existing voice analysis plus lightweight structural cues.
+- [x] Wire `ProcessorBase` to maintain and expose that shared context to products.
+- [x] Use `VXLeveler` as the first consumer while preserving the current verified baseline unless the new path proves better.
+- [x] Verify against the real speech corpus, `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, and `VXSuitePluginRegressionTests`, then document the kept outcome.
+
+## Review
+- Added a new shared framework layer in [VxSuiteVoiceContext.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteVoiceContext.h) and [VxSuiteVoiceContext.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteVoiceContext.cpp). It derives lightweight vocal-structure cues such as `vocalDominance`, `buriedSpeech`, `phraseActivity`, `phraseStart`, `phraseEnd`, and `intelligibility` from the existing block analysis plus a few extra band/phrase smoothers.
+- Wired `ProcessorBase` to maintain that shared context and expose it to products via `getVoiceContextSnapshot()` in [VxSuiteProcessorBase.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProcessorBase.h) and [VxSuiteProcessorBase.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProcessorBase.cpp).
+- Updated `VXLeveler` as the first consumer by feeding the shared context into [VxLevelerDetector.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp) through [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp). This kept the proven DSP core but improved the detector inputs with framework-level voice understanding.
+- The change verified better on both the user file and the new real speech corpus:
+  - `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`: `12.9225 dB` -> `11.8946 dB` in `Vocal Rider`
+  - `churchill_be_ye_men_of_valour`: `22.8432 dB` -> `20.1124 dB`
+  - `edward_viii_abdication`: `10.1938 dB` -> `7.18846 dB`
+  - `old_letters_librivox`: `19.8806 dB` -> `18.0528 dB`
+  - `princess_elizabeth_21st_birthday`: `12.9195 dB` -> `10.9563 dB`
+- Verified with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, the `VXLevelerMeasure` run on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`, the four corpus runs under `/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/wav/`, and `./build/VXSuitePluginRegressionTests`.
+
+# Voice corpus acquisition for shared vocal tuning — 2026-03-21
+
+## Problem
+We need more than one user file and synthetic regression material if we want `Voice` mode and future framework-level vocal understanding to improve reliably. The tuning loop needs a small repeatable real-world speech corpus inside the repo.
+
+## Plan
+- [x] Find permissive/public real-world spoken-word source files that can be downloaded directly.
+- [x] Download them into a local corpus folder and convert them to consistent WAV files for tuning.
+- [x] Run the current `Voice` mode across the corpus to establish a baseline.
+- [x] Record the corpus inventory and baseline measurements in the repo.
+
+## Review
+- Added a small real-world speech corpus under `/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/` with four source recordings from Wikimedia Commons and the Internet Archive / LibriVox.
+- Converted all files to `48 kHz` mono WAV for repeatable tuning and evaluation.
+- Added `/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/README.md` with source links, local file paths, and baseline `Voice`-mode measurements.
+- Current `Voice`-mode baseline across the corpus:
+  - `churchill_be_ye_men_of_valour`: `22.8432 dB` -> `20.1216 dB`
+  - `edward_viii_abdication`: `10.1938 dB` -> `7.21141 dB`
+  - `old_letters_librivox`: `19.8806 dB` -> `18.121 dB`
+  - `princess_elizabeth_21st_birthday`: `12.9195 dB` -> `10.99 dB`
+
+# Shared vocal context rollout to voice-aware products — 2026-03-22
+
+## Problem
+The new shared framework vocal context already improved `VXLeveler`, but it is still only helping one product directly. To make `Voice` mode meaningfully better across the suite without destabilising proven DSP, we need a conservative framework-first rollout into products that already consume voice-aware evidence, starting with `Cleanup` and then a small guarded pass on `Denoiser`.
+
+## Plan
+- [x] Extend shared polish analysis evidence so it can blend the framework `VoiceContextSnapshot` into existing speech-confidence and safety cues.
+- [x] Update `Cleanup` to pass the shared voice context through that evidence path and keep its DSP contract unchanged otherwise.
+- [x] Add a conservative `Voice`-mode protection bias in `Denoiser` using the shared vocal context, without changing its core denoise topology.
+- [x] Rebuild the affected targets, run the regression suite, and keep the changes only if they verify cleanly.
+- [x] Record the kept outcome here and add a lesson if the rollout confirms the framework-first pattern again.
+
+## Review
+- Extended shared analysis evidence in [VxPolishAnalysisEvidence.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/polish/VxPolishAnalysisEvidence.h) so products can blend framework `VoiceContextSnapshot` cues like `vocalDominance`, `phraseActivity`, `intelligibility`, and `speechBandEnergy` into the existing speech-confidence, artifact-risk, proximity, and speech-loudness evidence instead of inventing another product-local detector.
+- Updated [VxCleanupProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp) to consume that richer shared evidence and give `Voice` mode a small extra preservation bias from the framework vocal context without changing the corrective topology or adding a separate DSP branch.
+- Updated [VxDenoiserProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp) so `Voice` mode now uses the shared vocal context to modestly reduce over-cleaning pressure during high-priority vocal regions and to increase voice-retention bias during makeup recovery, while keeping the same denoiser backend and noise-only safeguards.
+- Verification stayed clean: `cmake --build build --target VXCleanupPlugin VXDenoiserPlugin VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests` both passed, including the existing `Cleanup` voiced-material/plosive regressions and the `Denoiser` vocal/general level-retention and noise-only tests.
+- Kept outcome: the shared vocal context is now helping `VXLeveler`, `Cleanup`, and `Denoiser`, which is a better suite-wide use of the framework layer than another isolated `VXLeveler` DSP rewrite.
+
+# Shared vocal context rollout batch 2 — 2026-03-22
+
+## Problem
+The framework vocal context is still only reaching part of the suite. Several products already expose a meaningful `Voice` mode but still rely on fixed voice-mode mappings rather than the new shared vocal understanding. We need a second conservative rollout pass for the products that can benefit from context-aware `Voice` protection without changing their DSP topology.
+
+## Plan
+- [x] Audit the remaining voice-aware products and choose the batch where shared-context remapping is low-risk and likely beneficial.
+- [x] Apply conservative `Voice`-mode remaps for `Finish`, `OptoComp`, `Tone`, `Proximity`, and `Subtract` using the shared vocal context.
+- [x] Leave `Deverb` out of this batch unless a clearly safer shared-context seam emerges, because its dereverb/body-restore contract is more specialised.
+- [x] Rebuild the affected targets and rerun `VXSuitePluginRegressionTests`.
+
+# Subtract voice-mode corpus tuning — 2026-03-23
+
+## Problem
+The improved batch harness now scores `Subtract` against a realistic noisy-speech input and a clean-speech target reference. On that corrected measurement, `Subtract` is the clearest remaining weak spot in suite `Voice` mode: it is over-subtracting the spoken clip and drifting far from both the noisy input and the clean target. The fix needs to improve `Voice`-mode speech preservation and learned-profile behavior without breaking the existing subtract regressions or the learned/listen workflow.
+
+## Plan
+- [x] Review the current `Subtract` voice-mode DSP/control flow against the new target-reference batch metrics and identify the strongest low-risk tuning seam.
+- [x] Implement a focused `Voice`-mode tuning pass for `Subtract`, keeping `General` behavior and learn/listen semantics intact.
+- [x] Rebuild and rerun `VXSuitePluginRegressionTests` plus the focused `Subtract` batch report, then keep only the tuned version if it improves the correct metrics.
+- [x] Record the verified outcome and any new lesson from the pass.
+
+## Review
+- Tuned `Subtract` in two places:
+  - [VxSubtractDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/subtract/dsp/VxSubtractDsp.cpp) now adds a narrower speech-preservation path inside the learned-profile subtraction stage. In `Voice` mode it only protects bins that look genuinely voiced and mid-band, instead of broadly lifting the learned subtract floor.
+  - [VxSubtractProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/subtract/VxSubtractProcessor.cpp) now maps `Voice` mode toward slightly stronger protection weighting and a slightly softer internal subtract drive, while leaving `General` mode unchanged.
+- Kept outcome on the corrected clean-target batch check in [VX_SUITE_BATCH_AUDIO_CHECK_SUBTRACT_REAL.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/VX_SUITE_BATCH_AUDIO_CHECK_SUBTRACT_REAL.md):
+  - baseline: target corr `0.105`, target speech corr `0.127`, target residual `0.992`
+  - kept build: target corr `0.111`, target speech corr `0.129`, target residual `0.992`
+- This is a modest improvement, not a breakthrough. The important part is that it improves the correct `Voice`-mode metric without regressing the subtract lifecycle/listen/stereo regressions.
+- Verified with `./build/VXSuitePluginRegressionTests` and `./build/VXSuiteBatchAudioCheck /Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/wav_clip /Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/VX_SUITE_BATCH_AUDIO_CHECK_SUBTRACT_REAL.md --products=subtract`.
+
+# Deverb voice-mode corpus tuning — 2026-03-23
+
+## Problem
+The corrected batch harness shows `Deverb` is much healthier than `Subtract`, but it is still one of the remaining voice-mode products worth refining against a clean dereverb target. The current clean-target report is already decent, so the only acceptable change here is a conservative voice-mode tuning pass that improves dereverb recovery without destabilising speech coherence, level retention, or existing deverb regressions.
+
+## Plan
+- [x] Review the current `Deverb` clean-target batch report, DSP control path, and regression seams to identify the safest voice-mode tuning seam.
+- [x] Implement a conservative `Voice`-mode tuning pass for `Deverb`, keeping the core spectral processor topology intact.
+- [x] Rebuild and rerun the deverb regressions plus the focused clean-target batch report, then keep only the version that improves the right metrics.
+- [x] Record the verified outcome and any new lesson from the pass.
+
+## Review
+- Tried a conservative `Voice`-mode retune in [VxDeverbProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/deverb/VxDeverbProcessor.cpp) by slightly increasing effective dereverb depth and body recovery when shared vocal context was strong.
+- The focused clean-target dereverb report got slightly worse, so I reverted the DSP change and kept the previous verified `Deverb` baseline. Candidate report outcome before revert: target corr stayed `0.854`, target speech corr stayed `0.866`, and target residual worsened from `0.520` to `0.521`.
+- That confirmed `Deverb` is not a good blind-tweak target right now. The more useful follow-up was improving the harness itself so `Denoiser` is also measured against a noisy-input / clean-target pair.
+- Updated [VXSuiteBatchAudioCheck.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXSuiteBatchAudioCheck.cpp) so `Denoiser` now receives synthetic noisy speech as input and is scored against the original clean clip. The new focused report is [VX_SUITE_BATCH_AUDIO_CHECK_DENOISER_REAL.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/VX_SUITE_BATCH_AUDIO_CHECK_DENOISER_REAL.md), which gives a more honest baseline:
+  - target corr `0.749`
+  - target speech corr `0.885`
+  - target residual `0.660`
+- Verified final kept state with `./build/VXSuitePluginRegressionTests` after the `Deverb` revert and harness update.
+
+# Denoiser voice-mode corpus tuning — 2026-03-23
+
+## Problem
+`Denoiser` now has a corrected clean-target batch report instead of a misleading clean-vs-clean score. On that more honest noisy-input / clean-target check, `Voice` mode is decent but still has room to retain spoken detail better while keeping noise-only reduction and the existing denoiser regressions intact.
+
+## Plan
+- [x] Review the current `Denoiser` voice-mode gain law and makeup-retention policy against the new clean-target batch baseline.
+- [x] Implement a focused `Voice`-mode tuning pass that improves clean-target speech recovery without collapsing noise-only performance.
+- [x] Rebuild and rerun `VXSuitePluginRegressionTests` plus the focused `Denoiser` batch report, then keep only the version that improves the right metrics.
+- [x] Record the verified outcome and any new lesson from the pass.
+
+## Review
+- Tuned [VxDenoiserProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/denoiser/VxDenoiserProcessor.cpp) so `Voice` mode is less timid:
+  - increased `effectiveClean` in vocal mode,
+  - eased `sourceProtect` slightly,
+  - reduced the vocal makeup-retention target a bit so cleanup is not immediately undone.
+- Kept outcome on the corrected clean-target report in [VX_SUITE_BATCH_AUDIO_CHECK_DENOISER_REAL.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/VX_SUITE_BATCH_AUDIO_CHECK_DENOISER_REAL.md):
+  - baseline: target corr `0.749`, target speech corr `0.885`, target residual `0.660`
+  - kept build: target corr `0.765`, target speech corr `0.891`, target residual `0.642`
+- This is a meaningful improvement because the output moves farther from the noisy input and closer to the clean target while remaining speech-coherent.
+- Verified with `./build/VXSuitePluginRegressionTests` after the tuning pass, so the denoiser still passes the existing strong-setting, level-retention, noise-only, stereo-independence, identity, latency, tail-window, and no-allocation checks.
+
+# OptoComp voice-mode short-corpus tuning — 2026-03-23
+
+## Problem
+On the short speech corpus, `OptoComp` is already decent but slightly behind `Finish` on evenness (`11.557 dB -> 8.885 dB` versus `8.822 dB`). Because both products share a similar levelling/compression role, `OptoComp` is a good next target for a conservative `Voice`-mode remap that might improve spoken-word levelling without risking a larger DSP rewrite.
+
+## Plan
+- [ ] Review the current `OptoComp` voice-mode mapping and short-corpus baseline to identify the smallest promising tuning seam.
+- [ ] Implement a focused `Voice`-mode remap for `OptoComp` and rerun the short-corpus batch report before deciding whether to keep it.
+- [ ] Run `VXSuitePluginRegressionTests` and document the kept outcome only if the short-corpus result improves without regressions.
+
+## Review
+- Tried a very small `Voice`-mode remap in `OptoComp` by slightly increasing vocal-mode peak-reduction engagement and trimming the body assist.
+- The short-corpus result did not improve enough to justify keeping it:
+  - baseline: `11.557 dB -> 8.885 dB`
+  - candidate: `11.557 dB -> 8.885 dB` (slightly worse at full precision)
+- Reverted the `OptoComp` tweak and kept the existing verified mapping.
+
+# Finish voice-mode short-corpus tuning — 2026-03-23
+
+## Problem
+`Finish` is already the best-performing short-corpus speech leveller in this batch, but it is close enough to the current `OptoComp` result that a very small `Voice`-mode remap may still yield a measurable improvement. Because it is already strong, any kept change must be clearly better on the short corpus and regression-clean.
+
+## Plan
+- [x] Review the current `Finish` voice-mode mapping and short-corpus baseline to identify the narrowest promising tuning seam.
+- [x] Implement one conservative `Voice`-mode remap for `Finish` and rerun the short-corpus report before deciding whether to keep it.
+- [x] Run `VXSuitePluginRegressionTests` and document the outcome, reverting immediately if the corpus result does not improve.
+
+## Review
+- Tried one conservative `Voice`-mode remap in `Finish` by slightly increasing vocal-mode peak-reduction engagement and trimming the body assist a little.
+- The short-corpus result was effectively flat-to-slightly-worse overall, so I reverted it:
+  - baseline: `11.557 dB -> 8.822 dB`
+  - candidate: `11.557 dB -> 8.823 dB`
+- Verified final kept state with `./build/VXSuitePluginRegressionTests` after reverting the `Finish` candidate.
+- Practical conclusion: under the current short-corpus harness, `Finish` and `OptoComp` both look close to their local optimum already. The more useful remaining work is in the corrective products and the harness/reporting layer, not more micro-remaps in this dynamics pair.
+- [x] Record the kept outcome here and add a lesson if the batch confirms the same rollout pattern.
+
+## Review
+- Audited the remaining `Voice`-aware processors and applied only parameter/remap-level changes so each product keeps its proven DSP core while gaining framework-level vocal understanding.
+- `Finish` and `OptoComp` now use `VoiceContextSnapshot` in `Voice` mode to ease peak reduction slightly during high-priority vocal regions and add a small body-preservation bias instead of always treating vocal mode as a fixed table. See [VxFinishProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/finish/VxFinishProcessor.cpp) and [VxOptoCompProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/OptoComp/VxOptoCompProcessor.cpp).
+- `Tone` now uses shared vocal priority to narrow how much `Voice` mode can boost/cut and to push its shelves a bit farther from the speech-critical band when speech is clearly dominant. See [VxToneProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/tone/VxToneProcessor.cpp).
+- `Proximity` now uses the shared vocal context to be a little more careful with `Air` in consonant-sensitive vocal passages while still allowing `Closer` to help when speech is buried. See [VxProximityProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/proximity/VxProximityProcessor.cpp).
+- `Subtract` now uses shared vocal priority to raise protection and speech focus and to trim subtraction aggressiveness slightly in important vocal regions instead of relying only on the user `Protect` control. See [VxSubtractProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/subtract/VxSubtractProcessor.cpp).
+- I also found a conservative enough seam for `Deverb`, so it joined this kept batch: `Voice` mode now slightly moderates dereverb depth and slightly reinforces body restore when the shared context says the vocal itself is the priority, without changing the underlying dereverb algorithm. See [VxDeverbProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/deverb/VxDeverbProcessor.cpp).
+- Verification passed with `cmake --build build --target VXDeverbPlugin VXFinishPlugin VXOptoCompPlugin VXTonePlugin VXProximityPlugin VXSubtractPlugin VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+- Kept outcome: the shared vocal context now meaningfully reaches `VXLeveler`, `Cleanup`, `Denoiser`, `Deverb`, `Finish`, `OptoComp`, `Tone`, `Proximity`, and `Subtract`, which is enough to treat the current framework-level `Voice` rollout as suite-wide for the non-ML products that can benefit from it.
+
+# VX Suite batch audio checks harness — 2026-03-22
+
+## Problem
+The suite now has a shared vocal-context rollout, but we still verify most products through regressions and a couple of one-off measure tools. To refine `Voice` mode properly across the whole suite, we need a reusable offline batch harness that can run real corpus WAVs through multiple VX products, compute comparable metrics, optionally write renders, and emit a report that is easy to use during tuning.
+
+## Plan
+- [x] Inspect the existing `VXLevelerMeasure` and `VXDeverbMeasure` utilities and define a reusable multi-product batch harness shape.
+- [x] Implement a `VXSuiteBatchAudioCheck` executable with real WAV input, per-product voice-mode presets, shared metrics, and markdown output.
+- [x] Add the new target to CMake and document how to run it on the speech corpus.
+- [x] Run the harness on the current real speech corpus for the upgraded voice-aware products and record the measured baseline.
+- [x] Keep the harness and report only if they build and run cleanly.
+
+## Review
+- Added a reusable offline harness in [VXSuiteBatchAudioCheck.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXSuiteBatchAudioCheck.cpp). It can batch-process corpus WAVs through multiple VX products in `Voice` mode, compute shared metrics (`spread`, `delta RMS`, `correlation`, `peak out`), optionally write renders, and emit markdown reports.
+- Added the corresponding build target in [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt) so the harness can be built and rerun locally like the other measure tools.
+- Hardened the harness for real corpus work by upmixing mono files to dual mono on load and by writing the markdown report incrementally after each completed product, so long/heavy product runs still leave usable partial results.
+- Recorded the first real suite baselines in [VX_SUITE_BATCH_AUDIO_CHECK.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/VX_SUITE_BATCH_AUDIO_CHECK.md), with detailed per-batch reports under `/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/`.
+- Current measured highlights:
+  - `Leveler` on the full 4-file corpus: `16.459 dB` spread in -> `14.077 dB` out
+  - `Cleanup` on the full 4-file corpus: `16.459 dB` spread in -> `16.838 dB` out
+  - `Finish` on the 2-file short corpus: `11.557 dB` spread in -> `8.822 dB` out
+  - `OptoComp` on the 2-file short corpus: `11.557 dB` spread in -> `8.885 dB` out
+  - `Tone` on the 2-file short corpus: `11.557 dB` spread in -> `11.378 dB` out
+  - `Proximity` on the 2-file short corpus: `11.557 dB` spread in -> `11.190 dB` out
+  - `Deverb`, `Denoiser`, and `Subtract` were measured on a 5-second speech clip to keep runtime practical; the summary is in the consolidated report.
+- Verification passed for the harness itself with `cmake -S . -B build` (already configured), `cmake --build build --target VXSuiteBatchAudioCheck -j4`, and repeated successful harness runs on corpus subsets.
+
+# Weak-product voice tuning with batch harness — 2026-03-22
+
+## Problem
+The new harness exposed the weakest real-speech results in `Cleanup`, `Deverb`, and `Subtract`. The goal of this pass was to use the harness as the gatekeeper and improve those products' `Voice` behavior on spoken-word material without destabilising the suite.
+
+## Plan
+- [x] Identify the smallest plausible voice-mode remaps for `Cleanup`, `Deverb`, and `Subtract`.
+- [x] Implement the candidate tuning changes and rerun focused harness checks.
+- [x] Keep only the measured improvements and revert anything that did not move the baseline meaningfully.
+- [x] Rebuild and rerun the regression suite after the kept outcome.
+
+## Review
+- I tried a conservative tuning pass on `Cleanup`, `Deverb`, and `Subtract` using the new harness as the evaluation loop.
+- The changes did not deliver meaningful real-file improvements:
+  - `Cleanup` remained effectively unchanged on the full speech corpus.
+  - `Deverb` did not improve on the speech clip check.
+  - `Subtract` only moved by a rounding-level amount, not enough to justify a behavior change.
+- Because of that, I reverted the tuning changes and kept the suite on the last verified DSP state. The real value from this pass is the harness/reporting loop itself, not the abandoned parameter tweaks.
+- I then extended [VXSuiteBatchAudioCheck.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXSuiteBatchAudioCheck.cpp) with `speech-band correlation` and `gain-matched residual ratio`, reran `Cleanup`, and confirmed that the product is actually preserving spoken-word material well (`avg speech-band corr 0.996`, `avg residual ratio 0.091`) even though its plain loudness spread is slightly worse. That makes `Cleanup` a measurement-interpretation issue, not a clear DSP failure.
+- While rerunning verification, the regression suite caught a separate real issue in the earlier `Finish` / `OptoComp` voice-context rollout: the body assist had nudged zero-amount defaults away from full transparency. I fixed that by making the body bias proportional to actual compression amount rather than always active at neutral settings.
+- Final verification passed with `cmake --build build --target VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+
 # VX Perform v2 levelling + reusable trace view — 2026-03-20
 
 ## Problem
@@ -1748,3 +2043,264 @@ The remaining user report narrowed the residual Cleanup distortion down further:
 - [ ] Add a stereo-specific regression that fails if right-only added noise is not treated materially more strongly on the right channel than the left.
 - [ ] Rework `VXDenoiser` from shared mono/mid denoising toward independent stereo denoising in the processor shell.
 - [ ] Rebuild and rerun the relevant regression target, document the result, and commit the fix.
+
+---
+
+# Proximity voice-mode short-corpus tuning — 2026-03-23
+
+## Problem
+`Proximity` is subtle by design, but it still has some measurable short-corpus headroom compared with `Tone`. A small `Voice`-mode remap may improve spoken-word consistency by leaning slightly more into `Closer` when speech is buried and being a bit less conservative with `Air` when the vocal is clearly leading.
+
+## Plan
+- [x] Implement one conservative `Voice`-mode remap for `Proximity` and rerun the short-corpus report.
+- [x] Keep it only if the short-corpus result improves and `VXSuitePluginRegressionTests` still pass.
+- [x] Document the kept or reverted outcome before moving on.
+
+## Review
+- Tuned [VxProximityProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/proximity/VxProximityProcessor.cpp) so `Voice` mode leans slightly more into `Closer` when speech is buried/phrased and backs off less on `Air` when intelligibility is strong.
+- Kept outcome on the short-corpus report in [VX_SUITE_BATCH_AUDIO_CHECK_PROXIMITY_REAL.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/VX_SUITE_BATCH_AUDIO_CHECK_PROXIMITY_REAL.md):
+  - baseline: `11.557 dB -> 11.190 dB`
+  - kept build: `11.557 dB -> 11.154 dB`
+- The move is small, but it is real and regression-clean:
+  - `edward_viii_abdication.wav`: `9.852 dB -> 9.817 dB`
+  - `princess_elizabeth_21st_birthday.wav`: `12.528 dB -> 12.490 dB`
+- Verified with `./build/VXSuitePluginRegressionTests`.
+
+---
+
+# Level trace scope cleanup — 2026-03-23
+
+## Problem
+The shared level trace had become a suite-wide UI element even though it is only genuinely useful for `Leveler`. In other products it added noise, and because it renders immediately from the current processed block rather than host-latency-aligned audible output, it could also appear to run ahead of what the user was hearing.
+
+## Plan
+- [x] Make the shared level trace opt-in at the product identity/framework level instead of always-on.
+- [x] Restrict the trace to `Leveler` for now and leave the rest of the suite on the cleaner default UI.
+- [x] Rebuild representative plugins and rerun `VXSuitePluginRegressionTests`.
+
+## Review
+- Added `showLevelTrace` to [VxSuiteProduct.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProduct.h) and used it to gate trace telemetry/editor wiring in [VxSuiteProcessorBase.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProcessorBase.cpp) and [VxSuiteEditorBase.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteEditorBase.cpp).
+- Enabled the trace only for [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp), so the rest of the suite now falls back to the simpler product UI.
+- Verified with `cmake --build build --target VXLevelerPlugin VXFinishPlugin VXProximityPlugin VXDenoiserPlugin VXSuitePluginRegressionTests -j4` and `./build/VXSuitePluginRegressionTests`.
+
+---
+
+# Leveler rider redesign — 2026-03-23
+
+## Problem
+`Leveler` still reads more like a gentle adaptive dynamics stage than an intelligent volume rider. At high settings it should be actively reducing perceived and real level jumps while staying more natural than a compressor or limiter, but the current law mostly smooths around an anchor and feels too timid.
+
+## Plan
+- [x] Inspect the existing `Leveler` detector + DSP law and identify the parts that are still envelope-balancing rather than target-riding.
+- [x] Prototype a stronger rider direction, reject the full rewrite when it performs worse, and keep the proven core as the base.
+- [x] Make the top end of `Vocal Rider` materially more assertive while keeping `Mix Leveler` on the stable general path.
+- [x] Verify with the real-file `VXLevelerMeasure` harness on `loud_quiet.wav`, rebuild the staged plugin, and rerun `VXSuitePluginRegressionTests`.
+
+## Review
+- Tried a full dB-target rider rewrite in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp), but it regressed both the real-file measure and the hot-mix regression, so it was intentionally discarded.
+- Kept the stronger pass by returning to the proven core and adding a focused high-setting intervention zone only to `Vocal Rider`, with the extra gain control concentrated in the broadband rider/override path and the vocal assist lanes damped so they stop fighting the main level ride.
+- Final verified measurements on [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav):
+  - `Vocal Rider`: `12.9225 dB -> 12.1879 dB`
+  - `Mix Leveler`: `12.9225 dB -> 12.8924 dB`
+- Verified with `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`, `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`, and `./build/VXSuitePluginRegressionTests`.
+
+---
+
+# Leveler architecture research pass — 2026-03-23
+
+## Problem
+`Leveler` is better than it was, but it still does not convincingly behave like an intelligent volume rider. Further implementation work should be grounded in established non-ML gain-riding and loudness-control practice instead of more blind tuning.
+
+## Plan
+- [x] Collect strong references on non-ML loudness levelling, automatic gain riding, and perceptual dynamics control.
+- [x] Map those findings onto `Leveler`’s actual product goal: reduce perceived and real volume jumps without sounding compressed.
+- [x] Write the recommended next architecture and tuning direction into project notes before another DSP rewrite.
+
+## Next implementation step
+- [x] Split `Leveler` internally into a preserved vocal engine and a separate general loudness engine so the two modes stop sharing one control law.
+- [x] Keep the current verified vocal path as the baseline while introducing a neutral loudness-led `Mix Leveler` branch with separate level and spike gains.
+- [x] Re-verify both modes on `loud_quiet.wav` and `VXSuitePluginRegressionTests` before attempting a deeper vocal-engine rewrite.
+
+## Review
+- `VxLevelerDsp.cpp` now uses two genuinely separate internal behaviors:
+  - `Vocal Rider` stays on the previously verified vocal engine.
+  - `Mix Leveler` now runs a separate loudness-led path with its own rolling baseline, deadbanded ride gain, and independent spike clamp.
+- This keeps the known-good vocal result while moving `General` toward the architecture the research suggested, without forcing both modes through one experimental control law.
+- Final verified measurements on [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav):
+  - `Vocal Rider`: `12.9225 dB -> 11.8946 dB`
+  - `Mix Leveler`: `12.9225 dB -> 12.6043 dB`
+- Verified with:
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`
+  - `./build/VXSuitePluginRegressionTests`
+
+---
+
+# Vocal Rider rework — 2026-03-23
+
+## Problem
+Now that `Mix Leveler` has its own branch, `Vocal Rider` is still the remaining mode that needs a more intentional architecture. It still leans on the older adaptive engine rather than a clearly committed rider contract.
+
+## Plan
+- [x] Inspect the current split `Leveler` DSP and identify where `Vocal Rider` still behaves like the older shared engine instead of a phrase-aware rider.
+- [x] Implement a more intentional `Vocal Rider` path with stronger state commitment and lighter coupling between ride, lift, and tame.
+- [x] Rebuild `Leveler`, measure both modes on `loud_quiet.wav`, and rerun `VXSuitePluginRegressionTests`.
+
+## Review
+- Research sources reviewed:
+  - [ITU-R BS.1770-4](https://www.itu.int/dms_pubrec/itu-r/rec/bs/R-REC-BS.1770-4-201510-S%21%21PDF-E.pdf)
+  - [EBU Tech 3341](https://tech.ebu.ch/publications/tech3341)
+  - [EBU Loudness overview](https://tech.ebu.ch/loudness/)
+  - [EBU Tech 3343 production guidelines](https://tech.ebu.ch/publications/tech3343)
+  - [US20230162754A1 Automatic Leveling of Speech Content](https://patents.google.com/patent/US20230162754A1)
+  - [Hathaway, “Automatic Audio Gain Controls” (AES historical paper)](https://www.aes.org/aeshc/pdf/how.the.aes.began/hathaway_automatic-audio-gain-controls.pdf)
+- Main takeaways for `Leveler`:
+  - A better rider should be based on perceptual loudness windows, not simple peak/envelope balancing.
+  - The right control split is a slow rider for loudness consistency plus a separate fast peak protector; those two should not share the same control law.
+  - Momentary and short-term loudness are the useful immediate riding views; integrated loudness is too slow for local riding.
+  - The rider should mostly attenuate louder-than-local-target passages and recover upward more cautiously, which is closer to manual fader riding than to compressor makeup behavior.
+  - `Vocal Rider` can add speech-aware weighting on top of that, but the core `Mix Leveler` path should stay non-semantic and loudness-led.
+- A full loudness-led prototype was built in `VxLevelerDsp.cpp` and measured, but it was not kept because it still failed the hot-mix regression despite improving some real-file measurements. The verified build was restored afterward.
+- Final kept verified state after reverting the failed prototype:
+  - `Vocal Rider`: `12.9225 dB -> 11.8946 dB`
+  - `Mix Leveler`: `12.9225 dB -> 12.8924 dB`
+- Verification after restore:
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`
+  - `./build/VXSuitePluginRegressionTests`
+- Kept follow-up refinement on top of the split architecture:
+  - threaded `phraseActivity`, `phraseStart`, `phraseEnd`, and `intelligibility` from the shared voice context into [VxLevelerDetector.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp),
+  - added a phrase-aware anchor in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp) so `Vocal Rider` can hold a more intentional local reference while speech is active,
+  - kept that phrase awareness mostly in the lift/override lanes rather than directly biasing the main ride target after the first attempt proved slightly worse on the real file.
+- Final kept verified state after this `Vocal Rider` rework:
+  - `Vocal Rider`: `12.9225 dB -> 11.8820 dB`
+  - `Mix Leveler`: `12.9225 dB -> 12.6043 dB`
+- Verified with:
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`
+  - `./build/VXSuitePluginRegressionTests`
+
+---
+
+# Mix Leveler loudness-window rework — 2026-03-23
+
+## Problem
+Even after the split architecture and the `Vocal Rider` phrase-aware pass, `Mix Leveler` still felt like a safe downward trim rather than an intelligent, neutral rider. The user screenshots showed the wet trace staying persistently low, which matched the underlying issue: the general branch still used an envelope-style baseline heuristic rather than a clearer perceptual loudness relationship.
+
+## Plan
+- [x] Replace the current `Mix Leveler` ride target with a loudness-window control law built around momentary, short-term, and baseline loudness.
+- [x] Keep `Vocal Rider` unchanged while reworking only the `Mix` branch.
+- [x] Rebuild, measure both modes on `loud_quiet.wav`, and rerun `VXSuitePluginRegressionTests`.
+- [x] Keep the new `Mix` law only if it materially improves the real-file result without regressions.
+
+## Review
+- Reworked the `Mix Leveler` branch in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp) so it now behaves more like the intended perceptual rider:
+  - `generalMomentary` now models the `L_m` view (`~400 ms`),
+  - `generalShort` now models the `L_s` view (`~3 s`),
+  - `generalBaseline` is a slower baseline follower,
+  - the slow ride is driven by `L_s - L_b` with a deadband and shaped correction ramp,
+  - the fast clamp is driven by `L_m - L_s` overshoot instead of mainly by sample-peak prediction.
+- I also kept the previous `Vocal Rider` phrase-aware improvement intact, without changing that branch during this pass.
+- Follow-up host debugging after the user screenshots showed the wet output still looking too low:
+  - confirmed the trace is based on real dry/wet RMS history in [VxSuiteLevelTraceView.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteLevelTraceView.cpp) and [VxSuiteSpectrumTelemetry.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteSpectrumTelemetry.cpp), so the display is not just inventing a large offset,
+  - removed the redundant product-local `OutputTrimmer` from [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp) and [VxLevelerProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.h), leaving only the shared framework safety trimmer,
+  - expanded [VXLevelerMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXLevelerMeasure.cpp) to report spread, RMS, and peak so future tuning can target “more even without ending up much quieter,”
+  - tried more aggressive host-feel fixes for `Mix Leveler` including extra recentering and a new general-mode regression guard, but those candidates either failed the hot-mix regression or gave back too much of the actual leveling effect,
+  - kept the best verified compromise from this round instead of the mathematically strongest spread result, because the user-facing problem is host feel, not spread alone.
+- Final kept verified state on [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav):
+  - `Vocal Rider`: `12.9225 dB -> 11.8820 dB`, RMS `-23.20 dBFS -> -24.61 dBFS`, peak `-4.57 dBFS -> -5.66 dBFS`
+  - `Mix Leveler`: `12.9225 dB -> 12.7314 dB`, RMS `-23.20 dBFS -> -26.14 dBFS`, peak `-4.57 dBFS -> -6.18 dBFS`
+- Kept follow-up improvement on top of that compromise:
+  - added a separate `Mix`-only normalization stage in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp) with explicit dry-vs-wet baseline tracking,
+  - bounded the normalization by headroom, capped it to a few dB, and backed it off when spike protection is active,
+  - kept `Vocal Rider` unchanged during this pass.
+- This is the first `Mix`-only output-centering pass that materially improves host-feel metrics without breaking the suite. A later refinement changed the normalizer to compare dry-vs-wet short-term loss, not just baseline loss, and then allowed a slightly stronger bounded recovery, which improved the kept `Mix` result again while leaving the regressions clean.
+- Verified with:
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`
+  - `./build/VXSuitePluginRegressionTests`
+
+---
+# Mix reference comparison — 2026-03-23
+
+## Problem
+We now have a second host-rendered Mix Leveler reference file and need to determine whether it is a better target than the first mix reference before doing more tuning.
+
+## Plan
+- [x] Measure and compare `loud_quiet_mix.wav` and `loud_quiet_mix_2.wav` against the dry source.
+- [x] Summarize whether the second file is objectively closer to the dry target while still leveled.
+
+## Review
+- Compared [loud_quiet_mix.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix.wav) and [loud_quiet_mix_2.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav) against the dry source [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav).
+- Results:
+  - dry: spread `13.056 dB`, RMS `-23.566 dBFS`, peak `-4.574 dBFS`
+  - mix1: spread `12.780 dB`, RMS `-27.663 dBFS`, peak `-7.072 dBFS`, corr `0.85243`, RMSE `0.037848`
+  - mix2: spread `12.842 dB`, RMS `-26.661 dBFS`, peak `-6.200 dBFS`, corr `0.85684`, RMSE `0.035742`
+- Interpretation:
+  - `mix1` levels slightly more aggressively than `mix2`,
+  - but `mix2` retains more overall loudness, keeps peaks closer to the dry reference, and is slightly closer to the dry waveform overall,
+  - which matches the user's listening note that the newer `Mix` result feels better balanced.
+- Kept conclusion: [loud_quiet_mix_2.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav) is the better current `Mix Leveler` reference target.
+
+---
+
+# Automated Leveler tuning loop — 2026-03-23
+
+## Problem
+Manual `Leveler` tuning has reached the point where the tradeoff is hard to judge by spread numbers alone. The user asked for automated tuning passes until the product is in a stronger place, and we now have enough feedback to define a better score: preserve the smooth, non-pulsing feel, reduce spread, and keep `Mix Leveler` much closer to the dry track’s overall level.
+
+## Plan
+- [x] Expose a small internal `Mix Leveler` tuning surface so a search tool can try bounded candidate sets without rewriting source each time.
+- [x] Add an automated tuning/search executable that scores candidates on dry-vs-wet correlation, spread improvement, RMS loss, and peak loss using [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav) and the better mix reference target [loud_quiet_mix_2.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav).
+- [x] Run automated passes, inspect the best candidates, and keep only a candidate that also passes `VXSuitePluginRegressionTests`.
+- [x] Document the kept tuning result and any new lesson.
+
+## Review
+- Added a small internal `Mix` tuning surface to [VxLevelerDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.h) and a processor setter in [VxLevelerProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.h) / [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp) so search tools can evaluate bounded `Mix Leveler` candidates without source rewriting.
+- Added [VXLevelerTuneSearch.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXLevelerTuneSearch.cpp) and wired it into [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt). The tool scores candidates on:
+  - dry correlation,
+  - correlation to [loud_quiet_mix_2.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav),
+  - spread improvement,
+  - RMS-loss penalty,
+  - peak-loss penalty.
+- Ran an automated 96-candidate search against [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav) and [loud_quiet_mix_2.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav). The best candidate materially outperformed the previous hand-tuned `Mix` default while keeping the same smooth behavior family.
+- Promoted the best candidate into the default `Mix` tuning in [VxLevelerDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.h).
+- Final kept verified state on [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav):
+  - `Vocal Rider`: spread `12.9225 dB -> 11.8820 dB`, RMS `-23.20 dBFS -> -24.61 dBFS`, peak `-4.57 dBFS -> -5.66 dBFS`
+  - `Mix Leveler`: spread `12.9225 dB -> 12.7270 dB`, RMS `-23.20 dBFS -> -25.45 dBFS`, peak `-4.57 dBFS -> -6.19 dBFS`
+- This is the strongest `Mix` result we have kept so far because it stays close to the better host reference while still preserving a modest levelling improvement and keeping the regression suite clean.
+- Verified with:
+  - `cmake -S . -B build`
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests VXLevelerTuneSearch -j4`
+  - `./build/VXLevelerTuneSearch /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav 96`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_test.wav voice 1.0 1.0`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_test.wav general 1.0 1.0`
+  - `./build/VXSuitePluginRegressionTests`
+
+---
+# Mix reference comparison 2 — 2026-03-23
+
+## Problem
+A new Mix Leveler render (`loud_quiet_mix_4.wav`) may expose a different failure mode: the vocal feels too quiet, suggesting the mix mode may not be balancing all material equally. We need to compare it with the current better mix reference before using it as a tuning target.
+
+## Plan
+- [x] Measure and compare `loud_quiet_mix_2.wav` and `loud_quiet_mix_4.wav` against the dry source.
+- [x] Summarize whether `mix_4` is a better target or evidence of a worse balance failure.
+
+## Review
+- Compared [loud_quiet_mix_2.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_2.wav) and [loud_quiet_mix_4.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_4.wav) against the dry source [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav).
+- Results:
+  - dry: spread `13.056 dB`, RMS `-23.566 dBFS`, peak `-4.574 dBFS`
+  - mix2: spread `12.842 dB`, RMS `-26.661 dBFS`, peak `-6.200 dBFS`, corr `0.85684`, RMSE `0.035742`
+  - mix4: spread `12.844 dB`, RMS `-25.954 dBFS`, peak `-6.187 dBFS`, corr `0.87185`, RMSE `0.033330`
+- Interpretation:
+  - `mix4` is essentially the same amount of levelling as `mix2`,
+  - but it retains more overall level and is measurably closer to the dry track,
+  - so it is the better current overall `Mix Leveler` reference.
+- Important caveat from the user's listening note:
+  - even though `mix4` is the better overall target, it may also expose a remaining content-balance issue, namely that `Mix Leveler` can still leave the vocal too quiet relative to the accompaniment.
+- Kept conclusion: [loud_quiet_mix_4.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_4.wav) is the better current global `Mix Leveler` target, but it also highlights that `Mix` still needs better equality across content, not just better overall loudness retention.

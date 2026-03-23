@@ -55,6 +55,26 @@ float windowedLevelSpreadDb(const juce::AudioBuffer<float>& buffer,
     return static_cast<float>(std::sqrt(variance));
 }
 
+float rms(const juce::AudioBuffer<float>& buffer) {
+    double energy = 0.0;
+    int count = 0;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < buffer.getNumSamples(); ++i) {
+            energy += static_cast<double>(data[i]) * data[i];
+            ++count;
+        }
+    }
+    return static_cast<float>(std::sqrt(energy / std::max(1, count)));
+}
+
+float peakAbs(const juce::AudioBuffer<float>& buffer) {
+    float peak = 0.0f;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        peak = std::max(peak, buffer.getMagnitude(ch, 0, buffer.getNumSamples()));
+    return peak;
+}
+
 juce::AudioBuffer<float> readWaveFile(const juce::File& file, double& sampleRate) {
     juce::AudioFormatManager manager;
     manager.registerBasicFormats();
@@ -152,6 +172,10 @@ int main(int argc, char* argv[]) {
         std::cout << "Mode: " << mode << "\n";
         std::cout << "Input spread dB: " << windowedLevelSpreadDb(input, sampleRate) << "\n";
         std::cout << "Output spread dB: " << windowedLevelSpreadDb(output, sampleRate) << "\n";
+        std::cout << "Input RMS dBFS: " << juce::Decibels::gainToDecibels(std::max(rms(input), 1.0e-5f), -100.0f) << "\n";
+        std::cout << "Output RMS dBFS: " << juce::Decibels::gainToDecibels(std::max(rms(output), 1.0e-5f), -100.0f) << "\n";
+        std::cout << "Input peak dBFS: " << juce::Decibels::gainToDecibels(std::max(peakAbs(input), 1.0e-5f), -100.0f) << "\n";
+        std::cout << "Output peak dBFS: " << juce::Decibels::gainToDecibels(std::max(peakAbs(output), 1.0e-5f), -100.0f) << "\n";
         std::cout << "Wrote: " << outputFile.getFullPathName() << "\n";
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";

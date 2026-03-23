@@ -14,7 +14,7 @@ VXStudioAnalyserAudioProcessor::VXStudioAnalyserAudioProcessor()
     : juce::AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                             .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       identity(makeIdentity()),
-      analysisDomainIdValue(vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain()),
+      analysisDomainIdValue(vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId)),
       stagePublisher(identity) {}
 
 VXStudioAnalyserAudioProcessor::~VXStudioAnalyserAudioProcessor() {

@@ -32,16 +32,16 @@ private:
         juce::String stageName;
         juce::String stateText;
         juce::String impactText;
-        juce::String classText;
+        juce::String typeLabel;   // "Tone", "Dynamic", "Spatial", "Mixed", "Sparse"
+        juce::String freqHint;    // "@1.2 kHz"
         bool selected = false;
     };
 
     struct RenderModel {
         bool valid = false;
+        bool bypassed = false;
         bool sparseTone = false;
-        bool fallbackStages = false;
         bool snapshotFallback = false;
-        std::uint64_t generation = 0;
         juce::String statusText;
         juce::String selectionTitle;
         std::array<juce::String, 4> summaryLines {};
@@ -93,7 +93,8 @@ private:
         juce::String stageName;
         juce::String stateText;
         juce::String impactText;
-        juce::String classText;
+        juce::String typeLabel;   // "Tone", "Dynamic", "Spatial", "Mixed", "Sparse"
+        juce::String freqHint;    // "@1.2 kHz"
         float spectralChange = 0.0f;
         float dynamicChange = 0.0f;
         float stereoChange = 0.0f;
@@ -136,12 +137,8 @@ private:
     std::atomic<int> smoothingIndex { 3 };
     bool diagnosticsExpanded = false;
     bool chainCollapsed = false;
+    std::size_t prevChainRowCount = 0;
 
-    juce::SpinLock renderModelLock;
-    RenderModel pendingRenderModel;
-    std::atomic<std::uint64_t> pendingGeneration { 0 };
-    std::uint64_t appliedGeneration = 0;
-    std::uint64_t renderGeneration = 0;
     RenderModel currentRenderModel;
     BackendState backendState;
     std::vector<SidebarSnapshotCacheEntry> sidebarSnapshotCache;

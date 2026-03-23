@@ -246,10 +246,14 @@ class DomainRegistry {
 public:
     static DomainRegistry& instance() noexcept;
 
-    std::uint64_t registerAnalyserDomain() noexcept;
+    std::uint64_t registerAnalyserDomain(std::string_view ownerStageId) noexcept;
     void unregisterAnalyserDomain(std::uint64_t analysisDomainId) noexcept;
     [[nodiscard]] bool latestDomainForProcess(std::uint64_t hostProcessId, DomainView& out) const noexcept;
     [[nodiscard]] bool latestActiveDomain(DomainView& out) const noexcept;
+    [[nodiscard]] int allDomainsForProcess(std::uint64_t hostProcessId,
+                                           std::array<std::uint64_t, kMaxDomains>& out) const noexcept;
+    [[nodiscard]] bool ownerStageIdForDomain(std::uint64_t domainId,
+                                             std::array<char, 32>& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
 };
 
@@ -267,6 +271,9 @@ public:
                                std::uint64_t analysisDomainId,
                                const StageTelemetry& telemetry) noexcept;
     [[nodiscard]] bool readStage(int slotIndex, StageView& out) const noexcept;
+    [[nodiscard]] bool findStageByDomainAndStageId(std::uint64_t domainId,
+                                                    const std::array<char, 32>& stageId,
+                                                    StageView& out) const noexcept;
     [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
 };
 

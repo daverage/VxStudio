@@ -12,7 +12,7 @@ ProcessorBase::ProcessorBase(ProductIdentity identity,
                                             .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       productIdentity(std::move(identity)),
       parameters(*this, nullptr, "STATE", std::move(parameterLayout)),
-      spectrumPublisher(productIdentity, true),
+      spectrumPublisher(productIdentity, productIdentity.showLevelTrace),
       stagePublisher(productIdentity) {}
 
 ProcessorBase::~ProcessorBase() = default;
@@ -25,6 +25,7 @@ void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerB
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     tailLengthSeconds = 0.0;
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
+    voiceContext.prepare(sampleRate, samplesPerBlock);
     listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
     prepareProcessCoordinator(samplesPerBlock);
     spectrumPublisher.prepare(sampleRate, samplesPerBlock);
@@ -37,6 +38,7 @@ void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerB
 
 void ProcessorBase::reset() {
     voiceAnalysis.reset();
+    voiceContext.reset();
     listenInputScratch.clear();
     resetProcessCoordinator();
     spectrumPublisher.reset();
@@ -47,6 +49,7 @@ void ProcessorBase::reset() {
 
 void ProcessorBase::releaseResources() {
     voiceAnalysis.reset();
+    voiceContext.reset();
     listenInputScratch.setSize(0, 0);
     releaseProcessCoordinator();
     spectrumPublisher.reset();
@@ -89,6 +92,7 @@ void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce:
 void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     voiceAnalysis.update(buffer, buffer.getNumSamples());
+    voiceContext.update(buffer, voiceAnalysis.snapshot());
 
     const bool hasDryScratch = listenInputScratch.getNumChannels() >= buffer.getNumChannels()
         && listenInputScratch.getNumSamples() >= buffer.getNumSamples();

@@ -47,7 +47,8 @@ void Detector::reset() {
 }
 
 DetectorSnapshot Detector::analyse(const juce::AudioBuffer<float>& input,
-                                   const vxsuite::VoiceAnalysisSnapshot& voiceAnalysis) {
+                                   const vxsuite::VoiceAnalysisSnapshot& voiceAnalysis,
+                                   const vxsuite::VoiceContextSnapshot& voiceContext) {
     const int numChannels = input.getNumChannels();
     const int numSamples = input.getNumSamples();
     if (numChannels <= 0 || numSamples <= 0)
@@ -108,16 +109,19 @@ DetectorSnapshot Detector::analyse(const juce::AudioBuffer<float>& input,
         ? clamp01(static_cast<float>(std::sqrt(sideEnergy / std::max(1.0e-9, midEnergy + sideEnergy))))
         : 0.0f;
 
-    const float speechPresence = clamp01(0.40f * voiceAnalysis.speechPresence
-                                       + 0.25f * voiceAnalysis.protectVoice
+    const float speechPresence = clamp01(0.26f * voiceAnalysis.speechPresence
+                                       + 0.18f * voiceAnalysis.protectVoice
                                        + 0.20f * voiceAnalysis.speechBandEnergy
-                                       + 0.15f * clamp01((speechShare - 0.10f) / 0.35f));
+                                       + 0.14f * voiceContext.vocalDominance
+                                       + 0.12f * voiceContext.phraseActivity
+                                       + 0.10f * clamp01((speechShare - 0.10f) / 0.35f));
 
-    const float speechDominance = clamp01(0.42f * speechPresence
+    const float speechDominance = clamp01(0.32f * speechPresence
                                         + 0.18f * voiceAnalysis.speechStability
                                         + 0.18f * speechShare
                                         + 0.12f * (1.0f - brightness)
                                         + 0.10f * voiceAnalysis.directness
+                                        + 0.10f * voiceContext.vocalDominance
                                         - 0.10f * lowShare
                                         - 0.20f * transient);
 
@@ -125,9 +129,10 @@ DetectorSnapshot Detector::analyse(const juce::AudioBuffer<float>& input,
                                             + 0.24f * transient
                                             + 0.24f * lowShare
                                             + 0.16f * clamp01(avgAbsDiff / (fullEnv + 1.0e-5f))
-                                            + 0.12f * (1.0f - speechPresence));
+                                            + 0.08f * (1.0f - speechPresence)
+                                            + 0.08f * (1.0f - voiceContext.vocalDominance));
 
-    const float buriedSpeech = clamp01(speechPresence
+    const float buriedSpeech = clamp01((0.68f * speechPresence + 0.32f * voiceContext.buriedSpeech)
                                      * clamp01((instrumentDominance - speechDominance + 0.26f) / 0.72f)
                                      * clamp01((0.52f - speechShare) / 0.28f
                                              + 0.35f * brightness
@@ -147,6 +152,10 @@ DetectorSnapshot Detector::analyse(const juce::AudioBuffer<float>& input,
     snapshot.speechDominance = smoothSpeechDominance;
     snapshot.instrumentDominance = smoothInstrumentDominance;
     snapshot.buriedSpeech = smoothBuriedSpeech;
+    snapshot.phraseActivity = voiceContext.phraseActivity;
+    snapshot.phraseStart = voiceContext.phraseStart;
+    snapshot.phraseEnd = voiceContext.phraseEnd;
+    snapshot.intelligibility = voiceContext.intelligibility;
     snapshot.brightness = smoothBrightness;
     snapshot.transientStrength = smoothTransient;
     snapshot.stereoSpread = smoothStereoSpread;

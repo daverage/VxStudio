@@ -111,14 +111,26 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto voiceContext = getVoiceContextSnapshot();
+    const float vocalPriority = voiceMode
+        ? vxsuite::clamp01(0.38f * voiceContext.vocalDominance
+                         + 0.26f * voiceContext.intelligibility
+                         + 0.18f * voiceContext.phraseActivity
+                         + 0.10f * voiceContext.speechPresence
+                         + 0.08f * voiceContext.centerConfidence)
+        : 0.0f;
     const float gainSigned = juce::jlimit(-1.0f, 1.0f, (smoothedGain - 0.5f) / 0.5f);
     const float outputGainDb = gainSigned * 6.0f;
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
-    dspParams.peakReduction = vxsuite::clamp01(smoothedFinish);
+    dspParams.peakReduction = vxsuite::clamp01(smoothedFinish
+                            * (voiceMode
+                                ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
+                                : 1.0f));
     dspParams.outputGainDb = outputGainDb;
-    dspParams.body = vxsuite::clamp01(smoothedBody);
+    dspParams.body = vxsuite::clamp01(smoothedBody
+                    + (voiceMode ? 0.10f * vocalPriority * smoothedFinish : 0.0f));
 
     polishChain.setParams(dspParams);
     polishChain.process(buffer);
