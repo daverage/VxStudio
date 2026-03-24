@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../../framework/VxSuiteProduct.h"
+#include "../../framework/VxSuiteSignalQuality.h"
 #include "../../framework/VxSuiteSpectrumTelemetry.h"
 
+#include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 class VXStudioAnalyserAudioProcessor final : public juce::AudioProcessor {
@@ -38,12 +40,20 @@ public:
 
     [[nodiscard]] std::uint64_t analysisDomainId() const noexcept { return analysisDomainIdValue; }
     [[nodiscard]] const vxsuite::ProductTheme& theme() const noexcept { return identity.theme; }
+    [[nodiscard]] const vxsuite::ProductIdentity& getProductIdentity() const noexcept { return identity; }
     [[nodiscard]] juce::String stageIdString() const { return juce::String(identity.stageId.data(), static_cast<int>(identity.stageId.size())); }
+    [[nodiscard]] vxsuite::SignalQualitySnapshot getSignalQualitySnapshot() const noexcept;
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
+    void publishSignalQualitySnapshot() noexcept;
 
     vxsuite::ProductIdentity identity;
     std::uint64_t analysisDomainIdValue = 0;
     vxsuite::analysis::StagePublisher stagePublisher;
+    vxsuite::SignalQualityState signalQualityState;
+    std::atomic<float> monoScore { 0.0f };
+    std::atomic<float> compressionScore { 0.0f };
+    std::atomic<float> tiltScore { 0.0f };
+    std::atomic<float> separationConfidence { 1.0f };
 };

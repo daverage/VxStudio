@@ -1,3 +1,495 @@
+# VX instrument-balancer concept evaluation — 2026-03-24
+
+# VX Suite shared help + text-fit + semantic versioning pass — 2026-03-24
+
+## Problem
+The shared plugin UI still has readability issues on first load, especially where labels rely on aggressive horizontal scaling instead of robust fit rules. The framework also lacks a reusable Help surface, so product guidance is split between the repo README and user intuition rather than living inside the plugins. On top of that, versioning is still effectively global and informal, while the user now wants proper independent semantic versions for the framework and each DSP.
+
+## Plan
+- [ ] Audit the shared editor/layout system, current public plugin documentation, and existing version metadata to identify the cleanest framework-level extension points.
+- [ ] Add a framework-level fit-text pass so titles, status lines, knob labels, hints, and related shared UI text do not appear squashed on initial load.
+- [ ] Add a reusable Help button in the shared editor and a modal/popup capable of rendering HTML help content.
+- [ ] Extend shared product metadata so each plugin can provide HTML help content plus its own independent semantic version, while the framework also tracks its own version independently.
+- [ ] Add per-plugin help content providers and keep the in-plugin content aligned with the public README documentation for every shipped plugin.
+- [ ] Add a framework-level documentation-maintenance rule reminding contributors to keep both the in-plugin help popup and the README in sync.
+- [ ] Build and verify the UI/layout/help/version changes, then record the review outcome here.
+
+## Problem
+We need to evaluate a new VX Suite DSP idea that lets the user raise or lower broad instrument groups from one place: `Bass`, `Drums`, `Vocals`, `Guitar`, and `Other`. The recommendation needs to stay aligned with the VX Suite framework, remain credible for realtime use, prefer elegant/simple architecture, and reuse external open-source code where that genuinely helps. We should compare non-ML and very-light-ML paths rather than assume full stem-separation ML is appropriate.
+
+## Plan
+- [x] Review the VX Suite framework, current product history, and the existing light-ML path for constraints that affect a multi-slider product.
+- [x] Compare the main architecture options: no-ML intelligent control, lightweight realtime ML, and heavier source-separation-style designs.
+- [x] Evaluate likely open-source building blocks and note where they fit or do not fit VX Suite’s realtime/product rules.
+- [x] Write the recommended product direction, phased implementation plan, and verification approach here.
+
+## Review
+- Best fit for VX Suite: ship this as a new product with a shared framework slider layout and a deliberately simple contract such as `Bass`, `Drums`, `Vocals`, `Guitar`, `Other`, plus a lightweight `Focus` or `Precision` control only if testing proves it is needed. This is one of the rare cases where more than two main controls is justified because the whole product promise is direct group balancing.
+- Recommended v1 architecture: do not begin with full ML stem separation. Start with an intelligent hybrid controller built from fast analysis and guided spectral rebalancing: low-band ownership for `Bass`, transient/onset density for `Drums`, shared vocal-context plus speech/lead cues for `Vocals`, mid/high harmonic + pitch-stability cues for `Guitar`, and residual energy for `Other`. That keeps latency, CPU, and maintainability compatible with the suite while still feeling meaningfully “smart”.
+- Best open-source building blocks for that v1 path are analysis libraries, not separator models. `aubio` is useful for onset/pitch helpers, but its GPL license makes direct embedding awkward for a commercial-safe core. `Essentia` has rich MIR features but is AGPL, so it is better as a research/prototyping reference than as an embedded dependency. Practical conclusion: reuse their ideas and offline prototypes, but prefer implementing the shippable realtime primitives inside `Source/vxsuite/framework/` and the product DSP locally.
+- Recommended v2 path, if v1 proves musically useful but not selective enough: add a very small optional ML assist that estimates control masks or ownership priors rather than generating full stems. This is the closest analogue to the current `DeepFilterNet` philosophy: use ML to guide a lightweight corrective path, not to run a heavyweight full demixer every block.
+- Not recommended for v1 realtime shipping: direct reuse of `Demucs`, `Open-Unmix`, or `Spleeter` as the live core. They are valuable references and good offline benchmarks, but they are still fundamentally separation-first systems with materially higher context, CPU, latency, and integration burden than the suite currently tolerates. `Demucs` is also archived upstream, which lowers confidence for a new product dependency.
+- If true realtime multi-stem ML becomes a hard requirement later, the most credible research direction is a causal/low-latency demixer family rather than offline-quality stem models adapted after the fact. That should be treated as a separate R&D phase with explicit latency and artifact gates.
+- Framework implication: because the shared editor currently tops out at four rotary controls, implement a generic multi-slider control surface in the framework instead of a one-off product editor. This product is the right place to add a reusable “group mixer” layout to VX Suite.
+- Verification should be staged:
+  - Stage 1: offline labelled-stem evaluation on public multitrack material to score control selectivity (`raise vocals` should mostly raise vocal stem energy, etc.).
+  - Stage 2: realtime plugin tests for CPU, latency, automation continuity, silence/reset safety, and stereo-image stability.
+  - Stage 3: musical listening tests on dense mixes to judge whether the plugin behaves like an intelligent rebalance tool rather than a phasey stem separator.
+
+# VX Rebalance framework-native spec rebuild — 2026-03-24
+
+## Problem
+The user provided a useful first-pass source-rebalance plugin spec, but it assumes a standalone JUCE plugin shape rather than the current VX Suite framework. We need to rebuild it into a VX-native spec that preserves the DSP idea while making the framework implications explicit: shared processor/editor base usage, parameter/layout contracts, slider-bank UI support, realtime rules, and verification expectations.
+
+## Plan
+- [x] Re-read the current VX Suite framework seams that constrain parameters and editor layout.
+- [x] Rebuild the standalone source-rebalance brief into a VX Suite product spec for `VX Rebalance`.
+- [x] Record the completed spec and note the required framework extension clearly.
+
+## Review
+- Rebuilt the standalone JUCE-first brief into a VX Suite-native product spec at [VX_REBALANCE_SPEC.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/docs/VX_REBALANCE_SPEC.md).
+- Kept the user’s core V1 DSP direction intact: heuristic STFT-domain ownership masks, no ML inference, bounded source-family rebalance, low-end/transient guardrails, and a global `Strength` control.
+- Adjusted the product contract to match the current suite architecture: `VX Rebalance` is specified as a `ProcessorBase` product with product-local DSP modules and explicit shared-framework work for a reusable multi-slider control bank.
+- Made the main framework gap explicit: the current `ProductIdentity` / `createSimpleParameterLayout(...)` / `EditorBase` path tops out at four rotary controls, so this product should drive a clean framework extension for slider-bank layouts and centered rebalance-style parameter formatting rather than a one-off editor fork.
+
+# VX Rebalance implementation — 2026-03-24
+
+## Problem
+The user wants `VX Rebalance` built now from the new spec. That means shipping both halves together: a reusable framework extension for a five-slider control bank and the first working `VX Rebalance` product using heuristic STFT-domain source-family masks.
+
+## Plan
+- [x] Extend the shared framework so a product can declare a multi-control slider bank without breaking existing 2–4 knob products.
+- [x] Add centered rebalance-style parameter formatting/layout support for `VX Rebalance`.
+- [x] Implement the `VX Rebalance` product skeleton, DSP engine, and product wiring under `Source/vxsuite/products/rebalance/`.
+- [x] Add the new plugin target to the build and stage it like the other VX products.
+- [x] Build the new target, fix compile/runtime issues, and run focused verification.
+- [x] Record the kept outcome and any risks here.
+
+## Review
+- Added a shared framework control-bank path so products can declare up to six banked controls in [VxSuiteProduct.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProduct.h), with matching editor support in [VxSuiteEditorBase.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteEditorBase.h) and [VxSuiteEditorBase.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteEditorBase.cpp). Existing 2–4 knob products still stay on the old path.
+- Added centered rebalance-style parameter display support in [VxSuiteParameters.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteParameters.h) so source-family controls can present `-100% ... +100%` style values while staying normalized internally.
+- Implemented the new product in [VxRebalanceProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.h), [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp), [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h), and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp). V1 is a linked-stereo STFT overlap-add rebalance engine with heuristic masks for `Vocals`, `Drums`, `Bass`, `Guitar`, and `Other`, plus a sixth `Strength` slider and low-end/transient guardrails.
+- Added the new plugin target and staging path in [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt). A staged bundle now exists at [VXRebalance.vst3](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/vst/VXRebalance.vst3).
+- Focused verification:
+  - `cmake -S . -B build`
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- One unrelated framework compile issue surfaced during the first build: [VxSuiteHelpView.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteHelpView.cpp) was already missing `toJuceString(...)` visibility, so I added the needed include while getting the new target through.
+- Known v1 risks:
+  - the heuristic mask engine is intentionally simple and not yet tuned against labelled stem datasets, so selectivity is plausible but not yet proven
+  - the new control-bank UI currently renders all six controls as a vertical slider bank, which is the right shared-framework move for now but may still need visual polish
+  - no product-specific measurement harness exists yet for selectivity, low-end stability, or transient retention, so this build is “compiles and stages” verified rather than fully outcome-verified
+
+## Follow-up correction
+- The first `VX Rebalance` pass had the wrong control contract and the wrong ownership priority. The source sliders were presented too much like broad percentage gain moves, and the initial heuristic masks let `Bass` and especially `Guitar` claim too much of the spectrum, which made several sliders feel like they were all moving the same material.
+- I corrected the user-facing control range by switching the five source-family sliders to centered `dB` display in [VxSuiteParameters.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteParameters.h) and [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp). They now read as bounded rebalance moves around `0 dB`, which is a much more honest fit for a heuristic source balancer.
+- I corrected the deeper DSP bug in [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp):
+  - `Vocals` now get a stronger voice-biased claim in the speech/formant region
+  - `Drums` now get stronger transient-led claims across kick/snare/cymbal regions
+  - `Bass` is narrower and backs off more during kick/transient-heavy frames
+  - `Guitar` is demoted from a broad default owner to a narrower residual midrange lane
+  - `Other` now behaves more like a true residual catch-all
+- I also fed shared framework voice-context evidence into the rebalance DSP so vocal ownership is no longer purely static-frequency-based.
+- Verification after the correction:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- Remaining gap: this is a stronger heuristic allocation than the first pass, but I still have not run a labelled-stem selectivity harness or in-host listening pass on the corrected build, so the retune is compile-verified, not yet fully musically verified.
+
+## Research notes
+- Reviewed current mixing/source-separation references before further tuning. The key practical takeaway is that real live/mastered music does not divide cleanly by one static frequency map; instead, each source tends to have a few strong ownership regions plus a lot of harmonic/transient overlap.
+- Stable source-prior anchors from the references:
+  - `Bass`: strongest fundamentals/sub energy in roughly `20–160 Hz`, with mud/conflict often around `200–400 Hz` and attack/presence up into about `700 Hz–2 kHz`. See [iZotope bass guide](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/todo.md) research summary and external source [How to EQ bass to sit well in the mix](https://www.izotope.com/en/learn/how-to-eq-bass).
+  - `Kick / drums`: kick punch commonly around `60–100 Hz`, body around `100–250 Hz`, click/attack around `1–5 kHz`; snare body around `150–250 Hz`, attack around `2–5 kHz`, cymbal/hat energy higher still. See [Yamaha EQ guide](https://hub.yamaha.com/proaudio/livesound/eq/) and [iZotope EQ cheat sheet](https://www.izotope.com/en/learn/eq-cheat-sheet).
+  - `Vocals`: low rumble generally below `80–100 Hz`, body/warmth around `100–400 Hz`, box/nasal zones around `400 Hz–1.5 kHz`, intelligibility around `1.5–5 kHz`, sibilance `5–8 kHz`, air above that. See [How to EQ vocals](https://www.izotope.com/en/learn/how-to-eq-vocals.html/1000).
+  - `Guitar`: lives mostly as midrange and upper-mid harmonic content; electric guitar harshness often `1–2 kHz`, body/punch can reach into a few hundred Hz, and pick/pluck lives in upper mids. It should not own the whole `250 Hz–5 kHz` band by default. See [Yamaha EQ guide](https://hub.yamaha.com/proaudio/livesound/eq/), [Sweetwater guitar EQ notes](https://www.sweetwater.com/insync/quickie-guide-mixing-part-14/), and [iZotope mixing guide PDF](https://downloads.izotope.com/guides/iZotope-Mixing-Guide-Principles-Tips-Techniques.pdf).
+- Important mix-structure findings:
+  - The broad low end is usually a negotiated space between kick and bass, not “bass owns lows” or “drums own lows” globally. The exact split often depends on which instrument carries the main fundamental in that song.
+  - The midrange (`500 Hz–2 kHz`) is shared by almost everything in pop/rock mixes, including vocals, snare, guitars, keys, and horns. So a static “midrange = guitar” heuristic is especially wrong on mastered mixes.
+  - The `2–8 kHz` region is not “vocals only” or “drums only”; it contains vocal intelligibility, kick/snare attack, acoustic pick, cymbals, breaths, and plenty of guitar detail. Ownership there needs transient/steadiness/voice evidence, not only frequency.
+  - Center information matters: bass, kick, snare, vocals, and other low-tone anchors are commonly mixed near the center, while higher-frequency material often spreads wider. See [Sweetwater stereo-field note](https://www.sweetwater.com/insync/get-creative-with-the-stereo-field/).
+  - Even reference source-separation datasets are imperfect: MUSDB18 documents bleed and stem-label ambiguity such as “other mixed into drums” and “bleeding of other instruments into vocals,” which is a good reminder that our heuristic lanes must be soft, not absolute. See [MUSDB18](https://sigsep.github.io/datasets/musdb.html).
+- Research-backed tuning direction for the next VX Rebalance pass:
+  - Treat `Vocals` as a center-weighted, voice-evidence-weighted lane with strongest ownership around `150 Hz–5 kHz`, but only when the spectrum is sufficiently steady and speech-like.
+  - Split `Drums` into sub-lanes conceptually: kick (`45–110 Hz` transient-led), snare/body (`150 Hz–300 Hz` + `2–5 kHz`), cymbal/hat (`5 kHz+` transient-led).
+  - Treat `Bass` as fundamentals plus first harmonics with continuity and center weighting, but explicitly suppress its claim during strong kick-like transient frames.
+  - Treat `Guitar` as a residual harmonic lane shaped by steadiness, midrange harmonic density, and reduced center priority, not as a default owner of everything non-vocal in the mids.
+  - Use `Other` as the true residual bucket for keys, ambience, pads, brass, backing clutter, and uncategorized overlap.
+
+## Research-driven retune
+- Reworked the `VX Rebalance` ownership logic in [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp) around the research findings instead of continuing to tweak the earlier static-band version.
+- The retuned heuristics now:
+  - derive per-bin `center` vs `side` weighting from stereo mid/side magnitude during each STFT frame
+  - bias `Vocals` toward center-heavy, speech-evidence-weighted, steadier bins in roughly the vocal body/presence region
+  - split `Drums` into low kick support, low-mid snare/body support, upper-mid attack support, and high-band cymbal/hat support, all transient-led
+  - make `Bass` more center/continuity-driven and explicitly reduce its claim during kick-like transient frames
+  - make `Guitar` a narrower harmonic residual lane, with less authority when the bin is center-heavy and voice-like
+  - keep `Other` as the true catch-all residual bucket rather than an afterthought
+- I also kept the earlier `dB around center` source-slider contract, so the controls now behave more like believable rebalance moves instead of pseudo-stem volume sliders.
+- Verification after the research-driven retune:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- Remaining limitation: this is still a heuristic rebalance engine on mastered stereo audio, so the build is stronger conceptually and compile-verified, but it still needs host listening and ideally a labelled-stem selectivity harness to prove whether the new ownership rules are actually better in practice.
+
+## User correction
+- After the research-driven retune, the user reported that `Vocals` still control too much of the spectrum. That confirms the broader conclusion from the tuning loop: on mastered stereo material, the overlap between vocals, guitars, snare attack, keys, and other center-heavy content is too strong for this heuristic-only v1 approach to be trustworthy.
+- Kept conclusion: `VX Rebalance` likely needs an ML-guided ownership stage for this job if it is meant to feel convincingly source-specific on mixed/mastered recordings.
+
+## Engineering follow-up
+- The user then reviewed the implementation and identified several real engineering issues in the current `VX Rebalance` DSP path.
+- Fixed in [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp):
+  - replaced the per-sample O(n) output FIFO left-shift with a circular-buffer read/write scheme
+  - changed control-target and analysis-context handoff to atomically published values
+  - added DSP-local `juce::SmoothedValue` control smoothing so source gains move continuously rather than stepping at block boundaries
+  - moved `prevAnalysisMag` state update out of the composite-gain loop for clearer maintenance
+  - documented the current `kMinCut = 0.5f` floor in code as an intentional v1 guardrail rather than an accidental hidden limit
+- Verification after the engineering fixes:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- Important context: these fixes improve CPU correctness and realtime behavior, but they do not change the broader product conclusion above that source-specific mastered-mix rebalance still likely needs ML guidance to be truly convincing.
+
+## Signal-quality detector
+- Added an internal `SignalQuality` path to [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp).
+- The detector now estimates, per frame with smoothing:
+  - `monoScore`
+  - `compressionScore`
+  - `tiltScore`
+  - derived `separationConfidence`
+- The current retune uses those signals conservatively:
+  - reduce vocal center bias when the recording is effectively mono
+  - reduce “steady = vocal” bias when dynamics are crushed
+  - lower the transient threshold under compression so drums still register
+  - weaken bass continuity bonus under strong low-frequency tilt
+  - blend all source gains back toward unity when separation confidence is low
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- This is the right pre-ML step because it makes the heuristic path more self-aware and gives us a confidence signal we can later reuse if the product pivots to ML-guided ownership.
+
+## Framework signal-quality layer — 2026-03-24
+
+## Problem
+The current signal-quality detector now exists inside `VX Rebalance`, but the idea is broader than that one product. We need to recreate it as a proper shared VX Suite framework analysis layer so all products can read the same recording-quality evidence instead of each one inventing its own ad hoc detector.
+
+## Plan
+- [x] Add a shared framework `SignalQuality` snapshot/state with prepare/reset/update lifecycle matching the existing analysis layers.
+- [x] Wire `ProcessorBase` to maintain and expose the shared signal-quality snapshot for all products.
+- [x] Refactor `VX Rebalance` to consume the shared framework signal-quality detector instead of its local copy.
+- [x] Rebuild `VXRebalancePlugin` and verify the framework refactor compiles/stages cleanly.
+- [x] Record the kept framework outcome here.
+
+## Review
+- Added a shared framework signal-quality analysis layer in [VxSuiteSignalQuality.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteSignalQuality.h) and [VxSuiteSignalQuality.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteSignalQuality.cpp). It computes reusable `monoScore`, `compressionScore`, `tiltScore`, and `separationConfidence` snapshots with the same prepare/reset/update lifecycle pattern as the existing voice-analysis layers.
+- Wired `ProcessorBase` to own and update that state in [VxSuiteProcessorBase.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProcessorBase.h) and [VxSuiteProcessorBase.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProcessorBase.cpp), so every product can now read `getSignalQualitySnapshot()` from the shared framework path.
+- Updated the framework build in [VxSuitePlugin.cmake](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxSuitePlugin.cmake) to compile the new shared analysis layer.
+- Refactored `VX Rebalance` to consume the shared framework detector instead of maintaining a duplicate local one in [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp), [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h), and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp).
+- Added the first broader suite consumer in [VxCleanupProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/cleanup/VxCleanupProcessor.cpp). `Cleanup` now uses `SignalQuality` to back off its more confident corrective decisions on mono, crushed, or low-tilted material rather than over-reading bad input.
+- Documented the shared `SignalQuality` contract and usage pattern in the framework docs at [README.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/README.md).
+- Verification:
+  - `cmake --build build --target VXCleanupPlugin VXRebalancePlugin -j4`
+- Kept architectural conclusion: shared signal-quality analysis belongs in the framework, but product-specific responses to that analysis still belong in the individual products.
+
+# Shared SignalQuality rollout continuation — 2026-03-24
+
+## Problem
+The framework now owns `SignalQuality`, and `Cleanup` plus `Rebalance` consume it, but the rollout is still narrow. We should extend it into the next most natural `ProcessorBase` product so the shared detector starts paying off as a suite-level input-trust layer rather than staying a one-feature experiment. `Leveler` is the best next fit because it already makes confidence-sensitive decisions about how firmly to ride programme material.
+
+## Plan
+- [x] Review `VX Leveler`'s current processor/DSP seam and identify the smallest clean place to pass `SignalQuality` through.
+- [x] Use `SignalQuality` in `Mix Leveler` to ease aggressive ride, spike, and restore decisions on mono, crushed, or low-confidence material without changing the vocal engine contract.
+- [x] Expand the framework `README.md` with suite-wide guidance on where `SignalQuality` belongs and how products should consume it.
+- [x] Build the affected target(s) and record the kept outcome plus any deferred rollout notes for `Analyser`.
+
+## Review
+- Extended [VxLevelerDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.h) and [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp) so `VX Leveler` now consumes the shared framework `SignalQuality` snapshot directly through its DSP params instead of inventing another local detector.
+- Kept the rollout conservative in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp): the shared snapshot only modulates `Mix Leveler` trust-sensitive decisions. Lower confidence now widens the ride deadband, softens ride depth, scales normalize/restore confidence, slightly lowers compressed-material spike thresholds, and eases brightness taming on low-tilt material. `Vocal Rider` behaviour was left unchanged on purpose.
+- Expanded the shared framework guidance in [README.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/README.md) so future products treat `SignalQuality` as an input-trust layer and keep product-specific response logic local.
+- Deferred direct `Analyser` adoption for now. It is not a `ProcessorBase` product, so the right next step there is an explicit bridge or UI-only exposure, not a second copy of the detector.
+- Verification:
+  - `cmake --build build --target VXLevelerPlugin -j4`
+  - `cmake --build build --target VXLevelerMeasure -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_signal_quality_leveler.wav general 1.0 1.0 smart`
+- Measured sanity check on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav` after the rollout:
+  - spread `12.9225 -> 12.3683 dB`
+  - RMS `-23.2013 -> -23.7865 dBFS`
+  - peak `-4.5736 -> -3.5545 dBFS`
+- Kept conclusion: `Leveler` is now the most comfortable second framework consumer after `Cleanup`, and `SignalQuality` is starting to act like a real suite-wide trust layer rather than a `Rebalance`-only experiment.
+
+# Studio Analyser SignalQuality exposure — 2026-03-24
+
+## Problem
+`SignalQuality` is now useful across the suite, but the one product that should make it visible to users still does not surface it. `Studio Analyser` is not a `ProcessorBase` product, so the clean implementation is to bridge the shared framework detector into the analyser processor and expose compact recording-condition hints in the UI without cloning detector logic.
+
+## Plan
+- [x] Add shared `SignalQualityState` ownership plus an atomic snapshot bridge to `Studio Analyser`'s processor.
+- [x] Surface concise recording-condition hints and confidence in the analyser header without adding a heavy new panel.
+- [x] Build `VXStudioAnalyserPlugin` and record the kept outcome.
+
+## Review
+- Bridged the shared framework detector into [VXStudioAnalyserProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/analyser/VXStudioAnalyserProcessor.h) and [VXStudioAnalyserProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/analyser/VXStudioAnalyserProcessor.cpp) using `SignalQualityState` plus an atomic snapshot handoff. That keeps the analyser on the same suite-wide detector without requiring `ProcessorBase` or duplicating DSP logic.
+- Exposed the result in [VXStudioAnalyserEditor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/analyser/VXStudioAnalyserEditor.h) and [VXStudioAnalyserEditor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/analyser/VXStudioAnalyserEditor.cpp) as a compact header line:
+  - stereo condition (`Near mono` / `Stereo-limited` / `Stereo-open`)
+  - dynamics condition (`AGC / crushed` to `Natural dynamics`)
+  - tonal condition (`Low-heavy / lo-fi` to `Balanced spectrum`)
+  - overall DSP trust percentage from `separationConfidence`
+- Kept the UI efficient on purpose: no new diagnostics panel, no duplicated detector readout, just one readable recording-condition sentence that updates with the existing analyser timer.
+- Verification:
+  - `cmake --build build --target VXStudioAnalyserPlugin -j4`
+- Kept conclusion: `Studio Analyser` now acts as the suite’s visible recording-condition surface, while the shared framework still owns the actual `SignalQuality` detection.
+
+# VX Rebalance neutral attenuation + weak range fix — 2026-03-24
+
+## Problem
+`VX Rebalance` is still misbehaving in two fundamental ways: with `Strength` at `100%` and all source sliders at `0 dB`, it audibly attenuates the signal instead of behaving like neutral bypass, and the current boost/bury law is too weak to make the product feel meaningful even before the remaining source-ownership issues. We need to fix the neutral contract first, then strengthen the source gain law so the sliders produce visible and audible movement.
+
+## Plan
+- [x] Inspect the neutral signal path and current rebalance gain law to identify why unity settings still attenuate.
+
+# Stem profiler phone-vs-pro comparison — 2026-03-24
+
+## Problem
+We now have two split-stem datasets for the same song family: a mobile-phone capture plus stem split, and a cleaner released-track stem split. We need to compare them with the same offline profiler so `VX Rebalance` tuning is guided by what survives across both recording conditions rather than overfitting to the phone example.
+
+## Plan
+- [x] Inspect the provided pro stem folder and confirm it matches the profiler's expected stem layout.
+- [x] Run the stem profiler on the pro dataset and collect report/plot outputs.
+- [x] Compare phone vs pro findings, then write the stable source-region guidance and tuning implications here.
+
+## Review
+- Extended [stem_profile.py](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tools/stem_profile.py) so it no longer hard-codes the phone dataset filenames. It now finds `*_original`, `*_vocals`, `*_drums`, `*_bass`, `*_guitar`, `*_piano`, and `*_other` with common audio extensions, which makes it reusable for future R&D packs without renaming assets.
+- Ran the same profiler on the pro release split at [stem-profile-brightside-pro/report.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/stem-profile-brightside-pro/report.md) and generated comparison notes at [stem-profile-brightside-compare.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/stem-profile-brightside-compare.md).
+- Stable regions across both the phone capture split and the pro release split are much narrower than the current heuristic `Rebalance` model assumed:
+  - `Vocals`: only `1.4 kHz - 2.9 kHz` survives cleanly across both sets as a strong static prior.
+  - `Drums`: only the high cymbal/hat bands above `6.3 kHz` survive cleanly across both sets as a strong static prior.
+- The low end is condition-dependent:
+  - the phone split makes `Bass` look strong below `136 Hz`,
+  - the pro split pushes more low ownership into kick-led `Drums` below about `93 Hz` and leaves `Bass` strongest at `136 Hz - 200 Hz`.
+- `Guitar`, `Piano`, and `Other` still do not produce robust static safe regions across both datasets, which supports keeping those lanes residual/confidence-gated rather than frequency-led in the current heuristic product.
+- Practical tuning implication for `VX Rebalance`: treat roughly `200 Hz - 430 Hz` as a low-confidence semantic band, trust `Vocals` mainly in the `1.4-2.9 kHz` presence zone, trust `Drums` most strongly in the upper transient/cymbal zone, and keep low-end ownership adaptive rather than hard-banded.
+
+# VX Rebalance recording-type mode profiles — 2026-03-24
+
+## Problem
+`VX Rebalance` still relies on one inline heuristic profile even though the user has now defined a clearer V1 contract: `Studio`, `Live`, and `Phone / Rough` should be explicit user-facing recording types with data-driven source band profiles, confidence behaviour, and safety limits. We need to implement that cleanly through the VX framework instead of burying another pile of mode-specific constants inside `computeMasks()`.
+
+## Plan
+- [x] Review the current `VX Rebalance` processor/editor seam and pick the cleanest framework-native place for a `Recording Type` selector.
+- [x] Add data-driven recording-type profile structs plus mode selection plumbing in the processor and DSP.
+- [x] Refit mask smoothing, confidence behaviour, and source gain limits to read from those profiles instead of hard-coded single-mode constants.
+- [x] Build the affected targets and verify the new mode path compiles and behaves sanely.
+
+## Review
+- Reworked [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp) so recording-type profiles can now express multiple weighted frequency regions per source instead of only one contiguous `strong / medium / light` band. That fixes the earlier structural mismatch where `Drums`, `Vocals`, and `Guitars` had to be flattened into overly broad fake bands.
+- Kept the user-requested `±24 dB` slider range in [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp), but restored mode-specific safety in the DSP:
+  - `Studio` now applies bounded composite moves around `+6 / -9 dB`
+  - `Live` around `+4.5 / -7 dB`
+  - `Phone / Rough` around `+3 / -5 dB`
+  - while the wide slider throw still acts as the user request into the engine.
+- Fixed the confidence-law bug in [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp): `confidenceFloor` now behaves as a threshold below which confident moves collapse more quickly, instead of acting like a permanent ceiling that weakened every user move even at high confidence.
+- Removed the remaining hop-time FIFO/OLA shifts from the realtime DSP path in [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp). Input history is now read from a circular buffer, and overlap-add accumulation advances through a ring instead of `std::move`-shifting whole buffers every hop.
+- Repaired [VXRebalanceMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXRebalanceMeasure.cpp) so it matches the actual product contract again:
+  - generic stem-file discovery for phone and pro naming styles
+  - `±24 dB` normalization instead of stale `±12 dB`
+  - optional `recording_type` argument so the harness can exercise `Studio`, `Live`, or `Phone / Rough`
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin VXRebalanceMeasure -j4`
+  - `./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 6.0 studio`
+- Current measured state after the structural fixes:
+  - neutral remains exact: `rms=0 peak=0`
+  - the harness is trustworthy again
+  - but source selectivity still needs musical retuning, especially `Bass`, `Guitar`, and `Other`, which remain too correlated with non-target material on the phone split
+
+### Follow-up: slider authority restore
+- After the structural fixes, the user correctly reported that the bands still felt weak and that the recording-type modes were not audibly distinct enough.
+- Kept fix in [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp):
+  - increased effective mask contribution,
+  - strengthened per-source dB weighting,
+  - relaxed the over-diluting gain focus law,
+  - widened the practical difference between `Studio`, `Live`, and `Phone / Rough` safety ceilings.
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin VXRebalanceMeasure -j4`
+  - `./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 24.0 studio`
+- Measured result:
+  - the plugin now has real authority again; for example `Vocals @ +24 dB` now gives about `+9.75 dB` on the isolated vocal stem instead of the earlier ~`+2 dB` range
+  - `Drums @ +24 dB` now gives about `+8.78 dB` on the isolated drum stem
+- Honest conclusion:
+  - this pass fixed the “almost no effect” problem,
+  - but it also makes the remaining selectivity leakage much more obvious, especially for `Bass`, `Guitar`, and `Other`
+  - the current build is stronger and more honest, but still not semantically clean enough to call the heuristic path finished
+
+---
+# VX Rebalance v2 ML spec — 2026-03-24
+
+## Problem
+The heuristic `VX Rebalance` path has taught us something useful but clear: users want believable control of `Vocals`, `Drums`, `Bass`, and `Guitar`, and pure heuristic STFT ownership is not selective enough on real mastered music to meet that promise reliably. We need a proper v2 specification for an ML-guided rebalance engine that stays aligned with VX Suite’s realtime/product constraints instead of drifting toward a heavyweight offline stem-separation product.
+
+## Plan
+- [x] Decide the core v2 product direction: ML-guided source ownership masks, not full stem export as the primary contract.
+- [x] Write a framework-native `VX Rebalance` v2 specification covering model role, DSP role, mode behaviour, latency/size constraints, and verification.
+- [x] Record the completed spec here and point to the new doc file.
+
+## Review
+- Wrote the v2 ML-based spec at [VX_REBALANCE_V2_SPEC.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/docs/VX_REBALANCE_V2_SPEC.md).
+- The kept direction is explicitly **ML-guided rebalance**, not “live Demucs in a plugin” and not “stem export”.
+- The central design choice is a five-head soft-mask model for:
+  - `Vocals`
+  - `Drums`
+  - `Bass`
+  - `Guitar`
+  - `Other`
+- `Guitar` is specified as a **direct-plus-negative-space** lane:
+  - the model predicts direct guitar evidence,
+  - stronger lanes like `Vocals`, `Drums`, and `Bass` claim their confident bins first,
+  - `Guitar` then combines its own direct evidence with the remaining residual opportunity,
+  - `Other` absorbs the unresolved remainder.
+- The spec keeps VX Suite’s product identity intact:
+  - the plugin remains a rebalance processor,
+  - ML only estimates ownership/masks,
+  - product DSP still handles bounded gain, smoothing, low-end protection, transient protection, and recording-type behaviour.
+- The spec also sets practical v2 constraints:
+  - no multi-GB offline-quality separator as the first shipping target,
+  - prefer a small/medium mask-prediction model,
+  - keep `Studio / Live / Phone / Rough` as behavioural priors around the model, not as separate models unless validation proves that necessary.
+- After review, tightened the spec around the real implementation risks:
+  - added an explicit **Training Data** section and named the actual blocker: guitar-specific labelled multitrack data
+  - committed the first cross-platform runtime direction to **ONNX Runtime**
+  - changed the latency story from vague “maybe realtime / maybe high precision” language to an explicit **near-realtime / high-precision default** with lower-latency modes treated as secondary
+  - added a hard shipping gate: if guitar-labelled data is not strong enough, the first ML shipping plan falls back to **4-head ML plus heuristic guitar shaping** instead of pretending a weak accompaniment model is a real guitar detector
+- [x] Add an exact dry bypass path for effectively neutral rebalance settings so `0 dB` really means no change.
+- [x] Strengthen the source gain law so masked boosts/cuts are materially stronger without breaking realtime safety.
+- [x] Rebuild `VXRebalancePlugin`, run focused verification, and record the kept outcome.
+
+## Review
+- Added an explicit neutral bypass in [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp): if `Strength` is effectively zero or all five source sliders are effectively centred at `0 dB`, the processor now returns the dry signal instead of sending audio through the heuristic STFT path. That directly fixes the user-facing contract that neutral settings must not attenuate.
+- Strengthened the source gain law in [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp):
+  - per-source range widened from `±6 dB` to `±12 dB`
+  - per-bin rebalance now combines masked source moves in the `dB` domain instead of as a diluted linear-gain average
+  - final composite gain remains bounded to a safe `±12 dB`
+- Kept the change minimal and realtime-safe: no new allocations, no new framework fork, and no extra detector layer. This pass was about fixing the neutral/buried/boost-too-small contract first, not about claiming source ownership is solved.
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- Important remaining gap:
+  - there is still no dedicated `Rebalance` measurement harness in this repo, so I verified build/staging and fixed the neutral contract in code, but I have not yet run a product-specific selectivity or loudness-retention render test for this version.
+
+# VX Rebalance source-mapping correction — 2026-03-24
+
+## Problem
+The latest `VX Rebalance` build still does not map its controls credibly. The analyser screenshots with each lane at `+6 dB` show several controls acting like broad overlapping tone shelves instead of distinct source-family moves, which matches the listening report. We need a focused ownership pass that makes the five lanes more orthogonal before we spend any more time on cosmetic gain-law tweaks.
+
+## Plan
+- [x] Inspect the current mask windows against the screenshot behaviour and the provided `brightside.wav` example.
+- [x] Retune the ownership logic so `Bass`, `Drums`, `Vocals`, `Guitar`, and `Other` claim more distinct regions and stop behaving like near-duplicates.
+- [x] Keep the new neutral/unity contract intact while strengthening source specificity.
+- [x] Rebuild `VXRebalancePlugin` and record the kept outcome plus any remaining ML boundary.
+
+## Review
+- Added a dedicated stem-aware measurement harness in [VXRebalanceMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXRebalanceMeasure.cpp) and wired it into [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt). It can now render `VX Rebalance` against a provided split-stem set and report both mix-delta correlation and isolated-stem gain per lane.
+- The first meaningful finding from the `brightside` stems was not just “bad heuristics” but a real wiring bug: the UI control order (`Vocals`, `Drums`, `Bass`, `Guitar`, `Other`) did not match the internal raw mask order. I fixed that in [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h) and [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp) by introducing explicit source indices.
+- I also fixed the neutral path properly in [VxRebalanceProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.h) and [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp): neutral now stays both dry and latency-aligned, so the measurement harness reports `Neutral diff rms=0 peak=0` instead of a false mismatch caused by bypass timing.
+- Current stem-driven state on `/Users/andrzejmarczewski/Downloads/brightside_stems` at `Vocals +6 dB`:
+  - mix-delta correlation is strongest with the vocal stem (`0.7798`) and near zero for bass/drums
+  - isolated stem gains show `Vocals` now lifts the vocal stem by about `+1.81 dB`, bass by effectively `0 dB`, drums by effectively `0 dB`, guitar by about `+0.29 dB`, and `Other` by about `+1.28 dB`
+- The same stem run also shows the remaining weak spots clearly:
+  - `Drums` is still too weak
+  - `Bass` still over-lifts drum/guitar stems more than desired
+  - `Guitar` is still effectively non-functional
+- Verification:
+  - `cmake -S . -B build`
+  - `cmake --build build --target VXRebalanceMeasure VXRebalancePlugin -j4`
+  - `./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 6.0`
+- Honest conclusion:
+  - `Vocals` is now materially closer to the intended family than it was when you first showed the screenshots.
+  - `Bass`, `Drums`, and especially `Guitar` still need another measurement-driven retune pass.
+  - The new harness means future retunes can now be scored directly against your split stems instead of by ear or analyser screenshots alone.
+
+# Stem-profiler R&D tool — 2026-03-24
+
+## Problem
+We need an offline analysis tool that can profile split stems from phone footage and cleaner recordings so `VX Rebalance` tuning stops relying on ad hoc intuition. The tool should measure spectral occupancy, overlap/conflict regions, stereo tendencies, and coarse recording-condition cues, then produce reports that help us decide which bands are safe heuristically and which ones are too entangled to trust.
+
+## Plan
+- [x] Implement a Python stem-profiler tool under `tools/` that reads an original mix plus split stems and measures per-stem occupancy, overlap, and phone-relevant quality cues.
+- [x] Have the tool emit both machine-friendly data and a readable Markdown report with suggested “safe” and “high-conflict” frequency regions.
+- [x] Run it on the provided `brightside` stem set and save the first report/artifacts under `tasks/reports/`.
+- [x] Summarize how the findings should change `VX Rebalance` heuristics and where they point toward ML.
+
+## Review
+- Added an offline Python profiler at [stem_profile.py](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tools/stem_profile.py). It loads an original mix plus split stems, computes STFT-based mean spectral occupancy, band dominance, conflict/entropy, and framework-style recording-condition cues (`mono`, `compression`, `tilt`, `separation confidence`).
+- The tool emits a readable Markdown report plus plots under [tasks/reports/stem-profile-brightside/report.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/stem-profile-brightside/report.md), [tasks/reports/stem-profile-brightside/stem_profiles.png](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/stem-profile-brightside/stem_profiles.png), and [tasks/reports/stem-profile-brightside/stem_conflict.png](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/stem-profile-brightside/stem_conflict.png).
+- First `brightside` findings that matter for `VX Rebalance`:
+  - `Bass` has genuinely safe low regions around roughly `29–136 Hz`, with growing conflict by `136–200 Hz`
+  - `Vocals` have the clearest safe heuristic zone here, roughly `431 Hz–4.3 kHz`
+  - `Drums` are only strongly dominant in the upper cymbal/hat region (`6.3 kHz+`) on this split
+  - `Guitar`, `Piano`, and `Other` have no strongly safe dominant regions on this phone-derived material, which is a strong signal that those lanes should either stay conservative or move toward ML-guided ownership
+- Recording-condition summary for this split/original set:
+  - `monoScore = 0.000`
+  - `compressionScore = 0.306`
+  - `tiltScore = 1.000`
+  - `separationConfidence = 0.693`
+- Practical heuristic implication:
+  - the next `Rebalance` pass should trust `Bass` mainly below about `140 Hz`
+  - trust `Vocals` mostly from about `430 Hz` upward, not in the broad low-mids
+  - treat `200–430 Hz` as a high-conflict region
+  - stop expecting `Guitar` to have a robust static heuristic lane on material like this
+- Verification:
+  - `python3 tools/stem_profile.py /Users/andrzejmarczewski/Downloads/brightside_stems --out-dir tasks/reports/stem-profile-brightside`
+
+# VXLeveler in-host Offline analyse + programme restore — 2026-03-24
+
+# VX Suite knob semantics + gain staging audit — 2026-03-24
+
+## Problem
+Several VX products feel quieter than they should in host use, especially the ones with explicit `Gain` knobs. The current knob presentation also exposes raw `0.0–1.0` values instead of consistent `0–100%` user-facing semantics. We need to audit the shared parameter path and the finishing-stage gain laws, fix the weak/attenuating behaviour without broad DSP churn, and verify the result with the existing batch-audio harness rather than by inspection alone.
+
+## Plan
+- [x] Audit the shared framework parameter formatting and the products with explicit `Gain` controls to identify the smallest safe fix.
+- [x] Change user-facing float knob display/parse semantics to `0–100%` in the shared framework path while keeping stable normalized automation underneath.
+- [x] Retune the finishing-product gain/output path so `Gain` has a more meaningful range and normal use does not read as unnecessary attenuation.
+- [x] Build the affected targets and run focused batch/regression verification for loudness retention, safety, and parameter compatibility.
+- [x] Record the review outcome here.
+
+## Review
+- Shared knob semantics now come from the framework in [VxSuiteParameters.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteParameters.h): all standard float controls still store normalized `0..1` internally for stable automation/state, but the user-facing text now reads/parses as `0–100%` instead of raw decimals.
+- `VXFinish` and `VXOptoComp` now map their `Gain` control across a wider `-12 dB .. +12 dB` range instead of the previous `±6 dB`, which makes the knob materially more useful when a user needs real recovery lift.
+- I removed the redundant product-local `OutputTrimmer` from [VxFinishProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/finish/VxFinishProcessor.cpp) and [VxOptoCompProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/OptoComp/VxOptoCompProcessor.cpp), leaving the framework safety trimmer as the final emergency guard instead of silently double-trimming after the internal limiter.
+- I also changed the shared finish/opto DSP in [VxFinishDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/finish/dsp/VxFinishDsp.cpp) so auto makeup is no longer capped at a tiny fixed amount; it now follows both knob intent and recent measured gain reduction within a bounded range.
+- Verification:
+  - `cmake --build build --target VXFinishPlugin VXOptoCompPlugin VXSuiteBatchAudioCheck VXSuitePluginRegressionTests -j4`
+  - `./build/VXSuiteBatchAudioCheck data/voice_corpus/wav tasks/reports/VX_SUITE_BATCH_AUDIO_CHECK_2026-03-24_GAIN_AUDIT.md --products=cleanup,denoiser,deverb,finish,leveler,optocomp,proximity,subtract,tone`
+  - `./build/VXSuiteBatchAudioCheck data/voice_corpus/wav tasks/reports/VX_SUITE_BATCH_AUDIO_CHECK_2026-03-24_FINISH_GAIN_FOLLOWUP.md --products=finish,optocomp`
+  - `./build/VXSuiteBatchAudioCheck data/voice_corpus/wav tasks/reports/VX_SUITE_BATCH_AUDIO_CHECK_2026-03-24_FINISH_GAIN_100_CENTER.md --products=finish,optocomp`
+- Kept outcome:
+  - The `0–100%` knob-display issue is fixed suite-wide through the shared framework path.
+  - `Finish`/`OptoComp` gained a meaningfully stronger gain knob and less hidden trimming.
+  - `Gain` for those products now follows unity-centered percent semantics: `50%` at the left edge, `100%` at center, `150%` at the right edge.
+  - The focused follow-up batch report still shows those two products running quieter than ideal at neutral `Gain=50%` on the speech corpus, but markedly less attenuated than the first post-range-change pass. This means the “gain knob too weak” complaint is improved, but there is still a separate product-voicing decision left if we want neutral settings to preserve more absolute loudness by default.
+  - The dedicated `100%`-center verification report stayed effectively unchanged versus the previous focused run, which is the right result: it confirms the neutral-gain point is now truly unity, and that the remaining quietness comes from the compressor/finish voicing rather than from a mis-scaled gain control.
+  - `./build/VXSuitePluginRegressionTests` still fails on an existing subtract steady-state allocation check (`Audio-thread allocation detected during steady-state subtract processing: count=1125`), which does not point back to the files changed in this pass.
+
+## Problem
+`VXLeveler` now has a strong `Offline` analysis path in the harness, but the DAW plugin still cannot actually build that map in-host. `Mix Leveler` also still trends too quiet overall, which makes it feel more like controlled attenuation than a true intelligent rider. We need a real `Analyze` workflow inside the plugin and a bounded programme-level restore stage so the processed track does not end up quieter than the original unless headroom safety requires it.
+
+## Plan
+- [x] Reuse the shared framework action-button path to expose `Analyze` for `VXLeveler` only when `Mix Leveler` + `Offline` analysis are selected.
+- [x] Add an in-host offline-analysis capture path that records fixed-size loudness blocks during playback and converts them into an offline target map without allocating in `process()`.
+- [x] Add a programme-level restore stage to `VXLeveler` so `Mix` avoids ending up globally quieter than the source unless peak/headroom safety forces it.
+- [x] Rebuild `VXLeveler`, rerun `VXLevelerMeasure` and `VXSuitePluginRegressionTests`, and keep only the verified build.
+- [x] Record the review result here and add the new lesson if the user’s “too quiet overall” correction changes our standard.
+
+## Review
+- Reused the shared framework `learnButton` path as an in-host `Analyze` action for `VXLeveler` instead of creating a custom editor fork. The processor now only shows that UI when `Mix Leveler` + `Offline` are selected, and the shared editor presents analysis-specific copy rather than the old noise-learn text.
+- Added a fixed-block offline capture path in [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp). While `Analyze` is armed, the processor accumulates fixed-size dry-program loudness blocks with preallocated storage, then converts them into an offline target map through the new `OfflineAnalyzer::analyse(blockDb, ...)` overload in [VxLevelerOfflineAnalyzer.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp).
+- Added a bounded programme-level restore stage in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp) for `Mix Leveler` only. It tracks long-horizon dry vs wet programme loudness and restores only enough gain to keep the processed result from ending up meaningfully quieter than the source, while still respecting spike activity and peak headroom.
+- The first restore attempt also touched `Vocal Rider`, but that weakened the hot-mix regression by undoing too much of the actual level-improvement work, so I backed restore back out of `Vocal Rider` and kept it only on the `Mix` path.
+- Follow-up UI cleanup: the analysis meter now explicitly reports `Coverage` while capture is running and reserves `Confidence` for the locked result after stop. Once capture has reached the nominal coverage target, the button now reads `Lock Analysis` instead of implying that analysis should already be finished.
+- Follow-up confidence fix: locked offline confidence now starts from a practical “usable map” floor instead of reading as ~`50%` after a normal full-track capture. The score now weights coverage most heavily, adds a smaller duration/range contribution, and produces results that better match what the feature is actually telling the user.
+- Follow-up attenuation check: the user-supplied DAW exports under `/Users/andrzejmarczewski/Downloads/noise test/.../mix test/` were confirmed to come from an older bad build. Their RMS values are roughly `12–15 dB` below the dry source (`offline_old -36.78 dBFS`, `realtime_old -35.49 dBFS`, `smart_old -36.45 dBFS`, `vocal_old -38.25 dBFS` versus dry `-23.20 dBFS`). Fresh renders from the current build are much closer to the source and no longer show that extreme attenuation:
+  - `Realtime`: `-21.84 dBFS`
+  - `Smart`: `-22.81 dBFS`
+  - `Offline`: `-24.44 dBFS`
+- Final verified result on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`:
+  - `Mix Leveler` `Smart Realtime`: spread `12.9225 -> 12.7545 dB`, RMS `-23.2013 -> -22.8142 dBFS`, peak `-4.5736 -> -1.4367 dBFS`
+  - `Vocal Rider`: spread `12.9225 -> 11.8820 dB`, RMS `-23.2013 -> -24.6122 dBFS`, peak `-4.5736 -> -5.6580 dBFS`
+- Verification:
+  - `cmake --build build --target VXLevelerPlugin VXLevelerMeasure VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_restore.wav general 1.0 1.0 smart`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_restore.wav voice 1.0 1.0`
+  - `./build/VXSuitePluginRegressionTests`
+
 # VxLeveler state-machine refactor + mode split — 2026-03-20
 
 ## Problem
@@ -2304,3 +2796,179 @@ A new Mix Leveler render (`loud_quiet_mix_4.wav`) may expose a different failure
 - Important caveat from the user's listening note:
   - even though `mix4` is the better overall target, it may also expose a remaining content-balance issue, namely that `Mix Leveler` can still leave the vocal too quiet relative to the accompaniment.
 - Kept conclusion: [loud_quiet_mix_4.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_4.wav) is the better current global `Mix Leveler` target, but it also highlights that `Mix` still needs better equality across content, not just better overall loudness retention.
+
+---
+# Leveler V3 implementation — 2026-03-23
+
+## Problem
+`VXLeveler` still behaves like a strong realtime rider rather than the fuller product defined in [levelerv3.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/levelerv3.md). The missing pieces are a true target-generation subsystem for `Mix`, Smart Realtime global loudness memory with confidence-based blending, and the first offline-analysis path so the plugin can stop treating long-form material as purely reactive.
+
+## Plan
+- [x] Refactor `Mix Leveler` so target generation is its own subsystem instead of being embedded inline with the gain math.
+- [x] Add Smart Realtime global loudness tracking and confidence-based blending between local and global targets.
+- [x] Keep `Vocal Rider` stable while landing the new `Mix` architecture.
+- [x] Add offline-analysis scaffolding and target-provider plumbing so `Mix` can support both Smart Realtime and Offline without duplicating downstream gain code.
+- [x] Add user-facing analysis-mode control and status messaging for `Mix`.
+- [x] Rebuild, remeasure on `loud_quiet.wav`, compare against the newer host references, and rerun `VXSuitePluginRegressionTests` after each kept phase.
+
+## Review
+- Landed the V3 architectural split for `Mix Leveler`:
+  - added a reusable auxiliary selector path to the shared framework so products can expose a second choice control without custom UI forks,
+  - used that in [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp) as `Analysis: Realtime / Smart Realtime / Offline`,
+  - kept `Vocal Rider` on its proven branch and moved only `Mix` onto the new target-generation path.
+- Added [VxLevelerGlobalLoudnessTracker.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.h) and [VxLevelerGlobalLoudnessTracker.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp):
+  - it consumes blockwise short-term loudness observations,
+  - maintains long-memory baseline/upper estimates with a confidence score,
+  - gives `Mix` the new Smart Realtime “learn the track over time” behavior from `levelerv3.md`.
+- Added [VxLevelerOfflineAnalyzer.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.h) and [VxLevelerOfflineAnalyzer.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp):
+  - this is the first real offline-analysis path and target-curve generator,
+  - the plugin falls back cleanly to Smart Realtime when no offline map is available in-host,
+  - the measure harness can already exercise the offline path by pre-analyzing the full file.
+- Refactored [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp) so `Mix` target generation is now mode-specific:
+  - `Realtime` uses the local target only,
+  - `Smart Realtime` blends local and global targets with shaped confidence,
+  - `Offline` consumes a precomputed target map when available.
+- Verification:
+  - `cmake --build build --target VXLevelerPlugin VXLevelerMeasure VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_voice_v3.wav voice 1.0 1.0 smart`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_realtime.wav general 1.0 1.0 realtime`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_smart.wav general 1.0 1.0 smart`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_offline.wav general 1.0 1.0 offline`
+  - `./build/VXSuitePluginRegressionTests`
+- Kept measurements on [loud_quiet.wav](/Users/andrzejmarczewski/Downloads/loud_quiet.wav):
+  - `Vocal Rider` (`Smart` path selected but ignored): spread `12.9225 -> 11.8820 dB`, RMS `-23.20 -> -24.61 dBFS`, peak `-4.57 -> -5.66 dBFS`
+  - `Mix Leveler Realtime`: spread `12.9225 -> 12.7270 dB`, RMS `-23.20 -> -25.45 dBFS`, peak `-4.57 -> -6.19 dBFS`
+  - `Mix Leveler Smart Realtime`: spread `12.9225 -> 12.5274 dB`, RMS `-23.20 -> -26.59 dBFS`, peak `-4.57 -> -6.08 dBFS`
+  - `Mix Leveler Offline`: spread `12.9225 -> 11.5872 dB`, RMS `-23.20 -> -27.01 dBFS`, peak `-4.57 -> -6.57 dBFS`
+- Additional comparison against the user's preferred [loud_quiet_mix_4.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_4.wav):
+  - `Realtime` remains almost identical to that render,
+  - `Smart Realtime` is measurably closer to the dry file than `mix_4`,
+  - `Offline` is more assertive still, but also quieter.
+- Honest conclusion:
+  - the V3 architecture is now real and regression-safe,
+  - but the next meaningful decision is sonic rather than structural: we need listening feedback on whether `Smart Realtime` actually feels better than the old `Realtime` path before deciding what should be the default `Mix` behavior.
+
+---
+# Leveler V3 Smart startup tuning — 2026-03-24
+
+## Problem
+`Mix Leveler` `Smart Realtime` was ending up with the right broad shape but still starting the file poorly: it learned too late, and the opening section stayed noticeably quieter than `Offline`. The risk was continuing to guess at startup heuristics without seeing what the Smart engine itself believed during those first seconds.
+
+## Plan
+- [x] Add lightweight debug tracing to the `VXLevelerMeasure` harness so Smart `Mix` state can be inspected over the opening seconds without changing the plugin UI/runtime path.
+- [x] Use that trace to identify whether the early mismatch comes from confidence, baseline learning, ride gain, spike clamp, or normalization.
+- [x] Implement the narrowest verified startup fix that improves the intro while keeping later sections stable and the regression suite green.
+- [x] Record the kept result and the lesson from the pass.
+
+## Review
+- Extended [VXLevelerMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXLevelerMeasure.cpp) with an optional trace pass that logs Smart `Mix` state every `0.5 s` for the first requested seconds. Added reusable debug snapshots through [VxLevelerDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.h), [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp), [VxLevelerProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.h), and [VxLevelerProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/VxLevelerProcessor.cpp).
+- The trace showed the real startup failure mode: Smart was letting near-silent opening material seed the `Mix` loudness engine, so by `0.5 s` its local baseline was still around `-80 dB`, which pushed the slow ride and spike clamp far too hard before the normalizer had enough time to recover.
+- Kept fix in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp):
+  - added a `generalPrimed` gate,
+  - prevented `Mix` from priming its loudness engine from near-silent opening material,
+  - and left the signal on the delayed dry path until real activity appeared.
+- Kept measured result on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav` with `Mix Leveler` `Smart Realtime`:
+  - spread `12.9225 -> 12.5455 dB`
+  - RMS `-23.2013 -> -26.5922 dBFS`
+  - peak `-4.5736 -> -5.9820 dBFS`
+- More importantly for host feel, the opening `0-5 s` section improved from `-37.9983 dB` to `-37.0481 dB`, and the opening slices improved materially:
+  - `0-1 s`: `-46.50 -> -41.67 dB`
+  - `1-2 s`: `-42.85 -> -40.90 dB`
+  - `2-3 s`: `-39.81 -> -38.36 dB`
+- Later sections stayed effectively stable or slightly improved:
+  - `5-10 s`: `-27.85 -> -27.60 dB`
+  - `10-15 s`: unchanged at `-23.35 dB`
+  - `15-20 s`: effectively unchanged
+  - `20-23 s`: effectively unchanged
+- Verification:
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_smart_primed.wav general 1.0 1.0 smart 6.0`
+  - `./build/VXSuitePluginRegressionTests`
+
+---
+# Leveler V3 final cleanup + harness sanity — 2026-03-24
+
+## Problem
+After the Smart startup fix, a later control-law tightening pass made `Smart Realtime` behave more like a broad level drop again, and the `VXLevelerMeasure` trace path also turned out to be capable of telling a different story from the plain render path because it traced and then reused the same processor instance. Before calling the current `Leveler` state clean, we needed to keep the real startup fix, reject the over-tight tuning, and make the measurement harness trustworthy.
+
+## Plan
+- [x] Revert the Smart/Offline control-law changes that worsened the real per-section dry deltas.
+- [x] Keep the actual priming-based startup fix in `Mix Leveler` Smart Realtime.
+- [x] Fix `VXLevelerMeasure` so trace runs and ordinary renders use separate processor instances.
+- [x] Rebuild, rerun plain and traced Smart renders plus the regression suite, and record the final kept state.
+
+## Review
+- Rejected the “product-grade tightening” pass that added dynamic-range-aware deadband/limits and adaptive offline blend. On the real file it made `Smart Realtime` read more like a broad volume drop again and made `Offline` worse on spread, so those DSP changes were backed out.
+- Kept the actual `Smart Realtime` startup improvement in [VxLevelerDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp):
+  - `Mix` still uses the priming gate that avoids learning from near-silent intro material,
+  - and `Offline` keeps the safer time-based target indexing rather than block-increment drift.
+- Fixed the harness in [VXLevelerMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXLevelerMeasure.cpp) so trace mode uses a dedicated processor instance and can no longer bias the subsequent render path.
+- Final verified `Smart Realtime` on `/Users/andrzejmarczewski/Downloads/loud_quiet.wav`:
+  - spread `12.9225 -> 12.5296 dB`
+  - RMS `-23.2013 -> -26.5924 dBFS`
+  - peak `-4.5736 -> -5.9828 dBFS`
+- Final verified `Vocal Rider` remains:
+  - spread `12.9225 -> 11.8820 dB`
+  - RMS `-23.2013 -> -24.6122 dBFS`
+  - peak `-4.5736 -> -5.6580 dBFS`
+- The verified plain and traced Smart renders now match again, which means the current rendered references are trustworthy.
+- Verification:
+  - `cmake --build build --target VXLevelerMeasure VXLevelerPlugin VXSuitePluginRegressionTests -j4`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_smart_plaincheck.wav general 1.0 1.0 smart`
+  - `./build/VXLevelerMeasure /Users/andrzejmarczewski/Downloads/loud_quiet.wav /Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_smart_trace_sanity.wav general 1.0 1.0 smart 6.0`
+  - `./build/VXSuitePluginRegressionTests`
+
+---
+# VX Rebalance v2 ML scaffolding build — 2026-03-24
+
+## Problem
+The v2 ML spec was written, but the product code still only had heuristic DSP. We needed a real compileable architecture seam for ML-guided masks without pretending trained weights or an ONNX runtime already existed in the repo.
+
+## Plan
+- [x] Add a rebalance-local ML scaffolding layer with feature analysis, confidence tracking, and model discovery/status.
+- [x] Wire the processor to own that runner and hand optional ML masks into the DSP.
+- [x] Keep the current heuristic engine as the truthful fallback path when no rebalance model/runtime is present.
+- [x] Rebuild the plugin and measurement harness and verify that neutral/fallback behaviour still works.
+
+## Review
+- Added the first `VX Rebalance` v2 ML scaffolding under:
+  - [VxRebalanceFeatureBuffer.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.h)
+  - [VxRebalanceFeatureBuffer.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp)
+  - [VxRebalanceConfidence.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.h)
+  - [VxRebalanceConfidence.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp)
+  - [VxRebalanceModelRunner.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.h)
+  - [VxRebalanceModelRunner.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp)
+- Wired the processor and DSP seam in:
+  - [VxRebalanceProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.h)
+  - [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp)
+  - [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h)
+  - [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp)
+- The new runner currently:
+  - analyses incoming blocks into lightweight features,
+  - smooths a rebalance-specific confidence estimate,
+  - discovers optional rebalance model assets,
+  - reports truthful status text,
+  - and publishes an optional ML mask snapshot to the DSP.
+- The DSP now supports ML-guided mask blending when a future runner provides real masks, but today it remains on the heuristic path because there is no shipped rebalance model/runtime yet.
+- Updated build wiring in [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt) so both the plugin and [VXRebalanceMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXRebalanceMeasure.cpp) include the new v2 scaffolding.
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin VXRebalanceMeasure -j4`
+  - `./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 6.0 phone`
+- Verified current fallback contract:
+  - neutral remains exact: `Neutral diff rms=0 peak=0`
+  - plugin/harness build cleanly with the new ML architecture seam in place
+  - current behaviour is still heuristic because no rebalance ONNX model is present
+
+### Follow-up: exact redesign trial
+- I also trialed the proposed `Mix` redesign seams directly:
+  - error blending instead of target blending,
+  - zoned confidence shaping,
+  - dynamic-range-aware ride/spike/upward limits,
+  - adaptive offline local/global blend.
+- On the real `loud_quiet.wav` file, the `Smart Realtime` versions with those changes consistently regressed toward “broad volume drop” behavior, especially in the intro, even when the architecture looked cleaner on paper.
+- I restored the best verified `Smart` baseline after those trials. The current kept build is:
+  - [loud_quiet_mix_v3_restored_best.wav](/Users/andrzejmarczewski/Downloads/loud_quiet_mix_v3_restored_best.wav)
+  - spread `12.9225 -> 12.5376 dB`
+  - RMS `-23.2013 -> -26.5655 dBFS`
+  - peak `-4.5736 -> -6.1602 dBFS`
+- The exact redesign review is still useful as a direction, but on this material the drop-in version did not beat the simpler primed Smart baseline.

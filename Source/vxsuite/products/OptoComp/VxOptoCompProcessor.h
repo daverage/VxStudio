@@ -2,7 +2,6 @@
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
-#include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "../finish/dsp/VxFinishDsp.h"
 
@@ -31,6 +30,5 @@ private:
     float smoothedPeakReduction = 0.0f;
     float smoothedBody = 0.5f;
     float smoothedGain = 0.5f;
-    vxsuite::OutputTrimmer outputTrimmer;
     bool controlsPrimed = false;
 };

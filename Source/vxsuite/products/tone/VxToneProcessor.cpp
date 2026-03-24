@@ -1,7 +1,9 @@
 #include "VxToneProcessor.h"
 
+#include "vxsuite/framework/VxSuiteHelpContent.h"
 #include "vxsuite/framework/VxSuiteBlockSmoothing.h"
 #include "vxsuite/framework/VxSuiteParameters.h"
+#include "VxSuiteVersions.h"
 
 #include <cmath>
 
@@ -41,6 +43,10 @@ vxsuite::ProductIdentity VXToneAudioProcessor::makeIdentity() {
     id.secondaryLabel     = "Treble";
     id.primaryHint        = "Low shelf boost or cut. In Vocal mode the shelf sits at 200 Hz to leave speech fundamentals clear.";
     id.secondaryHint      = "High shelf boost or cut. In Vocal mode the shelf sits at 6 kHz to avoid thinning consonants.";
+    id.dspVersion         = vxsuite::versions::plugins::tone;
+    id.helpTitle          = vxsuite::help::tone.title;
+    id.helpHtml           = vxsuite::help::tone.html;
+    id.readmeSection      = vxsuite::help::tone.readmeSection;
     id.primaryDefaultValue   = 0.5f;
     id.secondaryDefaultValue = 0.5f;
     id.theme.accentRgb      = { 0.55f, 0.35f, 0.90f };

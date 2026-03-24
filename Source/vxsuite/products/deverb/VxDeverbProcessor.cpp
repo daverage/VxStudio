@@ -1,4 +1,6 @@
 #include "VxDeverbProcessor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 #include <cmath>
 
@@ -90,6 +92,10 @@ vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     identity.secondaryLabel = "Blend";
     identity.primaryHint = "Remove late room tail with a clean wet strength control.";
     identity.secondaryHint = "Restore low-end body after deverb if the source feels too thin.";
+    identity.dspVersion = vxsuite::versions::plugins::deverb;
+    identity.helpTitle = vxsuite::help::deverb.title;
+    identity.helpHtml = vxsuite::help::deverb.html;
+    identity.readmeSection = vxsuite::help::deverb.readmeSection;
     identity.theme.accentRgb = { 0.00f, 0.82f, 1.00f };
     identity.theme.accent2Rgb = { 0.07f, 0.08f, 0.10f };
     identity.theme.backgroundRgb = { 0.05f, 0.05f, 0.07f };

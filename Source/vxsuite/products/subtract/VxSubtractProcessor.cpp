@@ -1,4 +1,6 @@
 #include "VxSubtractProcessor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 #include <cmath>
 #include <cstring>
@@ -36,6 +38,10 @@ vxsuite::ProductIdentity VXSubtractAudioProcessor::makeIdentity() {
     identity.secondaryLabel = "Protect";
     identity.primaryHint = "Smarter spectral subtraction than a raw profile notch, with adaptive tracking underneath.";
     identity.secondaryHint = "Keep consonants, harmonics, and detail when subtraction gets aggressive.";
+    identity.dspVersion = vxsuite::versions::plugins::subtract;
+    identity.helpTitle = vxsuite::help::subtract.title;
+    identity.helpHtml = vxsuite::help::subtract.html;
+    identity.readmeSection = vxsuite::help::subtract.readmeSection;
     identity.theme.accentRgb = { 0.90f, 0.28f, 0.18f };
     identity.theme.accent2Rgb = { 0.13f, 0.07f, 0.06f };
     identity.theme.backgroundRgb = { 0.06f, 0.04f, 0.04f };

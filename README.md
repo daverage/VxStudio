@@ -1,7 +1,7 @@
 # VX Suite
 
 > **Focused, realtime-safe audio processors for voice and vocal production.**
-> Ten plugins. One shared framework. One job each.
+> Twelve plugins. One shared framework. One job each.
 
 VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, minimal control surfaces, and performance-first DSP. Each plugin solves one problem cleanly rather than trying to be a general-purpose channel strip.
 
@@ -25,7 +25,33 @@ This repo contains one of the few implementations of de-reverb or deverb / rever
 | **VXTone** | Bass and treble tone shaping | `Bass` · `Treble` | Warmth, brightness, tonal balance after cleanup |
 | **VXFinish** | Smart finish and level control | `Finish` · `Body` · `Gain` | Compression, recovery lift, controlled loudness, final polish |
 | **VXOptoComp** | LA2A-style opto compression | `Peak Red.` · `Body` · `Gain` | Natural levelling, limiting, smooth dynamic control |
+| **VXLeveler** | Adaptive riding and programme levelling | `Level` · `Control` | Speech riding, long-form consistency, fader-style support |
+| **VXRebalance** | Heuristic source-family rebalance | `Vocals` · `Drums` · `Bass` · `Guitar` · `Other` · `Strength` | Broad mix balance moves without stems |
 | **VXStudioAnalyser** | Chain-aware spectrum analyser | `Avg Time` · `Smoothing` | Comparing dry vs wet, inspecting per-stage spectral changes, and checking the final VX chain |
+
+---
+
+## 🔢 Versions
+
+Framework and DSPs now use independent semantic versions. A help/doc-only update can bump a DSP without requiring a framework release, and framework UI/layout work can move independently of product DSP releases.
+
+| Component | Version |
+|---|---|
+| **VX Suite Framework** | `0.2.0` |
+| **VXDeepFilterNet** | `0.2.0` |
+| **VXDenoiser** | `0.2.0` |
+| **VXSubtract** | `0.2.0` |
+| **VXDeverb** | `0.2.0` |
+| **VXProximity** | `0.2.0` |
+| **VXCleanup** | `0.2.0` |
+| **VXTone** | `0.2.0` |
+| **VXFinish** | `0.3.0` |
+| **VXOptoComp** | `0.3.0` |
+| **VXLeveler** | `0.2.0` |
+| **VXRebalance** | `0.2.0` |
+| **VXStudioAnalyser** | `0.2.0` |
+
+The plugin Help popup and this README are a shared documentation contract. When a DSP's UI, behaviour, or recommended usage changes, update both together.
 
 ---
 
@@ -142,160 +168,289 @@ The framework runs block-rate signal evidence in `VxSuiteVoiceAnalysis` and expo
 
 ### VXDeepFilterNet
 
-State-of-the-art ML-powered voice isolation. Uses DeepFilterNet models (v2 and v3) to separate speech from complex background noise. Highly effective at removing non-stationary noise that traditional spectral denoisers cannot touch.
+ML-powered voice isolation for heavy or complex background noise. It is the strongest noise-removal tool in the suite when classic denoisers cannot separate the voice cleanly enough.
 
-**Controls:**
+**How to use it**
 
-`Clean` — ML denoise amount. Higher values push the DeepFilter model harder to isolate the voice.
+- Start with `Clean` around `55%` to `70%` and raise it until the noise falls back clearly.
+- Use `Guard` to restore natural speech detail if the result starts to sound over-processed.
+- Choose the model that behaves best on the material. `DeepFilterNet 3` is usually the first choice.
 
-`Guard` — Speech protection. Pulls back some dry detail if the model starts sounding too assertive or "processed."
+**Example settings**
 
-**Model differences:**
-- `DeepFilterNet 3`: Latest model, generally superior for complex noise and transients.
-- `DeepFilterNet 2`: Earlier model, sometimes preferred for specific noise textures.
+- Street or traffic noise: `Clean 75%`, `Guard 65%`.
+- Busy cafe or moving background: `Clean 65%`, `Guard 75%`.
+- Gentler isolation before other cleanup: `Clean 50%`, `Guard 80%`.
+
+**Practical scenarios**
+
+- Phone or camera speech recorded in public spaces.
+- Dialogue with mixed non-stationary interference.
+- First stage before deverb, cleanup, and finishing processors.
 
 ---
 
 ### VXDenoiser
 
-STFT-based spectral denoiser for steady background noise. Internally uses noise-floor tracking, Bark-band masking, gain smoothing, and stereo reconstruction that preserves side information.
+Broadband spectral denoiser for steady noise such as hiss, fans, HVAC, and room tone. It is designed to clean the bed without turning into a voice-isolation tool.
 
-**Controls:**
+**How to use it**
 
-`Clean` — Main denoising amount. Higher values push spectral reduction harder.
+- Raise `Clean` until the steady noise floor drops to a useful level.
+- If the voice loses harmonics or consonants, increase `Guard`.
+- Use it early in the chain, before deverb and finishing.
 
-`Guard` — Artifact protection. Higher values preserve harmonics, transients, and source detail.
+**Example settings**
 
-**Best for:** air conditioning, computer fans, preamp hiss, steady room noise under speech.
+- Light hiss: `Clean 40%`, `Guard 75%`.
+- Fan or HVAC: `Clean 60%`, `Guard 70%`.
+- Safety-first spoken voice: `Clean 50%`, `Guard 85%`.
+
+**Practical scenarios**
+
+- Podcast or narration with constant background air noise.
+- Camera audio with a steady room bed.
+- Follow-up cleanup after a stronger ML pass leaves residual steady noise.
 
 ---
 
 ### VXSubtract
 
-Profile-guided subtractive denoiser. Designed for cases where a learned noise print provides enough information to go further than a blind denoiser — while still applying speech and transient protection.
+Profile-guided subtractive denoiser for noises with a learnable fingerprint. It goes further than a blind denoiser when you can capture representative noise safely.
 
-**Controls:**
+**How to use it**
 
-`Subtract` — Main subtractive amount. Higher values remove more of the learned profile.
+- Enable `Learn` and play the noise by itself for about one to two seconds.
+- Turn `Learn` off to lock the profile.
+- Raise `Subtract` for more removal and raise `Protect` if the source becomes hollow or over-scooped.
 
-`Protect` — Speech and detail protection. Raise this when the cleanup sounds correct but the voice becomes hollow or over-scooped. Higher settings also make the subtract engine back off more, so it is both a preservation control and a subtraction-strength limiter.
+**Example settings**
 
-`Learn` — Starts guided profile capture. Play the representative noise, then switch `Learn` off to lock the replacement profile.
+- Machine or room noise with a clean profile: `Subtract 65%`, `Protect 80%`.
+- More aggressive learned subtraction: `Subtract 80%`, `Protect 70%`.
+- Delicate speech preservation: `Subtract 55%`, `Protect 88%`.
+
+**Practical scenarios**
+
+- Air conditioner, projector, or other repeatable tonal or broadband beds.
+- Noise-only intro or pause available for learning.
+- Pre-clean stage before deverb and tonal shaping.
 
 ---
 
 ### VXDeverb
 
-Dereverberation processor built on spectral late-reverberant suppression (LRSV). In `Vocal` mode, it additionally runs a full per-bin online WPE (Weighted Prediction Error) dereverberation stage.
+Room-tail and reverb reduction for speech and general programme material. It reduces smeared ambience while keeping direct sound usable.
 
-**Controls:**
+**How to use it**
 
-`Reduce` — Dereverb authority. Controls the mix between dry-aligned and fully processed output.
+- Increase `Reduce` until the room tail pulls back without making the source papery.
+- Use `Blend` to restore low-body weight if the dereverb pass gets too lean.
+- Place it before proximity, tone shaping, and final dynamics.
 
-`Blend` — Low-body restoration. Reintroduces low-end weight post-dereverberation.
+**Example settings**
+
+- Small reflective room: `Reduce 50%`, `Blend 40%`.
+- Distant voice in a live room: `Reduce 70%`, `Blend 35%`.
+- General ambience tidy-up: `Reduce 35%`, `Blend 50%`.
+
+**Practical scenarios**
+
+- Phone or camera speech recorded far from the source.
+- Dialogue in an untreated room.
+- Recovering clarity before cleanup and finishing.
 
 ---
 
 ### VXProximity
 
-Lightweight close-mic tone shaper. Simulates the tonal effect of moving a microphone closer to the source using shelf filters.
+Close-mic tone shaping that adds a fuller, nearer vocal perspective after cleanup. It is a tone-and-space shaper, not a corrective denoiser.
 
-**Controls:**
+**How to use it**
 
-`Closer` — Main proximity control. Increases low-shelf gain and shifts the shelf region.
+- Raise `Closer` to add weight and intimacy.
+- Use `Air` to stop the sound becoming overly thick or shut in.
+- Apply it after noise and room problems are already under control.
 
-`Air` — Upper clarity and openness. Prevents the result from becoming too thick.
+**Example settings**
+
+- Thin distant voice: `Closer 65%`, `Air 45%`.
+- Warm spoken-word polish: `Closer 55%`, `Air 40%`.
+- Subtle intimacy lift: `Closer 45%`, `Air 50%`.
+
+**Practical scenarios**
+
+- Phone or room mics that feel too far away.
+- Voice tracks that need warmth after cleanup.
+- Pre-tone-shaping enhancement before `VXTone`.
 
 ---
 
 ### VXCleanup
 
-Corrective cleanup processor. Focused on subtractive voice repair rather than enhancement: mud reduction, de-essing, de-breath, plosive control, and intelligent trouble smoothing.
+Corrective voice cleanup for mud, harshness, breaths, plosives, sibilance, and general tonal trouble. It is subtractive repair before enhancement.
 
-**Controls:**
+**How to use it**
 
-`Cleanup` — Main corrective amount. Drives overall cleanup intensity.
+- Raise `Cleanup` until the distracting problems start to fall away.
+- Increase `Body` if the result becomes too thin.
+- Use `Focus` to steer the correction toward low-mid cleanup or more presence and air control.
 
-`Body` — Preservation bias. Keeps useful low and low-mid weight while cleanup works.
+**Example settings**
 
-`Focus` — Steers the correction target (low-mid cleanup vs. upper-mid / air cleanup).
+- Muddy spoken voice: `Cleanup 55%`, `Body 55%`, `Focus 45%`.
+- Harsh, breathy voice: `Cleanup 60%`, `Body 50%`, `Focus 70%`.
+- Light corrective tidy-up: `Cleanup 35%`, `Body 55%`, `Focus 55%`.
 
----
+**Practical scenarios**
 
-### VXFinish
-
-Final shaping and level processor. Handles the restorative and dynamic side after cleanup: smart recovery lift, compression, intelligent gain makeup, and limiting, with noise-aware gating to avoid reintroducing floor noise.
-
-**Controls:**
-
-`Finish` — Main finish amount. Drives compression, final control, and overall polish.
-
-`Body` — Recovery amount. Restores useful weight and presence intelligently after cleanup.
-
-`Gain` — Smart gain. Increases mode-aware lift and makeup only when the signal is clean enough to support it.
+- Dialogue that needs cleanup before any enhancement.
+- Speech with boxiness, spit, or low-end bumps.
+- Preparation stage before proximity, tone, or final compression.
 
 ---
 
 ### VXTone
 
-Bass and treble tone shaper using biquad shelf filters. Mode changes the shelf frequencies to suit the signal type — Vocal mode positions the shelves outside the critical 200 Hz–6 kHz speech band so tone adjustments do not colour consonants or fundamentals.
+Simple bass and treble shaping with mode-aware shelf placement. It is the fast tonal balance stage after corrective cleanup.
 
-**Controls:**
+**How to use it**
 
-`Bass` — Low shelf boost or cut. Centre is neutral.
+- Start from the centre position and make small moves.
+- Use `Bass` for weight and warmth, `Treble` for brightness and openness.
+- Prefer subtle shaping after cleanup and proximity, not before.
 
-`Treble` — High shelf boost or cut. Centre is neutral.
+**Example settings**
 
-**Mode differences:**
-- `Vocal`: bass shelf at 200 Hz, treble at 6 kHz, ±5 dB — leaves the speech band untouched.
-- `General`: bass shelf at 120 Hz, treble at 8 kHz, ±6 dB — full-range shaping with more headroom.
+- Need a little warmth: `Bass 58%`, `Treble 50%`.
+- Dull voice lift: `Bass 50%`, `Treble 60%`.
+- Balanced polish: `Bass 55%`, `Treble 56%`.
+
+**Practical scenarios**
+
+- Final tonal balance after cleanup.
+- Correcting a track that feels thin or dull.
+- Subtle pre-finish shaping before `VXFinish` or `VXOptoComp`.
+
+---
+
+### VXFinish
+
+Final polish and level control after cleanup and tone work. It combines finish compression, bounded body recovery, makeup, and limiting for a more produced result.
+
+**How to use it**
+
+- Raise `Finish` to increase compression, polish, and level control.
+- Use `Body` to recover useful weight after cleanup.
+- `Gain` is unity-centered: left is `50%`, centre is `100%`, right is `150%`.
+
+**Example settings**
+
+- Light vocal polish: `Finish 35%`, `Body 55%`, `Gain 100%`.
+- Produced spoken voice: `Finish 60%`, `Body 58%`, `Gain 110%`.
+- Conservative final control after heavy cleanup: `Finish 45%`, `Body 52%`, `Gain 100%`.
+
+**Practical scenarios**
+
+- Last stage on cleaned speech.
+- Recovery and polish after corrective processing.
+- Fast final level shaping when you want more than a plain compressor.
 
 ---
 
 ### VXOptoComp
 
-LA2A-style opto compressor and limiter. Uses the same DSP core as VXFinish but tuned for opto character: slower, program-dependent gain reduction with a smooth knee. In Vocal mode it targets levelling; in General mode it biases toward limiting. Exposes compression, gain reduction, and limiter activity lights for visual feedback.
+LA2A-style opto levelling and limiting with slower, smoother program-dependent gain reduction than `VXFinish`. It is for natural dynamic control with opto character.
 
-**Controls:**
+**How to use it**
 
-`Peak Red.` — Drive the opto gain reduction. Higher values level harder.
+- Raise `Peak Red.` to drive more opto gain reduction.
+- Use `Body` for light post-compressor weight shaping.
+- `Gain` is unity-centered: left is `50%`, centre is `100%`, right is `150%`.
 
-`Body` — Light post-compressor body shaping. Centre is neutral.
+**Example settings**
 
-`Gain` — Final output gain. Centre is neutral; left reduces, right increases.
+- Gentle levelling: `Peak Red. 35%`, `Body 52%`, `Gain 100%`.
+- Firm voice levelling: `Peak Red. 55%`, `Body 54%`, `Gain 108%`.
+- Limiter-style general control: `Peak Red. 65%`, `Body 50%`, `Gain 100%`.
 
-**Mode differences:**
-- `Vocal`: opto compression levelling — controlled dynamic smoothing for voice.
-- `General`: opto limiting — harder gain ceiling, more aggressive transient catch.
+**Practical scenarios**
+
+- Natural spoken-word levelling.
+- Opto-style smoothing after cleanup and tone shaping.
+- General dynamic control when `VXFinish` feels too produced.
+
+---
+
+### VXLeveler
+
+Adaptive level control with two distinct behaviours: `Vocal Rider` for speech-focused riding and `Mix Leveler` for broader programme smoothing. It is meant to feel more like automatic fader support than static compression.
+
+**How to use it**
+
+- Choose `Vocal Rider` when speech intelligibility is the priority.
+- Choose `Mix Leveler` when you want gentler overall programme control.
+- Use `Level` for how far the processor should even things out and `Control` for how assertively it reacts.
+
+**Example settings**
+
+- `Vocal Rider` for uneven dialogue: `Level 65%`, `Control 60%`.
+- `Mix Leveler` for broad programme smoothing: `Level 50%`, `Control 45%`.
+- Heavier rider action: `Level 75%`, `Control 70%`.
+
+**Practical scenarios**
+
+- Speech riding in mixed or inconsistent recordings.
+- Programme smoothing before final finish or limiting.
+- Long-form content where sections vary in level too much.
+
+---
+
+### VXRebalance
+
+Heuristic source-family rebalance for full mixes. It lets you gently lift or tuck vocals, drums, bass, guitar, and residual content without running a heavyweight stem-separation model.
+
+**How to use it**
+
+- Start with small moves on the source lane you want to rebalance.
+- Use `Strength` to scale the overall impact of all five moves together.
+- Treat it like broad corrective balance, not surgical stem extraction.
+
+**Example settings**
+
+- Bring vocals forward slightly: `Vocals 60%`, `Strength 70%`.
+- Tuck a boomy rhythm section: `Bass 42%`, `Drums 45%`, `Strength 75%`.
+- Open a busy rehearsal mix: `Vocals 58%`, `Guitar 47%`, `Other 46%`, `Strength 65%`.
+
+**Practical scenarios**
+
+- Quick rebalance of a rough stereo mix.
+- Making speech or lead lines feel more present without remixing stems.
+- Light source-family shaping before final tone and dynamics.
 
 ---
 
 ### VXStudioAnalyser
 
-Chain-aware pass-through analyser for VX Suite. Insert it last in the chain. It reads the shared dry/wet spectrum telemetry published by other VX processors in the same session and lets you inspect either the full chain or one matched stage at a time.
+Chain-aware dry-vs-wet spectrum analyser for VX Suite. Insert it last to inspect either the whole chain or one specific VX stage at a time.
 
-**What it shows:**
+**How to use it**
 
-- `Full Chain` compares the dry signal entering the first visible VX stage against the wet signal leaving the last visible VX stage.
-- Clicking a stage in the left rail shows that stage's own dry vs wet spectrum instead of the whole chain.
-- The left rail is driven by the live VX chain order, not by arbitrary registration order, so it mirrors the active processors in the host.
-- Bypassed or missing stages drop out of the analysis view automatically.
+- Put the analyser at the end of the VX chain.
+- Select `Full Chain` to compare chain input against final output.
+- Click a stage in the left rail to inspect only that processor's dry-vs-wet spectrum.
 
-**Controls:**
+**Example settings**
 
-`Avg Time` — Temporal averaging of recent spectrum frames. Higher values stabilize the plot over time while keeping motion continuous.
+- General readability: `Avg Time 500 ms`, `Smoothing 1/3 OCT`.
+- Fast transient inspection: `Avg Time 125 ms`, `Smoothing 1/12 OCT`.
+- Broad tonal overview: `Avg Time 1000 ms`, `Smoothing 1 OCT`.
 
-`Smoothing` — Frequency-domain smoothing in octave widths (`Off` through `1 OCT`). Higher values blur fine peaks into broader tonal shape.
+**Practical scenarios**
 
-`Hide Chain` — Collapses the stage rail to give the spectrum plot more room.
-
-**Display behavior:**
-
-- Frequency range is `20 Hz` to `20 kHz` on a log axis.
-- The analyser uses a SPAN-style dry/wet overlay with additive/subtractive crossover shading so it is easy to see where wet is above or below dry.
-- Diagnostics can be expanded when you want to see telemetry coverage, chain matching, and other internal details.
-
-The analyser is intentionally measurement-led rather than descriptive now: it is primarily a dry-vs-wet spectrum view for the selected VX stage or the full chain, with `Avg Time` and `Smoothing` controls to tune readability.
+- Checking what one plugin in the chain is really changing.
+- Comparing whole-chain tone before and after processing.
+- Debugging over-bright, over-thin, or over-damped processing decisions.
 
 ---
 

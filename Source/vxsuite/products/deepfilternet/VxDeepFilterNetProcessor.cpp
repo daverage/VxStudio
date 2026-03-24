@@ -1,4 +1,6 @@
 #include "VxDeepFilterNetProcessor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 #include <cmath>
 
@@ -48,6 +50,10 @@ vxsuite::ProductIdentity VXDeepFilterNetAudioProcessor::makeIdentity() {
     identity.secondaryLabel = "Guard";
     identity.primaryHint = "Voice-only ML denoise amount. Push higher for stronger DeepFilter cleanup.";
     identity.secondaryHint = "Speech protection. Backs the model off and, where safe, restores a little dry detail.";
+    identity.dspVersion = vxsuite::versions::plugins::deepfilternet;
+    identity.helpTitle = vxsuite::help::deepFilterNet.title;
+    identity.helpHtml = vxsuite::help::deepFilterNet.html;
+    identity.readmeSection = vxsuite::help::deepFilterNet.readmeSection;
     identity.selectorLabel = "Model";
     identity.selectorChoiceLabels = { "DeepFilterNet 3", "DeepFilterNet 2" };
     identity.defaultMode = vxsuite::Mode::vocal;

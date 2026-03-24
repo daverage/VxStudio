@@ -28,15 +28,19 @@ struct ProductTheme {
 };
 
 struct ProductIdentity {
+    static constexpr size_t maxControlBankControls = 6;
+
     std::string_view suiteName = "VX Suite";
     std::string_view productName;
     std::string_view shortTag;
     std::string_view stageId;
+    std::string_view dspVersion = "0.1.0";
     std::string_view primaryParamId;
     std::string_view secondaryParamId;
     std::string_view tertiaryParamId;
     std::string_view quaternaryParamId;
     std::string_view modeParamId;
+    std::string_view auxSelectorParamId;
     std::string_view listenParamId;
     std::string_view primaryLabel;
     std::string_view secondaryLabel;
@@ -46,12 +50,19 @@ struct ProductIdentity {
     std::string_view secondaryHint;
     std::string_view tertiaryHint;
     std::string_view quaternaryHint;
+    // Keep these aligned with the public README whenever UI, behavior, or usage guidance changes.
+    std::string_view helpTitle;
+    std::string_view helpHtml;
+    std::string_view readmeSection;
     float primaryDefaultValue = 0.5f;
     float secondaryDefaultValue = 0.5f;
     float tertiaryDefaultValue = 0.5f;
     float quaternaryDefaultValue = 0.5f;
     std::string_view selectorLabel = "Mode";
     std::array<std::string_view, 2> selectorChoiceLabels {};
+    std::string_view auxSelectorLabel;
+    std::array<std::string_view, 3> auxSelectorChoiceLabels {};
+    int auxSelectorDefaultIndex = 0;
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
     bool showLevelTrace = false;
@@ -68,7 +79,26 @@ struct ProductIdentity {
     StageType stageType = StageType::unknown;
     std::uint32_t semanticFlags = 0;
     std::uint32_t telemetryFlags = 0;
+    int controlBankCount = 0;
+    bool controlBankVertical = true;
+    bool compactControlBankLayout = false;
+    std::array<std::string_view, maxControlBankControls> controlBankParamIds {};
+    std::array<std::string_view, maxControlBankControls> controlBankLabels {};
+    std::array<std::string_view, maxControlBankControls> controlBankHints {};
+    std::array<float, maxControlBankControls> controlBankDefaultValues {};
     ProductTheme theme {};
+
+    bool supportsControlBank() const noexcept {
+        return controlBankCount > 0;
+    }
+
+    int clampedControlBankCount() const noexcept {
+        return static_cast<int>(controlBankCount < 0
+            ? 0
+            : (controlBankCount > static_cast<int>(maxControlBankControls)
+                ? static_cast<int>(maxControlBankControls)
+                : controlBankCount));
+    }
 
     bool supportsModeSwitch() const noexcept {
         return !modeParamId.empty();
@@ -76,6 +106,10 @@ struct ProductIdentity {
 
     bool supportsListenMode() const noexcept {
         return !listenParamId.empty();
+    }
+
+    bool supportsAuxSelector() const noexcept {
+        return !auxSelectorParamId.empty();
     }
 
     bool supportsTertiaryControl() const noexcept {
@@ -90,8 +124,16 @@ struct ProductIdentity {
         return !learnParamId.empty();
     }
 
+    bool hasHelpContent() const noexcept {
+        return !helpHtml.empty();
+    }
+
     std::string_view selectorChoiceLabel(const size_t index) const noexcept {
         return index < selectorChoiceLabels.size() ? selectorChoiceLabels[index] : std::string_view{};
+    }
+
+    std::string_view auxSelectorChoiceLabel(const size_t index) const noexcept {
+        return index < auxSelectorChoiceLabels.size() ? auxSelectorChoiceLabels[index] : std::string_view{};
     }
 
 };

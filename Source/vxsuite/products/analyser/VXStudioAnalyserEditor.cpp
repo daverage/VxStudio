@@ -330,6 +330,30 @@ std::array<juce::String, 4> buildDynamicsSummary(const juce::String& title,
     };
 }
 
+juce::String signalQualityLabel(const vxsuite::SignalQualitySnapshot& quality) {
+    const juce::String stereoHint = quality.monoScore >= 0.72f ? "Near mono"
+        : quality.monoScore >= 0.42f ? "Stereo-limited"
+        : "Stereo-open";
+    const juce::String dynamicsHint = quality.compressionScore >= 0.72f ? "AGC / crushed"
+        : quality.compressionScore >= 0.42f ? "Controlled dynamics"
+        : "Natural dynamics";
+    const juce::String tiltHint = quality.tiltScore >= 0.72f ? "Low-heavy / lo-fi"
+        : quality.tiltScore >= 0.42f ? "Warm / tilted"
+        : "Balanced spectrum";
+
+    juce::String confidenceHint = "High trust";
+    if (quality.separationConfidence < 0.35f)
+        confidenceHint = "Low trust";
+    else if (quality.separationConfidence < 0.68f)
+        confidenceHint = "Moderate trust";
+
+    const int confidencePercent = juce::roundToInt(100.0f * juce::jlimit(0.0f, 1.0f, quality.separationConfidence));
+    return "Recording: " + stereoHint
+        + "  |  Dynamics: " + dynamicsHint
+        + "  |  Tone: " + tiltHint
+        + "  |  DSP trust: " + confidenceHint + " (" + juce::String(confidencePercent) + "%)";
+}
+
 
 } // namespace
 
@@ -357,10 +381,21 @@ VXStudioAnalyserEditor::VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor& o
     subtitleLabel.setMinimumHorizontalScale(0.75f);
     addAndMakeVisible(subtitleLabel);
 
+    recordingLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.78f));
+    recordingLabel.setFont(juce::FontOptions().withHeight(13.0f));
+    recordingLabel.setMinimumHorizontalScale(0.62f);
+    addAndMakeVisible(recordingLabel);
+
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.70f));
     statusLabel.setFont(juce::FontOptions().withHeight(12.5f));
     statusLabel.setMinimumHorizontalScale(0.68f);
     addAndMakeVisible(statusLabel);
+
+    helpButton.onClick = [this] {
+        showHelpDialog(*this, processor.getProductIdentity());
+    };
+    if (processor.getProductIdentity().hasHelpContent())
+        addAndMakeVisible(helpButton);
 
     selectionLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.94f));
     selectionLabel.setFont(juce::FontOptions().withHeight(22.0f).withStyle("Bold"));
@@ -576,7 +611,7 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
         return;
     }
 
-    auto plot = plotBounds.toFloat().reduced(56.0f, 20.0f);
+    auto plot = plotBounds.toFloat().reduced(60.0f, 28.0f);
     {
 
         // Minor grid lines
@@ -657,23 +692,29 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
                                          kSpectrumMaxDb,
                                          plot.getBottom(),
                                          plot.getY());
+        g.setColour(juce::Colours::black.withAlpha(0.45f));
+        g.fillEllipse(markerX - 5.0f, markerY - 5.0f, 10.0f, 10.0f);
         g.setColour(juce::Colour(0xffffd7a3));
         g.fillEllipse(markerX - 4.0f, markerY - 4.0f, 8.0f, 8.0f);
 
-        g.setColour(text.withAlpha(0.78f));
-        g.setFont(juce::FontOptions().withHeight(12.0f));
+        g.setColour(text.withAlpha(0.52f));
+        g.setFont(juce::FontOptions().withHeight(11.5f));
+
         for (float hz : { 20.0f, 50.0f, 100.0f, 1000.0f, 10000.0f, 20000.0f }) {
             const float x = xForFrequency(hz, plot);
+            g.drawVerticalLine(juce::roundToInt(x), plot.getBottom() + 1.0f, plot.getBottom() + 5.0f);
             g.drawText(formatFrequency(hz),
                        juce::Rectangle<float>(x - 30.0f, plot.getBottom() + 6.0f, 60.0f, 16.0f),
                        juce::Justification::centred,
                        false);
         }
+
         for (float db : { -18.0f, -30.0f, -42.0f, -54.0f, -66.0f, -78.0f }) {
             const float y = juce::jmap(db, kSpectrumMinDb, kSpectrumMaxDb, plot.getBottom(), plot.getY());
+            g.drawHorizontalLine(juce::roundToInt(y), plot.getX() - 5.0f, plot.getX());
             g.drawText(juce::String(db, 0) + " dB",
-                       juce::Rectangle<float>(plot.getX() - 2.0f, y - 8.0f, 58.0f, 16.0f),
-                       juce::Justification::left,
+                       juce::Rectangle<float>(plot.getX() - 58.0f, y - 8.0f, 52.0f, 16.0f),
+                       juce::Justification::centredRight,
                        false);
         }
     }
@@ -686,14 +727,29 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
         g.setFont(juce::FontOptions().withHeight(diagFontHeight));
         g.drawFittedText(currentRenderModel.diagnosticsText, diag, juce::Justification::topLeft, maxLines);
     }
+
+    g.setColour(text.withAlpha(0.45f));
+    g.setFont(juce::FontOptions().withHeight(12.0f));
+    g.drawFittedText("DSP v" + juce::String(processor.getProductIdentity().dspVersion.data())
+                        + "   FW v" + juce::String(vxsuite::versions::framework.data())
+                        + "    (c) Andrzej Marczewski 2026",
+                     getLocalBounds().reduced(24, 18),
+                     juce::Justification::bottomRight,
+                     1);
 }
 
 void VXStudioAnalyserEditor::resized() {
     auto area = getLocalBounds().reduced(20, 18);
-    auto header = area.removeFromTop(88);
-    suiteLabel.setBounds(header.removeFromTop(18));
+    auto header = area.removeFromTop(96);
+    auto topRow = header.removeFromTop(18);
+    if (processor.getProductIdentity().hasHelpContent()) {
+        helpButton.setBounds(topRow.removeFromRight(92));
+        topRow.removeFromRight(12);
+    }
+    suiteLabel.setBounds(topRow);
     titleLabel.setBounds(header.removeFromTop(34));
     subtitleLabel.setBounds(header.removeFromTop(20));
+    recordingLabel.setBounds(header.removeFromTop(18));
     statusLabel.setBounds(header.removeFromTop(20));
 
     area.removeFromTop(8);
@@ -766,6 +822,19 @@ void VXStudioAnalyserEditor::resized() {
         diagnosticsBounds = {};
     contentArea.removeFromTop(8);
     plotBounds = contentArea.toNearestInt();
+    applyTextFit();
+}
+
+void VXStudioAnalyserEditor::applyTextFit() {
+    vxsuite::fitLabelFontToBounds(suiteLabel, 16.0f, 13.0f);
+    vxsuite::fitLabelFontToBounds(titleLabel, 30.0f, 22.0f);
+    vxsuite::fitLabelFontToBounds(subtitleLabel, 14.0f, 12.0f);
+    vxsuite::fitLabelFontToBounds(recordingLabel, 13.0f, 11.0f);
+    vxsuite::fitLabelFontToBounds(statusLabel, 12.5f, 11.0f);
+    vxsuite::fitLabelFontToBounds(selectionLabel, 22.0f, 17.0f);
+    vxsuite::fitLabelFontToBounds(summaryLabel, 13.5f, 11.5f);
+    vxsuite::fitLabelFontToBounds(averageTimeLabel, 12.5f, 11.0f);
+    vxsuite::fitLabelFontToBounds(smoothingLabel, 12.5f, 11.0f);
 }
 
 void VXStudioAnalyserEditor::mouseUp(const juce::MouseEvent& event) {
@@ -1396,6 +1465,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 }
 
 void VXStudioAnalyserEditor::applyPendingRenderModel() {
+    recordingLabel.setText(signalQualityLabel(processor.getSignalQualitySnapshot()), juce::dontSendNotification);
     statusLabel.setText(currentRenderModel.statusText, juce::dontSendNotification);
     selectionLabel.setText(currentRenderModel.selectionTitle, juce::dontSendNotification);
     summaryLabel.setText(currentRenderModel.summaryLines[1] + "\n"

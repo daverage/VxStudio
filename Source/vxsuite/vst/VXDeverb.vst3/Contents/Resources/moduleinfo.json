@@ -1,6 +1,6 @@
 {
   "Name": "VXDeverb",
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "Factory Info": {
     "Vendor": "VX Suite",
     "URL": "",
@@ -17,7 +17,7 @@
       "Category": "Audio Module Class",
       "Name": "VXDeverb",
       "Vendor": "VX Suite",
-      "Version": "0.1.0",
+      "Version": "0.2.0",
       "SDKVersion": "VST 3.8.0",
       "Sub Categories": [
         "Fx",
@@ -32,7 +32,7 @@
       "Category": "Component Controller Class",
       "Name": "VXDeverb",
       "Vendor": "VX Suite",
-      "Version": "0.1.0",
+      "Version": "0.2.0",
       "SDKVersion": "VST 3.8.0",
       "Sub Categories": [
         "Fx",

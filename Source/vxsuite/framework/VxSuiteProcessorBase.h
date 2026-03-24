@@ -3,6 +3,7 @@
 #include "VxSuiteParameters.h"
 #include "VxSuiteProcessCoordinator.h"
 #include "VxSuiteOutputTrimmer.h"
+#include "VxSuiteSignalQuality.h"
 #include "VxSuiteSpectrumTelemetry.h"
 #include "VxSuiteVoiceAnalysis.h"
 #include "VxSuiteVoiceContext.h"
@@ -35,8 +36,10 @@ public:
     virtual float getLearnObservedSeconds() const noexcept { return 0.0f; }
     virtual bool isLearnActive() const noexcept { return false; }
     virtual bool isLearnReady() const noexcept { return false; }
+    virtual bool shouldShowLearnUi() const noexcept { return productIdentity.supportsLearnButton(); }
     VoiceAnalysisSnapshot getVoiceAnalysisSnapshot() const noexcept { return voiceAnalysis.snapshot(); }
     VoiceContextSnapshot getVoiceContextSnapshot() const noexcept { return voiceContext.snapshot(); }
+    SignalQualitySnapshot getSignalQualitySnapshot() const noexcept { return signalQuality.snapshot(); }
     bool getSpectrumSnapshotView(spectrum::SnapshotView& out) const noexcept;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -91,6 +94,7 @@ protected:
     juce::AudioProcessorValueTreeState parameters;
     VoiceAnalysisState voiceAnalysis;
     VoiceContextState voiceContext;
+    SignalQualityState signalQuality;
     spectrum::SnapshotPublisher spectrumPublisher;
     analysis::StagePublisher stagePublisher;
 

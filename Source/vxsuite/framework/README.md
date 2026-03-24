@@ -20,12 +20,14 @@ The framework collapses that to **three pure-virtual methods plus one identity d
 |---|---|
 | JUCE APVTS parameter layout | `createSimpleParameterLayout(identity)` |
 | Plugin name (`"VX Tone"` etc.) | `ProcessorBase::getName()` |
-| Default editor (knobs, mode selector, status bar, responsive text/layout) | `ProcessorBase::createEditor()` → `EditorBase` |
+| Default editor (knobs, help button, status bar, responsive text/layout) | `ProcessorBase::createEditor()` → `EditorBase` |
 | Per-block exponential parameter smoothing | `VxSuiteBlockSmoothing.h` |
 | Shared telemetry publishers for analysers | `VxSuiteSpectrumTelemetry.h` |
+| Shared signal-quality analysis (`mono`, `compression`, `tilt`, confidence) | `VxSuiteSignalQuality.h` |
 | Suite-wide final output safety trimmer | `ProcessorBase` + `VxSuiteOutputTrimmer.h` |
 | Latency-aware listen routing | `ProcessorBase` internals |
 | Latency-aligned listen/diff buffer | `ProcessorBase` internals |
+| Reusable HTML help popup | `VxSuiteHelpView.h/.cpp` + `ProductIdentity::helpHtml` |
 | CMake plugin registration | `vxsuite_add_framework` / `juce_add_plugin` helpers in `CMakeLists.txt` |
 
 ---
@@ -40,6 +42,7 @@ Plain struct that describes your plugin. Fill it in once; the framework reads it
 vxsuite::ProductIdentity id;
 id.productName        = "Tone";        // used in plugin name and UI header
 id.shortTag           = "TNE";         // 3-char debug tag
+id.dspVersion         = "1.2.0";       // DSP semver; independent from framework releases
 id.primaryParamId     = "bass";        // main knob
 id.secondaryParamId   = "treble";      // secondary knob
 id.modeParamId        = "mode";        // vocal / general toggle
@@ -48,12 +51,21 @@ id.primaryLabel       = "Bass";
 id.secondaryLabel     = "Treble";
 id.primaryHint        = "Low-shelf EQ";
 id.secondaryHint      = "High-shelf EQ";
+id.helpTitle          = "VXTone Help";
+id.helpHtml           = R"(<h1>VXTone</h1><p>...</p>)";
+id.readmeSection      = "VXTone";
 id.primaryDefaultValue   = 0.5f;       // 0-1, 0.5 = neutral
 id.secondaryDefaultValue = 0.5f;
 id.theme.accentRgb    = { 0.55f, 0.35f, 0.90f };   // purple
 ```
 
 Most fields have sensible defaults. The only ones you must set are `productName`, `shortTag`, and the param IDs.
+
+Documentation contract:
+
+- Every DSP should provide `dspVersion`, `helpTitle`, `helpHtml`, and `readmeSection`.
+- Keep the in-plugin Help popup and the public `README.md` aligned whenever behaviour, UI, or recommended usage changes.
+- DSP semantic versions are independent from the framework version. Bump the DSP when its behaviour, UI, or mirrored docs change; bump the framework when shared framework behaviour changes.
 
 ---
 
@@ -78,6 +90,17 @@ private:
 
 The framework handles the rest.
 
+If your DSP wants shared signal-quality evidence, do not build a separate detector inside the product. Read the snapshot the framework already maintains:
+
+```cpp
+void VXMyPluginAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
+                                              juce::MidiBuffer&) {
+    const auto signalQuality = getSignalQualitySnapshot();
+    const float trust = signalQuality.separationConfidence;
+    juce::ignoreUnused(buffer, trust);
+}
+```
+
 ---
 
 ### `EditorBase`  (`VxSuiteEditorBase.h`)
@@ -90,6 +113,7 @@ The shared editor is also where the current baseline resize/readability behavior
 - roomier vertical spacing for labels
 - control/header wrapping when width gets tight
 - more forgiving framework-level minimum sizes
+- optional top-right Help button that opens HTML help content from `ProductIdentity`
 
 ---
 
@@ -123,6 +147,47 @@ This is the path used by `VXStudioAnalyser`:
 - the analyser reads the live chain and lets the user inspect either the full chain or one stage at a time
 
 The telemetry path is designed to stay realtime-safe and cheap enough for normal plugin use. It is meant for chain-aware inspection, not for embedding a full lab analyser inside every product.
+
+---
+
+### Shared signal quality  (`VxSuiteSignalQuality.h`)
+
+The framework also provides a lightweight shared recording-condition detector alongside `VoiceAnalysis` and `VoiceContext`.
+
+It computes four reusable fields:
+
+- `monoScore`: how close the signal is to near-mono capture
+- `compressionScore`: how crushed / AGC-like the dynamics appear
+- `tiltScore`: how strongly the spectrum leans toward low-frequency-heavy / lo-fi character
+- `separationConfidence`: derived trust score for source- or structure-sensitive DSP
+
+`ProcessorBase` updates this automatically once per block and exposes it with:
+
+```cpp
+const auto signalQuality = getSignalQualitySnapshot();
+```
+
+Framework rule:
+
+- the framework owns the evidence
+- each product owns the response
+
+That means `SignalQuality` should stay generic and reusable, while products decide how to use it for threshold easing, confidence blending, protection, or UI hints.
+
+Typical uses:
+
+- back off aggressive correction on mono, crushed, or low-tilted material
+- reduce confidence in source-ownership or structure-sensitive DSP when conditions are poor
+- surface recording-condition hints in analyser-style tools
+
+Adoption guidance:
+
+- use it as an input-trust layer, not as a hidden product-mode switch
+- prefer threshold shaping, confidence blending, and protection over hard branching
+- keep product responses local: `Cleanup` can ease corrective targeting, `Leveler` can soften ride/restore confidence, `Rebalance` can blend source moves toward unity
+- if a product is not based on `ProcessorBase`, bridge the snapshot explicitly instead of duplicating the detector
+
+Avoid putting product-specific weighting laws into the framework. Shared detection belongs here; behaviour remains product-local.
 
 ---
 
@@ -347,6 +412,8 @@ The biquad filter state (`x1, x2, y1, y2`) is kept in `std::vector<BiquadState>`
 ## Parameter conventions
 
 All knob parameters are registered as `[0, 1]` floats. Your DSP maps `0.5` to neutral ("nothing happens") and the extremes to maximum effect. This gives the UI a consistent feel — the knob at 12 o'clock always means "off".
+
+The shared UI now presents standard percentage-style controls as `0%` to `100%` instead of raw `0.0` to `1.0`. Controls with a neutral midpoint should keep that midpoint semantically clear in both mapping and text, for example `50% .. 150%` with `100%` at centre for unity gain.
 
 Mode parameters are integers (`0`, `1`, …) registered as a choice list. Read them with `vxsuite::readMode(parameters, identity)`.
 

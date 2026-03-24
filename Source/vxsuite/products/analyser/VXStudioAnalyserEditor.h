@@ -1,7 +1,9 @@
 #pragma once
 
+#include "../../framework/VxSuiteHelpView.h"
 #include "../../framework/VxSuiteLookAndFeel.h"
 #include "../../framework/VxSuiteSpectrumTelemetry.h"
+#include "../../framework/VxSuiteUiHelpers.h"
 #include "VXStudioAnalyserProcessor.h"
 
 #include <array>
@@ -112,6 +114,7 @@ private:
     };
 
     void timerCallback() override;
+    void applyTextFit();
     void refreshRenderModel();
     void applyPendingRenderModel();
     void rebuildStageButtons();
@@ -146,11 +149,13 @@ private:
     juce::Label titleLabel;
     juce::Label suiteLabel;
     juce::Label subtitleLabel;
+    juce::Label recordingLabel;
     juce::Label statusLabel;
     juce::Label selectionLabel;
     juce::Label summaryLabel;
     juce::Label averageTimeLabel;
     juce::Label smoothingLabel;
+    vxsuite::HelpButton helpButton;
     juce::TextButton fullChainButton;
     juce::TextButton toneTabButton;
     juce::TextButton dynamicsTabButton;

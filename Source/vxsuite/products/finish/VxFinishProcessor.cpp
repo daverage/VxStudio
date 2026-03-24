@@ -1,4 +1,6 @@
 #include "VxFinishProcessor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 namespace {
 
@@ -33,6 +35,10 @@ vxsuite::ProductIdentity VXFinishAudioProcessor::makeIdentity() {
     identity.primaryHint = "Peak reduction and levelling. Push higher for firmer opto control.";
     identity.secondaryHint = "Light body enhancement only. Keep it subtle and post-cleanup.";
     identity.tertiaryHint = "Final output gain. Middle is neutral, left reduces, right increases.";
+    identity.dspVersion = vxsuite::versions::plugins::finish;
+    identity.helpTitle = vxsuite::help::finish.title;
+    identity.helpHtml = vxsuite::help::finish.html;
+    identity.readmeSection = vxsuite::help::finish.readmeSection;
     identity.theme.accentRgb = { 0.88f, 0.50f, 0.18f };
     identity.theme.accent2Rgb = { 0.16f, 0.10f, 0.07f };
     identity.theme.backgroundRgb = { 0.07f, 0.05f, 0.04f };
@@ -74,7 +80,6 @@ std::string_view VXFinishAudioProcessor::getActivityLightLabel(int index) const 
 void VXFinishAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     polishChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
-    outputTrimmer.setReleaseSeconds(0.22f);
     resetSuite();
 }
 
@@ -83,7 +88,6 @@ void VXFinishAudioProcessor::resetSuite() {
     smoothedFinish = 0.0f;
     smoothedBody = 0.5f;
     smoothedGain = 0.5f;
-    outputTrimmer.reset();
     controlsPrimed = false;
 }
 
@@ -119,8 +123,8 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                          + 0.10f * voiceContext.speechPresence
                          + 0.08f * voiceContext.centerConfidence)
         : 0.0f;
-    const float gainSigned = juce::jlimit(-1.0f, 1.0f, (smoothedGain - 0.5f) / 0.5f);
-    const float outputGainDb = gainSigned * 6.0f;
+    const float outputGainLinear = juce::jmap(smoothedGain, 0.0f, 1.0f, 0.5f, 1.5f);
+    const float outputGainDb = juce::Decibels::gainToDecibels(outputGainLinear, -120.0f);
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
@@ -134,7 +138,6 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     polishChain.setParams(dspParams);
     polishChain.process(buffer);
-    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 void VXFinishAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

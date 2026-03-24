@@ -1,6 +1,8 @@
 #include "VXStudioAnalyserProcessor.h"
 
 #include "VXStudioAnalyserEditor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 namespace {
 
@@ -26,6 +28,10 @@ vxsuite::ProductIdentity VXStudioAnalyserAudioProcessor::makeIdentity() {
     identity.productName = kProductName;
     identity.shortTag = kShortTag;
     identity.stageId = kStageId;
+    identity.dspVersion = vxsuite::versions::plugins::analyser;
+    identity.helpTitle = vxsuite::help::analyser.title;
+    identity.helpHtml = vxsuite::help::analyser.html;
+    identity.readmeSection = vxsuite::help::analyser.readmeSection;
     identity.stageType = vxsuite::StageType::mixed;
     identity.theme.accentRgb = { 0.32f, 0.90f, 0.95f };
     identity.theme.accent2Rgb = { 0.07f, 0.15f, 0.18f };
@@ -35,25 +41,52 @@ vxsuite::ProductIdentity VXStudioAnalyserAudioProcessor::makeIdentity() {
     return identity;
 }
 
+vxsuite::SignalQualitySnapshot VXStudioAnalyserAudioProcessor::getSignalQualitySnapshot() const noexcept {
+    return {
+        monoScore.load(std::memory_order_relaxed),
+        compressionScore.load(std::memory_order_relaxed),
+        tiltScore.load(std::memory_order_relaxed),
+        separationConfidence.load(std::memory_order_relaxed)
+    };
+}
+
+void VXStudioAnalyserAudioProcessor::publishSignalQualitySnapshot() noexcept {
+    const auto snapshot = signalQualityState.snapshot();
+    monoScore.store(snapshot.monoScore, std::memory_order_relaxed);
+    compressionScore.store(snapshot.compressionScore, std::memory_order_relaxed);
+    tiltScore.store(snapshot.tiltScore, std::memory_order_relaxed);
+    separationConfidence.store(snapshot.separationConfidence, std::memory_order_relaxed);
+}
+
 void VXStudioAnalyserAudioProcessor::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     stagePublisher.prepare(sampleRate, samplesPerBlock);
+    signalQualityState.prepare(sampleRate, samplesPerBlock);
+    publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::releaseResources() {
     stagePublisher.reset();
+    signalQualityState.reset();
+    publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::reset() {
     stagePublisher.reset();
+    signalQualityState.reset();
+    publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
+    signalQualityState.update(buffer, buffer.getNumSamples());
+    publishSignalQualitySnapshot();
     stagePublisher.publish(buffer, buffer, false);
 }
 
 void VXStudioAnalyserAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
+    signalQualityState.update(buffer, buffer.getNumSamples());
+    publishSignalQualitySnapshot();
     stagePublisher.publishBypassed(buffer);
 }
 

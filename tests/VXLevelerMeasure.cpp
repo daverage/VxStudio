@@ -137,11 +137,77 @@ juce::AudioBuffer<float> render(VXLevelerAudioProcessor& processor,
     return output;
 }
 
+void configureProcessor(VXLevelerAudioProcessor& leveler,
+                        const double sampleRate,
+                        const juce::String& mode,
+                        const float level,
+                        const float control,
+                        const juce::String& analysisMode,
+                        const juce::AudioBuffer<float>& input) {
+    leveler.prepareToPlay(sampleRate, 256);
+    setParamNormalized(leveler.getValueTreeState(), "mode", mode == "general" ? 1.0f : 0.0f);
+    setParamNormalized(leveler.getValueTreeState(), "level", level);
+    setParamNormalized(leveler.getValueTreeState(), "control", control);
+    if (auto* p = leveler.getValueTreeState().getParameter("analysisMode")) {
+        const float normalized = analysisMode == "realtime" ? 0.0f : (analysisMode == "offline" ? 1.0f : 0.5f);
+        p->setValueNotifyingHost(normalized);
+    }
+    if (mode == "general" && analysisMode == "offline")
+        leveler.setOfflineAnalysis(vxsuite::leveler::OfflineAnalyzer::analyse(input, sampleRate, 256));
+    else
+        leveler.clearOfflineAnalysis();
+}
+
+void renderWithTrace(VXLevelerAudioProcessor& processor,
+                     const juce::AudioBuffer<float>& input,
+                     const int blockSize,
+                     const double sampleRate,
+                     const double traceSeconds) {
+    const int latency = std::max(0, processor.getLatencySamples());
+    juce::AudioBuffer<float> staged(input.getNumChannels(), input.getNumSamples() + latency);
+    staged.clear();
+    for (int ch = 0; ch < input.getNumChannels(); ++ch)
+        staged.copyFrom(ch, 0, input, ch, 0, input.getNumSamples());
+
+    juce::MidiBuffer midi;
+    int processedSamples = 0;
+    int nextTraceSample = 0;
+    const int traceLimitSamples = static_cast<int>(traceSeconds * sampleRate);
+    const int traceIntervalSamples = std::max(1, static_cast<int>(0.5 * sampleRate));
+
+    while (processedSamples < staged.getNumSamples()) {
+        const int num = std::min(blockSize, staged.getNumSamples() - processedSamples);
+        juce::AudioBuffer<float> block(staged.getNumChannels(), num);
+        for (int ch = 0; ch < staged.getNumChannels(); ++ch)
+            block.copyFrom(ch, 0, staged, ch, processedSamples, num);
+        processor.processBlock(block, midi);
+        processedSamples += num;
+
+        while (nextTraceSample <= traceLimitSamples && processedSamples >= nextTraceSample) {
+            const auto snapshot = processor.getDebugSnapshot();
+            const double timeSeconds = static_cast<double>(nextTraceSample) / sampleRate;
+            std::cout << "Trace " << timeSeconds
+                      << "s: short=" << snapshot.generalShortDb
+                      << " baseline=" << snapshot.generalBaselineDb
+                      << " wetShort=" << snapshot.generalWetShortDb
+                      << " wetBaseline=" << snapshot.generalWetBaselineDb
+                      << " ride=" << snapshot.generalRideGainDb
+                      << " normalize=" << snapshot.generalNormalizeGainDb
+                      << " spike=" << snapshot.generalSpikeGainDb
+                      << " globalBase=" << snapshot.globalBaselineDb
+                      << " globalUpper=" << snapshot.globalUpperDb
+                      << " confidence=" << snapshot.globalConfidence
+                      << "\n";
+            nextTraceSample += traceIntervalSamples;
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
-        std::cerr << "Usage: VXLevelerMeasure <input.wav> <output.wav> [voice|general] [level] [control]\n";
+        std::cerr << "Usage: VXLevelerMeasure <input.wav> <output.wav> [voice|general] [level] [control] [realtime|smart|offline] [traceSeconds]\n";
         return 1;
     }
 
@@ -151,17 +217,21 @@ int main(int argc, char* argv[]) {
     const juce::String mode = argc > 3 ? juce::String(argv[3]).toLowerCase() : "voice";
     const float level = argc > 4 ? std::stof(argv[4]) : 1.0f;
     const float control = argc > 5 ? std::stof(argv[5]) : 1.0f;
+    const juce::String analysisMode = argc > 6 ? juce::String(argv[6]).toLowerCase() : "smart";
+    const double traceSeconds = argc > 7 ? std::stod(argv[7]) : 0.0;
 
     try {
         double sampleRate = 48000.0;
         auto input = readWaveFile(inputFile, sampleRate);
 
-        VXLevelerAudioProcessor leveler;
-        leveler.prepareToPlay(sampleRate, 256);
-        setParamNormalized(leveler.getValueTreeState(), "mode", mode == "general" ? 1.0f : 0.0f);
-        setParamNormalized(leveler.getValueTreeState(), "level", level);
-        setParamNormalized(leveler.getValueTreeState(), "control", control);
+        if (traceSeconds > 0.0) {
+            VXLevelerAudioProcessor traceLeveler;
+            configureProcessor(traceLeveler, sampleRate, mode, level, control, analysisMode, input);
+            renderWithTrace(traceLeveler, input, 256, sampleRate, traceSeconds);
+        }
 
+        VXLevelerAudioProcessor leveler;
+        configureProcessor(leveler, sampleRate, mode, level, control, analysisMode, input);
         const auto output = render(leveler, input, 256);
 
         if (!writeWaveFile(outputFile, output, sampleRate)) {
@@ -170,6 +240,7 @@ int main(int argc, char* argv[]) {
         }
 
         std::cout << "Mode: " << mode << "\n";
+        std::cout << "Analysis: " << analysisMode << "\n";
         std::cout << "Input spread dB: " << windowedLevelSpreadDb(input, sampleRate) << "\n";
         std::cout << "Output spread dB: " << windowedLevelSpreadDb(output, sampleRate) << "\n";
         std::cout << "Input RMS dBFS: " << juce::Decibels::gainToDecibels(std::max(rms(input), 1.0e-5f), -100.0f) << "\n";

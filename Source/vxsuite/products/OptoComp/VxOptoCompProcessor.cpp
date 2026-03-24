@@ -1,4 +1,6 @@
 #include "VxOptoCompProcessor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 namespace {
 
@@ -34,6 +36,10 @@ vxsuite::ProductIdentity VXOptoCompAudioProcessor::makeIdentity() {
     identity.primaryHint = "Drive the LA-2A style gain reduction. Higher values level harder.";
     identity.secondaryHint = "Light post-compressor body shaping only. Middle stays neutral.";
     identity.tertiaryHint = "Final output gain. Middle is neutral, left reduces, right increases.";
+    identity.dspVersion = vxsuite::versions::plugins::optocomp;
+    identity.helpTitle = vxsuite::help::optoComp.title;
+    identity.helpHtml = vxsuite::help::optoComp.html;
+    identity.readmeSection = vxsuite::help::optoComp.readmeSection;
     identity.theme.accentRgb = { 0.94f, 0.76f, 0.28f };
     identity.theme.accent2Rgb = { 0.16f, 0.12f, 0.05f };
     identity.theme.backgroundRgb = { 0.08f, 0.06f, 0.03f };
@@ -74,7 +80,6 @@ std::string_view VXOptoCompAudioProcessor::getActivityLightLabel(int index) cons
 void VXOptoCompAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     optoDsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
-    outputTrimmer.setReleaseSeconds(0.22f);
     resetSuite();
 }
 
@@ -83,7 +88,6 @@ void VXOptoCompAudioProcessor::resetSuite() {
     smoothedPeakReduction = 0.0f;
     smoothedBody = 0.5f;
     smoothedGain = 0.5f;
-    outputTrimmer.reset();
     controlsPrimed = false;
 }
 
@@ -119,7 +123,8 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                          + 0.10f * voiceContext.speechPresence
                          + 0.08f * voiceContext.centerConfidence)
         : 0.0f;
-    const float gainSigned = juce::jlimit(-1.0f, 1.0f, (smoothedGain - 0.5f) / 0.5f);
+    const float outputGainLinear = juce::jmap(smoothedGain, 0.0f, 1.0f, 0.5f, 1.5f);
+    const float outputGainDb = juce::Decibels::gainToDecibels(outputGainLinear, -120.0f);
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
@@ -127,13 +132,12 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                             * (voiceMode
                                 ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
                                 : 1.0f));
-    dspParams.outputGainDb = gainSigned * 6.0f;
+    dspParams.outputGainDb = outputGainDb;
     dspParams.body = vxsuite::clamp01(smoothedBody
                     + (voiceMode ? 0.10f * vocalPriority * smoothedPeakReduction : 0.0f));
 
     optoDsp.setParams(dspParams);
     optoDsp.process(buffer);
-    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 void VXOptoCompAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

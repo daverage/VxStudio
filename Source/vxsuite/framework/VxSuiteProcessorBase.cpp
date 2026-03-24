@@ -26,6 +26,7 @@ void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerB
     tailLengthSeconds = 0.0;
     voiceAnalysis.prepare(sampleRate, samplesPerBlock);
     voiceContext.prepare(sampleRate, samplesPerBlock);
+    signalQuality.prepare(sampleRate, samplesPerBlock);
     listenInputScratch.setSize(std::max(1, getTotalNumOutputChannels()), std::max(1, samplesPerBlock), false, false, true);
     prepareProcessCoordinator(samplesPerBlock);
     spectrumPublisher.prepare(sampleRate, samplesPerBlock);
@@ -39,6 +40,7 @@ void ProcessorBase::prepareToPlay(const double sampleRate, const int samplesPerB
 void ProcessorBase::reset() {
     voiceAnalysis.reset();
     voiceContext.reset();
+    signalQuality.reset();
     listenInputScratch.clear();
     resetProcessCoordinator();
     spectrumPublisher.reset();
@@ -50,6 +52,7 @@ void ProcessorBase::reset() {
 void ProcessorBase::releaseResources() {
     voiceAnalysis.reset();
     voiceContext.reset();
+    signalQuality.reset();
     listenInputScratch.setSize(0, 0);
     releaseProcessCoordinator();
     spectrumPublisher.reset();
@@ -93,6 +96,7 @@ void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce:
     juce::ScopedNoDenormals noDenormals;
     voiceAnalysis.update(buffer, buffer.getNumSamples());
     voiceContext.update(buffer, voiceAnalysis.snapshot());
+    signalQuality.update(buffer, buffer.getNumSamples());
 
     const bool hasDryScratch = listenInputScratch.getNumChannels() >= buffer.getNumChannels()
         && listenInputScratch.getNumSamples() >= buffer.getNumSamples();

@@ -1,9 +1,7 @@
 #include "VxSuiteEditorBase.h"
+#include "VxSuiteUiHelpers.h"
 
 namespace vxsuite {
-#ifndef VXSUITE_VERSION_STRING
-#define VXSUITE_VERSION_STRING "0.1.0"
-#endif
 
 EditorBase::EditorBase(ProcessorBase& owner)
     : juce::AudioProcessorEditor(&owner),
@@ -17,15 +15,17 @@ EditorBase::EditorBase(ProcessorBase& owner)
 
     setLookAndFeel(&lookAndFeel);
     setResizable(true, false);
-    const bool hasTertiary = owner.getProductIdentity().supportsTertiaryControl();
-    const bool hasQuaternary = owner.getProductIdentity().supportsQuaternaryControl();
-    setResizeLimits(hasQuaternary ? 920 : (hasTertiary ? 820 : 680),
-                    hasQuaternary ? 700 : (hasTertiary ? 640 : 600),
+    const auto& identity = processor.getProductIdentity();
+    const bool hasControlBank = identity.supportsControlBank();
+    const bool compactControlBank = hasControlBank && identity.compactControlBankLayout;
+    const bool hasTertiary = identity.supportsTertiaryControl();
+    const bool hasQuaternary = identity.supportsQuaternaryControl();
+    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : (hasQuaternary ? 920 : (hasTertiary ? 820 : 680)),
+                    hasControlBank ? (compactControlBank ? 640 : 720) : (hasQuaternary ? 700 : (hasTertiary ? 640 : 600)),
                     1280,
                     940);
-    setSize(hasQuaternary ? 1100 : (hasTertiary ? 950 : 760), hasQuaternary ? 740 : 660);
-
-    const auto& identity = processor.getProductIdentity();
+    setSize(hasControlBank ? (compactControlBank ? 1020 : 1160) : (hasQuaternary ? 1100 : (hasTertiary ? 950 : 760)),
+            hasControlBank ? (compactControlBank ? 680 : 760) : (hasQuaternary ? 740 : 660));
 
     suiteLabel.setText(toJuceString(identity.suiteName), juce::dontSendNotification);
     suiteLabel.setFont(juce::FontOptions().withHeight(17.0f).withKerningFactor(0.16f));
@@ -49,12 +49,27 @@ EditorBase::EditorBase(ProcessorBase& owner)
     if (identity.supportsModeSwitch())
         addAndMakeVisible(modeLabel);
 
+    auxSelectorLabel.setFont(juce::FontOptions().withHeight(14.0f).withKerningFactor(0.08f));
+    auxSelectorLabel.setMinimumHorizontalScale(0.72f);
+    makeMouseTransparent(auxSelectorLabel);
+    if (identity.supportsAuxSelector()) {
+        auxSelectorLabel.setText(toJuceString(identity.auxSelectorLabel.empty() ? "Option" : identity.auxSelectorLabel),
+                                 juce::dontSendNotification);
+        addAndMakeVisible(auxSelectorLabel);
+    }
+
     statusLabel.setJustificationType(juce::Justification::centredRight);
     statusLabel.setFont(juce::FontOptions().withHeight(13.0f));
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.62f));
     statusLabel.setMinimumHorizontalScale(0.55f);
     makeMouseTransparent(statusLabel);
     addAndMakeVisible(statusLabel);
+
+    helpButton.onClick = [this] {
+        showHelpDialog(*this, processor.getProductIdentity());
+    };
+    if (identity.hasHelpContent())
+        addAndMakeVisible(helpButton);
 
     learnMeterLabel.setJustificationType(juce::Justification::centredLeft);
     learnMeterLabel.setFont(juce::FontOptions().withHeight(12.0f).withKerningFactor(0.05f));
@@ -76,6 +91,14 @@ EditorBase::EditorBase(ProcessorBase& owner)
     modeBox.setWantsKeyboardFocus(true);
     if (identity.supportsModeSwitch())
         addAndMakeVisible(modeBox);
+
+    if (identity.supportsAuxSelector()) {
+        const auto auxChoices = makeAuxSelectorChoiceLabels(identity);
+        for (int i = 0; i < auxChoices.size(); ++i)
+            auxSelectorBox.addItem(auxChoices[i], i + 1);
+        auxSelectorBox.setWantsKeyboardFocus(true);
+        addAndMakeVisible(auxSelectorBox);
+    }
 
     listenButton.setButtonText("Listen");
     listenButton.setClickingTogglesState(true);
@@ -107,36 +130,59 @@ EditorBase::EditorBase(ProcessorBase& owner)
         addAndMakeVisible(traceZoomBox);
         addAndMakeVisible(levelTraceView);
     }
-    learnButton.setTooltip("Capture pure background noise only for about 1 to 2 seconds, then press again to stop and lock the profile.");
-    learnMeterBar.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
-    learnMeterLabel.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
+    const bool analyzeStyle = identity.learnButtonLabel == "Analyze";
+    if (analyzeStyle) {
+        learnButton.setTooltip("Play the track through once, then press Analyze again to stop and lock the offline levelling map.");
+        learnMeterBar.setTooltip("Confidence reflects how much of the programme has been observed and how stable the loudness map is.");
+        learnMeterLabel.setTooltip("Confidence reflects how much of the programme has been observed and how stable the loudness map is.");
+    } else {
+        learnButton.setTooltip("Capture pure background noise only for about 1 to 2 seconds, then press again to stop and lock the profile.");
+        learnMeterBar.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
+        learnMeterLabel.setTooltip("Confidence reflects how clean and representative the captured noise print is.");
+    }
 
-    configureKnob(primarySlider, primaryLabel, identity.primaryLabel, identity.primaryHint);
-    configureKnob(secondarySlider, secondaryLabel, identity.secondaryLabel, identity.secondaryHint);
-    if (identity.supportsTertiaryControl())
-        configureKnob(tertiarySlider, tertiaryLabel, identity.tertiaryLabel, identity.tertiaryHint);
-    if (identity.supportsQuaternaryControl())
-        configureKnob(quaternarySlider, quaternaryLabel, identity.quaternaryLabel, identity.quaternaryHint);
-    addAndMakeVisible(primaryHint);
-    addAndMakeVisible(secondaryHint);
-    if (identity.supportsTertiaryControl())
-        addAndMakeVisible(tertiaryHint);
-    if (identity.supportsQuaternaryControl())
-        addAndMakeVisible(quaternaryHint);
+    if (hasControlBank) {
+        for (int i = 0; i < identity.clampedControlBankCount(); ++i)
+            configureBankControl(i);
+    } else {
+        configureKnob(primarySlider, primaryLabel, identity.primaryLabel, identity.primaryHint);
+        configureKnob(secondarySlider, secondaryLabel, identity.secondaryLabel, identity.secondaryHint);
+        if (identity.supportsTertiaryControl())
+            configureKnob(tertiarySlider, tertiaryLabel, identity.tertiaryLabel, identity.tertiaryHint);
+        if (identity.supportsQuaternaryControl())
+            configureKnob(quaternarySlider, quaternaryLabel, identity.quaternaryLabel, identity.quaternaryHint);
+        addAndMakeVisible(primaryHint);
+        addAndMakeVisible(secondaryHint);
+        if (identity.supportsTertiaryControl())
+            addAndMakeVisible(tertiaryHint);
+        if (identity.supportsQuaternaryControl())
+            addAndMakeVisible(quaternaryHint);
+    }
 
     auto& state = processor.getValueTreeState();
     if (identity.supportsModeSwitch())
         modeAttachment = std::make_unique<ComboAttachment>(state, identity.modeParamId.data(), modeBox);
+    if (identity.supportsAuxSelector())
+        auxSelectorAttachment = std::make_unique<ComboAttachment>(state, identity.auxSelectorParamId.data(), auxSelectorBox);
     if (identity.supportsListenMode())
         listenAttachment = std::make_unique<ButtonAttachment>(state, identity.listenParamId.data(), listenButton);
     if (identity.supportsLearnButton())
         learnAttachment = std::make_unique<ButtonAttachment>(state, identity.learnParamId.data(), learnButton);
-    primaryAttachment = std::make_unique<SliderAttachment>(state, identity.primaryParamId.data(), primarySlider);
-    secondaryAttachment = std::make_unique<SliderAttachment>(state, identity.secondaryParamId.data(), secondarySlider);
-    if (identity.supportsTertiaryControl())
-        tertiaryAttachment = std::make_unique<SliderAttachment>(state, identity.tertiaryParamId.data(), tertiarySlider);
-    if (identity.supportsQuaternaryControl())
-        quaternaryAttachment = std::make_unique<SliderAttachment>(state, identity.quaternaryParamId.data(), quaternarySlider);
+    if (hasControlBank) {
+        for (int i = 0; i < identity.clampedControlBankCount(); ++i) {
+            bankAttachments[static_cast<size_t>(i)] =
+                std::make_unique<SliderAttachment>(state,
+                                                   identity.controlBankParamIds[static_cast<size_t>(i)].data(),
+                                                   bankSliders[static_cast<size_t>(i)]);
+        }
+    } else {
+        primaryAttachment = std::make_unique<SliderAttachment>(state, identity.primaryParamId.data(), primarySlider);
+        secondaryAttachment = std::make_unique<SliderAttachment>(state, identity.secondaryParamId.data(), secondarySlider);
+        if (identity.supportsTertiaryControl())
+            tertiaryAttachment = std::make_unique<SliderAttachment>(state, identity.tertiaryParamId.data(), tertiarySlider);
+        if (identity.supportsQuaternaryControl())
+            quaternaryAttachment = std::make_unique<SliderAttachment>(state, identity.quaternaryParamId.data(), quaternarySlider);
+    }
 
     timerCallback();
     startTimerHz(12);
@@ -265,7 +311,11 @@ void EditorBase::paint(juce::Graphics& g) {
 
 void EditorBase::resized() {
     auto bounds = getLocalBounds().reduced(scaled(20), scaled(16));
-    auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton() ? scaled(164) : scaled(132));
+    const bool compactControlBank = processor.getProductIdentity().supportsControlBank()
+        && processor.getProductIdentity().compactControlBankLayout;
+    auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton()
+        ? (compactControlBank ? scaled(146) : scaled(164))
+        : (compactControlBank ? scaled(112) : scaled(132)));
     auto body = bounds.reduced(0, scaled(10));
 
     suiteLabel.setBounds(header.removeFromTop(scaled(20)));
@@ -279,6 +329,12 @@ void EditorBase::resized() {
         modeBox.setBounds(modeRow.removeFromLeft(scaled(228)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
     }
+    if (processor.getProductIdentity().supportsAuxSelector()) {
+        auxSelectorLabel.setBounds(modeRow.removeFromLeft(scaled(84)));
+        modeRow.removeFromLeft(scaled(8));
+        auxSelectorBox.setBounds(modeRow.removeFromLeft(scaled(180)).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(16));
+    }
     if (processor.getProductIdentity().supportsListenMode()) {
         listenButton.setBounds(modeRow.removeFromLeft(scaled(116)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
@@ -287,9 +343,14 @@ void EditorBase::resized() {
         learnButton.setBounds(modeRow.removeFromLeft(scaled(110)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
+    if (processor.getProductIdentity().hasHelpContent()) {
+        helpButton.setBounds(modeRow.removeFromRight(scaled(92)).reduced(0, scaled(2)));
+        modeRow.removeFromRight(scaled(12));
+    }
 
     const bool hasTertiary = processor.getProductIdentity().supportsTertiaryControl();
     const bool hasQuaternary = processor.getProductIdentity().supportsQuaternaryControl();
+    const bool hasControlBank = processor.getProductIdentity().supportsControlBank();
     const bool wrapStatusRow = modeRow.getWidth() < scaled(220);
     if (wrapStatusRow) {
         statusLabel.setBounds(header.removeFromTop(scaled(24)));
@@ -340,6 +401,46 @@ void EditorBase::resized() {
         if (layoutId.showHighShelfIcon)
             highShelfIconBounds = { both ? startX + iconW + gap : startX, iconY, iconW, iconH };
     };
+    if (hasControlBank) {
+        body.removeFromBottom(compactControlBank ? scaled(24) : scaled(34));
+        auto controls = body.reduced(scaled(18), compactControlBank ? scaled(14) : scaled(24));
+        const int count = processor.getProductIdentity().clampedControlBankCount();
+        const bool stacked = controls.getWidth() < scaled(compactControlBank ? 840 : 920);
+        const int rows = stacked ? 2 : 1;
+        const int cols = stacked ? ((count + 1) / 2) : count;
+        const int rowGap = scaled(compactControlBank ? 8 : 12);
+        const int colGap = scaled(compactControlBank ? 6 : 10);
+        const int sectionHeight = (controls.getHeight() - rowGap * (rows - 1)) / rows;
+
+        for (int i = 0; i < count; ++i) {
+            const int row = stacked ? (i / cols) : 0;
+            const int col = stacked ? (i % cols) : i;
+            const int controlsY = controls.getY() + row * (sectionHeight + rowGap);
+            const int sectionWidth = (controls.getWidth() - colGap * (cols - 1)) / cols;
+            auto section = juce::Rectangle<int>(controls.getX() + col * (sectionWidth + colGap),
+                                                controlsY,
+                                                sectionWidth,
+                                                sectionHeight).reduced(scaled(10), scaled(6));
+            auto& label = bankLabels[static_cast<size_t>(i)];
+            auto& slider = bankSliders[static_cast<size_t>(i)];
+            auto& hint = bankHints[static_cast<size_t>(i)];
+            label.setBounds(section.removeFromTop(compactControlBank ? scaled(24) : scaled(28)));
+            section.removeFromTop(compactControlBank ? scaled(4) : scaled(8));
+            auto sliderArea = section.removeFromTop(juce::jmax(compactControlBank ? scaled(170) : scaled(200),
+                                                               section.getHeight() - scaled(compactControlBank ? 18 : 52)));
+            slider.setBounds(sliderArea.withTrimmedLeft(sectionWidth / (compactControlBank ? 8 : 6))
+                                       .withTrimmedRight(sectionWidth / (compactControlBank ? 8 : 6)));
+            if (compactControlBank) {
+                hint.setBounds({});
+                hint.setVisible(false);
+            } else {
+                section.removeFromTop(scaled(8));
+                hint.setBounds(section.removeFromTop(scaled(44)));
+                hint.setVisible(true);
+            }
+        }
+        return;
+    }
     if (stacked) {
         body.removeFromBottom(scaled(34));
         const int rows = hasQuaternary ? 4 : (hasTertiary ? 3 : 2);
@@ -367,6 +468,7 @@ void EditorBase::resized() {
             layoutKnob(body, secondarySlider, secondaryLabel, secondaryHint);
         }
         placeInlineShelfIcons(secondaryLabel.getBounds());
+        applyTextFit();
         return;
     }
 
@@ -392,6 +494,7 @@ void EditorBase::resized() {
         layoutKnob(c3, tertiarySlider, tertiaryLabel, tertiaryHint);
         layoutKnob(c4, quaternarySlider, quaternaryLabel, quaternaryHint);
         placeInlineShelfIcons(secondaryLabel.getBounds());
+        applyTextFit();
         return;
     }
 
@@ -414,6 +517,7 @@ void EditorBase::resized() {
         layoutKnob(center, secondarySlider, secondaryLabel, secondaryHint);
         layoutKnob(right, tertiarySlider, tertiaryLabel, tertiaryHint);
         placeInlineShelfIcons(secondaryLabel.getBounds());
+        applyTextFit();
         return;
     }
 
@@ -435,6 +539,7 @@ void EditorBase::resized() {
     right.removeFromTop(scaled(12));
     secondaryHint.setBounds(right.removeFromTop(scaled(62)));
     placeInlineShelfIcons(secondaryLabel.getBounds());
+    applyTextFit();
 }
 
 void EditorBase::setScaleFactor(const float newScale) {
@@ -480,8 +585,43 @@ void EditorBase::configureKnob(juce::Slider& slider,
     hintLabel->setInterceptsMouseClicks(false, false);
 }
 
+void EditorBase::configureBankControl(const int index) {
+    const auto& identity = processor.getProductIdentity();
+    const auto idx = static_cast<size_t>(index);
+    auto& slider = bankSliders[idx];
+    auto& label = bankLabels[idx];
+    auto& hint = bankHints[idx];
+
+    slider.setSliderStyle(identity.controlBankVertical
+        ? juce::Slider::LinearVertical
+        : juce::Slider::LinearHorizontal);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, scaled(84), scaled(24));
+    slider.setDoubleClickReturnValue(true, static_cast<double>(identity.controlBankDefaultValues[idx]));
+    slider.setScrollWheelEnabled(false);
+    slider.setWantsKeyboardFocus(true);
+    addAndMakeVisible(slider);
+
+    label.setText(toJuceString(identity.controlBankLabels[idx]), juce::dontSendNotification);
+    label.setJustificationType(juce::Justification::centred);
+    label.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(18))).withStyle("Bold"));
+    label.setMinimumHorizontalScale(0.58f);
+    label.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(label);
+
+    hint.setText(toJuceString(identity.controlBankHints[idx]), juce::dontSendNotification);
+    hint.setJustificationType(juce::Justification::centredTop);
+    hint.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(12))));
+    hint.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.72f));
+    hint.setMinimumHorizontalScale(0.60f);
+    hint.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(hint);
+}
+
 juce::String EditorBase::footerText() const {
-    return juce::String("v") + juce::String(VXSUITE_VERSION_STRING) + "    (c) Andrzej Marczewski 2026";
+    const auto& identity = processor.getProductIdentity();
+    return "DSP v" + juce::String(identity.dspVersion.data())
+        + "   FW v" + juce::String(vxsuite::versions::framework.data())
+        + "    (c) Andrzej Marczewski 2026";
 }
 
 int EditorBase::scaled(const int value) const {
@@ -532,6 +672,7 @@ void EditorBase::timerCallback() {
     }
     updateActivityIndicators();
     updateLearnUi();
+    updateAuxSelectorUi();
     if (processor.getProductIdentity().showLevelTrace) {
         vxsuite::spectrum::SnapshotView snapshot;
         if (processor.getSpectrumSnapshotView(snapshot)) {
@@ -571,16 +712,55 @@ void EditorBase::updateLearnUi() {
     if (!processor.getProductIdentity().supportsLearnButton())
         return;
 
+    const bool show = processor.shouldShowLearnUi();
+    learnButton.setVisible(show);
+    learnMeterBar.setVisible(show && (processor.isLearnActive() || processor.isLearnReady()));
+    learnMeterLabel.setVisible(show);
+    if (!show)
+        return;
+
     const bool active = processor.isLearnActive();
     const bool ready = processor.isLearnReady();
     const float progress = juce::jlimit(0.0f, 1.0f, processor.getLearnProgress());
     const float confidence = juce::jlimit(0.0f, 1.0f, processor.getLearnConfidence());
     const float observedSeconds = juce::jmax(0.0f, processor.getLearnObservedSeconds());
     const int confidencePct = juce::roundToInt(confidence * 100.0f);
+    const bool analyzeStyle = processor.getProductIdentity().learnButtonLabel == "Analyze";
 
     learnMeterUi = active ? static_cast<double>(progress) : static_cast<double>(confidence);
     learnMeterBar.setVisible(active || ready);
-    if (active) {
+    if (analyzeStyle) {
+        if (active) {
+            const int coveragePct = juce::roundToInt(progress * 100.0f);
+            juce::String captureHint = "press Analyze again to lock the map";
+            if (observedSeconds < 3.0f)
+                captureHint = "let more of the track play, then press Analyze again to lock the map";
+            else if (progress >= 1.0f)
+                captureHint = "coverage target reached, keep playing for a stronger map or press Analyze again to lock it";
+            else if (observedSeconds >= 12.0f)
+                captureHint = "good coverage so far, press Analyze again to lock it when ready";
+
+            learnMeterLabel.setText("Coverage " + juce::String(coveragePct) + "%  "
+                                    + juce::String(observedSeconds, 1) + "s observed  " + captureHint,
+                                    juce::dontSendNotification);
+            learnButton.setButtonText(progress >= 1.0f ? "Lock Analysis" : "Stop Analyze");
+        } else if (ready) {
+            juce::String qualityText = "usable programme map";
+            if (confidencePct < 40)
+                qualityText = "short capture, play more of the track for a stronger map";
+            else if (confidencePct >= 75)
+                qualityText = "strong whole-track map";
+
+            learnMeterLabel.setText("Analysis ready  " + juce::String(confidencePct)
+                                    + "% confidence  " + qualityText,
+                                    juce::dontSendNotification);
+            learnButton.setButtonText("Analyze");
+        } else {
+            learnMeterLabel.setText("Play the track through once, then press Analyze again to lock the levelling map",
+                                    juce::dontSendNotification);
+            learnButton.setButtonText("Analyze");
+        }
+    } else if (active) {
         juce::String captureHint = "press Learn again to stop";
         if (observedSeconds < 0.8f)
             captureHint = "keep capturing a little longer, then press Learn again to stop";
@@ -607,6 +787,33 @@ void EditorBase::updateLearnUi() {
                                 juce::dontSendNotification);
         learnButton.setButtonText("Learn");
     }
+}
+
+void EditorBase::updateAuxSelectorUi() {
+    if (!processor.getProductIdentity().supportsAuxSelector())
+        return;
+
+    const bool show = !processor.getProductIdentity().supportsModeSwitch()
+        || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) == Mode::general;
+    auxSelectorLabel.setVisible(show);
+    auxSelectorBox.setVisible(show);
+}
+
+void EditorBase::applyTextFit() {
+    fitLabelFontToBounds(suiteLabel, static_cast<float>(scaled(17)), static_cast<float>(scaled(13)));
+    fitLabelFontToBounds(productLabel, static_cast<float>(scaled(38)), static_cast<float>(scaled(24)));
+    fitLabelFontToBounds(modeLabel, static_cast<float>(scaled(14)), static_cast<float>(scaled(12)));
+    fitLabelFontToBounds(auxSelectorLabel, static_cast<float>(scaled(14)), static_cast<float>(scaled(12)));
+    fitLabelFontToBounds(statusLabel, static_cast<float>(scaled(13)), static_cast<float>(scaled(11)));
+    fitLabelFontToBounds(learnMeterLabel, static_cast<float>(scaled(12)), static_cast<float>(scaled(10)));
+    fitLabelFontToBounds(primaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));
+    fitLabelFontToBounds(secondaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));
+    fitLabelFontToBounds(tertiaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));
+    fitLabelFontToBounds(quaternaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));
+    fitLabelFontToBounds(primaryHint, static_cast<float>(scaled(13)), static_cast<float>(scaled(11)));
+    fitLabelFontToBounds(secondaryHint, static_cast<float>(scaled(13)), static_cast<float>(scaled(11)));
+    fitLabelFontToBounds(tertiaryHint, static_cast<float>(scaled(13)), static_cast<float>(scaled(11)));
+    fitLabelFontToBounds(quaternaryHint, static_cast<float>(scaled(13)), static_cast<float>(scaled(11)));
 }
 
 } // namespace vxsuite

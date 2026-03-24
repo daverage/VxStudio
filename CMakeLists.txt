@@ -5,6 +5,27 @@ project(VxStudio VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(VXSUITE_FRAMEWORK_VERSION "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXDEVERB "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXPROXIMITY "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXCLEANUP "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXFINISH "0.3.0")
+set(VXSUITE_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
+set(VXSUITE_PLUGIN_VERSION_VXSUBTRACT "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXDENOISER "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXTONE "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXLEVELER "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.0")
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+configure_file(
+  "${CMAKE_SOURCE_DIR}/cmake/VxSuiteVersions.h.in"
+  "${CMAKE_BINARY_DIR}/generated/VxSuiteVersions.h"
+  @ONLY
+)
+
 enable_testing()
 
 add_subdirectory(JUCE)
@@ -177,6 +198,8 @@ endfunction()
 vxsuite_add_framework(VxSuiteFramework)
 
 juce_add_plugin(VXDeverb
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXDEVERB}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXDEVERB}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxdeverb"
@@ -206,6 +229,8 @@ add_custom_target(VXDeverbPlugin ALL DEPENDS VXDeverb_VST3)
 vxsuite_stage_vst3_bundle(VXDeverb_VST3 "VXDeverb")
 
 juce_add_plugin(VXProximity
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXPROXIMITY}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXPROXIMITY}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxproximity"
@@ -233,6 +258,8 @@ add_custom_target(VXProximityPlugin ALL DEPENDS VXProximity_VST3)
 vxsuite_stage_vst3_bundle(VXProximity_VST3 "VXProximity")
 
 juce_add_plugin(VXCleanup
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXCLEANUP}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXCLEANUP}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxcleanup"
@@ -261,6 +288,8 @@ add_custom_target(VXCleanupPlugin ALL DEPENDS VXCleanup_VST3)
 vxsuite_stage_vst3_bundle(VXCleanup_VST3 "VXCleanup")
 
 juce_add_plugin(VXFinish
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXFINISH}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXFINISH}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxfinish"
@@ -290,6 +319,8 @@ add_custom_target(VXFinishPlugin ALL DEPENDS VXFinish_VST3)
 vxsuite_stage_vst3_bundle(VXFinish_VST3 "VXFinish")
 
 juce_add_plugin(VXOptoComp
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXOPTOCOMP}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXOPTOCOMP}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxoptocomp"
@@ -318,6 +349,8 @@ add_custom_target(VXOptoCompPlugin ALL DEPENDS VXOptoComp_VST3)
 vxsuite_stage_vst3_bundle(VXOptoComp_VST3 "VXOptoComp")
 
 juce_add_plugin(VXSubtract
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXSUBTRACT}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXSUBTRACT}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxsubtract"
@@ -345,6 +378,8 @@ add_custom_target(VXSubtractPlugin ALL DEPENDS VXSubtract_VST3)
 vxsuite_stage_vst3_bundle(VXSubtract_VST3 "VXSubtract")
 
 juce_add_plugin(VXDenoiser
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXDENOISER}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXDENOISER}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxdenoiser"
@@ -372,6 +407,8 @@ add_custom_target(VXDenoiserPlugin ALL DEPENDS VXDenoiser_VST3)
 vxsuite_stage_vst3_bundle(VXDenoiser_VST3 "VXDenoiser")
 
 juce_add_plugin(VXDeepFilterNet
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxdeepfilternet"
@@ -407,6 +444,8 @@ vxsuite_stage_vst3_bundle(VXDeepFilterNet_VST3 "VXDeepFilterNet")
 vxsuite_copy_vst3_resources(VXDeepFilterNet_VST3 "VXDeepFilterNet" ${VXSUITE_DF_EMBED_MODEL_FILES})
 
 juce_add_plugin(VXTone
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXTONE}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXTONE}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxtone"
@@ -433,6 +472,8 @@ add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxsuite_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
 juce_add_plugin(VXLeveler
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXLEVELER}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXLEVELER}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxleveler"
@@ -454,13 +495,49 @@ target_sources(VXLeveler PRIVATE
   Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
 )
 target_include_directories(VXLeveler PRIVATE Source)
 target_link_libraries(VXLeveler PRIVATE VxSuiteFramework juce::juce_dsp)
 add_custom_target(VXLevelerPlugin ALL DEPENDS VXLeveler_VST3)
 vxsuite_stage_vst3_bundle(VXLeveler_VST3 "VXLeveler")
 
+juce_add_plugin(VXRebalance
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXREBALANCE}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXREBALANCE}
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxsuite.vxrebalance"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXRB"
+)
+target_compile_definitions(VXRebalance PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXRebalance)
+target_sources(VXRebalance PRIVATE
+  Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp
+)
+target_include_directories(VXRebalance PRIVATE Source)
+target_link_libraries(VXRebalance PRIVATE VxSuiteFramework juce::juce_dsp)
+add_custom_target(VXRebalancePlugin ALL DEPENDS VXRebalance_VST3)
+vxsuite_stage_vst3_bundle(VXRebalance_VST3 "VXRebalance")
+
 juce_add_plugin(VXStudioAnalyser
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxsuite.vxstudioanalyser"
@@ -499,6 +576,7 @@ add_custom_target(VXSuite_VST3
     VXDeepFilterNet_VST3
     VXTone_VST3
     VXLeveler_VST3
+    VXRebalance_VST3
     VXStudioAnalyser_VST3
     VXDeverbStage
     VXProximityStage
@@ -510,6 +588,7 @@ add_custom_target(VXSuite_VST3
     VXDeepFilterNetStage
     VXToneStage
     VXLevelerStage
+    VXRebalanceStage
     VXStudioAnalyserStage
   COMMENT "Building all VX Suite VST3 products")
 
@@ -550,6 +629,8 @@ add_executable(VXLevelerMeasure
   Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
 )
 target_include_directories(VXLevelerMeasure PRIVATE Source tests)
 target_link_libraries(VXLevelerMeasure PRIVATE
@@ -566,6 +647,8 @@ add_executable(VXLevelerTuneSearch
   Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
 )
 target_include_directories(VXLevelerTuneSearch PRIVATE Source tests)
 target_link_libraries(VXLevelerTuneSearch PRIVATE
@@ -576,6 +659,24 @@ target_link_libraries(VXLevelerTuneSearch PRIVATE
 )
 target_compile_definitions(VXLevelerTuneSearch PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxsuite_add_executable_test(VXLevelerTuneSearch)
+
+add_executable(VXRebalanceMeasure
+  tests/VXRebalanceMeasure.cpp
+  Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp
+)
+target_include_directories(VXRebalanceMeasure PRIVATE Source tests)
+target_link_libraries(VXRebalanceMeasure PRIVATE
+  VxSuiteFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VXRebalanceMeasure PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxsuite_add_executable_test(VXRebalanceMeasure)
 
 add_executable(VxSuiteVoiceAnalysisTests
   tests/VxSuiteVoiceAnalysisTests.cpp
@@ -609,6 +710,8 @@ add_executable(VXSuitePluginRegressionTests
   Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
   Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXSuitePluginRegressionTests PRIVATE Source tests)
@@ -642,6 +745,8 @@ add_executable(VXSuiteBatchAudioCheck
   Source/vxsuite/products/leveler/VxLevelerProcessor.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxsuite/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxsuite/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
   Source/vxsuite/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXSuiteBatchAudioCheck PRIVATE Source tests)

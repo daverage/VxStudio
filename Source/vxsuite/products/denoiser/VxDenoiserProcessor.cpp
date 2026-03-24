@@ -1,4 +1,6 @@
 #include "VxDenoiserProcessor.h"
+#include "../../framework/VxSuiteHelpContent.h"
+#include "VxSuiteVersions.h"
 
 #include <cmath>
 
@@ -63,6 +65,10 @@ vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
     id.secondaryLabel   = "Guard";
     id.primaryHint      = "Spectral noise reduction - how much noise to remove.";
     id.secondaryHint    = "Artifact protection - guards harmonics and transients from over-processing.";
+    id.dspVersion       = vxsuite::versions::plugins::denoiser;
+    id.helpTitle        = vxsuite::help::denoiser.title;
+    id.helpHtml         = vxsuite::help::denoiser.html;
+    id.readmeSection    = vxsuite::help::denoiser.readmeSection;
     // Emerald green
     id.theme.accentRgb     = { 0.15f, 0.85f, 0.50f };
     id.theme.accent2Rgb    = { 0.04f, 0.10f, 0.06f };
