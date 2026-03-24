@@ -72,6 +72,23 @@ rather than:
 
 - weakest-possible realtime quality just to claim “live ML”
 
+### V2.0 scope decision
+
+The first realtime shipping build should be **v2.0**:
+
+- a lightweight **4-head** ML ownership model
+  - `Vocals`
+  - `Drums`
+  - `Bass`
+  - `Other`
+- exported for a CPU-first runtime path
+- with `Guitar` derived in DSP from:
+  - model `Other`
+  - harmonic midrange prior
+  - negative space after stronger sources claim ownership
+
+This keeps the runtime lighter than a true 5-head first ship while preserving the user-facing five-slider contract.
+
 ---
 
 ## V2 Product Rules

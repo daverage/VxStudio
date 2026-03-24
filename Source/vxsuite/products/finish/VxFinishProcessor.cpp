@@ -133,8 +133,7 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                 ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
                                 : 1.0f));
     dspParams.outputGainDb = outputGainDb;
-    dspParams.body = vxsuite::clamp01(smoothedBody
-                    + (voiceMode ? 0.10f * vocalPriority * smoothedFinish : 0.0f));
+    dspParams.body = 0.5f;
 
     polishChain.setParams(dspParams);
     polishChain.process(buffer);

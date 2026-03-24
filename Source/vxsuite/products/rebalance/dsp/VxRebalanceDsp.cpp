@@ -503,12 +503,48 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
             total += rawWeights[source][static_cast<size_t>(k)];
         total = std::max(kEps, total);
 
+        float derivedModelMasks[kSourceCount] {};
+        if (mlMaskSnapshot.available && mlMaskSnapshot.derivedGuitarFromOther) {
+            const float modelVocals = clamp01(mlMaskSnapshot.masks[vocalsSource][static_cast<size_t>(k)]);
+            const float modelDrums = clamp01(mlMaskSnapshot.masks[drumsSource][static_cast<size_t>(k)]);
+            const float modelBass = clamp01(mlMaskSnapshot.masks[bassSource][static_cast<size_t>(k)]);
+            const float modelOther = clamp01(mlMaskSnapshot.masks[otherSource][static_cast<size_t>(k)]);
+
+            const float harmonicPrior = clamp01(guitarWindow
+                * (0.20f
+                   + 0.30f * steadyPrior
+                   + 0.18f * (1.0f - centered)
+                   + 0.16f * wide));
+            const float vocalPenalty = clamp01(0.92f * modelVocals + 0.20f * analysisContext.speechPresence);
+            const float transientPenalty = clamp01((0.72f * modelDrums + 0.20f * drums) * transientPrior);
+            const float bassPenalty = clamp01(0.28f * modelBass);
+            const float derivedGuitar = modelOther * harmonicPrior
+                * (1.0f - 0.75f * vocalPenalty)
+                * (1.0f - 0.65f * transientPenalty)
+                * (1.0f - 0.35f * bassPenalty);
+
+            derivedModelMasks[vocalsSource] = modelVocals;
+            derivedModelMasks[drumsSource] = modelDrums;
+            derivedModelMasks[bassSource] = modelBass;
+            derivedModelMasks[guitarSource] = clamp01(derivedGuitar);
+            derivedModelMasks[otherSource] = clamp01(modelOther - derivedModelMasks[guitarSource]);
+
+            float derivedTotal = 0.0f;
+            for (float& value : derivedModelMasks)
+                derivedTotal += value;
+            derivedTotal = std::max(kEps, derivedTotal);
+            for (float& value : derivedModelMasks)
+                value /= derivedTotal;
+        }
+
         for (int source = 0; source < kSourceCount; ++source) {
             float nextMask = rawWeights[source][static_cast<size_t>(k)] / total;
             if (mlMaskSnapshot.available) {
                 const float modelBlend = clamp01(0.15f + 0.80f * mlMaskSnapshot.confidence
                     * signalQuality.separationConfidence);
-                const float modelMask = clamp01(mlMaskSnapshot.masks[static_cast<size_t>(source)][static_cast<size_t>(k)]);
+                const float modelMask = mlMaskSnapshot.derivedGuitarFromOther
+                    ? clamp01(derivedModelMasks[static_cast<size_t>(source)])
+                    : clamp01(mlMaskSnapshot.masks[static_cast<size_t>(source)][static_cast<size_t>(k)]);
                 nextMask = lerp(nextMask, modelMask, modelBlend);
             }
             if (!masksPrimed)

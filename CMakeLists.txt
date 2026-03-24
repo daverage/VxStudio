@@ -19,6 +19,19 @@ set(VXSUITE_PLUGIN_VERSION_VXLEVELER "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.0")
 
+execute_process(
+  COMMAND python3 -c "import pathlib, onnxruntime; p = pathlib.Path(onnxruntime.__file__).resolve().parent / 'capi'; libs = sorted(p.glob('libonnxruntime*.dylib')); print(libs[0] if libs else '', end='')"
+  OUTPUT_VARIABLE VXSUITE_ONNXRUNTIME_DYLIB
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+set(VXSUITE_HAS_ONNXRUNTIME FALSE)
+if(APPLE AND EXISTS "${VXSUITE_ONNXRUNTIME_DYLIB}")
+  add_library(VxSuiteOnnxRuntime SHARED IMPORTED GLOBAL)
+  set_target_properties(VxSuiteOnnxRuntime PROPERTIES IMPORTED_LOCATION "${VXSUITE_ONNXRUNTIME_DYLIB}")
+  set(VXSUITE_HAS_ONNXRUNTIME TRUE)
+endif()
+
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
 configure_file(
   "${CMAKE_SOURCE_DIR}/cmake/VxSuiteVersions.h.in"
@@ -529,9 +542,15 @@ target_sources(VXRebalance PRIVATE
   Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp
   Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp
   Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.cpp
 )
 target_include_directories(VXRebalance PRIVATE Source)
+target_include_directories(VXRebalance PRIVATE ThirdParty/onnxruntime/include)
 target_link_libraries(VXRebalance PRIVATE VxSuiteFramework juce::juce_dsp)
+if(VXSUITE_HAS_ONNXRUNTIME)
+  target_link_libraries(VXRebalance PRIVATE VxSuiteOnnxRuntime)
+  target_compile_definitions(VXRebalance PRIVATE VXS_HAS_ONNXRUNTIME=1)
+endif()
 add_custom_target(VXRebalancePlugin ALL DEPENDS VXRebalance_VST3)
 vxsuite_stage_vst3_bundle(VXRebalance_VST3 "VXRebalance")
 
@@ -667,14 +686,20 @@ add_executable(VXRebalanceMeasure
   Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp
   Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp
   Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp
+  Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.cpp
 )
 target_include_directories(VXRebalanceMeasure PRIVATE Source tests)
+target_include_directories(VXRebalanceMeasure PRIVATE ThirdParty/onnxruntime/include)
 target_link_libraries(VXRebalanceMeasure PRIVATE
   VxSuiteFramework
   juce::juce_dsp
   juce::juce_audio_processors
   juce::juce_audio_formats
 )
+if(VXSUITE_HAS_ONNXRUNTIME)
+  target_link_libraries(VXRebalanceMeasure PRIVATE VxSuiteOnnxRuntime)
+  target_compile_definitions(VXRebalanceMeasure PRIVATE VXS_HAS_ONNXRUNTIME=1)
+endif()
 target_compile_definitions(VXRebalanceMeasure PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxsuite_add_executable_test(VXRebalanceMeasure)
 

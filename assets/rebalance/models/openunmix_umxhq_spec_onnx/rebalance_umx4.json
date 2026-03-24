@@ -1,0 +1,27 @@
+{
+  "format": "vx_rebalance_umx4_onnx",
+  "source_model_dir": "assets/rebalance/models/openunmix_umxhq_spec",
+  "sample_rate": 44100,
+  "nfft": 4096,
+  "nhop": 1024,
+  "targets": [
+    "vocals",
+    "drums",
+    "bass",
+    "other"
+  ],
+  "input_shape": [
+    "batch",
+    2,
+    2049,
+    "frames"
+  ],
+  "output_shape": [
+    "batch",
+    4,
+    2,
+    2049,
+    "frames"
+  ],
+  "opset": 18
+}

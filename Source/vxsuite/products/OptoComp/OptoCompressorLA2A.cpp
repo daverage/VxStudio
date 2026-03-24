@@ -218,8 +218,6 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const float grAvgDb = grAcc / static_cast<float>(numSamples);
   activity01 = compressionEnabled ? clamp01(grAvgDb / 12.0f) : 0.0f; // 12dB -> “full” activity
 
-  // Optional gentle tone shaping after compression
-  applyBodyShelf(buffer);
 }
 
 void OptoCompressorLA2A::applyBodyShelf(juce::AudioBuffer<float>& buffer) noexcept {

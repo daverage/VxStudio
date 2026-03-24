@@ -1,0 +1,35 @@
+{
+  "audio_path": "/Users/andrzejmarczewski/Downloads/brightside_stems/brightside_original.wav",
+  "onnx_dir": "assets/rebalance/models/openunmix_umxhq_spec_onnx",
+  "sample_rate": 44100,
+  "nfft": 4096,
+  "nhop": 1024,
+  "window_frames": 64,
+  "stride_frames": 32,
+  "targets4": [
+    "vocals",
+    "drums",
+    "bass",
+    "other"
+  ],
+  "targets5": [
+    "vocals",
+    "drums",
+    "bass",
+    "guitar",
+    "other"
+  ],
+  "mean_share_4": {
+    "vocals": 0.2967495918273926,
+    "drums": 0.5452114343643188,
+    "bass": 0.01943049393594265,
+    "other": 0.1386076956987381
+  },
+  "mean_share_5": {
+    "vocals": 0.2967495918273926,
+    "drums": 0.5452114939689636,
+    "bass": 0.0194304957985878,
+    "guitar": 0.012313800863921642,
+    "other": 0.12629400193691254
+  }
+}

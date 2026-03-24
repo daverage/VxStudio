@@ -146,9 +146,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     // Map user controls + ModePolicy onto ProcessOptions
     vxsuite::ProcessOptions opts;
-    const float effectiveClean = isVoice
-        ? vxsuite::clamp01((0.68f - 0.08f * vocalPriority - 0.03f * voiceContext.buriedSpeech) * smoothedClean)
-        : vxsuite::clamp01(0.78f * smoothedClean);
+    const float effectiveClean = vxsuite::clamp01(smoothedClean);
     opts.isVoiceMode        = isVoice;
     opts.sourceProtect      = isVoice ? vxsuite::clamp01(0.48f
                                                        + 0.40f * smoothedGuard * policy.sourceProtect
@@ -187,7 +185,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     const int channels = buffer.getNumChannels();
-    const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 2.5f : 2.0f);
+    const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 6.0f : 5.0f);
     if (channels >= 2) {
         for (int ch = 0; ch < 2; ++ch) {
             const float wetRms = computeChannelRms(buffer, ch);
@@ -202,8 +200,8 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                 const float retentionWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.75f * speechWeight + 0.25f * contextWeight)
                                                       : speechWeight;
                 const float retentionTarget = isVoice
-                    ? juce::jlimit(0.72f, 0.88f, (0.72f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
-                    : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
+                    ? juce::jlimit(0.88f, 1.0f, (0.90f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect) * retentionWeight)
+                    : juce::jlimit(0.85f, 1.0f, (0.88f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
                 const float targetRms = channelDryRms * retentionTarget;
                 compensationTarget = juce::jlimit(1.0f, maxCompensation, targetRms / std::max(wetRms, 1.0e-6f));
             }

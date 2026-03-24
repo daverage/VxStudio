@@ -142,6 +142,7 @@ void VXCleanupAudioProcessor::resetSuite() {
     tonalMudEnv = 0.0f;
     harshnessEnv = 0.0f;
     outputTrimmer.reset();
+    smoothedMakeupGain = 1.0f;
     classifiersPrimed = false;
     controlsPrimed = false;
 }
@@ -154,8 +155,15 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         return;
 
     float dryPeak = 0.0f;
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    double dryRmsSq = 0.0;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
         dryPeak = std::max(dryPeak, buffer.getMagnitude(ch, 0, numSamples));
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < numSamples; ++i)
+            dryRmsSq += static_cast<double>(data[i]) * data[i];
+    }
+    const int dryCount = buffer.getNumChannels() * numSamples;
+    const float dryRms = dryCount > 0 ? static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(dryCount))) : 0.0f;
 
     const float cleanupTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
@@ -388,8 +396,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
       + 0.30f * (voiceMode ? modePolicy.sourceProtect : 0.55f * modePolicy.sourceProtect)
       + 0.14f * (voiceMode ? voiceContext.vocalDominance : 0.0f)
       + 0.08f * (1.0f - signalQuality.compressionScore));
-    params.denoiseAmount = vxsuite::clamp01(cleanup * qualityTrust
-        * juce::jmax(tonalMudWeight, juce::jmax(sibilanceWeight, breathWeight)));
+    params.denoiseAmount = 0.0f;
     params.artifactRisk = evidence.artifactRisk;
     params.compSidechainBoostDb = 0.0f;
     params.speechLoudnessDb = evidence.speechLoudnessDb;
@@ -415,13 +422,26 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     polishChain.setParams(params);
     polishChain.processCorrective(buffer);
 
+    // RMS makeup: restore level lost to subtractive EQ corrections.
+    double wetRmsSq = 0.0;
     float wetPeak = 0.0f;
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
         wetPeak = std::max(wetPeak, buffer.getMagnitude(ch, 0, numSamples));
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < numSamples; ++i)
+            wetRmsSq += static_cast<double>(data[i]) * data[i];
+    }
+    const float wetRms = dryCount > 0 ? static_cast<float>(std::sqrt(wetRmsSq / static_cast<double>(dryCount))) : 0.0f;
 
-    const float allowedPeak = juce::jmin(0.985f, juce::jmax(1.0e-4f, dryPeak * 1.02f + 1.0e-4f));
-    if (wetPeak > allowedPeak)
-        buffer.applyGain(allowedPeak / std::max(wetPeak, 1.0e-6f));
+    float makeupTarget = 1.0f;
+    if (dryRms > 1.0e-5f && wetRms > 1.0e-5f)
+        makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(6.0f), dryRms / std::max(wetRms, 1.0e-6f));
+    smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, makeupTarget, currentSampleRateHz, numSamples, 0.120f);
+
+    // Safety: never push above the original dry peak.
+    const float safeGain = wetPeak > 1.0e-6f ? std::min(smoothedMakeupGain, dryPeak / wetPeak) : smoothedMakeupGain;
+    if (std::abs(safeGain - 1.0f) > 1.0e-4f)
+        buffer.applyGain(safeGain);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

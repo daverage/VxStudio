@@ -42,6 +42,7 @@ private:
     double currentSampleRateHz = 48000.0;
     float smoothedSubtract = 0.0f;
     float smoothedProtect = 0.5f;
+    float smoothedMakeupGain = 1.0f;
     bool controlsPrimed = false;
     bool learnToggleLatched = false;
     juce::AudioBuffer<float> leftScratch;

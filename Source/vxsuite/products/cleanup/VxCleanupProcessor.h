@@ -55,6 +55,7 @@ private:
     float tonalMudEnv = 0.0f;
     float harshnessEnv = 0.0f;
     vxsuite::OutputTrimmer outputTrimmer;
+    float smoothedMakeupGain = 1.0f;
     bool classifiersPrimed = false;
     bool controlsPrimed = false;
 };

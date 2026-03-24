@@ -38,7 +38,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     const float autoMakeupMaxDb = voiceMode ? 10.0f : 8.0f;
     const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, 0.85f);
     const float autoMakeupFromReductionDb = juce::jlimit(0.0f, autoMakeupMaxDb, 0.80f * opto.getGainReductionDb());
-    const float autoMakeupTargetDb = std::max(autoMakeupFromKnobDb, autoMakeupFromReductionDb);
+    const float autoMakeupTargetDb = autoMakeupFromKnobDb;
     smoothedAutoMakeupDb += vxsuite::blockBlendAlpha(sr, numSamples, 0.18f)
         * (autoMakeupTargetDb - smoothedAutoMakeupDb);
 

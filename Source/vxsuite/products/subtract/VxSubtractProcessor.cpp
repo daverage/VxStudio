@@ -117,6 +117,7 @@ void VXSubtractAudioProcessor::resetSuite() {
     subtractDspRight.resetStreamingState();
     smoothedSubtract = 0.0f;
     smoothedProtect = 0.5f;
+    smoothedMakeupGain = 1.0f;
     controlsPrimed = false;
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     subtractDspMono.setLearning(learnToggleLatched);
@@ -244,6 +245,32 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         }
     } else {
         subtractDspMono.processInPlace(buffer, blindAmount, options);
+    }
+
+    // RMS makeup: restore level lost to spectral subtraction.
+    if (!learningActiveNow && subtractStrength > 1.0e-4f) {
+        const auto& dryRef = getLatencyAlignedListenDryBuffer();
+        double dryRmsSq = 0.0, wetRmsSq = 0.0;
+        const int chCount = std::min(buffer.getNumChannels(), dryRef.getNumChannels());
+        for (int ch = 0; ch < chCount; ++ch) {
+            const auto* d = dryRef.getReadPointer(ch);
+            const auto* w = buffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                dryRmsSq += static_cast<double>(d[i]) * d[i];
+                wetRmsSq += static_cast<double>(w[i]) * w[i];
+            }
+        }
+        const int n = chCount * numSamples;
+        const float dryRms = n > 0 ? static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(n))) : 0.0f;
+        const float wetRms = n > 0 ? static_cast<float>(std::sqrt(wetRmsSq / static_cast<double>(n))) : 0.0f;
+        float makeupTarget = 1.0f;
+        if (dryRms > 1.0e-5f && wetRms > 1.0e-5f)
+            makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(8.0f), dryRms / std::max(wetRms, 1.0e-6f));
+        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, makeupTarget, currentSampleRateHz, numSamples, 0.120f);
+        if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f)
+            buffer.applyGain(smoothedMakeupGain);
+    } else {
+        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
     }
 
     updateLearnTelemetry(numChannels);

@@ -125,14 +125,7 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
 void VXDeverbAudioProcessor::resetSuite() {
     deverbProcessor.reset();
     wetScratch.clear();
-    if (!dryLowpassState.empty())
-        std::fill(dryLowpassState.begin(), dryLowpassState.end(), 0.0f);
-    if (!wetLowpassState.empty())
-        std::fill(wetLowpassState.begin(), wetLowpassState.end(), 0.0f);
-    if (!bodySpeechState.empty())
-        std::fill(bodySpeechState.begin(), bodySpeechState.end(), 0.0f);
     smoothedReduce = 0.0f;
-    smoothedBody = 0.0f;
     smoothedCompensationGain = 1.0f;
     controlsPrimed = false;
 }
@@ -188,16 +181,13 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         return;
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
-    const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     const float dryRms = computeBufferRms(buffer);
     const bool isFirstBlock = !controlsPrimed;
     if (isFirstBlock) {
         smoothedReduce = reduceTarget;
-        smoothedBody = bodyTarget;
         controlsPrimed = true;
     } else {
         smoothedReduce = vxsuite::smoothBlockValue(smoothedReduce, reduceTarget, currentSampleRateHz, numSamples, 0.060f);
-        smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget, currentSampleRateHz, numSamples, 0.090f);
     }
 
     for (int ch = 0; ch < outputChannels; ++ch)
@@ -244,11 +234,6 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     for (int ch = 0; ch < outputChannels; ++ch)
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
-    const float effectiveBody = voiceMode
-        ? vxsuite::clamp01(smoothedBody + 0.10f * vocalPriority)
-        : smoothedBody;
-    if (effectiveBody > 1.0e-4f)
-        applyBodyRestore(getLatencyAlignedListenDryBuffer(), buffer, effectiveBody, isFirstBlock);
     applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock);
 }
 
@@ -256,64 +241,6 @@ void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int
     const int safeChannels = std::max(1, channels);
     const int safeSamples = std::max(1, samples);
     wetScratch.setSize(safeChannels, safeSamples, false, false, true);
-    dryLowpassState.assign(static_cast<size_t>(safeChannels), 0.0f);
-    wetLowpassState.assign(static_cast<size_t>(safeChannels), 0.0f);
-    bodySpeechState.assign(static_cast<size_t>(safeChannels), 0.0f);
-}
-
-void VXDeverbAudioProcessor::applyBodyRestore(const juce::AudioBuffer<float>& dryBuffer,
-                                              juce::AudioBuffer<float>& wetBuffer,
-                                              const float bodyAmount,
-                                              const bool isFirstBlock) {
-    const int channels = wetBuffer.getNumChannels();
-    const int samples = wetBuffer.getNumSamples();
-    if (channels <= 0 || samples <= 0 || bodyAmount < 1.0e-4f)
-        return;
-
-    const float alpha = onePoleAlpha(currentSampleRateHz, 180.0f);
-    const float restore = juce::jlimit(0.0f, 1.05f, 1.05f * std::pow(vxsuite::clamp01(bodyAmount), 0.72f));
-    const float support = 0.24f * vxsuite::clamp01(bodyAmount);
-    const float rampDuration = 2.0f * static_cast<float>(currentSampleRateHz) / 1000.0f;
-    const float speechAttack = std::exp(-1.0f / (0.004f * static_cast<float>(currentSampleRateHz)));
-    const float speechRelease = std::exp(-1.0f / (0.160f * static_cast<float>(currentSampleRateHz)));
-
-    for (int ch = 0; ch < channels; ++ch) {
-        auto* wet = wetBuffer.getWritePointer(ch);
-        const auto* dry = dryBuffer.getReadPointer(ch);
-        float dryLp = dryLowpassState[static_cast<size_t>(ch)];
-        float wetLp = wetLowpassState[static_cast<size_t>(ch)];
-        float speechState = bodySpeechState[static_cast<size_t>(ch)];
-
-        if (isFirstBlock) {
-            dryLp = dry[0];
-            wetLp = wet[0];
-            speechState = 0.0f;
-        }
-
-        for (int i = 0; i < samples; ++i) {
-            dryLp = alpha * dryLp + (1.0f - alpha) * dry[i];
-            wetLp = alpha * wetLp + (1.0f - alpha) * wet[i];
-            const float wetHigh = wet[i] - wetLp;
-            const float dryHigh = dry[i] - dryLp;
-            const float ramp = isFirstBlock
-                ? std::min(1.0f, static_cast<float>(i + 1) / std::max(1.0f, rampDuration))
-                : 1.0f;
-            const float speechDriver = std::abs(dryHigh) + 0.18f * std::abs(dry[i]);
-            const float speechIndicator = juce::jlimit(0.0f, 1.0f, (speechDriver - 0.0010f) / 0.012f);
-            const float speechCoeff = speechIndicator > speechState ? speechAttack : speechRelease;
-            speechState = speechCoeff * speechState + (1.0f - speechCoeff) * speechIndicator;
-            const float gatedRamp = ramp * speechState;
-            const float restoreDelta = std::max(0.0f, dryLp - wetLp);
-            const float blendedLow = wetLp
-                + (restore * gatedRamp) * restoreDelta
-                + (support * gatedRamp) * dryLp;
-            wet[i] = safeValue(wetHigh + blendedLow);
-        }
-
-        dryLowpassState[static_cast<size_t>(ch)] = dryLp;
-        wetLowpassState[static_cast<size_t>(ch)] = wetLp;
-        bodySpeechState[static_cast<size_t>(ch)] = speechState;
-    }
 }
 
 void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>& wetBuffer,
@@ -329,7 +256,7 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     const float dryDb = juce::Decibels::gainToDecibels(dryRms, -120.0f);
     const float wetDb = juce::Decibels::gainToDecibels(wetRms, -120.0f);
     const float lostDb = std::max(0.0f, dryDb - wetDb);
-    const float compensationDb = std::min(9.0f, lostDb * (0.72f + 0.18f * reduceAmount));
+    const float compensationDb = std::min(12.0f, lostDb * 0.95f);
     const float targetGain = juce::Decibels::decibelsToGain(compensationDb);
 
     if (isFirstBlock) {

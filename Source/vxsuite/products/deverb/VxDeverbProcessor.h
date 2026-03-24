@@ -33,10 +33,6 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     void ensureScratchCapacity(int channels, int samples);
-    void applyBodyRestore(const juce::AudioBuffer<float>& dryBuffer,
-                          juce::AudioBuffer<float>& wetBuffer,
-                          float bodyAmount,
-                          bool isFirstBlock);
     void applyLoudnessCompensation(juce::AudioBuffer<float>& wetBuffer,
                                    float dryRms,
                                    float reduceAmount,
@@ -44,11 +40,7 @@ private:
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
     juce::AudioBuffer<float> wetScratch;
-    std::vector<float> dryLowpassState;
-    std::vector<float> wetLowpassState;
-    std::vector<float> bodySpeechState;
     float smoothedReduce = 0.45f;
-    float smoothedBody   = 0.60f;
     float smoothedCompensationGain = 1.0f;
     double currentSampleRateHz = 48000.0;
     int    preparedBlockSize   = 0;

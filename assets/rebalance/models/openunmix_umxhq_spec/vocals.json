@@ -1,0 +1,13 @@
+{
+  "target": "vocals",
+  "source": "sigsep/open-unmix-pytorch umxhq_spec",
+  "args": {
+    "samplerate": 44100,
+    "sample_rate": 44100,
+    "nfft": 4096,
+    "nhop": 1024,
+    "nb_channels": 2,
+    "hidden_size": 512,
+    "bandwidth": 16000
+  }
+}

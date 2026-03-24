@@ -1,0 +1,13 @@
+{
+  "sample_rate": 44100,
+  "nfft": 4096,
+  "nhop": 1024,
+  "nb_channels": 2,
+  "model": "open-unmix umxhq_spec",
+  "targets": [
+    "vocals",
+    "drums",
+    "bass",
+    "other"
+  ]
+}

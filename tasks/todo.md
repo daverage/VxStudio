@@ -2959,6 +2959,122 @@ The v2 ML spec was written, but the product code still only had heuristic DSP. W
   - plugin/harness build cleanly with the new ML architecture seam in place
   - current behaviour is still heuristic because no rebalance ONNX model is present
 
+### Follow-up: v2.0 realtime path
+- Promoted the generic ML seam into the concrete **v2.0 shipping path**:
+  - explicit **4-head** model contract (`Vocals / Drums / Bass / Other`)
+  - explicit DSP-side `Guitar` derivation from `Other`
+  - truthful product status text around the v2.0 path
+- Updated:
+  - [VxRebalanceModelRunner.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.h)
+  - [VxRebalanceModelRunner.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp)
+  - [VxRebalanceDsp.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.h)
+  - [VxRebalanceDsp.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp)
+  - [VX_REBALANCE_V2_SPEC.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/docs/VX_REBALANCE_V2_SPEC.md)
+- The DSP-side derived guitar lane now uses:
+  - model `Other`
+  - harmonic/steady priors
+  - penalties from vocal, drum/transient, and bass ownership
+  - renormalization back into the five-lane competition model
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin VXRebalanceMeasure -j4`
+  - `./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 6.0 phone`
+- Verified result:
+  - build clean
+  - neutral still exact: `Neutral diff rms=0 peak=0`
+  - because there is still no shipped rebalance ONNX model, current audible behaviour remains the heuristic fallback even though the v2.0 4-head + derived-guitar architecture is now the code path contract
+
+### Follow-up: official v2.0 baseline model fetched
+- Pulled the official Open-Unmix `umxhq_spec` 4-stem baseline into:
+  - [assets/rebalance/models/openunmix_umxhq_spec/README.md](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/assets/rebalance/models/openunmix_umxhq_spec/README.md)
+  - [assets/rebalance/models/openunmix_umxhq_spec/separator.json](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/assets/rebalance/models/openunmix_umxhq_spec/separator.json)
+  - `vocals.pth`, `drums.pth`, `bass.pth`, `other.pth`
+- Wrote local metadata files so the bundle is reproducible and discoverable as the v2.0 baseline.
+- Updated [VxRebalanceModelRunner.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp) so the plugin can now detect the local Open-Unmix v2.0 bundle and report it as found.
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- Current honest state:
+  - official baseline weights are now in the repo
+  - plugin can detect that the v2.0 bundle exists
+  - actual in-plugin inference still needs the dedicated runtime/conversion step
+
+### Follow-up: ONNX conversion + runnable inference bridge
+- Added a practical v2.0 bridge tool at [rebalance_openunmix_v20.py](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tools/rebalance_openunmix_v20.py).
+- The tool now supports:
+  - `export`: load the local official Open-Unmix `umxhq_spec` 4-head bundle and export a **combined** ONNX model
+  - `infer`: run that ONNX model on audio, normalize 4-head masks, derive `Guitar` from `Other`, and write mask tensors/reports for tuning
+- Kept the export aligned with the practical v2.0 architecture:
+  - no full `Separator` export
+  - no STFT/ISTFT inside ONNX
+  - one combined spectral model with output shape `(batch, 4, 2, 2049, frames)`
+- Produced the exported ONNX bundle:
+  - [assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx)
+  - [assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json)
+- Validation:
+  - `python3 tools/rebalance_openunmix_v20.py export --validate`
+  - export max abs error: about `5.0e-06`
+- Produced the first real inference output:
+  - [tasks/reports/rebalance-openunmix-v20/brightside_masks.npz](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/rebalance-openunmix-v20/brightside_masks.npz)
+  - [tasks/reports/rebalance-openunmix-v20/brightside_masks.json](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tasks/reports/rebalance-openunmix-v20/brightside_masks.json)
+- First inference summary on `/Users/andrzejmarczewski/Downloads/brightside_stems/brightside_original.wav`:
+  - 4-head mean share: `vocals 0.297`, `drums 0.545`, `bass 0.019`, `other 0.139`
+  - 5-lane derived mean share: `vocals 0.297`, `drums 0.545`, `bass 0.019`, `guitar 0.012`, `other 0.126`
+- Updated [VxRebalanceModelRunner.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp) so the plugin can detect the exported ONNX bundle as the v2.0 model asset.
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin -j4`
+- Current honest state:
+  - ONNX export and offline inference are now real and verified
+  - native in-plugin C++ ONNX inference still needs runtime header packaging/integration before the plugin can consume these masks directly
+
+### Follow-up: native ONNX runtime integration made real
+- Integrated a native in-plugin ONNX path for `VX Rebalance` using the exported Open-Unmix v2.0 baseline instead of the heuristic-only fallback architecture.
+- Added a dedicated runtime wrapper at:
+  - [VxRebalanceOnnxModel.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.h)
+  - [VxRebalanceOnnxModel.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.cpp)
+- Important implementation notes:
+  - vendored the minimal ONNX Runtime headers into `ThirdParty/onnxruntime/include`
+  - linked the local Python-installed `libonnxruntime` as an imported CMake runtime
+  - switched the native wrapper from the ONNX C++ API to the lower-level C API after repeated teardown crashes from the header-only C++ wrapper path
+  - fixed a real model contract bug: the exported Open-Unmix ONNX bundle uses `64` frames, not `8`
+  - added ONNX tensor-shape validation at prepare time so future export/runtime mismatches fail cleanly instead of corrupting memory
+- Updated:
+  - [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt)
+  - [VxRebalanceModelRunner.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp)
+  - [VxRebalanceModelRunner.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.h)
+  - [VxRebalanceOnnxModel.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.h)
+  - [VxRebalanceOnnxModel.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.cpp)
+  - [tests/VXRebalanceMeasure.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXRebalanceMeasure.cpp)
+- Verification:
+  - `python3 tools/rebalance_openunmix_v20.py export --validate`
+  - `cmake --build build --target VXRebalance VXRebalancePlugin VXRebalanceMeasure -j1`
+  - `script -q /dev/null ./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 6.0 studio`
+- Verified result:
+  - status now reports `V2.0 UMX4 masks active`
+  - neutral remains exact: `Neutral diff rms=0 peak=0`
+  - the native ML path is now active against the local exported Open-Unmix model instead of only detecting it
+- Current limitation:
+  - none for common host rates: the model path now uses an analysis-only resampling layer so the fixed `44.1 kHz` Open-Unmix model can stay active in `48 kHz` sessions too
+
+### Follow-up: 48 kHz sample-rate support for the ML path
+- Reused the same lightweight resampling approach already proven in the DeepFilterNet runtime path, but only on the analysis/model side so the audio path itself stays in the host sample rate.
+- Updated [VxRebalanceModelRunner.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.h) and [VxRebalanceModelRunner.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp):
+  - added per-channel analysis resamplers targeting the fixed Open-Unmix model rate (`44.1 kHz`)
+  - resampled input blocks into the ML FIFO before STFT/model inference
+  - corrected model-bin mapping so DSP bins are projected into the model spectrum using the model sample rate instead of the host sample rate
+  - removed the old hard `44.1 kHz` gate from model activation
+- Verification:
+  - `cmake --build build --target VXRebalance VXRebalancePlugin VXRebalanceMeasure -j1`
+  - `script -q /dev/null ./build/VXRebalanceMeasure /Users/andrzejmarczewski/Downloads/brightside_stems 6.0 studio`
+  - created a temporary `48 kHz` stem pack with `ffmpeg`
+  - `script -q /dev/null ./build/VXRebalanceMeasure /tmp/vxrebalance48.nEOPER 6.0 studio`
+- Verified result:
+  - both `44.1 kHz` and `48 kHz` runs report `V2.0 UMX4 masks active`
+  - neutral remains exact in both runs: `Neutral diff rms=0 peak=0`
+
+### Review
+- Root cause of the native-runtime crash was not “ONNX is unstable” but a contract mismatch between the exported model and the runner: the ONNX bundle had a fixed `64`-frame output while the runner allocated for `8`.
+- The ONNX C++ wrapper also proved fragile in this local vendored-header + imported-dylib setup; the plain C API is the safer runtime boundary for this repo.
+- `VX Rebalance` now has a real ML path, but it still needs one more pass for sample-rate flexibility and then a fresh tuning pass on the ML masks themselves.
+
 ### Follow-up: exact redesign trial
 - I also trialed the proposed `Mix` redesign seams directly:
   - error blending instead of target blending,

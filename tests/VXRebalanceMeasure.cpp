@@ -211,6 +211,7 @@ int main(int argc, char* argv[]) {
 
         VXRebalanceAudioProcessor processor;
         processor.prepareToPlay(sampleRate, 256);
+        std::cout << "Status: " << processor.getStatusText() << "\n";
 
         setRebalanceDefaults(processor);
         vxsuite::test::setParamNormalized(processor, "recordingType", normalizedChoiceFromIndex(recordingTypeIndex, 3));
