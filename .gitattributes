@@ -1,0 +1,4 @@
+assets/deepfilternet/models/*.tar.gz filter=lfs diff=lfs merge=lfs -text
+assets/deepfilternet/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+assets/rebalance/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+assets/rebalance/models/**/*.pth filter=lfs diff=lfs merge=lfs -text
