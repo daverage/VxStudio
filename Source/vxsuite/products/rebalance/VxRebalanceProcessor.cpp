@@ -46,8 +46,8 @@ vxsuite::ModelPackage makeRebalancePackage() {
         "Rebalance ML Model",
         "VX Rebalance uses a lightweight music-source model for ML mode. Downloading it enables stronger vocals, drums, bass, guitar, and other source control without making the plugin bundle huge.",
         {
-            { "rebalance_umx4.json", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json" },
-            { "vx_rebalance_umx4.onnx", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx" }
+            { "rebalance_umx4.json", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json" },
+            { "vx_rebalance_umx4.onnx", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx" }
         }
     };
 }

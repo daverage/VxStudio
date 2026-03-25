@@ -24,7 +24,7 @@ vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilter
             "deepfilternet2",
             "DeepFilterNet 2 Model",
             {},
-            { { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" } }
+            { { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" } }
         };
     }
 
@@ -32,7 +32,7 @@ vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilter
         "deepfilternet3",
         "DeepFilterNet 3 Model",
         {},
-        { { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" } }
+        { { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" } }
     };
 }
 

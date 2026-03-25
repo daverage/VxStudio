@@ -20,7 +20,7 @@ vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFi
             "DeepFilterNet 2 Model",
             "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
             {
-                { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" }
+                { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" }
             }
         };
     }
@@ -30,7 +30,7 @@ vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFi
         "DeepFilterNet 3 Model",
         "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
         {
-            { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" }
+            { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" }
         }
     };
 }
