@@ -13,6 +13,28 @@ constexpr std::string_view kGuardParam = "guard";
 constexpr std::string_view kModelParam = "model";
 constexpr std::string_view kListenParam = "listen";
 
+vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
+    if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
+        return {
+            "deepfilternet2",
+            "DeepFilterNet 2 Model",
+            "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
+            {
+                { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" }
+            }
+        };
+    }
+
+    return {
+        "deepfilternet3",
+        "DeepFilterNet 3 Model",
+        "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
+        {
+            { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" }
+        }
+    };
+}
+
 juce::String describeBackend(const vxsuite::deepfilternet::DeepFilterService& engine) {
     switch (engine.realtimeBackend()) {
         case vxsuite::deepfilternet::DeepFilterService::RealtimeBackend::cpu: return "CPU";
@@ -70,6 +92,10 @@ juce::String VXDeepFilterNetAudioProcessor::getStatusText() const {
         return "Listen - removed voice noise only";
 
     const auto variant = selectedModelVariant();
+    if (isModelDownloadInProgress())
+        return describeVariant(variant) + " - downloading model";
+    if (!isModelReadyForUi())
+        return describeVariant(variant) + " selected - model not installed";
     const auto status = engine.lastStatus();
     if (status.startsWith("rt_missing_model"))
         return describeVariant(variant) + " selected - model not found";
@@ -80,6 +106,59 @@ juce::String VXDeepFilterNetAudioProcessor::getStatusText() const {
     if (engine.isRealtimeReady())
         return describeVariant(variant) + " - realtime " + describeBackend(engine) + " voice denoise";
     return describeVariant(variant) + " - preparing realtime backend";
+}
+
+vxsuite::ModelPackage VXDeepFilterNetAudioProcessor::currentModelPackage() const {
+    return makeDeepFilterPackage(selectedModelVariant());
+}
+
+bool VXDeepFilterNetAudioProcessor::isModelReadyForUi() const noexcept {
+    if (vxsuite::ModelAssetService::instance().isReady(makeDeepFilterPackage(selectedModelVariant())))
+        return true;
+
+    const auto status = engine.lastStatus();
+    return status == "rt_ready"
+        || status == "rt_preparing"
+        || status == "rt_init_failed"
+        || status == "rt_process_failed"
+        || status == "rt_reprepare_needed"
+        || engine.isRealtimeReady();
+}
+
+bool VXDeepFilterNetAudioProcessor::isModelDownloadInProgress() const noexcept {
+    return vxsuite::ModelAssetService::instance().isDownloading(makeDeepFilterPackage(selectedModelVariant()));
+}
+
+float VXDeepFilterNetAudioProcessor::getModelDownloadProgress() const noexcept {
+    return vxsuite::ModelAssetService::instance().progress(makeDeepFilterPackage(selectedModelVariant()));
+}
+
+bool VXDeepFilterNetAudioProcessor::shouldPromptForModelDownload() const noexcept {
+    return !isModelReadyForUi()
+        && vxsuite::ModelAssetService::instance().shouldPrompt(makeDeepFilterPackage(selectedModelVariant()));
+}
+
+juce::String VXDeepFilterNetAudioProcessor::getModelDownloadButtonText() const {
+    if (isModelDownloadInProgress())
+        return "Downloading Model...";
+    return "Download Model";
+}
+
+juce::String VXDeepFilterNetAudioProcessor::getModelDownloadPromptTitle() const {
+    return "Download " + describeVariant(selectedModelVariant()) + "?";
+}
+
+juce::String VXDeepFilterNetAudioProcessor::getModelDownloadPromptBody() const {
+    return currentModelPackage().reason
+        + "\n\nThe model will be stored in your user model cache so the VST stays smaller. If you skip this, ML denoise stays unavailable until you download it later.";
+}
+
+void VXDeepFilterNetAudioProcessor::requestModelDownload() {
+    vxsuite::ModelAssetService::instance().requestDownload(currentModelPackage());
+}
+
+void VXDeepFilterNetAudioProcessor::declineModelDownloadPrompt() {
+    vxsuite::ModelAssetService::instance().declinePrompt(currentModelPackage());
 }
 
 void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {

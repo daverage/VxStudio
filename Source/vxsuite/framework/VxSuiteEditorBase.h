@@ -35,8 +35,10 @@ private:
     int scaled(int value) const;
     juce::String footerText() const;
     void showTransientStatus(const juce::String& text);
+    void showModelDownloadPrompt(bool automatic);
     void updateActivityIndicators();
     void updateLearnUi();
+    void updateModelDownloadUi();
     void updateAuxSelectorUi();
     void applyTextFit();
 
@@ -51,11 +53,15 @@ private:
     juce::Label auxSelectorLabel;
     juce::Label statusLabel;
     juce::Label learnMeterLabel;
+    juce::Label modelDownloadLabel;
     juce::ProgressBar learnMeterBar { learnMeterUi };
+    double modelDownloadUi = 0.0;
+    juce::ProgressBar modelDownloadBar { modelDownloadUi };
     juce::ComboBox traceZoomBox;
     juce::ComboBox modeBox;
     juce::ComboBox auxSelectorBox;
     HelpButton helpButton;
+    juce::TextButton modelButton;
     juce::ToggleButton listenButton;
     juce::TextButton learnButton;
     juce::Slider primarySlider;
@@ -93,6 +99,7 @@ private:
     int traceMissTicks = 0;
     juce::String transientStatusText;
     int transientStatusTicks = 0;
+    bool modelPromptVisible = false;
 };
 
 } // namespace vxsuite

@@ -95,6 +95,47 @@ function(vxsuite_copy_vst3_resources target_name bundle_name)
   endforeach()
 endfunction()
 
+function(vxsuite_prune_vst3_resources target_name bundle_name)
+  if(NOT ARGN)
+    return()
+  endif()
+
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(stage_bundle_dir "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3")
+
+  foreach(resource IN LISTS ARGN)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E rm -f "${bundle_source_dir}/Contents/Resources/${resource}"
+      COMMAND ${CMAKE_COMMAND} -E rm -f "${stage_bundle_dir}/Contents/Resources/${resource}"
+      VERBATIM)
+  endforeach()
+
+  if(APPLE)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND /usr/bin/codesign --force --sign - "${bundle_source_dir}"
+      COMMAND /usr/bin/codesign --force --sign - "${stage_bundle_dir}"
+      VERBATIM)
+  endif()
+endfunction()
+
+function(vxsuite_strip_vst3_binary target_name bundle_name)
+  if(NOT APPLE)
+    return()
+  endif()
+
+  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
+  set(stage_bundle_binary "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(stage_bundle_dir "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3")
+
+  add_custom_command(TARGET ${target_name} POST_BUILD
+    COMMAND /usr/bin/strip -x "${bundle_source_binary}"
+    COMMAND /usr/bin/strip -x "${stage_bundle_binary}"
+    COMMAND /usr/bin/codesign --force --sign - "${bundle_source_dir}"
+    COMMAND /usr/bin/codesign --force --sign - "${stage_bundle_dir}"
+    VERBATIM)
+endfunction()
+
 find_package(Eigen3 CONFIG QUIET)
 if(NOT TARGET Eigen3::Eigen)
   set(Eigen3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -113,18 +154,6 @@ if(APPLE AND VXSUITE_MACOS_DEPLOYMENT_TARGET STREQUAL "")
   set(VXSUITE_MACOS_DEPLOYMENT_TARGET "15.0")
 endif()
 set(VXSUITE_DF_EMBED_MODEL_FILES "")
-if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/DeepFilterNet2_onnx.tar.gz")
-  list(APPEND VXSUITE_DF_EMBED_MODEL_FILES "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/DeepFilterNet2_onnx.tar.gz")
-endif()
-if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz")
-  list(APPEND VXSUITE_DF_EMBED_MODEL_FILES "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz")
-endif()
-if(EXISTS "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz")
-  list(APPEND VXSUITE_DF_EMBED_MODEL_FILES "${CMAKE_SOURCE_DIR}/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz")
-endif()
-if(VXSUITE_DF_EMBED_MODEL_FILES)
-  juce_add_binary_data(VxDeepFilterNetModels SOURCES ${VXSUITE_DF_EMBED_MODEL_FILES})
-endif()
 
 if(WIN32)
   set(VXSUITE_DF_RUNTIME_LIB "${VXSUITE_LIBDF_TARGET_DIR}/df.lib")
@@ -448,13 +477,15 @@ target_link_libraries(VXDeepFilterNet PRIVATE
   VxSuiteFramework
   VxSuiteDeepFilterRuntime
   VxSuiteDeepFilterRuntimeDfn2
-  VxDeepFilterNetModels
   ${VXSUITE_DF_SYSTEM_LIBS}
   juce::juce_dsp)
-vxsuite_link_df_models(VXDeepFilterNet)
 add_custom_target(VXDeepFilterNetPlugin ALL DEPENDS VXDeepFilterNet_VST3)
 vxsuite_stage_vst3_bundle(VXDeepFilterNet_VST3 "VXDeepFilterNet")
-vxsuite_copy_vst3_resources(VXDeepFilterNet_VST3 "VXDeepFilterNet" ${VXSUITE_DF_EMBED_MODEL_FILES})
+vxsuite_strip_vst3_binary(VXDeepFilterNet_VST3 "VXDeepFilterNet")
+vxsuite_prune_vst3_resources(VXDeepFilterNet_VST3 "VXDeepFilterNet"
+  "DeepFilterNet2_onnx.tar.gz"
+  "DeepFilterNet2_onnx_ll.tar.gz"
+  "DeepFilterNet3_onnx.tar.gz")
 
 juce_add_plugin(VXTone
   VERSION ${VXSUITE_PLUGIN_VERSION_VXTONE}
@@ -553,6 +584,9 @@ if(VXSUITE_HAS_ONNXRUNTIME)
 endif()
 add_custom_target(VXRebalancePlugin ALL DEPENDS VXRebalance_VST3)
 vxsuite_stage_vst3_bundle(VXRebalance_VST3 "VXRebalance")
+vxsuite_prune_vst3_resources(VXRebalance_VST3 "VXRebalance"
+  "rebalance_umx4.json"
+  "vx_rebalance_umx4.onnx")
 
 juce_add_plugin(VXStudioAnalyser
   VERSION ${VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER}

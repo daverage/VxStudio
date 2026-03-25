@@ -2,6 +2,8 @@
 
 #include "../dsp/VxRebalanceDsp.h"
 
+#include <atomic>
+#include <functional>
 #include <string>
 
 namespace vxsuite::rebalance::ml {
@@ -20,10 +22,17 @@ public:
     void reset() noexcept;
     [[nodiscard]] bool isReady() const noexcept;
 
-    bool run(const float* inputMagnitudes,
-             int frames,
-             float* outputMagnitudes,
-             std::string& errorOut);
+    // Async inference: dispatches to ORT's global thread pool and returns
+    // immediately. onComplete is called on an ORT thread when done.
+    // Returns false (and never calls onComplete) if dispatch fails.
+    bool runAsync(const float* inputMagnitudes,
+                  int frames,
+                  std::function<void(const float*, int)> onComplete,
+                  std::string& errorOut);
+
+    // Blocks until all dispatched runAsync callbacks have fired.
+    // Must be called before destroying any state the callback references.
+    void waitForPendingAsync() noexcept;
 
 private:
     struct RuntimeHandles;

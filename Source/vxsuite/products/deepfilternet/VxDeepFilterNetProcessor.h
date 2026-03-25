@@ -2,6 +2,7 @@
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
+#include "../../framework/VxSuiteModelAssets.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxDeepFilterNetService.h"
 
@@ -12,6 +13,16 @@ public:
     ~VXDeepFilterNetAudioProcessor() override;
 
     juce::String getStatusText() const override;
+    bool supportsModelDownloadUi() const noexcept override { return true; }
+    bool isModelReadyForUi() const noexcept override;
+    bool isModelDownloadInProgress() const noexcept override;
+    float getModelDownloadProgress() const noexcept override;
+    bool shouldPromptForModelDownload() const noexcept override;
+    juce::String getModelDownloadButtonText() const override;
+    juce::String getModelDownloadPromptTitle() const override;
+    juce::String getModelDownloadPromptBody() const override;
+    void requestModelDownload() override;
+    void declineModelDownloadPrompt() override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -20,6 +31,7 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
+    [[nodiscard]] vxsuite::ModelPackage currentModelPackage() const;
 
     using ModelVariant = vxsuite::deepfilternet::DeepFilterService::ModelVariant;
 

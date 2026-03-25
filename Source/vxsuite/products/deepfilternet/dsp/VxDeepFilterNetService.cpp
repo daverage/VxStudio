@@ -1,8 +1,7 @@
 #include "VxDeepFilterNetService.h"
 
 #include "../../../framework/VxSuiteBlockSmoothing.h"
-
-#include <BinaryData.h>
+#include "../../../framework/VxSuiteModelAssets.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +17,24 @@ constexpr int kDefaultFrameLength = 480;
 constexpr int kFifoCapacity48k = 48000;
 constexpr int kDfn3Latency48k = 1920;
 constexpr int kDfn2LowLatency48k = 480;
+
+vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
+    if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
+        return {
+            "deepfilternet2",
+            "DeepFilterNet 2 Model",
+            {},
+            { { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" } }
+        };
+    }
+
+    return {
+        "deepfilternet3",
+        "DeepFilterNet 3 Model",
+        {},
+        { { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/main/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" } }
+    };
+}
 
 } // namespace
 
@@ -210,83 +227,20 @@ float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime
 }
 
 juce::File DeepFilterService::modelAssetForVariant(const ModelVariant variant) const {
-    if (const auto bundleResources = bundleResourcesDirectory(); bundleResources.isDirectory()) {
-        if (variant == ModelVariant::dfn2) {
-            const juce::String dfn2Names[] = { "DeepFilterNet2_onnx_ll.tar.gz", "DeepFilterNet2_onnx.tar.gz" };
-            for (const auto& fileName : dfn2Names) {
-                const auto bundledModel = bundleResources.getChildFile(fileName);
-                if (bundledModel.existsAsFile())
-                    return bundledModel;
-            }
-        } else {
-            const auto bundledModel = bundleResources.getChildFile("DeepFilterNet3_onnx.tar.gz");
-            if (bundledModel.existsAsFile())
-                return bundledModel;
-        }
-    }
-
-    const auto currentWorkingDirectory = juce::File::getCurrentWorkingDirectory();
-    if (variant == ModelVariant::dfn2) {
-        const juce::String dfn2Names[] = { "DeepFilterNet2_onnx_ll.tar.gz", "DeepFilterNet2_onnx.tar.gz" };
-        for (const auto& fileName : dfn2Names) {
-            const juce::File candidates[] = {
-                currentWorkingDirectory.getChildFile("assets/deepfilternet/models/" + fileName),
-                currentWorkingDirectory.getChildFile("../assets/deepfilternet/models/" + fileName)
-            };
-            for (const auto& candidate : candidates) {
-                if (candidate.existsAsFile())
-                    return candidate;
-            }
-        }
-        return {};
-    }
-
-    const juce::String fileName = "DeepFilterNet3_onnx.tar.gz";
-    const juce::File candidates[] = {
-        currentWorkingDirectory.getChildFile("assets/deepfilternet/models/" + fileName),
-        currentWorkingDirectory.getChildFile("../assets/deepfilternet/models/" + fileName)
-    };
-    for (const auto& candidate : candidates) {
-        if (candidate.existsAsFile())
-            return candidate;
-    }
-    return {};
-}
-
-juce::File DeepFilterService::bundleResourcesDirectory() const {
-    auto current = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-    while (current.exists() && current != current.getParentDirectory()) {
-        if (current.getFileName() == "Contents") {
-            const auto resources = current.getChildFile("Resources");
-            if (resources.isDirectory())
-                return resources;
-            break;
-        }
-        current = current.getParentDirectory();
-    }
-    return {};
+    const auto fileName = variant == ModelVariant::dfn2
+        ? juce::String("DeepFilterNet2_onnx_ll.tar.gz")
+        : juce::String("DeepFilterNet3_onnx.tar.gz");
+    const auto installedFile = vxsuite::ModelAssetService::instance().packageFile(packageForVariant(variant), fileName);
+    return installedFile.existsAsFile() ? installedFile : juce::File{};
 }
 
 juce::String DeepFilterService::binaryDataNameForVariant(const ModelVariant variant) const {
-    return variant == ModelVariant::dfn2
-        ? "DeepFilterNet2_onnx_ll_tar_gz"
-        : "DeepFilterNet3_onnx_tar_gz";
+    juce::ignoreUnused(variant);
+    return {};
 }
 
 bool DeepFilterService::extractEmbeddedModel(const ModelVariant variant, const juce::File& destination) {
-    int dataSize = 0;
-    const auto resourceName = binaryDataNameForVariant(variant);
-    const char* bytes = BinaryData::getNamedResource(resourceName.toRawUTF8(), dataSize);
-    if (bytes == nullptr || dataSize <= 0)
-        return false;
-
-    if (auto stream = std::unique_ptr<juce::FileOutputStream>(destination.createOutputStream())) {
-        stream->setPosition(0);
-        stream->truncate();
-        stream->write(bytes, static_cast<size_t>(dataSize));
-        stream->flush();
-        return destination.getSize() == static_cast<int64_t>(dataSize);
-    }
+    juce::ignoreUnused(variant, destination);
     return false;
 }
 

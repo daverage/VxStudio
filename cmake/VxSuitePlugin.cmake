@@ -3,6 +3,7 @@ function(vxsuite_add_framework target_name)
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteHelpView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteLookAndFeel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteLevelTraceView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteModelAssets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteProcessorBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteSignalQuality.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxsuite/framework/VxSuiteEditorBase.cpp

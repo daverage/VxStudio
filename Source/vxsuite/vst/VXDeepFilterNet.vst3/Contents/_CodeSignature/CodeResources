@@ -4,18 +4,6 @@
 <dict>
 	<key>files</key>
 	<dict>
-		<key>Resources/DeepFilterNet2_onnx.tar.gz</key>
-		<data>
-		S7tpLFGahMoH7Iz0vf180GxWDy8=
-		</data>
-		<key>Resources/DeepFilterNet2_onnx_ll.tar.gz</key>
-		<data>
-		5O+WXMH3asrMiSMDqr5hKL9qwLI=
-		</data>
-		<key>Resources/DeepFilterNet3_onnx.tar.gz</key>
-		<data>
-		HFnZfuY3dnqeGU33lCEUuGSHzd4=
-		</data>
 		<key>Resources/models/aggressive.onnx</key>
 		<data>
 		ba5ad3+YBfxbKeC43zAQBGnuirk=
@@ -59,27 +47,6 @@
 	</dict>
 	<key>files2</key>
 	<dict>
-		<key>Resources/DeepFilterNet2_onnx.tar.gz</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			QS6B2NF3m4+SWsS1NHJlWp+GbEr3Pb+TCrWHNZ9jFig=
-			</data>
-		</dict>
-		<key>Resources/DeepFilterNet2_onnx_ll.tar.gz</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			337YH4Pc6WOk54AsKqENVm+kfVj77bqEHTx5F5Huftw=
-			</data>
-		</dict>
-		<key>Resources/DeepFilterNet3_onnx.tar.gz</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			yU2R9wkRAByUbg+rtKqa3DcEX0WgO1YAjLDIJEy2NhY=
-			</data>
-		</dict>
 		<key>Resources/models/aggressive.onnx</key>
 		<dict>
 			<key>hash2</key>

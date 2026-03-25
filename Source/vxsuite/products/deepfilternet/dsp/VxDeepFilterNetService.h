@@ -133,7 +133,6 @@ private:
     int runtimeFrameLength(RuntimeApi api, void* runtime) const;
     void setRuntimeAttenuation(RuntimeApi api, void* runtime, float attenuationLimitDb) const;
     float processRuntimeFrame(RuntimeApi api, void* runtime, float* input, float* output) const;
-    juce::File bundleResourcesDirectory() const;
     juce::File modelAssetForVariant(ModelVariant variant) const;
     juce::String binaryDataNameForVariant(ModelVariant variant) const;
     bool extractEmbeddedModel(ModelVariant variant, const juce::File& destination);

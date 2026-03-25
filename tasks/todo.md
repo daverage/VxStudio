@@ -1,3 +1,42 @@
+# VX shared model download progress + DeepFilter bundle size — 2026-03-25
+
+## Problem
+The new shared model-download flow is too opaque once the user accepts the prompt: the popup closes immediately and the only remaining feedback is a subtle disabled button/state text. At the same time, the staged `VXDeepFilterNet.vst3` bundle is still over 100 MB locally, so we need to verify whether model payloads are still being embedded in the plugin binary or otherwise retained despite the new external-download path.
+
+## Plan
+- [x] Inspect the current shared editor/model-download seams and the `VXDeepFilterNet` build inputs to identify the smallest clean fix.
+- [x] Add persistent shared UI feedback for model downloads after the popup closes, using the existing framework progress state rather than a product-specific hack.
+- [x] Remove or disable any remaining embedded-model build inputs that still inflate `VXDeepFilterNet` now that it uses external model downloads.
+- [x] Rebuild the affected targets, inspect the staged bundle contents/size, and record the kept result here.
+
+## Review
+- Added shared persistent model-download feedback in [VxSuiteProcessorBase.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteProcessorBase.h), [VxSuiteEditorBase.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteEditorBase.h), and [VxSuiteEditorBase.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/framework/VxSuiteEditorBase.cpp). The popup remains consent-only; once a download starts, the shared editor now shows a persistent `Model download X%` row with a progress bar until the asset is ready.
+- Wired the shared progress hook through both current model-download products in [VxDeepFilterNetProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/deepfilternet/VxDeepFilterNetProcessor.cpp), [VxDeepFilterNetProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/deepfilternet/VxDeepFilterNetProcessor.h), [VxRebalanceProcessor.cpp](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp), and [VxRebalanceProcessor.h](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/products/rebalance/VxRebalanceProcessor.h), reusing `ModelAssetService::progress(...)` instead of adding product-local download state.
+- Verified that the staged `VXDeepFilterNet` bundle was not still carrying the old model archives in `Contents/Resources`; the remaining size was dominated by the plugin executable itself. Added a targeted macOS post-build strip step for the staged `VXDeepFilterNet` binary in [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt), followed by re-signing.
+- Verification:
+  - `cmake --build build --target VXDeepFilterNetPlugin VXRebalancePlugin -j4`
+  - `codesign --verify --deep --strict Source/vxsuite/vst/VXDeepFilterNet.vst3`
+  - `codesign --verify --deep --strict Source/vxsuite/vst/VXRebalance.vst3`
+- Measured kept outcome after rebuild:
+  - `Source/vxsuite/vst/VXDeepFilterNet.vst3` dropped from `105M` to `80M`
+  - `Source/vxsuite/vst/VXDeepFilterNet.vst3/Contents/MacOS/VXDeepFilterNet` dropped from `73M` to `47M`
+  - staged `VXDeepFilterNet` resources now contain only `moduleinfo.json`
+- Kept conclusion: the earlier “full model still embedded” issue is no longer in the bundle resources. The remaining DeepFilterNet size comes mostly from shipping both native DeepFilter runtimes plus plugin code; stripping removed a meaningful chunk of symbol weight, but a further size reduction would require changing which runtime(s) DeepFilterNet ships.
+
+# VX Rebalance background inference thread — 2026-03-25
+
+## Problem
+`VX Rebalance` with the ONNX Open-Unmix model cannot run in realtime on a modest machine because `onnxModel.run()` is called directly on the audio thread inside `analyseBlock()`. Open-Unmix is an offline BiLSTM model: every hop it processes 64 frames × 2049 bins × 2 channels (~1M floats through a recurrent network), which takes hundreds of milliseconds and causes dropouts. DeepFilterNet works because its purpose-built streaming C library processes tiny 480-sample frames designed for realtime use — a fundamentally different architecture.
+
+## Plan
+- [ ] Add a background `juce::Thread` + `juce::WaitableEvent` to `ModelRunner`. The thread owns the FFT accumulation and ONNX inference pipeline.
+- [ ] Replace `SampleFifo` with a `juce::AbstractFifo`-based lock-free queue for the audio-thread-to-inference-thread audio handoff.
+- [ ] `analyseBlock()` becomes: resample + push to lock-free queue + signal thread. No FFT or inference on the audio thread.
+- [ ] Protect `latestSnapshot` with a `juce::SpinLock` for safe cross-thread reads.
+- [ ] Build, run regression tests, and verify no audio-thread blocking by checking that dropouts are gone in host.
+
+## Review
+
 # VX instrument-balancer concept evaluation — 2026-03-24
 
 # VX Suite shared help + text-fit + semantic versioning pass — 2026-03-24
@@ -3069,6 +3108,19 @@ The v2 ML spec was written, but the product code still only had heuristic DSP. W
 - Verified result:
   - both `44.1 kHz` and `48 kHz` runs report `V2.0 UMX4 masks active`
   - neutral remains exact in both runs: `Neutral diff rms=0 peak=0`
+
+### Follow-up: embed the Rebalance model into the VST bundle
+- Updated [CMakeLists.txt](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt) so `VXRebalance` now bundles its ONNX model assets into `Contents/Resources` during VST staging.
+- Packaged assets:
+  - [vx_rebalance_umx4.onnx](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx)
+  - [rebalance_umx4.json](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json)
+- Verification:
+  - `cmake --build build --target VXRebalancePlugin -j1`
+  - confirmed staged bundle resources:
+    - [Source/vxsuite/vst/VXRebalance.vst3/Contents/Resources/rebalance_umx4.json](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/vst/VXRebalance.vst3/Contents/Resources/rebalance_umx4.json)
+    - [Source/vxsuite/vst/VXRebalance.vst3/Contents/Resources/vx_rebalance_umx4.onnx](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxsuite/vst/VXRebalance.vst3/Contents/Resources/vx_rebalance_umx4.onnx)
+- Result:
+  - `VX Rebalance.vst3` is now self-contained and no longer depends on repo-relative asset lookup for the shipped model
 
 ### Review
 - Root cause of the native-runtime crash was not “ONNX is unstable” but a contract mismatch between the exported model and the runner: the ONNX bundle had a fixed `64`-frame output while the runner allocated for `8`.

@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(VXS_HAS_ONNXRUNTIME)
@@ -64,11 +65,13 @@ std::string allocatedName(const OrtApi* api, OrtSession* session, OrtAllocator* 
 struct OnnxUmx4Model::RuntimeHandles {
 #if defined(VXS_HAS_ONNXRUNTIME)
     const OrtApi* api = nullptr;
+    OrtThreadingOptions* threadingOptions = nullptr;
     OrtEnv* env = nullptr;
     OrtSessionOptions* sessionOptions = nullptr;
     OrtSession* session = nullptr;
     OrtMemoryInfo* memoryInfo = nullptr;
     OrtRunOptions* runOptions = nullptr;
+    std::atomic<int> pendingAsync { 0 };
 #endif
 };
 
@@ -87,11 +90,13 @@ bool OnnxUmx4Model::prepare(const std::string& onnxPath, std::string& errorOut) 
             throw std::runtime_error("failed to acquire onnxruntime api");
 
         auto* api = runtime->api;
-        throwOnStatus(api, api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "vx_rebalance_umx4", &runtime->env));
+        throwOnStatus(api, api->CreateThreadingOptions(&runtime->threadingOptions));
+        throwOnStatus(api, api->SetGlobalIntraOpNumThreads(runtime->threadingOptions, 1));
+        throwOnStatus(api, api->SetGlobalInterOpNumThreads(runtime->threadingOptions, 1));
+        throwOnStatus(api, api->CreateEnvWithGlobalThreadPools(ORT_LOGGING_LEVEL_WARNING, "vx_rebalance_umx4", runtime->threadingOptions, &runtime->env));
         throwOnStatus(api, api->CreateSessionOptions(&runtime->sessionOptions));
-        throwOnStatus(api, api->SetIntraOpNumThreads(runtime->sessionOptions, 1));
-        throwOnStatus(api, api->SetInterOpNumThreads(runtime->sessionOptions, 1));
-        throwOnStatus(api, api->SetSessionGraphOptimizationLevel(runtime->sessionOptions, ORT_ENABLE_BASIC));
+        throwOnStatus(api, api->DisablePerSessionThreads(runtime->sessionOptions));
+        throwOnStatus(api, api->SetSessionGraphOptimizationLevel(runtime->sessionOptions, ORT_ENABLE_ALL));
         throwOnStatus(api, api->CreateSession(runtime->env, onnxPath.c_str(), runtime->sessionOptions, &runtime->session));
         throwOnStatus(api, api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &runtime->memoryInfo));
         throwOnStatus(api, api->CreateRunOptions(&runtime->runOptions));
@@ -150,6 +155,8 @@ void OnnxUmx4Model::reset() noexcept {
                 handles->api->ReleaseSessionOptions(handles->sessionOptions);
             if (handles->env != nullptr)
                 handles->api->ReleaseEnv(handles->env);
+            if (handles->threadingOptions != nullptr)
+                handles->api->ReleaseThreadingOptions(handles->threadingOptions);
         }
         delete handles;
         handles = nullptr;
@@ -163,36 +170,25 @@ bool OnnxUmx4Model::isReady() const noexcept {
     return handles != nullptr;
 }
 
-bool OnnxUmx4Model::run(const float* inputMagnitudes,
-                        const int frames,
-                        float* outputMagnitudes,
-                        std::string& errorOut) {
+
+bool OnnxUmx4Model::runAsync(const float* inputMagnitudes,
+                             const int frames,
+                             std::function<void(const float*, int)> onComplete,
+                             std::string& errorOut) {
 #if defined(VXS_HAS_ONNXRUNTIME)
-    if (!isReady() || inputMagnitudes == nullptr || outputMagnitudes == nullptr || frames != kModelFrames) {
-        errorOut = "Open-Unmix ONNX run received unexpected frame count";
+    if (!isReady() || inputMagnitudes == nullptr || frames != kModelFrames || !onComplete) {
+        errorOut = "Open-Unmix ONNX runAsync: precondition failed";
         return false;
     }
 
     try {
         auto* api = handles->api;
         const std::array<int64_t, 4> inputShape {
-            1,
-            2,
-            static_cast<int64_t>(kModelBins),
-            static_cast<int64_t>(frames)
-        };
-        const std::array<int64_t, 5> outputShape {
-            1,
-            static_cast<int64_t>(kHeadCount),
-            2,
-            static_cast<int64_t>(kModelBins),
-            static_cast<int64_t>(frames)
+            1, 2, static_cast<int64_t>(kModelBins), static_cast<int64_t>(frames)
         };
         const size_t inputBytes = static_cast<size_t>(2 * kModelBins * frames) * sizeof(float);
-        const size_t outputBytes = static_cast<size_t>(kHeadCount * 2 * kModelBins * frames) * sizeof(float);
 
         OrtValue* inputTensor = nullptr;
-        OrtValue* outputTensor = nullptr;
         throwOnStatus(api, api->CreateTensorWithDataAsOrtValue(handles->memoryInfo,
                                                                const_cast<float*>(inputMagnitudes),
                                                                inputBytes,
@@ -200,37 +196,74 @@ bool OnnxUmx4Model::run(const float* inputMagnitudes,
                                                                inputShape.size(),
                                                                ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
                                                                &inputTensor));
-        throwOnStatus(api, api->CreateTensorWithDataAsOrtValue(handles->memoryInfo,
-                                                               outputMagnitudes,
-                                                               outputBytes,
-                                                               outputShape.data(),
-                                                               outputShape.size(),
-                                                               ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-                                                               &outputTensor));
 
-        const char* inputNames[] = { inputName.c_str() };
+        struct Context {
+            const OrtApi* api;
+            OrtValue* inputTensor;
+            OrtValue* outputTensor; // ORT fills this in; must outlive the dispatch
+            int totalOutputFloats;
+            std::atomic<int>* pendingAsync;
+            std::function<void(const float*, int)> onComplete;
+        };
+
+        const int totalOut = kHeadCount * 2 * kModelBins * frames;
+        auto* ctx = new Context { api, inputTensor, nullptr, totalOut, &handles->pendingAsync, std::move(onComplete) };
+
+        const char* inputNames[]  = { inputName.c_str() };
         const char* outputNames[] = { outputName.c_str() };
-        OrtValue* outputValues[] = { outputTensor };
-        OrtStatus* status = api->Run(handles->session,
-                                     handles->runOptions,
-                                     inputNames,
-                                     &inputTensor,
-                                     1,
-                                     outputNames,
-                                     1,
-                                     outputValues);
-        api->ReleaseValue(inputTensor);
-        api->ReleaseValue(outputTensor);
-        throwOnStatus(api, status);
+
+        // pendingAsync incremented before dispatch so waitForPendingAsync is safe
+        handles->pendingAsync.fetch_add(1, std::memory_order_relaxed);
+
+        OrtStatus* dispatchStatus = api->RunAsync(
+            handles->session, handles->runOptions,
+            inputNames, &inputTensor, 1,
+            outputNames, 1, &ctx->outputTensor,
+            [](void* userData, OrtValue** /*outputs*/, size_t /*numOutputs*/, OrtStatusPtr cbStatus) {
+                auto* ctx = static_cast<Context*>(userData);
+                if (cbStatus == nullptr && ctx->outputTensor != nullptr) {
+                    float* data = nullptr;
+                    OrtStatus* dataStatus = ctx->api->GetTensorMutableData(ctx->outputTensor, reinterpret_cast<void**>(&data));
+                    if (dataStatus != nullptr)
+                        ctx->api->ReleaseStatus(dataStatus);
+                    else if (data != nullptr)
+                        ctx->onComplete(data, ctx->totalOutputFloats);
+                    ctx->api->ReleaseValue(ctx->outputTensor);
+                } else if (cbStatus != nullptr) {
+                    ctx->api->ReleaseStatus(const_cast<OrtStatus*>(cbStatus));
+                }
+                ctx->api->ReleaseValue(ctx->inputTensor);
+                ctx->pendingAsync->fetch_sub(1, std::memory_order_release);
+                delete ctx;
+            },
+            ctx);
+
+        if (dispatchStatus != nullptr) {
+            // Dispatch failed synchronously — callback will NOT be called.
+            handles->pendingAsync.fetch_sub(1, std::memory_order_relaxed);
+            errorOut = statusMessageAndRelease(api, dispatchStatus);
+            api->ReleaseValue(inputTensor);
+            delete ctx;
+            return false;
+        }
         return true;
     } catch (const std::exception& e) {
         errorOut = e.what();
         return false;
     }
 #else
-    juce::ignoreUnused(inputMagnitudes, frames, outputMagnitudes);
+    juce::ignoreUnused(inputMagnitudes, frames, onComplete);
     errorOut = "onnxruntime not available at build time";
     return false;
+#endif
+}
+
+void OnnxUmx4Model::waitForPendingAsync() noexcept {
+#if defined(VXS_HAS_ONNXRUNTIME)
+    if (handles == nullptr)
+        return;
+    while (handles->pendingAsync.load(std::memory_order_acquire) > 0)
+        std::this_thread::yield();
 #endif
 }
 

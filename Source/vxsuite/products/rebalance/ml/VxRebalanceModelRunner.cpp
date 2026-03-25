@@ -44,7 +44,7 @@ void ModelRunner::SampleFifo::push(const float* data, const int count) {
     }
 }
 
-void ModelRunner::prepare(const double sampleRate, const int maxBlockSize) {
+void ModelRunner::prepare(const double sampleRate, const int maxBlockSize, const juce::File& onnxFile) {
     sampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     maxBlockSizePrepared = std::max(1, maxBlockSize);
     featureBuffer.prepare(sampleRateHz, maxBlockSizePrepared);
@@ -65,23 +65,17 @@ void ModelRunner::prepare(const double sampleRate, const int maxBlockSize) {
     for (auto& buffer : fftBuffers)
         buffer.assign(static_cast<size_t>(kModelFftSize * 2), 0.0f);
     modelInputMagnitudes.assign(static_cast<size_t>(2 * kModelBins * kModelFrames), 0.0f);
-    modelOutputMagnitudes.assign(static_cast<size_t>(OnnxUmx4Model::kHeadCount * 2 * kModelBins * kModelFrames), 0.0f);
     frameHistory.assign(static_cast<size_t>(2 * kModelBins * kModelFrames), 0.0f);
     frameWriteIndex = 0;
     frameCount = 0;
 
-    const auto modelFile = findModelAsset();
-    const bool foundModel = modelFile.existsAsFile();
-    detectedLayout = foundModel ? detectModelLayout(modelFile) : ModelLayout::none;
+    const bool foundModel = onnxFile.existsAsFile();
     modelDiscovered.store(foundModel, std::memory_order_relaxed);
 
     bool modelReady = false;
     lastError.clear();
-    if (foundModel && detectedLayout == ModelLayout::umx4DerivedGuitar) {
-        const auto onnxPath = resolveOnnxPath(modelFile);
-        if (onnxPath.existsAsFile())
-            modelReady = onnxModel.prepare(onnxPath.getFullPathName().toStdString(), lastError);
-    }
+    if (foundModel)
+        modelReady = onnxModel.prepare(onnxFile.getFullPathName().toStdString(), lastError);
 
     status.store(static_cast<int>(modelReady ? Status::mlMasksActive
                                              : (foundModel ? Status::umx4ModelDetectedRuntimePending
@@ -91,6 +85,10 @@ void ModelRunner::prepare(const double sampleRate, const int maxBlockSize) {
 }
 
 void ModelRunner::reset() {
+    // Wait for any in-flight async inference before clearing shared state.
+    onnxModel.waitForPendingAsync();
+    inferenceInFlight.store(false, std::memory_order_relaxed);
+
     featureBuffer.reset();
     confidenceTracker.reset();
     for (auto& channel : channels) {
@@ -103,11 +101,14 @@ void ModelRunner::reset() {
     for (auto& buffer : fftBuffers)
         std::fill(buffer.begin(), buffer.end(), 0.0f);
     std::fill(modelInputMagnitudes.begin(), modelInputMagnitudes.end(), 0.0f);
-    std::fill(modelOutputMagnitudes.begin(), modelOutputMagnitudes.end(), 0.0f);
     std::fill(frameHistory.begin(), frameHistory.end(), 0.0f);
     frameWriteIndex = 0;
     frameCount = 0;
-    latestSnapshot = {};
+    {
+        juce::SpinLock::ScopedLockType lock(snapshotLock);
+        latestSnapshot = {};
+    }
+    audioThreadSnapshot = {};
     latestBlendConfidence.store(0.0f, std::memory_order_relaxed);
 }
 
@@ -117,10 +118,6 @@ void ModelRunner::analyseBlock(const juce::AudioBuffer<float>& buffer,
     const auto features = featureBuffer.analyseBlock(buffer);
     const float blendConfidence = confidenceTracker.update(features, recordingType, signalQuality);
     latestBlendConfidence.store(blendConfidence, std::memory_order_relaxed);
-
-    latestSnapshot.available = false;
-    latestSnapshot.confidence = 0.0f;
-    latestSnapshot.derivedGuitarFromOther = detectedLayout == ModelLayout::umx4DerivedGuitar;
 
     const int numChannels = std::min(2, buffer.getNumChannels());
     if (numChannels <= 0)
@@ -149,14 +146,18 @@ void ModelRunner::analyseBlock(const juce::AudioBuffer<float>& buffer,
             });
     }
 
-    if (status.load(std::memory_order_relaxed) != static_cast<int>(Status::mlMasksActive))
-        return;
+    if (status.load(std::memory_order_relaxed) == static_cast<int>(Status::mlMasksActive)) {
+        while (channels[0].inputFifo.available >= kModelFftSize && channels[1].inputFifo.available >= kModelFftSize)
+            processModelFrame(signalQuality);
+    }
 
-    while (channels[0].inputFifo.available >= kModelFftSize && channels[1].inputFifo.available >= kModelFftSize)
-        processModelFrame(signalQuality);
-
-    if (status.load(std::memory_order_relaxed) == static_cast<int>(Status::mlMasksActive))
-        latestSnapshot.confidence = blendConfidence;
+    // Copy the latest snapshot (written by ORT callback thread) to the audio-thread copy.
+    {
+        juce::SpinLock::ScopedLockType lock(snapshotLock);
+        audioThreadSnapshot = latestSnapshot;
+    }
+    if (!audioThreadSnapshot.available)
+        audioThreadSnapshot.derivedGuitarFromOther = true;
 }
 
 void ModelRunner::processModelFrame(const vxsuite::SignalQualitySnapshot& signalQuality) {
@@ -200,41 +201,63 @@ void ModelRunner::processModelFrame(const vxsuite::SignalQualitySnapshot& signal
         }
     }
 
+    // Skip if a previous inference is still running — use the last published masks.
+    if (inferenceInFlight.load(std::memory_order_acquire))
+        return;
+
+    // Capture values needed in the callback (fired on an ORT thread).
+    const float blendConf = latestBlendConfidence.load(std::memory_order_relaxed);
+    const float sepConf   = signalQuality.separationConfidence;
+    const double sr       = sampleRateHz;
+
+    inferenceInFlight.store(true, std::memory_order_release);
+
     std::string error;
-    if (!onnxModel.run(modelInputMagnitudes.data(), kModelFrames, modelOutputMagnitudes.data(), error)) {
+    const bool dispatched = onnxModel.runAsync(
+        modelInputMagnitudes.data(), kModelFrames,
+        [this, blendConf, sepConf, sr](const float* outputData, int /*size*/) {
+            // Runs on an ORT thread — extract masks then publish atomically.
+            const int latestFrame = kModelFrames - 1;
+            Dsp::MlMaskSnapshot snap;
+            snap.derivedGuitarFromOther = true;
+
+            for (int k = 0; k < Dsp::kBins; ++k) {
+                const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(Dsp::kFftSize);
+                const int modelBin = juce::jlimit(0, kModelBins - 1,
+                    juce::roundToInt(hz * static_cast<float>(kModelFftSize) / static_cast<float>(kModelSampleRate)));
+
+                float shares[OnnxUmx4Model::kHeadCount] {};
+                float total = 0.0f;
+                for (int head = 0; head < OnnxUmx4Model::kHeadCount; ++head) {
+                    const size_t li = static_cast<size_t>((((head * 2) + 0) * kModelBins + modelBin) * kModelFrames + latestFrame);
+                    const size_t ri = static_cast<size_t>((((head * 2) + 1) * kModelBins + modelBin) * kModelFrames + latestFrame);
+                    shares[head] = 0.5f * (outputData[li] + outputData[ri]);
+                    total += shares[head];
+                }
+                total = std::max(kEps, total);
+
+                snap.masks[Dsp::vocalsSource][static_cast<size_t>(k)] = shares[0] / total;
+                snap.masks[Dsp::drumsSource] [static_cast<size_t>(k)] = shares[1] / total;
+                snap.masks[Dsp::bassSource]  [static_cast<size_t>(k)] = shares[2] / total;
+                snap.masks[Dsp::guitarSource][static_cast<size_t>(k)] = 0.0f;
+                snap.masks[Dsp::otherSource] [static_cast<size_t>(k)] = shares[3] / total;
+            }
+            snap.available  = true;
+            snap.confidence = clamp01(blendConf * sepConf);
+
+            {
+                juce::SpinLock::ScopedLockType lock(snapshotLock);
+                latestSnapshot = snap;
+            }
+            inferenceInFlight.store(false, std::memory_order_release);
+        },
+        error);
+
+    if (!dispatched) {
         status.store(static_cast<int>(Status::umx4ModelDetectedRuntimePending), std::memory_order_relaxed);
         lastError = error;
-        latestSnapshot = {};
-        return;
+        inferenceInFlight.store(false, std::memory_order_release);
     }
-
-    const int latestFrame = kModelFrames - 1;
-    for (int k = 0; k < Dsp::kBins; ++k) {
-        const float hz = static_cast<float>(k) * static_cast<float>(sampleRateHz) / static_cast<float>(Dsp::kFftSize);
-        const int modelBin = juce::jlimit(0, kModelBins - 1,
-            juce::roundToInt(hz * static_cast<float>(kModelFftSize) / static_cast<float>(kModelSampleRate)));
-
-        float shares[OnnxUmx4Model::kHeadCount] {};
-        float total = 0.0f;
-        for (int head = 0; head < OnnxUmx4Model::kHeadCount; ++head) {
-            const size_t leftIndex = static_cast<size_t>((((head * 2) + 0) * kModelBins + modelBin) * kModelFrames + latestFrame);
-            const size_t rightIndex = static_cast<size_t>((((head * 2) + 1) * kModelBins + modelBin) * kModelFrames + latestFrame);
-            shares[head] = 0.5f * (modelOutputMagnitudes[leftIndex] + modelOutputMagnitudes[rightIndex]);
-            total += shares[head];
-        }
-        total = std::max(kEps, total);
-
-        latestSnapshot.masks[Dsp::vocalsSource][static_cast<size_t>(k)] = shares[0] / total;
-        latestSnapshot.masks[Dsp::drumsSource][static_cast<size_t>(k)] = shares[1] / total;
-        latestSnapshot.masks[Dsp::bassSource][static_cast<size_t>(k)] = shares[2] / total;
-        latestSnapshot.masks[Dsp::guitarSource][static_cast<size_t>(k)] = 0.0f;
-        latestSnapshot.masks[Dsp::otherSource][static_cast<size_t>(k)] = shares[3] / total;
-    }
-
-    latestSnapshot.available = true;
-    latestSnapshot.derivedGuitarFromOther = true;
-    latestSnapshot.confidence = clamp01(latestBlendConfidence.load(std::memory_order_relaxed)
-        * signalQuality.separationConfidence);
 }
 
 juce::String ModelRunner::statusText() const {
@@ -256,61 +279,5 @@ juce::String ModelRunner::statusText() const {
     return "V2.0 heuristic fallback";
 }
 
-juce::File ModelRunner::bundleResourcesDirectory() const {
-    auto current = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-    while (current.exists() && current != current.getParentDirectory()) {
-        if (current.getFileName() == "Contents") {
-            const auto resources = current.getChildFile("Resources");
-            if (resources.isDirectory())
-                return resources;
-            break;
-        }
-        current = current.getParentDirectory();
-    }
-    return {};
-}
-
-juce::File ModelRunner::findModelAsset() const {
-    if (const auto bundleResources = bundleResourcesDirectory(); bundleResources.isDirectory()) {
-        const auto bundledManifest = bundleResources.getChildFile("rebalance_umx4.json");
-        if (bundledManifest.existsAsFile())
-            return bundledManifest;
-        const auto bundledOnnx = bundleResources.getChildFile("vx_rebalance_umx4.onnx");
-        if (bundledOnnx.existsAsFile())
-            return bundledOnnx;
-    }
-
-    const auto cwd = juce::File::getCurrentWorkingDirectory();
-    const juce::File candidates[] = {
-        cwd.getChildFile("assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json"),
-        cwd.getChildFile("../assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json"),
-        cwd.getChildFile("assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx"),
-        cwd.getChildFile("../assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx")
-    };
-    for (const auto& candidate : candidates) {
-        if (candidate.existsAsFile())
-            return candidate;
-    }
-    return {};
-}
-
-ModelRunner::ModelLayout ModelRunner::detectModelLayout(const juce::File& modelFile) const noexcept {
-    const auto name = modelFile.getFileNameWithoutExtension().toLowerCase();
-    if (name.contains("umx") || name.contains("rebalance_umx4") || name.contains("separator"))
-        return ModelLayout::umx4DerivedGuitar;
-    if (name.contains("5head") || name.contains("five"))
-        return ModelLayout::fiveStem;
-    return ModelLayout::none;
-}
-
-juce::File ModelRunner::resolveOnnxPath(const juce::File& modelAsset) const {
-    if (modelAsset.hasFileExtension("onnx"))
-        return modelAsset;
-
-    const auto sibling = modelAsset.getSiblingFile("vx_rebalance_umx4.onnx");
-    if (sibling.existsAsFile())
-        return sibling;
-    return {};
-}
 
 } // namespace vxsuite::rebalance::ml

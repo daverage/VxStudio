@@ -37,6 +37,16 @@ public:
     virtual bool isLearnActive() const noexcept { return false; }
     virtual bool isLearnReady() const noexcept { return false; }
     virtual bool shouldShowLearnUi() const noexcept { return productIdentity.supportsLearnButton(); }
+    virtual bool supportsModelDownloadUi() const noexcept { return false; }
+    virtual bool isModelReadyForUi() const noexcept { return true; }
+    virtual bool isModelDownloadInProgress() const noexcept { return false; }
+    virtual float getModelDownloadProgress() const noexcept { return 0.0f; }
+    virtual bool shouldPromptForModelDownload() const noexcept { return false; }
+    virtual juce::String getModelDownloadButtonText() const { return "Download Model"; }
+    virtual juce::String getModelDownloadPromptTitle() const { return {}; }
+    virtual juce::String getModelDownloadPromptBody() const { return {}; }
+    virtual void requestModelDownload() {}
+    virtual void declineModelDownloadPrompt() {}
     VoiceAnalysisSnapshot getVoiceAnalysisSnapshot() const noexcept { return voiceAnalysis.snapshot(); }
     VoiceContextSnapshot getVoiceContextSnapshot() const noexcept { return voiceContext.snapshot(); }
     SignalQualitySnapshot getSignalQualitySnapshot() const noexcept { return signalQuality.snapshot(); }

@@ -65,11 +65,32 @@ EditorBase::EditorBase(ProcessorBase& owner)
     makeMouseTransparent(statusLabel);
     addAndMakeVisible(statusLabel);
 
+    modelDownloadLabel.setJustificationType(juce::Justification::centredLeft);
+    modelDownloadLabel.setFont(juce::FontOptions().withHeight(12.0f).withKerningFactor(0.04f));
+    modelDownloadLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.72f));
+    modelDownloadLabel.setMinimumHorizontalScale(0.58f);
+    makeMouseTransparent(modelDownloadLabel);
+    modelDownloadBar.setColour(juce::ProgressBar::backgroundColourId, juce::Colour(0xff14141c));
+    modelDownloadBar.setColour(juce::ProgressBar::foregroundColourId,
+                               lookAndFeel.findColour(juce::Slider::rotarySliderFillColourId).withAlpha(0.92f));
+    makeMouseTransparent(modelDownloadBar);
+    if (processor.supportsModelDownloadUi()) {
+        addAndMakeVisible(modelDownloadLabel);
+        addAndMakeVisible(modelDownloadBar);
+        modelDownloadLabel.setVisible(false);
+        modelDownloadBar.setVisible(false);
+    }
+
     helpButton.onClick = [this] {
         showHelpDialog(*this, processor.getProductIdentity());
     };
     if (identity.hasHelpContent())
         addAndMakeVisible(helpButton);
+
+    modelButton.setWantsKeyboardFocus(true);
+    modelButton.onClick = [this] { showModelDownloadPrompt(false); };
+    if (processor.supportsModelDownloadUi())
+        addAndMakeVisible(modelButton);
 
     learnMeterLabel.setJustificationType(juce::Justification::centredLeft);
     learnMeterLabel.setFont(juce::FontOptions().withHeight(12.0f).withKerningFactor(0.05f));
@@ -313,9 +334,10 @@ void EditorBase::resized() {
     auto bounds = getLocalBounds().reduced(scaled(20), scaled(16));
     const bool compactControlBank = processor.getProductIdentity().supportsControlBank()
         && processor.getProductIdentity().compactControlBankLayout;
+    const int modelDownloadRowHeight = processor.supportsModelDownloadUi() ? scaled(28) : 0;
     auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton()
-        ? (compactControlBank ? scaled(146) : scaled(164))
-        : (compactControlBank ? scaled(112) : scaled(132)));
+        ? (compactControlBank ? scaled(146) : scaled(164)) + modelDownloadRowHeight
+        : (compactControlBank ? scaled(112) : scaled(132)) + modelDownloadRowHeight);
     auto body = bounds.reduced(0, scaled(10));
 
     suiteLabel.setBounds(header.removeFromTop(scaled(20)));
@@ -343,6 +365,10 @@ void EditorBase::resized() {
         learnButton.setBounds(modeRow.removeFromLeft(scaled(110)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
+    if (processor.supportsModelDownloadUi()) {
+        modelButton.setBounds(modeRow.removeFromLeft(scaled(156)).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(12));
+    }
     if (processor.getProductIdentity().hasHelpContent()) {
         helpButton.setBounds(modeRow.removeFromRight(scaled(92)).reduced(0, scaled(2)));
         modeRow.removeFromRight(scaled(12));
@@ -363,6 +389,13 @@ void EditorBase::resized() {
         learnMeterLabel.setBounds(learnRow.removeFromLeft(scaled(176)));
         learnRow.removeFromLeft(scaled(8));
         learnMeterBar.setBounds(learnRow.removeFromLeft(juce::jmax(scaled(220), juce::jmin(scaled(320), learnRow.getWidth()))));
+    }
+    if (processor.supportsModelDownloadUi()) {
+        header.removeFromTop(scaled(6));
+        auto modelRow = header.removeFromTop(scaled(22));
+        modelDownloadLabel.setBounds(modelRow.removeFromLeft(scaled(176)));
+        modelRow.removeFromLeft(scaled(8));
+        modelDownloadBar.setBounds(modelRow);
     }
 
     const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 800 : 600));
@@ -672,7 +705,15 @@ void EditorBase::timerCallback() {
     }
     updateActivityIndicators();
     updateLearnUi();
+    updateModelDownloadUi();
     updateAuxSelectorUi();
+    if (processor.supportsModelDownloadUi()) {
+        modelButton.setVisible(!processor.isModelReadyForUi());
+        modelButton.setEnabled(!processor.isModelDownloadInProgress());
+        modelButton.setButtonText(processor.getModelDownloadButtonText());
+        if (!modelPromptVisible && processor.shouldPromptForModelDownload())
+            showModelDownloadPrompt(true);
+    }
     if (processor.getProductIdentity().showLevelTrace) {
         vxsuite::spectrum::SnapshotView snapshot;
         if (processor.getSpectrumSnapshotView(snapshot)) {
@@ -789,6 +830,22 @@ void EditorBase::updateLearnUi() {
     }
 }
 
+void EditorBase::updateModelDownloadUi() {
+    if (!processor.supportsModelDownloadUi())
+        return;
+
+    const bool downloading = processor.isModelDownloadInProgress();
+    modelDownloadLabel.setVisible(downloading);
+    modelDownloadBar.setVisible(downloading);
+    if (!downloading)
+        return;
+
+    const float progress = juce::jlimit(0.0f, 1.0f, processor.getModelDownloadProgress());
+    modelDownloadUi = static_cast<double>(progress);
+    const int progressPct = juce::roundToInt(progress * 100.0f);
+    modelDownloadLabel.setText("Model download " + juce::String(progressPct) + "%", juce::dontSendNotification);
+}
+
 void EditorBase::updateAuxSelectorUi() {
     if (!processor.getProductIdentity().supportsAuxSelector())
         return;
@@ -799,6 +856,31 @@ void EditorBase::updateAuxSelectorUi() {
     auxSelectorBox.setVisible(show);
 }
 
+void EditorBase::showModelDownloadPrompt(const bool automatic) {
+    juce::ignoreUnused(automatic);
+    if (!processor.supportsModelDownloadUi() || processor.isModelReadyForUi() || processor.isModelDownloadInProgress())
+        return;
+    if (modelPromptVisible)
+        return;
+
+    modelPromptVisible = true;
+    auto options = juce::MessageBoxOptions()
+        .withIconType(juce::MessageBoxIconType::QuestionIcon)
+        .withTitle(processor.getModelDownloadPromptTitle())
+        .withMessage(processor.getModelDownloadPromptBody())
+        .withButton("Download")
+        .withButton("Not Now")
+        .withAssociatedComponent(this);
+    juce::AlertWindow::showAsync(options, [this](int result) {
+        modelPromptVisible = false;
+        if (result == 1) {
+            processor.requestModelDownload();
+            return;
+        }
+        processor.declineModelDownloadPrompt();
+    });
+}
+
 void EditorBase::applyTextFit() {
     fitLabelFontToBounds(suiteLabel, static_cast<float>(scaled(17)), static_cast<float>(scaled(13)));
     fitLabelFontToBounds(productLabel, static_cast<float>(scaled(38)), static_cast<float>(scaled(24)));
@@ -806,6 +888,7 @@ void EditorBase::applyTextFit() {
     fitLabelFontToBounds(auxSelectorLabel, static_cast<float>(scaled(14)), static_cast<float>(scaled(12)));
     fitLabelFontToBounds(statusLabel, static_cast<float>(scaled(13)), static_cast<float>(scaled(11)));
     fitLabelFontToBounds(learnMeterLabel, static_cast<float>(scaled(12)), static_cast<float>(scaled(10)));
+    fitLabelFontToBounds(modelDownloadLabel, static_cast<float>(scaled(12)), static_cast<float>(scaled(10)));
     fitLabelFontToBounds(primaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));
     fitLabelFontToBounds(secondaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));
     fitLabelFontToBounds(tertiaryLabel, static_cast<float>(scaled(20)), static_cast<float>(scaled(15)));

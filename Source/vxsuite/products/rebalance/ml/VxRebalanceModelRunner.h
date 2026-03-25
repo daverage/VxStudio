@@ -25,15 +25,19 @@ public:
         mlMasksActive
     };
 
-    void prepare(double sampleRate, int maxBlockSize);
+    void prepare(double sampleRate, int maxBlockSize, const juce::File& onnxFile);
     void reset();
     void analyseBlock(const juce::AudioBuffer<float>& buffer,
                       Dsp::RecordingType recordingType,
                       const vxsuite::SignalQualitySnapshot& signalQuality);
 
-    [[nodiscard]] const Dsp::MlMaskSnapshot& latestMaskSnapshot() const noexcept { return latestSnapshot; }
+    // Safe to call on audio thread — returns the snapshot copied in analyseBlock().
+    [[nodiscard]] const Dsp::MlMaskSnapshot& latestMaskSnapshot() const noexcept { return audioThreadSnapshot; }
     [[nodiscard]] bool isUsingMlMasks() const noexcept {
         return status.load(std::memory_order_relaxed) == static_cast<int>(Status::mlMasksActive);
+    }
+    [[nodiscard]] bool hasDiscoveredModel() const noexcept {
+        return modelDiscovered.load(std::memory_order_relaxed);
     }
     [[nodiscard]] juce::String statusText() const;
 
@@ -56,38 +60,33 @@ private:
         std::vector<float> resampleOut;
     };
 
-    enum class ModelLayout {
-        none = 0,
-        umx4DerivedGuitar,
-        fiveStem
-    };
-
-    [[nodiscard]] juce::File bundleResourcesDirectory() const;
-    [[nodiscard]] juce::File findModelAsset() const;
-    [[nodiscard]] ModelLayout detectModelLayout(const juce::File& modelFile) const noexcept;
-    [[nodiscard]] juce::File resolveOnnxPath(const juce::File& modelAsset) const;
     void processModelFrame(const vxsuite::SignalQualitySnapshot& signalQuality);
 
     double sampleRateHz = 48000.0;
     int maxBlockSizePrepared = 0;
     FeatureBuffer featureBuffer;
     ConfidenceTracker confidenceTracker;
-    OnnxUmx4Model onnxModel;
     vxsuite::RealFft fft;
     std::vector<float> window;
     std::array<AnalysisChannel, 2> channels;
     std::array<std::vector<float>, 2> fftBuffers;
     std::vector<float> modelInputMagnitudes;
-    std::vector<float> modelOutputMagnitudes;
     std::vector<float> frameHistory;
     int frameWriteIndex = 0;
     int frameCount = 0;
     std::string lastError;
+    // latestSnapshot: written by ORT callback thread, read in analyseBlock under lock.
+    // audioThreadSnapshot: audio-thread-only copy, updated in analyseBlock after lock.
+    juce::SpinLock snapshotLock;
     Dsp::MlMaskSnapshot latestSnapshot;
+    Dsp::MlMaskSnapshot audioThreadSnapshot;
+    std::atomic<bool> inferenceInFlight { false };
     std::atomic<int> status { static_cast<int>(Status::heuristicFallback) };
     std::atomic<bool> modelDiscovered { false };
     std::atomic<float> latestBlendConfidence { 0.0f };
-    ModelLayout detectedLayout = ModelLayout::none;
+    // onnxModel declared last so its destructor (which waits for pending async)
+    // runs before the snapshot/lock members are destroyed.
+    OnnxUmx4Model onnxModel;
 };
 
 } // namespace vxsuite::rebalance::ml
