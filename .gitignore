@@ -3,5 +3,4 @@ build/
 Source/vxsuite/vst/.DS_Store
 *.swp
 *.swo
-assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx
 tasks/reports/rebalance-openunmix-v20/brightside_masks.npz
