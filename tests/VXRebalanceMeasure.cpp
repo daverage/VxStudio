@@ -118,6 +118,7 @@ juce::AudioBuffer<float> subtract(const juce::AudioBuffer<float>& a,
 }
 
 void setRebalanceDefaults(VXRebalanceAudioProcessor& processor) {
+    vxsuite::test::setParamNormalized(processor, "mode", 1.0f);
     vxsuite::test::setParamNormalized(processor, "recordingType", 0.0f);
     vxsuite::test::setParamNormalized(processor, "vocals", 0.5f);
     vxsuite::test::setParamNormalized(processor, "drums", 0.5f);
@@ -146,6 +147,15 @@ int recordingTypeIndexFromText(const juce::String& text) {
     return 0;
 }
 
+int engineIndexFromText(const juce::String& text) {
+    const auto normalized = text.trim().toLowerCase();
+    if (normalized == "dsp")
+        return 0;
+    if (normalized == "umx4")
+        return 2;
+    return 1; // spleeter
+}
+
 void printStemRow(const std::string& name,
                   const juce::AudioBuffer<float>& delta,
                   const juce::AudioBuffer<float>& stem) {
@@ -167,7 +177,7 @@ float rmsGainDb(const juce::AudioBuffer<float>& input,
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: VXRebalanceMeasure <stem_dir> [boost_db] [recording_type]\n";
+        std::cerr << "Usage: VXRebalanceMeasure <stem_dir> [boost_db] [recording_type] [dsp|spleeter|umx4] [lane_id] [--skip-isolated]\n";
         return 1;
     }
 
@@ -175,6 +185,9 @@ int main(int argc, char* argv[]) {
     const juce::File stemDir(argv[1]);
     const float boostDb = argc > 2 ? std::stof(argv[2]) : 6.0f;
     const int recordingTypeIndex = argc > 3 ? recordingTypeIndexFromText(argv[3]) : 0;
+    const int engineIndex = argc > 4 ? engineIndexFromText(argv[4]) : 1;
+    const juce::String requestedLane = argc > 5 ? juce::String(argv[5]).trim().toLowerCase() : juce::String();
+    const bool skipIsolated = argc > 6 && juce::String(argv[6]).trim().equalsIgnoreCase("--skip-isolated");
 
     try {
         double sampleRate = 48000.0;
@@ -210,13 +223,14 @@ int main(int argc, char* argv[]) {
         };
 
         VXRebalanceAudioProcessor processor;
+        setRebalanceDefaults(processor);
+        vxsuite::test::setParamNormalized(processor, "mode", normalizedChoiceFromIndex(engineIndex, 3));
+        vxsuite::test::setParamNormalized(processor, "recordingType", normalizedChoiceFromIndex(recordingTypeIndex, 3));
         processor.prepareToPlay(sampleRate, 256);
         std::cout << "Status: " << processor.getStatusText() << "\n";
-
-        setRebalanceDefaults(processor);
-        vxsuite::test::setParamNormalized(processor, "recordingType", normalizedChoiceFromIndex(recordingTypeIndex, 3));
         const auto neutral = vxsuite::test::render(processor, stems.original, 256);
         const auto neutralDelta = subtract(neutral, stems.original);
+        std::cout << "Status after neutral render: " << processor.getStatusText() << "\n";
         std::cout << "Neutral diff rms=" << vxsuite::test::rms(neutralDelta)
                   << " peak=" << vxsuite::test::peakAbs(neutralDelta) << "\n";
 
@@ -235,14 +249,19 @@ int main(int argc, char* argv[]) {
         }};
 
         for (const auto& lane : lanes) {
+            if (requestedLane.isNotEmpty() && !requestedLane.equalsIgnoreCase(lane.id))
+                continue;
+
             processor.releaseResources();
-            processor.prepareToPlay(sampleRate, 256);
             setRebalanceDefaults(processor);
+            vxsuite::test::setParamNormalized(processor, "mode", normalizedChoiceFromIndex(engineIndex, 3));
             vxsuite::test::setParamNormalized(processor, "recordingType", normalizedChoiceFromIndex(recordingTypeIndex, 3));
+            processor.prepareToPlay(sampleRate, 256);
             vxsuite::test::setParamNormalized(processor, lane.id, normalizedFromDb(boostDb));
 
             const auto rendered = vxsuite::test::render(processor, stems.original, 256);
             const auto delta = subtract(rendered, stems.original);
+            std::cout << "  status_after_render=" << processor.getStatusText() << "\n";
 
             std::cout << "\nLane " << lane.label << " @" << boostDb << " dB"
                       << " delta_rms=" << vxsuite::test::rms(delta)
@@ -263,15 +282,18 @@ int main(int argc, char* argv[]) {
                 { "other ", &stems.other }
             }};
 
-            std::cout << "  isolated_gain_db\n";
-            for (const auto& stem : isolated) {
-                VXRebalanceAudioProcessor isolatedProcessor;
-                isolatedProcessor.prepareToPlay(sampleRate, 256);
-                setRebalanceDefaults(isolatedProcessor);
-                vxsuite::test::setParamNormalized(isolatedProcessor, "recordingType", normalizedChoiceFromIndex(recordingTypeIndex, 3));
-                vxsuite::test::setParamNormalized(isolatedProcessor, lane.id, normalizedFromDb(boostDb));
-                const auto renderedStem = vxsuite::test::render(isolatedProcessor, *stem.second, 256);
-                std::cout << "    " << stem.first << " " << rmsGainDb(*stem.second, renderedStem) << " dB\n";
+            if (!skipIsolated) {
+                std::cout << "  isolated_gain_db\n";
+                for (const auto& stem : isolated) {
+                    VXRebalanceAudioProcessor isolatedProcessor;
+                    setRebalanceDefaults(isolatedProcessor);
+                    vxsuite::test::setParamNormalized(isolatedProcessor, "mode", normalizedChoiceFromIndex(engineIndex, 3));
+                    vxsuite::test::setParamNormalized(isolatedProcessor, "recordingType", normalizedChoiceFromIndex(recordingTypeIndex, 3));
+                    isolatedProcessor.prepareToPlay(sampleRate, 256);
+                    vxsuite::test::setParamNormalized(isolatedProcessor, lane.id, normalizedFromDb(boostDb));
+                    const auto renderedStem = vxsuite::test::render(isolatedProcessor, *stem.second, 256);
+                    std::cout << "    " << stem.first << " " << rmsGainDb(*stem.second, renderedStem) << " dB\n";
+                }
             }
         }
     } catch (const std::exception& e) {

@@ -12,6 +12,7 @@ namespace vxsuite {
 struct ModelAssetFile {
     juce::String fileName;
     juce::String url;
+    int64_t expectedBytes = 0;
 };
 
 struct ModelPackage {

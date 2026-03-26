@@ -52,8 +52,6 @@ public:
         float lowEndProtection = 0.20f;
         float stereoWidthTrust = 0.85f;
         float residualFallbackStrength = 0.20f;
-        float maxBoostDb = 6.0f;
-        float maxCutDb = 9.0f;
         float globalStrength = 1.0f;
         float vocalCenterBias = 0.22f;
         float harmonicContinuityWeight = 1.0f;
@@ -77,20 +75,12 @@ public:
         float transientRisk = 0.0f;
     };
 
-    struct MlMaskSnapshot {
-        bool available = false;
-        float confidence = 0.0f;
-        bool derivedGuitarFromOther = false;
-        std::array<std::array<float, kBins>, kSourceCount> masks {};
-    };
-
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void reset();
     void setControlTargets(const std::array<float, kControlCount>& normalizedValues);
     void setAnalysisContext(const AnalysisContext& newContext) noexcept;
     void setSignalQuality(const vxsuite::SignalQualitySnapshot& newQuality) noexcept;
     void setRecordingType(RecordingType newType) noexcept;
-    void setMlMaskSnapshot(const MlMaskSnapshot& snapshot) noexcept;
     void process(juce::AudioBuffer<float>& buffer);
 
     [[nodiscard]] int latencySamples() const noexcept { return kFftSize; }
@@ -138,7 +128,6 @@ private:
     std::atomic<float> targetCompressionScore { 0.0f };
     std::atomic<float> targetTiltScore { 0.0f };
     std::atomic<float> targetSeparationConfidence { 1.0f };
-    MlMaskSnapshot mlMaskSnapshot;
     std::array<float, kBins> prevAnalysisMag {};
     std::array<float, kBins> bassContinuity {};
     std::array<float, kBins> compositeGain {};

@@ -570,23 +570,11 @@ juce_generate_juce_header(VXRebalance)
 target_sources(VXRebalance PRIVATE
   Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.cpp
 )
 target_include_directories(VXRebalance PRIVATE Source)
-target_include_directories(VXRebalance PRIVATE ThirdParty/onnxruntime/include)
 target_link_libraries(VXRebalance PRIVATE VxSuiteFramework juce::juce_dsp)
-if(VXSUITE_HAS_ONNXRUNTIME)
-  target_link_libraries(VXRebalance PRIVATE VxSuiteOnnxRuntime)
-  target_compile_definitions(VXRebalance PRIVATE VXS_HAS_ONNXRUNTIME=1)
-endif()
 add_custom_target(VXRebalancePlugin ALL DEPENDS VXRebalance_VST3)
 vxsuite_stage_vst3_bundle(VXRebalance_VST3 "VXRebalance")
-vxsuite_prune_vst3_resources(VXRebalance_VST3 "VXRebalance"
-  "rebalance_umx4.json"
-  "vx_rebalance_umx4.onnx")
 
 juce_add_plugin(VXStudioAnalyser
   VERSION ${VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER}
@@ -717,23 +705,14 @@ add_executable(VXRebalanceMeasure
   tests/VXRebalanceMeasure.cpp
   Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceConfidence.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceFeatureBuffer.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceModelRunner.cpp
-  Source/vxsuite/products/rebalance/ml/VxRebalanceOnnxModel.cpp
 )
 target_include_directories(VXRebalanceMeasure PRIVATE Source tests)
-target_include_directories(VXRebalanceMeasure PRIVATE ThirdParty/onnxruntime/include)
 target_link_libraries(VXRebalanceMeasure PRIVATE
   VxSuiteFramework
   juce::juce_dsp
   juce::juce_audio_processors
   juce::juce_audio_formats
 )
-if(VXSUITE_HAS_ONNXRUNTIME)
-  target_link_libraries(VXRebalanceMeasure PRIVATE VxSuiteOnnxRuntime)
-  target_compile_definitions(VXRebalanceMeasure PRIVATE VXS_HAS_ONNXRUNTIME=1)
-endif()
 target_compile_definitions(VXRebalanceMeasure PRIVATE VXSUITE_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxsuite_add_executable_test(VXRebalanceMeasure)
 

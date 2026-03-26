@@ -851,7 +851,8 @@ void EditorBase::updateAuxSelectorUi() {
         return;
 
     const bool show = !processor.getProductIdentity().supportsModeSwitch()
-        || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) == Mode::general;
+        || !processor.getProductIdentity().auxSelectorFollowsGeneralMode
+        || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) != Mode::vocal;
     auxSelectorLabel.setVisible(show);
     auxSelectorBox.setVisible(show);
 }

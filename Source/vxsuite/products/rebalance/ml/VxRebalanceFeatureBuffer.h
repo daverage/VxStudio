@@ -19,7 +19,7 @@ class FeatureBuffer {
 public:
     void prepare(double sampleRate, int maxBlockSize) noexcept;
     void reset() noexcept;
-    FeatureSnapshot analyseBlock(const juce::AudioBuffer<float>& buffer) noexcept;
+    FeatureSnapshot analyseBlock(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept;
 
 private:
     double sampleRateHz = 48000.0;

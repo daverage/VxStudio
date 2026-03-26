@@ -113,11 +113,11 @@ inline juce::StringArray makeModeChoiceLabels() {
 inline juce::StringArray makeSelectorChoiceLabels(const ProductIdentity& identity) {
     const auto first = identity.selectorChoiceLabel(0);
     const auto second = identity.selectorChoiceLabel(1);
+    const auto third = identity.selectorChoiceLabel(2);
     if (!first.empty() && !second.empty()) {
-        return juce::StringArray {
-            toJuceString(first),
-            toJuceString(second)
-        };
+        if (!third.empty())
+            return juce::StringArray { toJuceString(first), toJuceString(second), toJuceString(third) };
+        return juce::StringArray { toJuceString(first), toJuceString(second) };
     }
     return makeModeChoiceLabels();
 }
@@ -218,8 +218,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
 inline Mode readMode(const juce::AudioProcessorValueTreeState& state, const ProductIdentity& identity) {
     if (!identity.supportsModeSwitch())
         return identity.defaultMode;
-    if (const auto* raw = state.getRawParameterValue(identity.modeParamId.data()))
-        return raw->load() < 0.5f ? Mode::vocal : Mode::general;
+    if (const auto* raw = state.getRawParameterValue(identity.modeParamId.data())) {
+        const int index = static_cast<int>(raw->load() + 0.5f);
+        if (index <= 0) return Mode::vocal;
+        if (index == 1) return Mode::general;
+        return Mode::extended;
+    }
     return identity.defaultMode;
 }
 

@@ -14,10 +14,10 @@ void FeatureBuffer::reset() noexcept {
     blockSize = std::max(1, blockSize);
 }
 
-FeatureSnapshot FeatureBuffer::analyseBlock(const juce::AudioBuffer<float>& buffer) noexcept {
+FeatureSnapshot FeatureBuffer::analyseBlock(const juce::AudioBuffer<float>& buffer, const int requestedSamples) noexcept {
     FeatureSnapshot snapshot {};
     const int numChannels = std::max(1, buffer.getNumChannels());
-    const int numSamples = buffer.getNumSamples();
+    const int numSamples = std::min(buffer.getNumSamples(), std::max(0, requestedSamples));
     if (numSamples <= 0)
         return snapshot;
 

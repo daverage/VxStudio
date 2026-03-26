@@ -20,7 +20,7 @@ vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFi
             "DeepFilterNet 2 Model",
             "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
             {
-                { "DeepFilterNet2_onnx_ll.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/deepfilternet/models/DeepFilterNet2_onnx_ll.tar.gz" }
+                { "DeepFilterNet2_onnx_ll.tar.gz", "https://github.com/daverage/VxStudio/releases/download/models-v1/DeepFilterNet2_onnx_ll.tar.gz", 8628785 }
             }
         };
     }
@@ -30,7 +30,7 @@ vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFi
         "DeepFilterNet 3 Model",
         "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
         {
-            { "DeepFilterNet3_onnx.tar.gz", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz" }
+            { "DeepFilterNet3_onnx.tar.gz", "https://github.com/daverage/VxStudio/releases/download/models-v1/DeepFilterNet3_onnx.tar.gz", 7983136 }
         }
     };
 }
@@ -113,15 +113,7 @@ vxsuite::ModelPackage VXDeepFilterNetAudioProcessor::currentModelPackage() const
 }
 
 bool VXDeepFilterNetAudioProcessor::isModelReadyForUi() const noexcept {
-    if (vxsuite::ModelAssetService::instance().isReady(makeDeepFilterPackage(selectedModelVariant())))
-        return true;
-
-    const auto status = engine.lastStatus();
-    return status == "rt_ready"
-        || status == "rt_preparing"
-        || status == "rt_init_failed"
-        || status == "rt_process_failed"
-        || status == "rt_reprepare_needed"
+    return vxsuite::ModelAssetService::instance().isReady(makeDeepFilterPackage(selectedModelVariant()))
         || engine.isRealtimeReady();
 }
 

@@ -7,8 +7,8 @@ namespace vxsuite::rebalance {
 
 namespace {
 constexpr float kEps = 1.0e-9f;
-constexpr float kMaxCompositeAbsDb = 24.0f;
-constexpr float kMaxUserSourceAbsDb = 24.0f;
+constexpr float kMaxBoostDb         = 12.0f;  // maximum boost applied to any source
+constexpr float kMaxCutDb           = 18.0f;  // keep cuts near the UI contract instead of hard-nulling bins
 constexpr int kStrengthIndex = 5;
 
 using RecordingType = Dsp::RecordingType;
@@ -32,68 +32,76 @@ constexpr SourceBandProfile makeProfile(const BandRegion a = {},
 }
 
 constexpr std::array<RebalanceModeProfile, 3> kModeProfiles { {
+    // ---- Studio ----
     {
+        // vocals: core 500-1800, shoulders, upper-mid 1800-3500, sibilance
         makeProfile(makeRegion(500.0f, 1800.0f, 1.00f),
-                    makeRegion(220.0f, 500.0f, 0.50f),
-                    makeRegion(1800.0f, 3500.0f, 0.48f),
+                    makeRegion(220.0f, 500.0f,  0.34f),
+                    makeRegion(1800.0f, 3500.0f, 0.32f),
                     makeRegion(3500.0f, 6000.0f, 0.16f)),
-        makeProfile(makeRegion(60.0f, 180.0f, 1.00f),
-                    makeRegion(180.0f, 280.0f, 0.54f),
-                    makeRegion(280.0f, 400.0f, 0.18f)),
-        makeProfile(makeRegion(40.0f, 120.0f, 0.95f),
+        // drums: kick/snare body, transient crack, hi-hat
+        makeProfile(makeRegion(60.0f, 180.0f,   1.00f),
+                    makeRegion(180.0f, 280.0f,  0.54f),
+                    makeRegion(280.0f, 400.0f,  0.10f)),
+        // bass: low body, sub, harmonics
+        makeProfile(makeRegion(40.0f, 120.0f,   0.95f),
                     makeRegion(4000.0f, 10000.0f, 1.00f),
-                    makeRegion(120.0f, 350.0f, 0.42f),
+                    makeRegion(120.0f, 350.0f,  0.42f),
                     makeRegion(2500.0f, 4000.0f, 0.18f)),
+        // guitar: core mid, body, upper-mid, presence — proven profile
         makeProfile(makeRegion(350.0f, 1200.0f, 1.00f),
-                    makeRegion(150.0f, 350.0f, 0.48f),
+                    makeRegion(150.0f, 350.0f,  0.48f),
                     makeRegion(1200.0f, 2500.0f, 0.46f),
                     makeRegion(2500.0f, 4000.0f, 0.16f)),
-        makeProfile(makeRegion(250.0f, 1500.0f, 0.56f),
-                    makeRegion(1500.0f, 5000.0f, 0.30f),
-                    makeRegion(20.0f, 20000.0f, 0.08f)),
-        0.12f, 20.0f, 90.0f, 1.00f, 0.82f, 0.20f, 0.85f, 0.20f, 10.0f, 12.0f, 1.00f, 0.22f, 1.00f, 0.90f, 0.22f, 35.0f, 80.0f
+        // other: broad residual, low weight
+        makeProfile(makeRegion(250.0f, 1500.0f, 0.44f),
+                    makeRegion(1500.0f, 5000.0f, 0.22f),
+                    makeRegion(20.0f, 20000.0f, 0.03f)),
+        0.12f, 20.0f, 90.0f, 1.00f, 0.82f, 0.20f, 0.85f, 0.20f, 1.00f, 0.22f, 1.00f, 0.90f, 0.22f, 35.0f, 80.0f
     },
+    // ---- Live ----
     {
         makeProfile(makeRegion(450.0f, 1600.0f, 1.00f),
-                    makeRegion(250.0f, 450.0f, 0.46f),
-                    makeRegion(1600.0f, 3000.0f, 0.44f),
+                    makeRegion(250.0f, 450.0f,  0.32f),
+                    makeRegion(1600.0f, 3000.0f, 0.30f),
                     makeRegion(3000.0f, 5000.0f, 0.14f)),
-        makeProfile(makeRegion(55.0f, 170.0f, 1.00f),
-                    makeRegion(170.0f, 260.0f, 0.50f),
-                    makeRegion(260.0f, 350.0f, 0.16f)),
-        makeProfile(makeRegion(45.0f, 130.0f, 0.95f),
+        makeProfile(makeRegion(55.0f, 170.0f,   1.00f),
+                    makeRegion(170.0f, 260.0f,  0.50f),
+                    makeRegion(260.0f, 350.0f,  0.10f)),
+        makeProfile(makeRegion(45.0f, 130.0f,   0.95f),
                     makeRegion(4500.0f, 11000.0f, 1.00f),
-                    makeRegion(130.0f, 400.0f, 0.44f),
+                    makeRegion(130.0f, 400.0f,  0.44f),
                     makeRegion(2500.0f, 4500.0f, 0.18f)),
         makeProfile(makeRegion(300.0f, 1100.0f, 1.00f),
-                    makeRegion(160.0f, 300.0f, 0.46f),
+                    makeRegion(160.0f, 300.0f,  0.46f),
                     makeRegion(1100.0f, 2200.0f, 0.42f),
                     makeRegion(2200.0f, 3500.0f, 0.14f)),
-        makeProfile(makeRegion(250.0f, 2000.0f, 0.62f),
-                    makeRegion(2000.0f, 6000.0f, 0.34f),
-                    makeRegion(20.0f, 20000.0f, 0.10f)),
-        0.22f, 35.0f, 140.0f, 0.78f, 1.00f, 0.32f, 0.55f, 0.35f, 7.0f, 9.0f, 0.82f, 0.14f, 0.80f, 1.00f, 0.36f, 45.0f, 95.0f
+        makeProfile(makeRegion(250.0f, 2000.0f, 0.48f),
+                    makeRegion(2000.0f, 6000.0f, 0.24f),
+                    makeRegion(20.0f, 20000.0f, 0.04f)),
+        0.22f, 35.0f, 140.0f, 0.78f, 1.00f, 0.32f, 0.55f, 0.35f, 0.82f, 0.14f, 0.80f, 1.00f, 0.36f, 45.0f, 95.0f
     },
+    // ---- Phone / Rough ----
     {
         makeProfile(makeRegion(350.0f, 1200.0f, 1.00f),
-                    makeRegion(1200.0f, 2500.0f, 0.42f),
-                    makeRegion(220.0f, 350.0f, 0.38f),
+                    makeRegion(1200.0f, 2500.0f, 0.28f),
+                    makeRegion(220.0f, 350.0f,  0.26f),
                     makeRegion(2500.0f, 4000.0f, 0.12f)),
-        makeProfile(makeRegion(90.0f, 180.0f, 1.00f),
-                    makeRegion(180.0f, 250.0f, 0.46f),
-                    makeRegion(250.0f, 350.0f, 0.14f)),
-        makeProfile(makeRegion(70.0f, 120.0f, 0.95f),
+        makeProfile(makeRegion(90.0f, 180.0f,   1.00f),
+                    makeRegion(180.0f, 250.0f,  0.46f),
+                    makeRegion(250.0f, 350.0f,  0.08f)),
+        makeProfile(makeRegion(70.0f, 120.0f,   0.95f),
                     makeRegion(5000.0f, 10000.0f, 1.00f),
-                    makeRegion(120.0f, 280.0f, 0.40f),
+                    makeRegion(120.0f, 280.0f,  0.40f),
                     makeRegion(3000.0f, 5000.0f, 0.16f)),
-        makeProfile(makeRegion(250.0f, 900.0f, 1.00f),
-                    makeRegion(150.0f, 250.0f, 0.42f),
-                    makeRegion(900.0f, 1800.0f, 0.40f),
+        makeProfile(makeRegion(250.0f, 900.0f,  1.00f),
+                    makeRegion(150.0f, 250.0f,  0.42f),
+                    makeRegion(900.0f, 1800.0f,  0.40f),
                     makeRegion(1800.0f, 3000.0f, 0.12f)),
-        makeProfile(makeRegion(300.0f, 3000.0f, 0.72f),
-                    makeRegion(3000.0f, 7000.0f, 0.36f),
-                    makeRegion(20.0f, 20000.0f, 0.12f)),
-        0.32f, 50.0f, 220.0f, 0.62f, 0.88f, 0.40f, 0.25f, 0.40f, 5.0f, 7.0f, 0.64f, 0.08f, 0.65f, 0.95f, 0.52f, 55.0f, 110.0f
+        makeProfile(makeRegion(300.0f, 3000.0f, 0.56f),
+                    makeRegion(3000.0f, 7000.0f, 0.24f),
+                    makeRegion(20.0f, 20000.0f, 0.05f)),
+        0.32f, 50.0f, 220.0f, 0.62f, 0.88f, 0.40f, 0.25f, 0.40f, 0.64f, 0.08f, 0.65f, 0.95f, 0.52f, 55.0f, 110.0f
     }
 } };
 
@@ -151,7 +159,6 @@ void Dsp::reset() {
     for (auto& masks : smoothedMasks)
         std::fill(masks.begin(), masks.end(), 0.0f);
     masksPrimed = false;
-    mlMaskSnapshot = {};
 
     for (auto& channel : channels) {
         std::fill(channel.inputFifo.begin(), channel.inputFifo.end(), 0.0f);
@@ -192,16 +199,6 @@ void Dsp::setSignalQuality(const vxsuite::SignalQualitySnapshot& newQuality) noe
 
 void Dsp::setRecordingType(const RecordingType newType) noexcept {
     targetRecordingType.store(static_cast<int>(newType), std::memory_order_relaxed);
-}
-
-void Dsp::setMlMaskSnapshot(const MlMaskSnapshot& snapshot) noexcept {
-    if (!snapshot.available && !mlMaskSnapshot.available) {
-        mlMaskSnapshot.available = false;
-        mlMaskSnapshot.confidence = snapshot.confidence;
-        return;
-    }
-
-    mlMaskSnapshot = snapshot;
 }
 
 void Dsp::process(juce::AudioBuffer<float>& buffer) {
@@ -291,8 +288,9 @@ void Dsp::processFrame() {
         }
     }
 
-    const auto& modeProfile = currentModeProfile();
     computeMasks(analysisMag, centerWeight, sideWeight);
+
+    const auto& modeProfile = currentModeProfile();
 
     for (int ch = 0; ch < preparedChannels; ++ch) {
         auto& state = channels[static_cast<size_t>(ch)];
@@ -310,8 +308,8 @@ void Dsp::processFrame() {
                 gain = lerp(1.0f, gain, protectedBlend);
             }
 
-            const float scaledMag = mag * juce::jlimit(juce::Decibels::decibelsToGain(-modeProfile.maxCutDb),
-                                                       juce::Decibels::decibelsToGain(modeProfile.maxBoostDb),
+            const float scaledMag = mag * juce::jlimit(0.0f,
+                                                       juce::Decibels::decibelsToGain(kMaxBoostDb),
                                                        gain);
             const float ratio = scaledMag / std::max(kEps, mag);
             state.fftData[static_cast<size_t>(2 * k)] *= ratio;
@@ -452,10 +450,10 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
         float vocals = 0.01f;
         if (vocalWindow > 0.0f) {
             vocals = voiceBias * vocalWindow * (0.10f + vocalCentredCoeff * centered + 0.24f * steadyPrior);
-            if (phoneMode && hz > 2500.0f)
-                vocals *= 0.72f;
-            if (phoneMode && hz < 320.0f)
-                vocals *= 0.70f;
+            if (phoneMode && hz > 2000.0f)
+                vocals *= 0.55f;
+            if (phoneMode && hz < 200.0f)
+                vocals *= 0.65f;
             vocals *= lerp(1.0f, 0.62f, transientPrior * clamp01((hz - 1800.0f) / 2200.0f));
             vocals *= lerp(1.0f, 0.82f, wide);
             if (hz >= 250.0f && hz <= 600.0f)
@@ -463,25 +461,27 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
         }
         rawWeights[vocalsSource][static_cast<size_t>(k)] = vocals;
 
-        float guitar = 0.012f;
+        float guitar = 0.028f;
         if (guitarWindow > 0.0f) {
             const float residualSpace = 1.0f - clamp01(0.96f * vocals + 0.82f * drums + 0.50f * bass);
-            const float guitarBody = guitarWindow * (0.04f + 0.18f * steadyPrior * modeProfile.harmonicTrust
-                + 0.14f * wide + 0.12f * (1.0f - centered));
+            const float guitarBody = guitarWindow * (0.10f + 0.28f * steadyPrior * modeProfile.harmonicTrust
+                + 0.16f * wide + 0.16f * (1.0f - centered));
             guitar += residualSpace * guitarBody;
-            guitar *= lerp(1.0f, phoneMode ? 0.85f : 0.75f, centered);
-            guitar *= lerp(1.0f, phoneMode ? 0.80f : 0.70f, vocals * (0.7f + 0.3f * analysisContext.speechPresence));
-            guitar *= lerp(1.0f, phoneMode ? 0.85f : 0.75f, transientPrior);
-            if (phoneMode && hz > 1800.0f)
-                guitar *= 0.58f;
+            guitar *= lerp(1.0f, phoneMode ? 0.90f : 0.82f, centered);
+            guitar *= lerp(1.0f, phoneMode ? 0.88f : 0.80f, vocals * (0.7f + 0.3f * analysisContext.speechPresence));
+            guitar *= lerp(1.0f, phoneMode ? 0.90f : 0.84f, transientPrior);
+            if (phoneMode && hz > 2000.0f)
+                guitar *= 0.55f;
+            if (phoneMode && hz < 200.0f)
+                guitar *= 0.65f;
             if (hz > 1800.0f)
-                guitar *= liveMode ? 0.70f : 0.62f;
+                guitar *= liveMode ? 0.82f : 0.74f;
         }
         rawWeights[guitarSource][static_cast<size_t>(k)] = guitar;
 
-        const float occupied = clamp01(0.44f * bass + 0.58f * drums + 0.72f * vocals + 0.44f * guitar);
-        float other = 0.004f + 0.45f * modeProfile.residualFallbackStrength * (1.0f - occupied) + 0.08f * wide;
-        other += otherWindow * (0.04f + 0.70f * modeProfile.residualFallback * (0.4f + 0.6f * wide));
+        const float occupied = clamp01(0.48f * bass + 0.62f * drums + 0.78f * vocals + 0.48f * guitar);
+        float other = 0.003f + 0.24f * modeProfile.residualFallbackStrength * (1.0f - occupied) + 0.05f * wide;
+        other += otherWindow * (0.03f + 0.42f * modeProfile.residualFallback * (0.35f + 0.65f * wide));
         if (phoneMode && hz >= 400.0f && hz <= 1800.0f)
             other *= 1.08f;
         if (hz < modeProfile.lowEndUnityBlendEndHz)
@@ -503,120 +503,93 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
             total += rawWeights[source][static_cast<size_t>(k)];
         total = std::max(kEps, total);
 
-        float derivedModelMasks[kSourceCount] {};
-        if (mlMaskSnapshot.available && mlMaskSnapshot.derivedGuitarFromOther) {
-            const float modelVocals = clamp01(mlMaskSnapshot.masks[vocalsSource][static_cast<size_t>(k)]);
-            const float modelDrums = clamp01(mlMaskSnapshot.masks[drumsSource][static_cast<size_t>(k)]);
-            const float modelBass = clamp01(mlMaskSnapshot.masks[bassSource][static_cast<size_t>(k)]);
-            const float modelOther = clamp01(mlMaskSnapshot.masks[otherSource][static_cast<size_t>(k)]);
-
-            const float harmonicPrior = clamp01(guitarWindow
-                * (0.20f
-                   + 0.30f * steadyPrior
-                   + 0.18f * (1.0f - centered)
-                   + 0.16f * wide));
-            const float vocalPenalty = clamp01(0.92f * modelVocals + 0.20f * analysisContext.speechPresence);
-            const float transientPenalty = clamp01((0.72f * modelDrums + 0.20f * drums) * transientPrior);
-            const float bassPenalty = clamp01(0.28f * modelBass);
-            const float derivedGuitar = modelOther * harmonicPrior
-                * (1.0f - 0.75f * vocalPenalty)
-                * (1.0f - 0.65f * transientPenalty)
-                * (1.0f - 0.35f * bassPenalty);
-
-            derivedModelMasks[vocalsSource] = modelVocals;
-            derivedModelMasks[drumsSource] = modelDrums;
-            derivedModelMasks[bassSource] = modelBass;
-            derivedModelMasks[guitarSource] = clamp01(derivedGuitar);
-            derivedModelMasks[otherSource] = clamp01(modelOther - derivedModelMasks[guitarSource]);
-
-            float derivedTotal = 0.0f;
-            for (float& value : derivedModelMasks)
-                derivedTotal += value;
-            derivedTotal = std::max(kEps, derivedTotal);
-            for (float& value : derivedModelMasks)
-                value /= derivedTotal;
+        float semanticSupport[kSourceCount] {};
+        if (hz < 220.0f) { // Low end support
+            const float bassVsDrums = clamp01(0.48f
+                + 0.34f * steadyPrior
+                + 0.12f * centered
+                - 0.42f * transientPrior);
+            semanticSupport[bassSource] *= lerp(0.92f, 1.60f, bassVsDrums);
+            semanticSupport[drumsSource] *= lerp(1.18f, 0.74f, bassVsDrums);
+            semanticSupport[otherSource] *= 0.42f;
         }
 
+        if (hz >= 280.0f && hz <= 3200.0f) { // Midrange vocal vs guitar arbitration
+            const float vocalScore =
+                vocalWindow * (0.6f + 0.4f * centered + 0.3f * analysisContext.speechPresence);
+            const float guitarScore =
+                guitarWindow * (0.6f + 0.3f * steadyPrior + 0.3f * wide);
+
+            const float totalScore = vocalScore + guitarScore + kEps;
+
+            const float vocalDominance = vocalScore / totalScore;
+            const float guitarDominance = guitarScore / totalScore;
+
+            rawWeights[vocalsSource][static_cast<size_t>(k)] *= (0.7f + 0.6f * vocalDominance);
+            rawWeights[guitarSource][static_cast<size_t>(k)] *= (0.7f + 0.6f * guitarDominance);
+
+            // Kill ambiguity
+            rawWeights[otherSource][static_cast<size_t>(k)] *= 0.6f;
+        }
+
+        // Heuristic semantic support (DSP-only, no ML)
+        semanticSupport[vocalsSource] = clamp01(0.02f + 0.98f * vocalWindow + 0.16f * centered - 0.10f * wide);
+        semanticSupport[drumsSource]  = clamp01(0.03f + 0.94f * drumWindow + 0.16f * transientPrior + 0.10f * wide);
+        semanticSupport[bassSource]   = clamp01(0.01f + 1.04f * bassWindow + 0.10f * centered + 0.10f * steadyPrior);
+        semanticSupport[guitarSource] = clamp01(0.02f + 0.98f * guitarWindow + 0.16f * wide + 0.10f * (1.0f - centered) + 0.12f * steadyPrior);
+        semanticSupport[otherSource]  = clamp01(0.05f + 0.72f * otherWindow + 0.18f * wide + 0.10f * (1.0f - centered));
+
+        if (hz < 140.0f)
+            semanticSupport[vocalsSource] *= 0.08f;
+        if (hz > 9000.0f)
+            semanticSupport[vocalsSource] *= 0.18f;
+
+        if (hz > 380.0f)
+            semanticSupport[bassSource] *= 0.18f;
+        if (hz > 700.0f)
+            semanticSupport[bassSource] *= 0.08f;
+
+        if (hz < 110.0f)
+            semanticSupport[guitarSource] *= 0.18f;
+        if (hz > 6500.0f)
+            semanticSupport[guitarSource] *= 0.12f;
+
+        if (hz < 110.0f)
+            semanticSupport[otherSource] *= 0.10f;
+
+        float conditionedMasks[kSourceCount] {};
+        float conditionedTotal = 0.0f;
+
         for (int source = 0; source < kSourceCount; ++source) {
-            float nextMask = rawWeights[source][static_cast<size_t>(k)] / total;
-            if (mlMaskSnapshot.available) {
-                const float modelBlend = clamp01(0.15f + 0.80f * mlMaskSnapshot.confidence
-                    * signalQuality.separationConfidence);
-                const float modelMask = mlMaskSnapshot.derivedGuitarFromOther
-                    ? clamp01(derivedModelMasks[static_cast<size_t>(source)])
-                    : clamp01(mlMaskSnapshot.masks[static_cast<size_t>(source)][static_cast<size_t>(k)]);
-                nextMask = lerp(nextMask, modelMask, modelBlend);
-            }
-            if (!masksPrimed)
+            const float baseMask = rawWeights[source][static_cast<size_t>(k)] / total;
+            const float sourceSupport = 0.035f + (1.0f - 0.035f) * semanticSupport[static_cast<size_t>(source)];
+            conditionedMasks[source] = std::pow(clamp01(baseMask), 1.08f) * sourceSupport;
+        }
+
+        if (phoneMode && hz >= 400.0f && hz <= 1800.0f) {
+            conditionedMasks[vocalsSource] *= 0.88f;
+            conditionedMasks[guitarSource] *= 0.82f;
+        } else if (liveMode && hz >= 300.0f && hz <= 1200.0f) {
+            conditionedMasks[guitarSource] *= 0.90f;
+            conditionedMasks[otherSource] *= 1.08f;
+        }
+
+        conditionedTotal = 0.0f;
+        for (int source = 0; source < kSourceCount; ++source)
+            conditionedTotal += conditionedMasks[source];
+        conditionedTotal = std::max(kEps, conditionedTotal);
+
+        for (int source = 0; source < kSourceCount; ++source) {
+            const float nextMask = conditionedMasks[source] / conditionedTotal;
+            if (!masksPrimed) {
                 smoothedMasks[source][static_cast<size_t>(k)] = nextMask;
-            else {
+            } else {
                 const float previous = smoothedMasks[source][static_cast<size_t>(k)];
                 const float alpha = nextMask > previous ? attackAlpha : releaseAlpha;
                 smoothedMasks[source][static_cast<size_t>(k)] =
                     alpha * previous + (1.0f - alpha) * nextMask;
             }
         }
-    }
-
-    for (int k = 0; k < kBins; ++k) {
-        std::array<float, kSourceCount> effectiveGainDb {};
-        for (int source = 0; source < kSourceCount; ++source)
-            effectiveGainDb[static_cast<size_t>(source)] = mappedSourceGainDb(source);
-
-        if (hardTransient) {
-            for (int source = 0; source < kSourceCount; ++source) {
-                if (source == drumsSource)
-                    continue;
-                effectiveGainDb[static_cast<size_t>(source)] =
-                    lerp(0.0f, effectiveGainDb[static_cast<size_t>(source)], 0.5f);
-            }
-        }
-
-        constexpr std::array<float, kSourceCount> kSourceMaskExponent {
-            0.90f, // vocals
-            0.86f, // drums
-            1.15f, // bass
-            1.28f, // guitar
-            1.45f  // other
-        };
-        constexpr std::array<float, kSourceCount> kSourceDbWeight {
-            1.85f, // vocals
-            2.10f, // drums
-            1.45f, // bass
-            1.60f, // guitar
-            0.90f  // other
-        };
-
-        float dominantMask = 0.0f;
-        float secondMask = 0.0f;
-        for (int source = 0; source < kSourceCount; ++source) {
-            const float mask = smoothedMasks[source][static_cast<size_t>(k)];
-            if (mask >= dominantMask) {
-                secondMask = dominantMask;
-                dominantMask = mask;
-            } else if (mask > secondMask) {
-                secondMask = mask;
-            }
-        }
-
-        const float ownershipConfidence = clamp01((dominantMask - 0.24f) / 0.40f)
-            * clamp01((dominantMask - secondMask - 0.04f) / 0.22f);
-
-        float gainDb = 0.0f;
-        for (int source = 0; source < kSourceCount; ++source) {
-            const float rawMask = smoothedMasks[source][static_cast<size_t>(k)];
-            const float focusedMask = std::pow(clamp01(rawMask),
-                                               kSourceMaskExponent[static_cast<size_t>(source)]);
-            const float confidentGainDb = lerp(0.0f,
-                                               effectiveGainDb[static_cast<size_t>(source)],
-                                               usableConfidence);
-            gainDb += focusedMask * kSourceDbWeight[static_cast<size_t>(source)] * confidentGainDb;
-        }
-        gainDb *= 0.70f + 0.65f * ownershipConfidence;
-        gainDb = juce::jlimit(-kMaxCompositeAbsDb, kMaxCompositeAbsDb, gainDb);
-        compositeGain[static_cast<size_t>(k)] = juce::jlimit(juce::Decibels::decibelsToGain(-modeProfile.maxCutDb),
-                                                             juce::Decibels::decibelsToGain(modeProfile.maxBoostDb),
-                                                             juce::Decibels::decibelsToGain(gainDb));
     }
 
     for (int k = 0; k < kBins; ++k)
@@ -664,11 +637,12 @@ float Dsp::mappedSourceGainDb(const int sourceIndex) const noexcept {
     const auto& modeProfile = currentModeProfile();
     const float strength = currentControlValues[static_cast<size_t>(kStrengthIndex)];
     const float centered = (currentControlValues[static_cast<size_t>(sourceIndex)] - 0.5f) * 2.0f;
+    // Asymmetric: boosts use kMaxBoostDb, cuts use kMaxCutDb so param=0 reaches silence.
     const float db = centered >= 0.0f
-        ? centered * kMaxUserSourceAbsDb
-        : centered * kMaxUserSourceAbsDb;
+        ? centered * kMaxBoostDb
+        : centered * kMaxCutDb;
     return lerp(0.0f,
-                juce::jlimit(-kMaxUserSourceAbsDb, kMaxUserSourceAbsDb, db) * modeProfile.globalStrength,
+                juce::jlimit(-kMaxCutDb, kMaxBoostDb, db) * modeProfile.globalStrength,
                 strength);
 }
 

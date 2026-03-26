@@ -17,6 +17,7 @@ constexpr std::string_view kBassParam = "bass";
 constexpr std::string_view kGuitarParam = "guitar";
 constexpr std::string_view kOtherParam = "other";
 constexpr std::string_view kStrengthParam = "strength";
+constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kRecordingTypeParam = "recordingType";
 
 constexpr std::array<std::string_view, vxsuite::ProductIdentity::maxControlBankControls> kBankParamIds {
@@ -28,53 +29,39 @@ constexpr std::array<std::string_view, vxsuite::ProductIdentity::maxControlBankC
 };
 
 constexpr std::array<std::string_view, vxsuite::ProductIdentity::maxControlBankControls> kBankHints {
-    "Lead-vocal rebalance around 0 dB center.",
-    "Transient and percussive rebalance around 0 dB center.",
-    "Low-end foundation rebalance around 0 dB center.",
-    "Broad harmonic midrange rebalance around 0 dB center.",
-    "Residual material rebalance around 0 dB center.",
-    "Scale all five rebalance moves together."
+    "Lead-vocal stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
+    "Drums stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
+    "Bass stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
+    "Guitar stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
+    "Other stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
+    "Scale all five stem moves together."
 };
 
 constexpr std::array<float, vxsuite::ProductIdentity::maxControlBankControls> kBankDefaults {
     0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 1.0f
 };
 
-vxsuite::ModelPackage makeRebalancePackage() {
-    return {
-        "rebalance_umx4",
-        "Rebalance ML Model",
-        "VX Rebalance uses a lightweight music-source model for ML mode. Downloading it enables stronger vocals, drums, bass, guitar, and other source control without making the plugin bundle huge.",
-        {
-            { "rebalance_umx4.json", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json" },
-            { "vx_rebalance_umx4.onnx", "https://raw.githubusercontent.com/daverage/VxStudio/master/assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.onnx" }
-        }
-    };
-}
-
 } // namespace
 
 VXRebalanceAudioProcessor::VXRebalanceAudioProcessor()
     : ProcessorBase(makeIdentity(), makeParameterLayout()) {
-    startTimerHz(20);
 }
 
-VXRebalanceAudioProcessor::~VXRebalanceAudioProcessor() {
-    stopTimer();
-}
-
-vxsuite::ModelPackage VXRebalanceAudioProcessor::modelPackage() {
-    return makeRebalancePackage();
-}
+VXRebalanceAudioProcessor::~VXRebalanceAudioProcessor() = default;
 
 vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity id {};
     id.productName = kProductName;
     id.shortTag = kShortTag;
+    id.modeParamId = kModeParam;
+    id.selectorLabel = "Engine";
+    id.selectorChoiceLabels = { "DSP" };
+    id.defaultMode = vxsuite::Mode::vocal;
     id.auxSelectorParamId = kRecordingTypeParam;
     id.auxSelectorLabel = "Recording Type";
     id.auxSelectorChoiceLabels = { "Studio", "Live", "Phone / Rough" };
     id.auxSelectorDefaultIndex = 0;
+    id.auxSelectorFollowsGeneralMode = false;
     id.controlBankCount = vxsuite::rebalance::Dsp::kControlCount;
     id.controlBankVertical = true;
     id.compactControlBankLayout = true;
@@ -97,6 +84,12 @@ vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
 juce::AudioProcessorValueTreeState::ParameterLayout VXRebalanceAudioProcessor::makeParameterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { kModeParam.data(), 1 },
+        "Engine",
+        juce::StringArray { "DSP" },
+        0,
+        vxsuite::makeChoiceAttributes("Engine")));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { kRecordingTypeParam.data(), 1 },
         "Recording Type",
         juce::StringArray { "Studio", "Live", "Phone / Rough" },
@@ -109,7 +102,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRebalanceAudioProcessor::m
             vxsuite::toJuceString(kBankLabels[static_cast<size_t>(i)]),
             juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
             0.5f,
-            vxsuite::makeCenteredDecibelFloatAttributes(24.0f)));
+            vxsuite::makeCenteredPercentFloatAttributes()));
     }
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -124,65 +117,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRebalanceAudioProcessor::m
 juce::String VXRebalanceAudioProcessor::getStatusText() const {
     const auto recordingType = vxsuite::readChoiceIndex(parameters, kRecordingTypeParam, 0);
     const juce::String modeLabel = recordingType == 1 ? "Live" : (recordingType == 2 ? "Phone / Rough" : "Studio");
-    if (isModelDownloadInProgress())
-        return "Linked-stereo source rebalance  -  downloading ML model  -  " + modeLabel + "  -  latency "
-            + juce::String(dsp.latencySamples()) + " samples";
-    if (!isModelReadyForUi())
-        return "Linked-stereo source rebalance  -  ML model not installed  -  " + modeLabel + "  -  latency "
-            + juce::String(dsp.latencySamples()) + " samples";
-    return "Linked-stereo source rebalance  -  " + modelRunner.statusText() + "  -  " + modeLabel + "  -  latency "
+    return "Linked-stereo source rebalance  -  DSP heuristic engine  -  " + modeLabel + "  -  latency "
         + juce::String(dsp.latencySamples()) + " samples";
-}
-
-bool VXRebalanceAudioProcessor::isModelReadyForUi() const noexcept {
-    return vxsuite::ModelAssetService::instance().isReady(modelPackage())
-        || modelRunner.hasDiscoveredModel()
-        || modelRunner.isUsingMlMasks();
-}
-
-bool VXRebalanceAudioProcessor::isModelDownloadInProgress() const noexcept {
-    return vxsuite::ModelAssetService::instance().isDownloading(modelPackage());
-}
-
-float VXRebalanceAudioProcessor::getModelDownloadProgress() const noexcept {
-    return vxsuite::ModelAssetService::instance().progress(modelPackage());
-}
-
-bool VXRebalanceAudioProcessor::shouldPromptForModelDownload() const noexcept {
-    return !isModelReadyForUi()
-        && vxsuite::ModelAssetService::instance().shouldPrompt(modelPackage());
-}
-
-juce::String VXRebalanceAudioProcessor::getModelDownloadButtonText() const {
-    if (isModelDownloadInProgress())
-        return "Downloading Model...";
-    return "Download ML Model";
-}
-
-juce::String VXRebalanceAudioProcessor::getModelDownloadPromptTitle() const {
-    return "Download Rebalance ML Model?";
-}
-
-juce::String VXRebalanceAudioProcessor::getModelDownloadPromptBody() const {
-    return modelPackage().reason
-        + "\n\nThe model will be stored in your user model cache so the VST stays smaller. If you skip this, ML mode stays unavailable until you download it later.";
-}
-
-void VXRebalanceAudioProcessor::requestModelDownload() {
-    vxsuite::ModelAssetService::instance().requestDownload(modelPackage());
-}
-
-void VXRebalanceAudioProcessor::declineModelDownloadPrompt() {
-    vxsuite::ModelAssetService::instance().declinePrompt(modelPackage());
 }
 
 void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
     dsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
-    modelRunner.prepare(currentSampleRateHz, currentBlockSize,
-        vxsuite::ModelAssetService::instance().packageFile(modelPackage(), "vx_rebalance_umx4.onnx"));
-    observedModelReady = isModelReadyForUi();
     dryDelayLines.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())),
                          std::vector<float>(static_cast<size_t>(std::max(1, dsp.latencySamples())), 0.0f));
     dryDelayWritePos = 0;
@@ -192,20 +134,11 @@ void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int 
 
 void VXRebalanceAudioProcessor::resetSuite() {
     dsp.reset();
-    modelRunner.reset();
     smoothedControls = kBankDefaults;
     controlsPrimed = false;
     for (auto& channel : dryDelayLines)
         std::fill(channel.begin(), channel.end(), 0.0f);
     dryDelayWritePos = 0;
-}
-
-void VXRebalanceAudioProcessor::timerCallback() {
-    const bool readyNow = isModelReadyForUi();
-    if (readyNow && !observedModelReady && currentSampleRateHz > 1000.0 && currentBlockSize > 0)
-        modelRunner.prepare(currentSampleRateHz, currentBlockSize,
-            vxsuite::ModelAssetService::instance().packageFile(modelPackage(), "vx_rebalance_umx4.onnx"));
-    observedModelReady = readyNow;
 }
 
 void VXRebalanceAudioProcessor::processNeutralWithLatency(juce::AudioBuffer<float>& buffer) {
@@ -281,14 +214,11 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         }
     }
 
-    if (effectivelyNeutral)
-    {
+    if (effectivelyNeutral) {
         processNeutralWithLatency(buffer);
         return;
     }
 
-    modelRunner.analyseBlock(buffer, recordingTypeEnum, signalQuality);
-    dsp.setMlMaskSnapshot(modelRunner.latestMaskSnapshot());
     dsp.setControlTargets(smoothedControls);
     dsp.process(buffer);
 }

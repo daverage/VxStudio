@@ -31,11 +31,18 @@ public:
         }
 
         const int totalFiles = std::max(1, static_cast<int>(package.files.size()));
+        int64_t totalWeight = 0;
+        for (const auto& file : package.files)
+            totalWeight += std::max<int64_t>(1, file.expectedBytes);
+        totalWeight = std::max<int64_t>(1, totalWeight);
+        int64_t completedWeight = 0;
+
         for (int index = 0; index < totalFiles; ++index) {
             if (shouldExit())
                 return jobHasFinished;
 
             const auto& file = package.files[static_cast<size_t>(index)];
+            const int64_t fileWeight = std::max<int64_t>(1, file.expectedBytes);
             if (file.url.isEmpty() || file.fileName.isEmpty()) {
                 state.lastError = "package manifest is incomplete";
                 state.state.store(static_cast<int>(ModelAssetService::State::failed), std::memory_order_relaxed);
@@ -69,6 +76,7 @@ public:
 
             constexpr int kChunkSize = 1 << 16;
             juce::HeapBlock<char> buffer(kChunkSize);
+            int64_t bytesWritten = 0;
             for (;;) {
                 if (shouldExit()) {
                     tempFile.deleteFile();
@@ -79,6 +87,10 @@ public:
                 if (bytesRead <= 0)
                     break;
                 out->write(buffer.getData(), static_cast<size_t>(bytesRead));
+                bytesWritten += static_cast<int64_t>(bytesRead);
+                const auto weightedBytes = std::min<int64_t>(fileWeight, bytesWritten);
+                const auto progress = static_cast<float>(completedWeight + weightedBytes) / static_cast<float>(totalWeight);
+                state.progress.store(juce::jlimit(0.0f, 0.999f, progress), std::memory_order_relaxed);
             }
 
             out->flush();
@@ -90,7 +102,8 @@ public:
                 return jobHasFinished;
             }
 
-            state.progress.store(static_cast<float>(index + 1) / static_cast<float>(totalFiles), std::memory_order_relaxed);
+            completedWeight += fileWeight;
+            state.progress.store(static_cast<float>(completedWeight) / static_cast<float>(totalWeight), std::memory_order_relaxed);
         }
 
         state.lastError.clear();

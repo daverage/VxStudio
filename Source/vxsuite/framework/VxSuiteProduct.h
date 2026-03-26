@@ -8,7 +8,8 @@ namespace vxsuite {
 
 enum class Mode : int {
     vocal = 0,
-    general = 1
+    general = 1,
+    extended = 2
 };
 
 enum class StageType : std::uint8_t {
@@ -59,10 +60,11 @@ struct ProductIdentity {
     float tertiaryDefaultValue = 0.5f;
     float quaternaryDefaultValue = 0.5f;
     std::string_view selectorLabel = "Mode";
-    std::array<std::string_view, 2> selectorChoiceLabels {};
+    std::array<std::string_view, 3> selectorChoiceLabels {};
     std::string_view auxSelectorLabel;
     std::array<std::string_view, 3> auxSelectorChoiceLabels {};
     int auxSelectorDefaultIndex = 0;
+    bool auxSelectorFollowsGeneralMode = true;
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
     bool showLevelTrace = false;

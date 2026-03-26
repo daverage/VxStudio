@@ -4,3 +4,9 @@ Source/vxsuite/vst/.DS_Store
 *.swp
 *.swo
 tasks/reports/rebalance-openunmix-v20/brightside_masks.npz
+assets/rebalance/models/demucs/htdemucs_6s.onnx
+assets/rebalance/models/demucs/htdemucs_6s.onnx.data
+assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json
+assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.tar.gz
+assets/rebalance/models/vx_rebalance_spleeter5.onnx
+assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json
