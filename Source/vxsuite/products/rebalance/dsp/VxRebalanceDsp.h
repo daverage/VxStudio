@@ -40,8 +40,8 @@ public:
 
     struct RebalanceModeProfile {
         SourceBandProfile vocals;
-        SourceBandProfile bass;
         SourceBandProfile drums;
+        SourceBandProfile bass;
         SourceBandProfile guitars;
         SourceBandProfile other;
         float confidenceFloor = 0.18f;
@@ -67,6 +67,73 @@ public:
     static constexpr int kFftSize = 1 << kFftOrder;
     static constexpr int kHopSize = kFftSize / 4;
     static constexpr int kBins = kFftSize / 2 + 1;
+
+    // Harmonic grouping constants
+    static constexpr int kMaxPeaks = 24;
+    static constexpr int kMaxClusters = 24;
+    static constexpr int kClusterHarmonics = 8;
+
+    // Phase 2: Object tracking constants
+    static constexpr int kMaxTrackedClusters = 32;
+    static constexpr int kMaxTransientEvents = 32;
+
+    struct SpectralPeak {
+        int bin = 0;
+        float hz = 0.0f;
+        float magnitude = 0.0f;
+    };
+
+    struct HarmonicCluster {
+        bool active = false;
+        int rootBin = 0;
+        float rootHz = 0.0f;
+        float strength = 0.0f;
+        int memberCount = 0;
+        std::array<int, kClusterHarmonics> memberBins {};
+        std::array<float, kSourceCount> sourceScores {};
+        int dominantSource = otherSource;
+        float confidence = 0.0f;
+    };
+
+    // Phase 2: Tracked cluster for object continuity across frames
+    struct TrackedCluster {
+        bool active = false;
+        int id = -1;
+
+        float estimatedF0Hz = 0.0f;
+        float meanHz = 0.0f;
+        float meanMagnitude = 0.0f;
+
+        float stereoCenter = 0.0f;
+        float stereoWidth = 0.0f;
+
+        float onsetStrength = 0.0f;
+        float sustainStrength = 0.0f;
+
+        int dominantSource = otherSource;
+        std::array<float, kSourceCount> sourceProbabilities {};
+
+        float confidence = 0.0f;
+        float ageFrames = 0.0f;
+        float inactiveFrames = 0.0f;
+
+        std::array<int, kClusterHarmonics> lastMemberBins {};
+        int lastMemberCount = 0;
+    };
+
+    // Phase 2: Transient event for attack handling
+    struct TransientEvent {
+        bool active = false;
+        int id = -1;
+        int birthFrame = 0;
+        float peakHz = 0.0f;
+        float bandwidthHz = 0.0f;
+        float magnitude = 0.0f;
+        float stereoWidth = 0.0f;
+        float drumProbability = 0.0f;
+        float guitarProbability = 0.0f;
+        float vocalProbability = 0.0f;
+    };
 
     struct AnalysisContext {
         float vocalDominance = 0.0f;
@@ -110,6 +177,44 @@ private:
     [[nodiscard]] float gaussianPeak(float x, float centre, float sigma) const noexcept;
     [[nodiscard]] float mappedSourceGainDb(int sourceIndex) const noexcept;
 
+    // Harmonic grouping and source persistence
+    void detectSpectralPeaks(const std::array<float, kBins>& analysisMag);
+    void buildHarmonicClusters(const std::array<float, kBins>& analysisMag);
+    void analyseClusterSources(const std::array<float, kBins>& analysisMag,
+                               const std::array<float, kBins>& centerWeight,
+                               const std::array<float, kBins>& sideWeight,
+                               float transientPrior,
+                               float steadyPriorScale);
+    void buildSpectralEnvelope(const std::array<float, kBins>& analysisMag);
+    [[nodiscard]] float vocalFormantSupport(float hz, float localMag, float envelopeMag) const noexcept;
+    [[nodiscard]] float guitarTonalSupport(float hz, float localMag, float envelopeMag,
+                                           float centered, float wide, float steadyPrior) const noexcept;
+    void applyClusterInfluence(std::array<std::array<float, kBins>, kSourceCount>& rawWeights) noexcept;
+    void applySourcePersistence(std::array<std::array<float, kBins>, kSourceCount>& conditionedMasks,
+                                float transientPrior) noexcept;
+
+    // Phase 2: Object-based tracking and rendering
+    void updateTrackedClusters(const std::array<float, kBins>& analysisMag,
+                               const std::array<float, kBins>& centerWeight,
+                               const std::array<float, kBins>& sideWeight);
+    [[nodiscard]] float estimateClusterF0Hz(const HarmonicCluster& cluster) const noexcept;
+    [[nodiscard]] int findBestTrackedClusterMatch(const HarmonicCluster& cluster) const noexcept;
+    void ageTrackedClusters() noexcept;
+    void detectTransientEvents(const std::array<float, kBins>& analysisMag,
+                               const std::array<float, kBins>& centerWeight,
+                               const std::array<float, kBins>& sideWeight,
+                               float transientPrior);
+    void updateTransientEvents() noexcept;
+    void updateObjectSourceProbabilities(const std::array<float, kBins>& analysisMag,
+                                         const std::array<float, kBins>& centerWeight,
+                                         const std::array<float, kBins>& sideWeight,
+                                         float transientPrior,
+                                         float steadyPriorScale);
+    void writeObjectOwnershipToBins() noexcept;
+    void buildForegroundBackgroundRender(const std::array<float, kBins>& analysisMag) noexcept;
+    [[nodiscard]] float computeSourceForegroundPriority(int source, float userControl, float confidence) const noexcept;
+    [[nodiscard]] float computeSourceSuppressionBias(int source, float userControl, float confidence) const noexcept;
+
     double sampleRateHz = 48000.0;
     int preparedChannels = 0;
     int maxBlockSizePrepared = 0;
@@ -133,6 +238,29 @@ private:
     std::array<float, kBins> compositeGain {};
     std::array<std::array<float, kBins>, kSourceCount> smoothedMasks {};
     bool masksPrimed = false;
+
+    // Harmonic grouping and source persistence state
+    std::array<int, kBins> previousWinningSource {};
+    std::array<float, kBins> previousWinningConfidence {};
+    std::array<float, kBins> sourcePersistence {};
+
+    std::array<SpectralPeak, kMaxPeaks> detectedPeaks {};
+    std::array<HarmonicCluster, kMaxClusters> harmonicClusters {};
+    int detectedPeakCount = 0;
+    int harmonicClusterCount = 0;
+
+    std::array<float, kBins> smoothedLogSpectrum {};
+    std::array<float, kBins> spectralEnvelope {};
+
+    // Phase 2: Object tracking state
+    std::array<TrackedCluster, kMaxTrackedClusters> trackedClusters {};
+    int nextTrackedClusterId = 1;
+    std::array<TransientEvent, kMaxTransientEvents> transientEvents {};
+    int nextTransientEventId = 1;
+    std::array<int, kBins> binOwningCluster {};
+    std::array<float, kBins> binOwnershipConfidence {};
+    std::array<float, kBins> spectralFlux {};
+    int currentFrameCount = 0;
 };
 
 } // namespace vxsuite::rebalance
