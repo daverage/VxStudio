@@ -126,9 +126,7 @@ void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int sa
 void VXCleanupAudioProcessor::resetSuite() {
     polishChain.reset();
     tonalAnalysis.reset();
-    smoothedCleanup = 0.0f;
-    smoothedBody = 0.5f;
-    smoothedFocus = 0.5f;
+    controls.reset(0.0f, 0.5f, 0.5f);
     std::fill(spectralFifo.begin(), spectralFifo.end(), 0.0f);
     std::fill(spectralFrame.begin(), spectralFrame.end(), 0.0f);
     spectralWritePos = 0;
@@ -144,7 +142,6 @@ void VXCleanupAudioProcessor::resetSuite() {
     outputTrimmer.reset();
     smoothedMakeupGain = 1.0f;
     classifiersPrimed = false;
-    controlsPrimed = false;
 }
 
 void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -169,16 +166,9 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
     const float focusTarget = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId, 0.5f);
 
-    if (!controlsPrimed) {
-        smoothedCleanup = cleanupTarget;
-        smoothedBody = bodyTarget;
-        smoothedFocus = focusTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedCleanup = vxsuite::smoothBlockValue(smoothedCleanup, cleanupTarget, currentSampleRateHz, numSamples, 0.050f);
-        smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget, currentSampleRateHz, numSamples, 0.090f);
-        smoothedFocus = vxsuite::smoothBlockValue(smoothedFocus, focusTarget, currentSampleRateHz, numSamples, 0.070f);
-    }
+    const auto [smoothedCleanup, smoothedBody, smoothedFocus] = controls.process(
+        cleanupTarget, bodyTarget, focusTarget, currentSampleRateHz, numSamples,
+        0.050f, 0.090f, 0.070f);
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto& modePolicy = currentModePolicy();

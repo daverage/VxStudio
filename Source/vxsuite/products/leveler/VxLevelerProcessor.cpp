@@ -138,9 +138,7 @@ void VXLevelerAudioProcessor::prepareSuite(const double sampleRate, const int sa
 void VXLevelerAudioProcessor::resetSuite() {
     detector.reset();
     dsp.reset();
-    smoothedLevel = 0.0f;
-    smoothedControl = 0.0f;
-    controlsPrimed = false;
+    controls.reset(0.0f, 0.0f);
     analyzeToggleLatched = false;
     analysisActive = false;
     analysisReady = dsp.hasOfflineTargetMap();
@@ -161,14 +159,10 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float levelTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float controlTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
 
-    if (!controlsPrimed) {
-        smoothedLevel = levelTarget;
-        smoothedControl = controlTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedLevel = vxsuite::smoothBlockValue(smoothedLevel, levelTarget, currentSampleRateHz, numSamples, 0.080f);
-        smoothedControl = vxsuite::smoothBlockValue(smoothedControl, controlTarget, currentSampleRateHz, numSamples, 0.080f);
-    }
+    const auto [smoothedLevel, smoothedControl] = controls.process(
+        levelTarget, controlTarget,
+        currentSampleRateHz, numSamples,
+        0.080f, 0.080f);
 
     vxsuite::leveler::Dsp::Params params {};
     params.level = juce::jlimit(0.0f, 1.0f, smoothedLevel);

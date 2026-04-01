@@ -85,10 +85,7 @@ void VXOptoCompAudioProcessor::prepareSuite(const double sampleRate, const int s
 
 void VXOptoCompAudioProcessor::resetSuite() {
     optoDsp.reset();
-    smoothedPeakReduction = 0.0f;
-    smoothedBody = 0.5f;
-    smoothedGain = 0.5f;
-    controlsPrimed = false;
+    controls.reset(0.0f, 0.5f, 0.5f);
 }
 
 void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
@@ -103,16 +100,10 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float bodyTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
     const float gainTarget = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId, 0.5f);
 
-    if (!controlsPrimed) {
-        smoothedPeakReduction = peakReductionTarget;
-        smoothedBody = bodyTarget;
-        smoothedGain = gainTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedPeakReduction = vxsuite::smoothBlockValue(smoothedPeakReduction, peakReductionTarget, currentSampleRateHz, numSamples, 0.080f);
-        smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget, currentSampleRateHz, numSamples, 0.100f);
-        smoothedGain = vxsuite::smoothBlockValue(smoothedGain, gainTarget, currentSampleRateHz, numSamples, 0.080f);
-    }
+    const auto [smoothedPeakReduction, smoothedBody, smoothedGain] = controls.process(
+        peakReductionTarget, bodyTarget, gainTarget,
+        currentSampleRateHz, numSamples,
+        0.080f, 0.100f, 0.080f);
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto voiceContext = getVoiceContextSnapshot();

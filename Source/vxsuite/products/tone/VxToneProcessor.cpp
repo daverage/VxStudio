@@ -74,9 +74,7 @@ void VXToneAudioProcessor::prepareSuite(const double sampleRate, const int /*sam
 void VXToneAudioProcessor::resetSuite() {
     for (auto& s : bassState)   s = BiquadState{};
     for (auto& s : trebleState) s = BiquadState{};
-    smoothedBass   = 0.5f;
-    smoothedTreble = 0.5f;
-    controlsPrimed = false;
+    controls.reset(0.5f, 0.5f);
 }
 
 void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -90,14 +88,8 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     const float bassTarget   = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
     const float trebleTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
 
-    if (!controlsPrimed) {
-        smoothedBass   = bassTarget;
-        smoothedTreble = trebleTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedBass   = vxsuite::smoothBlockValue(smoothedBass,   bassTarget,   currentSampleRateHz, numSamples, 0.060f);
-        smoothedTreble = vxsuite::smoothBlockValue(smoothedTreble, trebleTarget, currentSampleRateHz, numSamples, 0.060f);
-    }
+    const auto [smoothedBass, smoothedTreble] = controls.process(
+        bassTarget, trebleTarget, currentSampleRateHz, numSamples, 0.060f, 0.060f);
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto voiceContext = getVoiceContextSnapshot();

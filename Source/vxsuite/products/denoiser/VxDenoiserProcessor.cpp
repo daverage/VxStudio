@@ -1,5 +1,6 @@
 #include "VxDenoiserProcessor.h"
 #include "../../framework/VxSuiteHelpContent.h"
+#include "../../framework/VxSuiteLightAnalysis.h"
 #include "VxSuiteVersions.h"
 
 #include <cmath>
@@ -12,40 +13,6 @@ constexpr std::string_view kCleanParam   = "clean";
 constexpr std::string_view kGuardParam   = "guard";
 constexpr std::string_view kModeParam    = "mode";
 constexpr std::string_view kListenParam  = "listen";
-
-float computeBufferRms(const juce::AudioBuffer<float>& buffer) {
-    const int channels = buffer.getNumChannels();
-    const int samples = buffer.getNumSamples();
-    if (channels <= 0 || samples <= 0)
-        return 0.0f;
-
-    double sumSquares = 0.0;
-    int count = 0;
-    for (int ch = 0; ch < channels; ++ch) {
-        const auto* data = buffer.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i) {
-            const double sample = data[i];
-            sumSquares += sample * sample;
-        }
-        count += samples;
-    }
-
-    return count > 0 ? static_cast<float>(std::sqrt(sumSquares / static_cast<double>(count))) : 0.0f;
-}
-
-float computeChannelRms(const juce::AudioBuffer<float>& buffer, const int channel) {
-    if (channel < 0 || channel >= buffer.getNumChannels() || buffer.getNumSamples() <= 0)
-        return 0.0f;
-
-    double sumSquares = 0.0;
-    const auto* data = buffer.getReadPointer(channel);
-    for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        const double sample = data[i];
-        sumSquares += sample * sample;
-    }
-
-    return static_cast<float>(std::sqrt(sumSquares / static_cast<double>(buffer.getNumSamples())));
-}
 
 } // namespace
 
@@ -95,8 +62,11 @@ void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
     denoiserDspMono.prepare(currentSampleRateHz, samplesPerBlock);
     denoiserDspLeft.prepare(currentSampleRateHz, samplesPerBlock);
     denoiserDspRight.prepare(currentSampleRateHz, samplesPerBlock);
-    leftScratch.setSize(1, std::max(1, samplesPerBlock), false, false, true);
-    rightScratch.setSize(1, std::max(1, samplesPerBlock), false, false, true);
+    // Pre-allocate scratch buffers to maximum typical block size.
+    // This prevents heap allocation in the realtime audio thread (processProduct).
+    const int maxBlockSize = std::max(samplesPerBlock, 4096);
+    leftScratch.setSize(1, maxBlockSize, false, false, true);
+    rightScratch.setSize(1, maxBlockSize, false, false, true);
     setReportedLatencySamples(denoiserDspMono.getLatencySamples());
     resetSuite();
 }
@@ -105,12 +75,10 @@ void VXDenoiserAudioProcessor::resetSuite() {
     denoiserDspMono.reset();
     denoiserDspLeft.reset();
     denoiserDspRight.reset();
-    smoothedClean  = 0.0f;
-    smoothedGuard  = 0.5f;
+    controls.reset(0.0f, 0.5f);
     smoothedMakeupGain = 1.0f;
     smoothedStereoMakeupGain = { 1.0f, 1.0f };
     outputTrimmer.reset();
-    controlsPrimed = false;
 }
 
 void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
@@ -122,16 +90,10 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     const float cleanTarget = vxsuite::readNormalized(parameters, kCleanParam, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, kGuardParam, 0.5f);
-    const float dryRms = computeBufferRms(buffer);
+    const float dryRms = vxsuite::analysis::rms(buffer);
 
-    if (!controlsPrimed) {
-        smoothedClean  = cleanTarget;
-        smoothedGuard  = guardTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedClean = vxsuite::smoothBlockValue(smoothedClean, cleanTarget, currentSampleRateHz, numSamples, 0.060f);
-        smoothedGuard = vxsuite::smoothBlockValue(smoothedGuard, guardTarget, currentSampleRateHz, numSamples, 0.080f);
-    }
+    const auto [smoothedClean, smoothedGuard] = controls.process(
+        cleanTarget, guardTarget, currentSampleRateHz, numSamples, 0.060f, 0.080f);
 
     const bool isVoice  = vxsuite::readMode(parameters, productIdentity)
                        == vxsuite::Mode::vocal;
@@ -172,8 +134,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     ensureLatencyAlignedListenDry(numSamples);
     const bool stereo = buffer.getNumChannels() >= 2;
     if (stereo) {
-        leftScratch.setSize(1, numSamples, false, false, true);
-        rightScratch.setSize(1, numSamples, false, false, true);
+        // Use pre-allocated scratch buffers (no allocation on audio thread).
         leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
         rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
         denoiserDspLeft.processInPlace(leftScratch, effectiveClean, opts);
@@ -188,8 +149,8 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 6.0f : 5.0f);
     if (channels >= 2) {
         for (int ch = 0; ch < 2; ++ch) {
-            const float wetRms = computeChannelRms(buffer, ch);
-            const float channelDryRms = computeChannelRms(getLatencyAlignedListenDryBuffer(), ch);
+            const float wetRms = vxsuite::analysis::rmsChannel(buffer, ch);
+            const float channelDryRms = vxsuite::analysis::rmsChannel(getLatencyAlignedListenDryBuffer(), ch);
             const auto& dsp = (ch == 0) ? denoiserDspLeft : denoiserDspRight;
             const float speechPresence = juce::jlimit(0.0f, 1.0f, dsp.getSignalPresence());
             float compensationTarget = 1.0f;
@@ -216,7 +177,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                 buffer.applyGain(ch, 0, numSamples, smoothedGain);
         }
     } else {
-        const float wetRms = computeBufferRms(buffer);
+        const float wetRms = vxsuite::analysis::rms(buffer);
         const float speechPresence = aggregatedSignalPresence(channels);
         if (dryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
             const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);

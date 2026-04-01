@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteFft.h"
 #include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteSpectralHelpers.h"
@@ -43,9 +44,7 @@ private:
     int spectralWritePos = 0;
     int spectralSamplesReady = 0;
     double currentSampleRateHz = 48000.0;
-    float smoothedCleanup = 0.0f;
-    float smoothedBody = 0.5f;
-    float smoothedFocus = 0.5f;
+    vxsuite::BlockSmoothedControlTriple controls;
     float spectralFlatness = 0.0f;
     float harmonicity = 0.0f;
     float highFreqRatio = 0.0f;
@@ -57,5 +56,4 @@ private:
     vxsuite::OutputTrimmer outputTrimmer;
     float smoothedMakeupGain = 1.0f;
     bool classifiersPrimed = false;
-    bool controlsPrimed = false;
 };

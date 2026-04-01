@@ -21,7 +21,9 @@ The framework collapses that to **three pure-virtual methods plus one identity d
 | JUCE APVTS parameter layout | `createSimpleParameterLayout(identity)` |
 | Plugin name (`"VX Tone"` etc.) | `ProcessorBase::getName()` |
 | Default editor (knobs, help button, status bar, responsive text/layout) | `ProcessorBase::createEditor()` → `EditorBase` |
-| Per-block exponential parameter smoothing | `VxSuiteBlockSmoothing.h` |
+| Per-block exponential parameter smoothing (inline) | `VxSuiteBlockSmoothing.h` |
+| **Encapsulated parameter smoothing helpers** | `VxSuiteBlockSmoothedControl.h` |
+| **Lightweight audio analysis** (RMS, peak) | `VxSuiteLightAnalysis.h` |
 | Shared telemetry publishers for analysers | `VxSuiteSpectrumTelemetry.h` |
 | Shared signal-quality analysis (`mono`, `compression`, `tilt`, confidence) | `VxSuiteSignalQuality.h` |
 | Suite-wide final output safety trimmer | `ProcessorBase` + `VxSuiteOutputTrimmer.h` |
@@ -121,16 +123,26 @@ The shared editor is also where the current baseline resize/readability behavior
 
 Instantaneous peak-limiting safety net: if any sample exceeds the ceiling the gain snaps down, then releases slowly back to unity.
 
-Current framework behavior:
+**Two-stage layering:**
 
-- `ProcessorBase` now applies a final emergency output trimmer automatically for every VX processor.
-- Product-local trimmers are still useful when a specific DSP needs tighter local control before the shared final safety stage.
+- **Framework stage (ProcessorBase)**: A final emergency output trimmer is applied automatically after all products return from `processProduct()`. This is a mandatory safety net that protects against DSP bugs or measurement errors.
+
+- **Product-local stage (optional)**: Individual products can apply a local trimmer during `processProduct()` for tighter control on a specific DSP stage (e.g., before dynamics compensation). This allows early control when needed.
+
+**When to use product-local trimmer:**
+- Your DSP algorithm can produce peaks exceeding headroom during intermediate stages
+- You want per-stage protection rather than just a final safety net
+- You're doing aggressive spectral processing or dynamics that need local limiting
+
+**When NOT to use (rely on framework instead):**
+- Simple EQ or gain staging (framework final trimmer is sufficient)
+- You're not sure if you need it (always profile first)
 
 ```cpp
 vxsuite::OutputTrimmer localTrimmer;
 // in prepareSuite: localTrimmer.setReleaseSeconds(0.18f);  // optional
 // in resetSuite:   localTrimmer.reset();
-// at end of processProduct:
+// in processProduct (early, before other stages):
 localTrimmer.process(buffer, currentSampleRateHz);
 ```
 
@@ -191,22 +203,66 @@ Avoid putting product-specific weighting laws into the framework. Shared detecti
 
 ---
 
-### Block smoothing  (`VxSuiteBlockSmoothing.h`)
+### Block smoothing  (`VxSuiteBlockSmoothing.h`, `VxSuiteBlockSmoothedControl.h`)
 
-Smooth a parameter value block-by-block without per-sample branching:
+Smooth parameter values block-by-block without per-sample branching. Two patterns:
 
+**Inline (low-level):**
 ```cpp
 float smoothed = 0.5f;
 // each block:
 smoothed = vxsuite::smoothBlockValue(smoothed, target, sampleRate, numSamples, 0.06f /*time constant s*/);
 ```
 
-Prime on first block to avoid a ramp from zero:
+**Encapsulated (recommended for products):**
+Use `BlockSmoothedControl` (1 param), `BlockSmoothedControlPair` (2 params), or `BlockSmoothedControlTriple` (3 params):
 
 ```cpp
-if (!primed) { smoothed = target; primed = true; }
-else         { smoothed = vxsuite::smoothBlockValue(...); }
+vxsuite::BlockSmoothedControlPair controls;  // member variable
+
+void resetSuite() {
+    controls.reset(0.5f, 0.5f);  // default values
+}
+
+void processProduct(AudioBuffer<float>& buffer, ...) {
+    float target1 = readNormalized(parameters, paramId1, 0.5f);
+    float target2 = readNormalized(parameters, paramId2, 0.5f);
+
+    // Single call handles priming + smoothing
+    const auto [smoothed1, smoothed2] = controls.process(
+        target1, target2, sampleRate, numSamples, 0.060f, 0.080f);
+
+    // Use smoothed1 and smoothed2 in DSP
+}
 ```
+
+The helper manages the primer flag internally, simplifying product code and centralizing smoothing logic.
+
+---
+
+### Lightweight analysis  (`VxSuiteLightAnalysis.h`)
+
+Realtime-safe, zero-allocation audio analysis primitives for per-block measurement:
+
+```cpp
+#include "../../framework/VxSuiteLightAnalysis.h"
+
+// All channels
+float rmsValue = vxsuite::analysis::rms(buffer);
+float peakValue = vxsuite::analysis::peak(buffer);
+
+// Single channel
+float chRms = vxsuite::analysis::rmsChannel(buffer, channelIndex);
+float chPeak = vxsuite::analysis::peakChannel(buffer, channelIndex);
+```
+
+These are designed for:
+- RMS-based makeup gain compensation
+- Peak detection for protection logic
+- Level metering and analysis
+- Any analysis that fits in a single block without state
+
+All functions are `noexcept` and contain no allocations, making them safe for the realtime path.
 
 ---
 
@@ -221,6 +277,7 @@ Source/vxsuite/products/myplugin/VxMyPlugin.h
 ```cpp
 #pragma once
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 
 class VXMyPluginAudioProcessor final : public vxsuite::ProcessorBase {
 public:
@@ -232,6 +289,9 @@ protected:
     void processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 private:
     static vxsuite::ProductIdentity makeIdentity();
+
+    double currentSampleRateHz = 48000.0;
+    vxsuite::BlockSmoothedControlPair controls;
     // your DSP state here
 };
 ```
@@ -244,7 +304,7 @@ Source/vxsuite/products/myplugin/VxMyPlugin.cpp
 
 ```cpp
 #include "VxMyPlugin.h"
-#include "vxsuite/framework/VxSuiteBlockSmoothing.h"
+#include "vxsuite/framework/VxSuiteBlockSmoothedControl.h"
 #include "vxsuite/framework/VxSuiteParameters.h"
 
 namespace {
@@ -274,9 +334,25 @@ vxsuite::ProductIdentity VXMyPluginAudioProcessor::makeIdentity() {
 }
 
 juce::String VXMyPluginAudioProcessor::getStatusText() const { return ""; }
-void VXMyPluginAudioProcessor::prepareSuite(double, int) {}
-void VXMyPluginAudioProcessor::resetSuite() {}
-void VXMyPluginAudioProcessor::processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) {}
+
+void VXMyPluginAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock) {
+    currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
+}
+
+void VXMyPluginAudioProcessor::resetSuite() {
+    controls.reset(0.5f, 0.5f);
+}
+
+void VXMyPluginAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
+                                              juce::MidiBuffer&) {
+    const float dryTarget = vxsuite::readNormalized(parameters, kDryParam, 0.5f);
+    const float wetTarget = vxsuite::readNormalized(parameters, kWetParam, 0.5f);
+
+    const auto [drySmoothed, wetSmoothed] = controls.process(
+        dryTarget, wetTarget, currentSampleRateHz, buffer.getNumSamples(), 0.060f, 0.060f);
+
+    // Use drySmoothed and wetSmoothed in DSP
+}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXMyPluginAudioProcessor();
@@ -352,7 +428,25 @@ So `0.0` → full cut, `0.5` → flat, `1.0` → full boost.
 
 ### Smoothing
 
-Both parameters are block-smoothed at a 60 ms time constant to prevent clicks when the user moves the knobs. The smoothed value is used to compute filter coefficients once per block.
+Both parameters are block-smoothed at a 60 ms time constant to prevent clicks when the user moves the knobs. Uses `BlockSmoothedControlPair` to manage smoothing state:
+
+```cpp
+vxsuite::BlockSmoothedControlPair controls;  // member variable
+
+void resetSuite() {
+    controls.reset(0.5f, 0.5f);  // neutral defaults
+}
+
+void processProduct(AudioBuffer<float>& buffer, MidiBuffer&) {
+    const float bassTarget = readNormalized(parameters, primaryParamId, 0.5f);
+    const float trebleTarget = readNormalized(parameters, secondaryParamId, 0.5f);
+
+    const auto [smoothedBass, smoothedTreble] = controls.process(
+        bassTarget, trebleTarget, currentSampleRateHz, buffer.getNumSamples(), 0.060f, 0.060f);
+
+    // Use smoothedBass and smoothedTreble to compute filter coefficients once per block
+}
+```
 
 ### DSP: Audio EQ Cookbook shelf filters
 
@@ -383,15 +477,25 @@ When `|gainDb| < 0.01` the coefficients default to passthrough (`b0=1`, all othe
 // 1. Identity descriptor — drives the UI and parameter layout
 vxsuite::ProductIdentity VXToneAudioProcessor::makeIdentity() { … }
 
-// 2. prepareSuite — allocate per-channel biquad state vectors
+// 2. prepareSuite — allocate per-channel biquad state vectors and cache sample rate
 void VXToneAudioProcessor::prepareSuite(double sampleRate, int) {
-    bassState.assign(numChannels, {});
-    trebleState.assign(numChannels, {});
+    currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    bassState.assign(getTotalNumOutputChannels(), {});
+    trebleState.assign(getTotalNumOutputChannels(), {});
 }
 
-// 3. processProduct — smooth → map to dB → compute coeffs → apply per channel
+// 3. resetSuite — initialize smoothing helpers
+void VXToneAudioProcessor::resetSuite() {
+    for (auto& s : bassState)   s = BiquadState{};
+    for (auto& s : trebleState) s = BiquadState{};
+    controls.reset(0.5f, 0.5f);
+}
+
+// 4. processProduct — smooth → map to dB → compute coeffs → apply per channel
 void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buf, juce::MidiBuffer&) {
-    // block-smooth both knobs
+    const auto [smoothedBass, smoothedTreble] = controls.process(
+        bassTarget, trebleTarget, currentSampleRateHz, buf.getNumSamples(), 0.060f, 0.060f);
+
     // select freq/gain constants from mode
     // compute BiquadCoeffs once (not per sample)
     // apply bass biquad then treble biquad to each channel
@@ -442,23 +546,193 @@ All values are `[0, 1]` linear floats. The editor picks these up automatically.
 ```
 Source/vxsuite/
 ├── framework/
-│   ├── README.md                      ← you are here
-│   ├── VxSuiteProduct.h               ← ProductIdentity struct
-│   ├── VxSuiteProcessorBase.h/.cpp    ← ProcessorBase
-│   ├── VxSuiteEditorBase.h/.cpp       ← EditorBase
-│   ├── VxSuiteBlockSmoothing.h        ← smoothBlockValue / blockBlendAlpha
-│   ├── VxSuiteOutputTrimmer.h         ← OutputTrimmer
-│   ├── VxSuiteSpectrumTelemetry.h/.cpp← analyser telemetry + stage publishers
-│   └── VxSuiteParameters.h            ← readNormalized / readMode helpers
+│   ├── README.md                         ← you are here
+│   ├── VxSuiteProduct.h                  ← ProductIdentity struct
+│   ├── VxSuiteProcessorBase.h/.cpp       ← ProcessorBase (realtime-safe audio processor)
+│   ├── VxSuiteEditorBase.h/.cpp          ← EditorBase (responsive plugin UI)
+│   ├── VxSuiteBlockSmoothing.h           ← smoothBlockValue / blockBlendAlpha
+│   ├── VxSuiteBlockSmoothedControl.h     ← BlockSmoothedControl* (param smoothing helpers)
+│   ├── VxSuiteLightAnalysis.h            ← rms / peak analysis (realtime-safe)
+│   ├── VxSuiteOutputTrimmer.h            ← OutputTrimmer (peak limiting safety)
+│   ├── VxSuiteSignalQuality.h/.cpp       ← shared signal quality detection
+│   ├── VxSuiteSpectrumTelemetry.h/.cpp   ← analyser telemetry + stage publishers
+│   ├── VxSuiteVoiceAnalysis.h/.cpp       ← voice-specific analysis
+│   ├── VxSuiteVoiceContext.h/.cpp        ← recording condition context
+│   └── VxSuiteParameters.h               ← readNormalized / readMode helpers
 └── products/
     ├── tone/                          ← VXTone example (bass/treble EQ)
-    ├── cleanup/                       ← VXCleanup
-    ├── deverb/                        ← VXDeverb
-    ├── finish/                        ← VXFinish
-    ├── subtract/                      ← VXSubtract
-    ├── proximity/                     ← VXProximity
-    ├── denoiser/                      ← VXDenoiser
-    ├── deepfilternet/                 ← VXDeepFilterNet (ML)
+    ├── cleanup/                       ← VXCleanup (spectral trouble removal)
+    ├── deverb/                        ← VXDeverb (spatial reverb reduction)
+    ├── finish/                        ← VXFinish (final EQ + warmth)
+    ├── subtract/                      ← VXSubtract (sidechain-style subtraction)
+    ├── proximity/                     ← VXProximity (proximity effect control)
+    ├── denoiser/                      ← VXDenoiser (spectral noise reduction)
+    ├── deepfilternet/                 ← VXDeepFilterNet (ML-backed noise reduction)
     ├── OptoComp/                      ← VXOptoComp (opto compressor)
-    └── analyser/                      ← VXStudioAnalyser (chain analyser)
+    ├── leveler/                       ← VXLeveler (dynamic level control)
+    ├── rebalance/                     ← VXRebalance (ML-backed source separation)
+    └── analyser/                      ← VXStudioAnalyser (real-time chain inspection)
 ```
+
+---
+
+## Architecture & Best Practices
+
+### Realtime Safety Contract
+
+All VX Suite products follow strict realtime audio rules:
+
+**In `processBlock()` / `processProduct()`:**
+- ✅ Read from parameters via helpers (`readNormalized`, `readMode`)
+- ✅ Use smoothing helpers (`BlockSmoothedControl*`)
+- ✅ Call shared analysis (`analysis::rms`, `analysis::peak`)
+- ✅ Read snapshots (`getSignalQualitySnapshot`, `getVoiceContextSnapshot`)
+- ❌ No heap allocation (`new`, `malloc`, `setSize()`)
+- ❌ No blocking I/O (file reads, network calls)
+- ❌ No mutex locks or `wait()` calls
+- ❌ No dynamic string allocation
+
+**In `prepareSuite()` / `resetSuite()`:**
+- ✅ Allocate audio buffers (`AudioBuffer::setSize`)
+- ✅ Initialize DSP state
+- ✅ Cache sample rate and block size
+- ❌ Don't call `processBlock()` or access audio buffers
+
+### Parameter Smoothing Pattern
+
+Use `BlockSmoothedControl*` helpers in all products with knob parameters:
+
+```cpp
+// For 1 control: BlockSmoothedControl
+// For 2 controls: BlockSmoothedControlPair
+// For 3 controls: BlockSmoothedControlTriple
+
+// In header:
+vxsuite::BlockSmoothedControlPair controls;  // member variable
+
+// In resetSuite():
+controls.reset(defaultValue1, defaultValue2);
+
+// In processProduct():
+const auto [smooth1, smooth2] = controls.process(
+    target1, target2, sampleRate, numSamples, timeSeconds1, timeSeconds2);
+```
+
+Benefits:
+- Automatic priming (no clicks on init)
+- Centralized smoothing logic
+- Consistent smoothing times across suite
+- Reduced code duplication
+
+### DSP Organization Pattern
+
+Keep product DSP clean and modular:
+
+```cpp
+class VXMyPluginAudioProcessor final : public vxsuite::ProcessorBase {
+private:
+    // Smoothed UI parameters (use helpers)
+    vxsuite::BlockSmoothedControlPair controls;
+
+    // DSP state (per-channel vectors for stereo)
+    std::vector<DspStageState> stageState;
+
+    // Analysis state (if needed)
+    vxsuite::SignalQualityState signalQuality;  // inherited from ProcessorBase
+
+    // Configuration (cache sample rate, block size)
+    double currentSampleRateHz = 48000.0;
+    int currentBlockSize = 0;
+};
+```
+
+Key principles:
+- **One responsibility per member** — smoothing, DSP state, analysis
+- **Per-channel vectors** — handle mono/stereo without branching
+- **Cache, don't recompute** — sample rate in `prepareSuite()`, not `processBlock()`
+- **Use framework snapshots** — don't duplicate analysis (signal quality, voice analysis)
+
+### Mode Switching Pattern
+
+Use framework `ModePolicy` to map UI modes to DSP parameters:
+
+```cpp
+const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+const auto& policy = currentModePolicy();
+
+// Mode policy provides reusable tunings:
+float strength = isVoice ? 0.75f * policy.sourceProtect : 0.50f * policy.sourceProtect;
+```
+
+Do NOT:
+- Hard-code mode constants in products
+- Duplicate mode logic across products
+- Create product-specific mode switches
+
+### Listen (Delta Audition) Pattern
+
+When a product removes content, expose delta audition via listen:
+
+```cpp
+// In ProductIdentity:
+id.listenParamId = "listen";
+
+// Optional override in processProduct:
+void renderListenOutput(AudioBuffer<float>& out, const AudioBuffer<float>& in) override {
+    // Default: removed delta (input - output)
+    // Override for: added delta (output only) or custom subtraction reference
+}
+```
+
+Framework handles:
+- Latency alignment (dry reference matches DSP latency)
+- UI toggle visibility
+- Naming ("Listen: removed trouble")
+
+### Testing & Validation
+
+Minimal test coverage for each product:
+
+1. **Realtime safety:** No allocations in `processBlock()`
+2. **Bypass transparency:** Output unchanged when bypassed
+3. **Parameter automation:** Smooth response to rapid parameter changes
+4. **Sample rate changes:** Graceful reinitialization (no pops/clicks)
+5. **Silence/reset stability:** Consistent output with empty/null input
+
+Use `vxsuite::analysis::rms()` in tests to verify DSP effect magnitude.
+
+---
+
+## Modern C++ & JUCE Patterns
+
+The framework assumes C++17+ and modern JUCE (7.0+):
+
+- Structured bindings: `const auto [a, b] = pair.process(...)`
+- `std::string_view` for parameter IDs (zero-copy, constexpr)
+- `noexcept` on realtime-safe functions
+- `std::vector` for flexible per-channel allocation
+- `juce::ScopedNoDenormals` in audio thread
+- `const` and `override` on all appropriate methods
+
+---
+
+## Release & Versioning
+
+**Framework versions** are independent from product versions:
+
+- Bump framework version when shared infrastructure changes
+- Bump product DSP version when behavior, UI, or parameter contracts change
+- Products can update without framework changes
+- Framework can improve without affecting products
+
+Example:
+- Framework 0.3.0 → adds new helper, all products compatible
+- VXTone v1.2.0 → changes default mode, bumps independently
+
+---
+
+## Recommended Reading
+
+- [VX Suite Research](../docs/VX_SUITE_RESEARCH.md) — UI/UX patterns
+- [JUCE Plugin Architecture](https://docs.juce.com/master/classjuce_1_1AudioProcessor.html) — processor contract
+- [VST3 Processor/Controller](https://steinbergmedia.github.io/vst3_doc/vstsdk/) — plugin spec

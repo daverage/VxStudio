@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
@@ -27,8 +28,5 @@ private:
 
     vxsuite::finish::Dsp optoDsp;
     double currentSampleRateHz = 48000.0;
-    float smoothedPeakReduction = 0.0f;
-    float smoothedBody = 0.5f;
-    float smoothedGain = 0.5f;
-    bool controlsPrimed = false;
+    vxsuite::BlockSmoothedControlTriple controls;
 };

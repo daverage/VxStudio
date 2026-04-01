@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxLevelerDetector.h"
 #include "dsp/VxLevelerDsp.h"
@@ -42,9 +43,7 @@ private:
     vxsuite::leveler::Dsp dsp;
     double currentSampleRateHz = 48000.0;
     int preparedBlockSize = 256;
-    float smoothedLevel = 0.0f;
-    float smoothedControl = 0.0f;
-    bool controlsPrimed = false;
+    vxsuite::BlockSmoothedControlPair controls;
     bool analyzeToggleLatched = false;
     bool analysisActive = false;
     bool analysisReady = false;

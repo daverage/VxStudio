@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
@@ -23,9 +24,6 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::proximity::ProximityDsp proximityDsp;
-
-    float  smoothedCloser      = 0.f;
-    float  smoothedAir         = 0.f;
+    vxsuite::BlockSmoothedControlPair controls;
     double currentSampleRateHz = 48000.0;
-    bool   controlsPrimed      = false;
 };

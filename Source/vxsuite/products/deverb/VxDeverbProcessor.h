@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxDeverbSpectralProcessor.h"
@@ -40,9 +41,9 @@ private:
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
     juce::AudioBuffer<float> wetScratch;
-    float smoothedReduce = 0.45f;
+    vxsuite::BlockSmoothedControl controls;
     float smoothedCompensationGain = 1.0f;
     double currentSampleRateHz = 48000.0;
     int    preparedBlockSize   = 0;
-    bool   controlsPrimed      = false;
+    bool   firstBlockProcessed = false;
 };

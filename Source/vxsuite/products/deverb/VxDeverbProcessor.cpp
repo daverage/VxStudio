@@ -125,9 +125,9 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
 void VXDeverbAudioProcessor::resetSuite() {
     deverbProcessor.reset();
     wetScratch.clear();
-    smoothedReduce = 0.0f;
+    controls.reset(0.0f);
     smoothedCompensationGain = 1.0f;
-    controlsPrimed = false;
+    firstBlockProcessed = false;
 }
 
 void VXDeverbAudioProcessor::setDebugRt60PresetSeconds(const float rt60Seconds) {
@@ -182,13 +182,9 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float dryRms = computeBufferRms(buffer);
-    const bool isFirstBlock = !controlsPrimed;
-    if (isFirstBlock) {
-        smoothedReduce = reduceTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedReduce = vxsuite::smoothBlockValue(smoothedReduce, reduceTarget, currentSampleRateHz, numSamples, 0.060f);
-    }
+    const bool isFirstBlock = !firstBlockProcessed;
+    const float smoothedReduce = controls.process(reduceTarget, currentSampleRateHz, numSamples, 0.060f);
+    firstBlockProcessed = true;
 
     for (int ch = 0; ch < outputChannels; ++ch)
         wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);

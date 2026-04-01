@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
@@ -40,10 +41,8 @@ private:
     vxsuite::subtract::SubtractDsp subtractDspRight;
 
     double currentSampleRateHz = 48000.0;
-    float smoothedSubtract = 0.0f;
-    float smoothedProtect = 0.5f;
+    vxsuite::BlockSmoothedControlPair controls;
     float smoothedMakeupGain = 1.0f;
-    bool controlsPrimed = false;
     bool learnToggleLatched = false;
     juce::AudioBuffer<float> leftScratch;
     juce::AudioBuffer<float> rightScratch;

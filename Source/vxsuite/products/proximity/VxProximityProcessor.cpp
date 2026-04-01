@@ -64,9 +64,7 @@ void VXProximityAudioProcessor::prepareSuite(const double sampleRate,
 
 void VXProximityAudioProcessor::resetSuite() {
     proximityDsp.reset();
-    smoothedCloser = 0.f;
-    smoothedAir    = 0.f;
-    controlsPrimed = false;
+    controls.reset(0.0f, 0.0f);
 }
 
 void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
@@ -80,14 +78,10 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float closerTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.f);
     const float airTarget    = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.f);
 
-    if (!controlsPrimed) {
-        smoothedCloser = closerTarget;
-        smoothedAir    = airTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedCloser = vxsuite::smoothBlockValue(smoothedCloser, closerTarget, currentSampleRateHz, numSamples, 0.060f);
-        smoothedAir = vxsuite::smoothBlockValue(smoothedAir, airTarget, currentSampleRateHz, numSamples, 0.090f);
-    }
+    const auto [smoothedCloser, smoothedAir] = controls.process(
+        closerTarget, airTarget,
+        currentSampleRateHz, numSamples,
+        0.060f, 0.090f);
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto voiceContext = getVoiceContextSnapshot();

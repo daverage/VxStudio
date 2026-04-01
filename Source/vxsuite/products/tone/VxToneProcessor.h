@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxSuiteProcessorBase.h"
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 
 #include <array>
 #include <vector>
@@ -36,7 +37,5 @@ private:
     double currentSampleRateHz = 48000.0;
     std::vector<BiquadState> bassState;
     std::vector<BiquadState> trebleState;
-    float smoothedBass   = 0.5f;
-    float smoothedTreble = 0.5f;
-    bool controlsPrimed = false;
+    vxsuite::BlockSmoothedControlPair controls;
 };

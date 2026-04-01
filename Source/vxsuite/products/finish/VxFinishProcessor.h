@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteProcessorBase.h"
 #include "dsp/VxFinishDsp.h"
@@ -27,8 +28,5 @@ private:
 
     vxsuite::finish::Dsp polishChain;
     double currentSampleRateHz = 48000.0;
-    float smoothedFinish = 0.0f;
-    float smoothedBody = 0.5f;
-    float smoothedGain = 0.5f;
-    bool controlsPrimed = false;
+    vxsuite::BlockSmoothedControlTriple controls;
 };

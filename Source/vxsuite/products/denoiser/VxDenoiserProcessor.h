@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxSuiteBlockSmoothing.h"
+#include "../../framework/VxSuiteBlockSmoothedControl.h"
 #include "../../framework/VxSuiteEditorBase.h"
 #include "../../framework/VxSuiteOutputTrimmer.h"
 #include "../../framework/VxSuiteProcessorBase.h"
@@ -32,9 +33,7 @@ private:
     juce::AudioBuffer<float> rightScratch;
 
     double currentSampleRateHz = 48000.0;
-    float  smoothedClean       = 0.0f;
-    float  smoothedGuard       = 0.5f;
+    vxsuite::BlockSmoothedControlPair controls;
     float  smoothedMakeupGain  = 1.0f;
     std::array<float, 2> smoothedStereoMakeupGain { 1.0f, 1.0f };
-    bool   controlsPrimed      = false;
 };

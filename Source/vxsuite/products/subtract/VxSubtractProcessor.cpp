@@ -115,10 +115,8 @@ void VXSubtractAudioProcessor::resetSuite() {
     subtractDspMono.resetStreamingState();
     subtractDspLeft.resetStreamingState();
     subtractDspRight.resetStreamingState();
-    smoothedSubtract = 0.0f;
-    smoothedProtect = 0.5f;
+    controls.reset(0.0f, 0.5f);
     smoothedMakeupGain = 1.0f;
-    controlsPrimed = false;
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     subtractDspMono.setLearning(learnToggleLatched);
     subtractDspLeft.setLearning(learnToggleLatched);
@@ -139,14 +137,10 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     const float subtractTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float protectTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
 
-    if (!controlsPrimed) {
-        smoothedSubtract = subtractTarget;
-        smoothedProtect = protectTarget;
-        controlsPrimed = true;
-    } else {
-        smoothedSubtract = vxsuite::smoothBlockValue(smoothedSubtract, subtractTarget, currentSampleRateHz, numSamples, 0.045f);
-        smoothedProtect = vxsuite::smoothBlockValue(smoothedProtect, protectTarget, currentSampleRateHz, numSamples, 0.080f);
-    }
+    const auto [smoothedSubtract, smoothedProtect] = controls.process(
+        subtractTarget, protectTarget,
+        currentSampleRateHz, numSamples,
+        0.045f, 0.080f);
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto voiceContext = getVoiceContextSnapshot();
