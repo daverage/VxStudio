@@ -1,0 +1,17 @@
+{
+  "name": "live_room_band",
+  "description": "Band-style mix with room coloration derived from a MUSDB rock excerpt.",
+  "source_track": "ANiMAL - Rockshow",
+  "recording_type": "live",
+  "primary_check": "Neutral, Vocals +100, Guitar -100",
+  "path": "tests/fixtures/rebalance/listening_cases/live_room_band",
+  "files": [
+    "_bass.wav",
+    "_drums.wav",
+    "_guitar.wav",
+    "_original.wav",
+    "_other.wav",
+    "_piano.wav",
+    "_vocals.wav"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "studio_vocal_guitar",
+  "description": "Studio-style singer-songwriter balance with vocals and guitar foregrounded.",
+  "source_track": "Aimee Norwich - Child",
+  "recording_type": "studio",
+  "primary_check": "Vocals +100, Guitar -100, Neutral",
+  "path": "tests/fixtures/rebalance/listening_cases/studio_vocal_guitar",
+  "files": [
+    "_bass.wav",
+    "_drums.wav",
+    "_guitar.wav",
+    "_original.wav",
+    "_other.wav",
+    "_piano.wav",
+    "_vocals.wav"
+  ]
+}

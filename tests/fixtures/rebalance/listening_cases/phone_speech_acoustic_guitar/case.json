@@ -1,0 +1,17 @@
+{
+  "name": "phone_speech_acoustic_guitar",
+  "description": "Synthetic phone-band speech plus guitar-accompaniment proxy.",
+  "source_track": "Aimee Norwich - Child",
+  "recording_type": "phone",
+  "primary_check": "Vocals +100, Guitar -100, Neutral",
+  "path": "tests/fixtures/rebalance/listening_cases/phone_speech_acoustic_guitar",
+  "files": [
+    "_bass.wav",
+    "_drums.wav",
+    "_guitar.wav",
+    "_original.wav",
+    "_other.wav",
+    "_piano.wav",
+    "_vocals.wav"
+  ]
+}

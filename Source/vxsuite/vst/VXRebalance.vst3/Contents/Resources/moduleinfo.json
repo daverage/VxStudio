@@ -1,6 +1,6 @@
 {
   "Name": "VXRebalance",
-  "Version": "0.2.0",
+  "Version": "0.2.1",
   "Factory Info": {
     "Vendor": "VX Suite",
     "URL": "",
@@ -17,7 +17,7 @@
       "Category": "Audio Module Class",
       "Name": "VXRebalance",
       "Vendor": "VX Suite",
-      "Version": "0.2.0",
+      "Version": "0.2.1",
       "SDKVersion": "VST 3.8.0",
       "Sub Categories": [
         "Fx",
@@ -32,7 +32,7 @@
       "Category": "Component Controller Class",
       "Name": "VXRebalance",
       "Vendor": "VX Suite",
-      "Version": "0.2.0",
+      "Version": "0.2.1",
       "SDKVersion": "VST 3.8.0",
       "Sub Categories": [
         "Fx",

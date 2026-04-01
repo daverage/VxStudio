@@ -94,7 +94,7 @@ void appendElement(const juce::XmlElement& element,
     if (tag == "ul") {
         forEachXmlChildElement(element, child) {
             if (child->hasTagName("li")) {
-                appendText(out, "• ", style);
+                appendText(out, "- ", style);
                 appendChildren(*child, out, style);
                 appendText(out, "\n", parentStyle);
             }

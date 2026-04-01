@@ -300,12 +300,13 @@ inline constexpr HelpContent rebalance {
     "VXRebalance Help",
     R"(
 <h1>VXRebalance</h1>
-<p>Heuristic source-family rebalance for full mixes. It lets you gently lift or tuck vocals, drums, bass, guitar, and residual content without running a heavyweight stem-separation model.</p>
+<p>Confidence-driven source-family rebalance for full mixes. It estimates source ownership across time-frequency regions and lets you push or pull vocals, drums, bass, guitar, and residual content without stems.</p>
 <h2>How to use it</h2>
 <ul>
+<li>Choose the Recording Type that best matches the source: Studio, Live, or Phone / Rough.</li>
 <li>Start with small moves on the source lane you want to rebalance.</li>
 <li>Use Strength to scale the overall impact of all five moves together.</li>
-<li>Treat it like broad corrective balance, not surgical stem extraction.</li>
+<li>Treat it as perceptual source rebalance, not perfect stem extraction.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>

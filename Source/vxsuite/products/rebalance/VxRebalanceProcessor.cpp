@@ -1,6 +1,6 @@
 #include "VxRebalanceProcessor.h"
+#include "VxRebalanceEditor.h"
 
-#include "../../framework/VxSuiteBlockSmoothing.h"
 #include "../../framework/VxSuiteHelpContent.h"
 #include "../../framework/VxSuiteParameters.h"
 #include "VxSuiteVersions.h"
@@ -17,7 +17,6 @@ constexpr std::string_view kBassParam = "bass";
 constexpr std::string_view kGuitarParam = "guitar";
 constexpr std::string_view kOtherParam = "other";
 constexpr std::string_view kStrengthParam = "strength";
-constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kRecordingTypeParam = "recordingType";
 
 constexpr std::array<std::string_view, vxsuite::ProductIdentity::maxControlBankControls> kBankParamIds {
@@ -29,12 +28,12 @@ constexpr std::array<std::string_view, vxsuite::ProductIdentity::maxControlBankC
 };
 
 constexpr std::array<std::string_view, vxsuite::ProductIdentity::maxControlBankControls> kBankHints {
-    "Lead-vocal stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
-    "Drums stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
-    "Bass stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
-    "Guitar stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
-    "Other stem level. 0% = unchanged, -100% = removed, +100% = boosted.",
-    "Scale all five stem moves together."
+    "Vocal Presence. 0% = unchanged, -100% = reduced, +100% = enhanced.",
+    "Drum Presence. 0% = unchanged, -100% = reduced, +100% = enhanced.",
+    "Bass Presence. 0% = unchanged, -100% = reduced, +100% = enhanced.",
+    "Guitar Presence. 0% = unchanged, -100% = reduced, +100% = enhanced.",
+    "Other Presence. 0% = unchanged, -100% = reduced, +100% = enhanced.",
+    "Scale all five source moves together."
 };
 
 constexpr std::array<float, vxsuite::ProductIdentity::maxControlBankControls> kBankDefaults {
@@ -49,14 +48,18 @@ VXRebalanceAudioProcessor::VXRebalanceAudioProcessor()
 
 VXRebalanceAudioProcessor::~VXRebalanceAudioProcessor() = default;
 
+juce::AudioProcessorEditor* VXRebalanceAudioProcessor::createEditor() {
+    return new VXRebalanceEditor(*this);
+}
+
+vxsuite::rebalance::Dsp::DebugSnapshot VXRebalanceAudioProcessor::getDebugSnapshot() const noexcept {
+    return dsp.getDebugSnapshot();
+}
+
 vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity id {};
     id.productName = kProductName;
     id.shortTag = kShortTag;
-    id.modeParamId = kModeParam;
-    id.selectorLabel = "Engine";
-    id.selectorChoiceLabels = { "DSP" };
-    id.defaultMode = vxsuite::Mode::vocal;
     id.auxSelectorParamId = kRecordingTypeParam;
     id.auxSelectorLabel = "Recording Type";
     id.auxSelectorChoiceLabels = { "Studio", "Live", "Phone / Rough" };
@@ -83,12 +86,6 @@ vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
 
 juce::AudioProcessorValueTreeState::ParameterLayout VXRebalanceAudioProcessor::makeParameterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID { kModeParam.data(), 1 },
-        "Engine",
-        juce::StringArray { "DSP" },
-        0,
-        vxsuite::makeChoiceAttributes("Engine")));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { kRecordingTypeParam.data(), 1 },
         "Recording Type",
@@ -117,7 +114,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRebalanceAudioProcessor::m
 juce::String VXRebalanceAudioProcessor::getStatusText() const {
     const auto recordingType = vxsuite::readChoiceIndex(parameters, kRecordingTypeParam, 0);
     const juce::String modeLabel = recordingType == 1 ? "Live" : (recordingType == 2 ? "Phone / Rough" : "Studio");
-    return "Linked-stereo source rebalance  -  DSP heuristic engine  -  " + modeLabel + "  -  latency "
+    return "Linked-stereo source rebalance  -  " + modeLabel + "  -  latency "
         + juce::String(dsp.latencySamples()) + " samples";
 }
 
@@ -134,11 +131,10 @@ void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int 
 
 void VXRebalanceAudioProcessor::resetSuite() {
     dsp.reset();
-    smoothedControls = kBankDefaults;
-    controlsPrimed = false;
     for (auto& channel : dryDelayLines)
         std::fill(channel.begin(), channel.end(), 0.0f);
     dryDelayWritePos = 0;
+    wasNeutral = false;
 }
 
 void VXRebalanceAudioProcessor::processNeutralWithLatency(juce::AudioBuffer<float>& buffer) {
@@ -187,27 +183,12 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const auto recordingTypeEnum = static_cast<vxsuite::rebalance::Dsp::RecordingType>(juce::jlimit(0, 2, recordingType));
     dsp.setRecordingType(recordingTypeEnum);
 
-    if (!controlsPrimed) {
-        smoothedControls = targets;
-        controlsPrimed = true;
-    } else {
-        for (int i = 0; i < vxsuite::rebalance::Dsp::kControlCount; ++i) {
-            const float timeSeconds = i == vxsuite::rebalance::Dsp::kControlCount - 1 ? 0.070f : 0.050f;
-            smoothedControls[static_cast<size_t>(i)] =
-                vxsuite::smoothBlockValue(smoothedControls[static_cast<size_t>(i)],
-                                          targets[static_cast<size_t>(i)],
-                                          currentSampleRateHz,
-                                          numSamples,
-                                          timeSeconds);
-        }
-    }
-
-    const float strength = smoothedControls[static_cast<size_t>(vxsuite::rebalance::Dsp::kControlCount - 1)];
+    const float strength = targets[static_cast<size_t>(vxsuite::rebalance::Dsp::kControlCount - 1)];
     bool effectivelyNeutral = strength <= 1.0e-4f;
     if (!effectivelyNeutral) {
         effectivelyNeutral = true;
         for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
-            if (std::abs(smoothedControls[static_cast<size_t>(i)] - 0.5f) > 1.0e-3f) {
+            if (std::abs(targets[static_cast<size_t>(i)] - 0.5f) > 1.0e-3f) {
                 effectivelyNeutral = false;
                 break;
             }
@@ -215,11 +196,17 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     if (effectivelyNeutral) {
+        wasNeutral = true;
         processNeutralWithLatency(buffer);
         return;
     }
 
-    dsp.setControlTargets(smoothedControls);
+    if (wasNeutral) {
+        dsp.reset();
+        wasNeutral = false;
+    }
+
+    dsp.setControlTargets(targets);
     dsp.process(buffer);
 }
 

@@ -1,0 +1,89 @@
+{
+  "cases": [
+    {
+      "name": "studio_vocal_guitar",
+      "description": "Studio-style singer-songwriter balance with vocals and guitar foregrounded.",
+      "source_track": "Aimee Norwich - Child",
+      "recording_type": "studio",
+      "primary_check": "Vocals +100, Guitar -100, Neutral",
+      "path": "tests/fixtures/rebalance/listening_cases/studio_vocal_guitar",
+      "files": [
+        "_bass.wav",
+        "_drums.wav",
+        "_guitar.wav",
+        "_original.wav",
+        "_other.wav",
+        "_piano.wav",
+        "_vocals.wav"
+      ]
+    },
+    {
+      "name": "live_room_band",
+      "description": "Band-style mix with room coloration derived from a MUSDB rock excerpt.",
+      "source_track": "ANiMAL - Rockshow",
+      "recording_type": "live",
+      "primary_check": "Neutral, Vocals +100, Guitar -100",
+      "path": "tests/fixtures/rebalance/listening_cases/live_room_band",
+      "files": [
+        "_bass.wav",
+        "_drums.wav",
+        "_guitar.wav",
+        "_original.wav",
+        "_other.wav",
+        "_piano.wav",
+        "_vocals.wav"
+      ]
+    },
+    {
+      "name": "phone_speech_acoustic_guitar",
+      "description": "Synthetic phone-band speech plus guitar-accompaniment proxy.",
+      "source_track": "Aimee Norwich - Child",
+      "recording_type": "phone",
+      "primary_check": "Vocals +100, Guitar -100, Neutral",
+      "path": "tests/fixtures/rebalance/listening_cases/phone_speech_acoustic_guitar",
+      "files": [
+        "_bass.wav",
+        "_drums.wav",
+        "_guitar.wav",
+        "_original.wav",
+        "_other.wav",
+        "_piano.wav",
+        "_vocals.wav"
+      ]
+    },
+    {
+      "name": "drum_heavy_loop",
+      "description": "Drum-led loop-style excerpt with supporting bass and accompaniment.",
+      "source_track": "ANiMAL - Clinic A",
+      "recording_type": "studio",
+      "primary_check": "Drums -100, Neutral",
+      "path": "tests/fixtures/rebalance/listening_cases/drum_heavy_loop",
+      "files": [
+        "_bass.wav",
+        "_drums.wav",
+        "_guitar.wav",
+        "_original.wav",
+        "_other.wav",
+        "_piano.wav",
+        "_vocals.wav"
+      ]
+    },
+    {
+      "name": "bass_heavy_mix",
+      "description": "Bass-weighted mix built from a MUSDB preview excerpt.",
+      "source_track": "Actions - One Minute Smile",
+      "recording_type": "studio",
+      "primary_check": "Bass -100, Neutral",
+      "path": "tests/fixtures/rebalance/listening_cases/bass_heavy_mix",
+      "files": [
+        "_bass.wav",
+        "_drums.wav",
+        "_guitar.wav",
+        "_original.wav",
+        "_other.wav",
+        "_piano.wav",
+        "_vocals.wav"
+      ]
+    }
+  ]
+}

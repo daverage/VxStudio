@@ -16,7 +16,7 @@ set(VXSUITE_PLUGIN_VERSION_VXDENOISER "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXTONE "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXLEVELER "0.2.0")
-set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.1")
 set(VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.0")
 
 execute_process(
@@ -53,7 +53,7 @@ include(VxSuiteValidation)
 set(VXSUITE_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxsuite/vst")
 
 function(vxsuite_stage_vst3_bundle target_name bundle_name)
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
   add_custom_command(TARGET ${target_name} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSUITE_VST3_STAGE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3"
@@ -77,7 +77,7 @@ function(vxsuite_copy_vst3_resources target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   foreach(resource IN LISTS ARGN)
@@ -100,7 +100,7 @@ function(vxsuite_prune_vst3_resources target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   foreach(resource IN LISTS ARGN)
@@ -123,9 +123,9 @@ function(vxsuite_strip_vst3_binary target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
+  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
   set(stage_bundle_binary "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSUITE_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   add_custom_command(TARGET ${target_name} POST_BUILD
@@ -568,6 +568,7 @@ target_compile_definitions(VXRebalance PRIVATE
 )
 juce_generate_juce_header(VXRebalance)
 target_sources(VXRebalance PRIVATE
+  Source/vxsuite/products/rebalance/VxRebalanceEditor.cpp
   Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp
 )
@@ -703,6 +704,7 @@ vxsuite_add_executable_test(VXLevelerTuneSearch)
 
 add_executable(VXRebalanceMeasure
   tests/VXRebalanceMeasure.cpp
+  Source/vxsuite/products/rebalance/VxRebalanceEditor.cpp
   Source/vxsuite/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxsuite/products/rebalance/dsp/VxRebalanceDsp.cpp
 )

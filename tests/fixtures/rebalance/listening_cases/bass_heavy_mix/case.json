@@ -1,0 +1,17 @@
+{
+  "name": "bass_heavy_mix",
+  "description": "Bass-weighted mix built from a MUSDB preview excerpt.",
+  "source_track": "Actions - One Minute Smile",
+  "recording_type": "studio",
+  "primary_check": "Bass -100, Neutral",
+  "path": "tests/fixtures/rebalance/listening_cases/bass_heavy_mix",
+  "files": [
+    "_bass.wav",
+    "_drums.wav",
+    "_guitar.wav",
+    "_original.wav",
+    "_other.wav",
+    "_piano.wav",
+    "_vocals.wav"
+  ]
+}

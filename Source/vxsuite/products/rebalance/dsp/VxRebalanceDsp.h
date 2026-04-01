@@ -67,6 +67,7 @@ public:
     static constexpr int kFftSize = 1 << kFftOrder;
     static constexpr int kHopSize = kFftSize / 4;
     static constexpr int kBins = kFftSize / 2 + 1;
+    static constexpr int kDebugBins = 96;
 
     // Harmonic grouping constants
     static constexpr int kMaxPeaks = 24;
@@ -116,6 +117,12 @@ public:
         float confidence = 0.0f;
         float ageFrames = 0.0f;
         float inactiveFrames = 0.0f;
+        float transientBoost = 0.0f;
+        int transientBoostFrames = 0;
+        
+        // Lifecycle state for render authority
+        enum class LifecycleState { newborn, stable, decaying };
+        LifecycleState lifecycleState = LifecycleState::newborn;
 
         std::array<int, kClusterHarmonics> lastMemberBins {};
         int lastMemberCount = 0;
@@ -125,6 +132,7 @@ public:
     struct TransientEvent {
         bool active = false;
         int id = -1;
+        int linkedClusterTrackId = -1;
         int birthFrame = 0;
         float peakHz = 0.0f;
         float bandwidthHz = 0.0f;
@@ -142,6 +150,16 @@ public:
         float transientRisk = 0.0f;
     };
 
+    struct DebugSnapshot {
+        std::array<int, kDebugBins> dominantSources {};
+        std::array<float, kDebugBins> confidence {};
+        std::array<float, kDebugBins> dominantMasks {};
+        std::array<float, kDebugBins> otherMasks {};
+        std::array<float, kSourceCount> dominantCoverage {};
+        float overallConfidence = 0.0f;
+        int frameCounter = 0;
+    };
+
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void reset();
     void setControlTargets(const std::array<float, kControlCount>& normalizedValues);
@@ -151,6 +169,7 @@ public:
     void process(juce::AudioBuffer<float>& buffer);
 
     [[nodiscard]] int latencySamples() const noexcept { return kFftSize; }
+    [[nodiscard]] DebugSnapshot getDebugSnapshot() const noexcept;
 
 private:
     struct ChannelState {
@@ -175,7 +194,6 @@ private:
     [[nodiscard]] float smoothBand(float hz, float lo, float hi) const noexcept;
     [[nodiscard]] float binToHz(int bin) const noexcept;
     [[nodiscard]] float gaussianPeak(float x, float centre, float sigma) const noexcept;
-    [[nodiscard]] float mappedSourceGainDb(int sourceIndex) const noexcept;
 
     // Harmonic grouping and source persistence
     void detectSpectralPeaks(const std::array<float, kBins>& analysisMag);
@@ -189,7 +207,6 @@ private:
     [[nodiscard]] float vocalFormantSupport(float hz, float localMag, float envelopeMag) const noexcept;
     [[nodiscard]] float guitarTonalSupport(float hz, float localMag, float envelopeMag,
                                            float centered, float wide, float steadyPrior) const noexcept;
-    void applyClusterInfluence(std::array<std::array<float, kBins>, kSourceCount>& rawWeights) noexcept;
     void applySourcePersistence(std::array<std::array<float, kBins>, kSourceCount>& conditionedMasks,
                                 float transientPrior) noexcept;
 
@@ -211,9 +228,9 @@ private:
                                          float transientPrior,
                                          float steadyPriorScale);
     void writeObjectOwnershipToBins() noexcept;
-    void buildForegroundBackgroundRender(const std::array<float, kBins>& analysisMag) noexcept;
-    [[nodiscard]] float computeSourceForegroundPriority(int source, float userControl, float confidence) const noexcept;
-    [[nodiscard]] float computeSourceSuppressionBias(int source, float userControl, float confidence) const noexcept;
+    void applyObjectOwnershipToMasks(std::array<std::array<float, kBins>, kSourceCount>& masks) noexcept;
+    void buildForegroundBackgroundRender() noexcept;
+    [[nodiscard]] float computeSourceContributionMultiplier(int source, float sliderNormalized, float strength) const noexcept;
 
     double sampleRateHz = 48000.0;
     int preparedChannels = 0;
@@ -236,6 +253,7 @@ private:
     std::array<float, kBins> prevAnalysisMag {};
     std::array<float, kBins> bassContinuity {};
     std::array<float, kBins> compositeGain {};
+    std::array<float, kBins> prevCompositeGain {};
     std::array<std::array<float, kBins>, kSourceCount> smoothedMasks {};
     bool masksPrimed = false;
 
@@ -261,6 +279,13 @@ private:
     std::array<float, kBins> binOwnershipConfidence {};
     std::array<float, kBins> spectralFlux {};
     int currentFrameCount = 0;
+    std::array<std::atomic<int>, kDebugBins> debugDominantSources {};
+    std::array<std::atomic<float>, kDebugBins> debugConfidence {};
+    std::array<std::atomic<float>, kDebugBins> debugDominantMasks {};
+    std::array<std::atomic<float>, kDebugBins> debugOtherMasks {};
+    std::array<std::atomic<float>, kSourceCount> debugDominantCoverage {};
+    std::atomic<float> debugOverallConfidence { 0.0f };
+    std::atomic<int> debugFrameCounter { 0 };
 };
 
 } // namespace vxsuite::rebalance

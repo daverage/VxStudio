@@ -1,0 +1,17 @@
+{
+  "name": "drum_heavy_loop",
+  "description": "Drum-led loop-style excerpt with supporting bass and accompaniment.",
+  "source_track": "ANiMAL - Clinic A",
+  "recording_type": "studio",
+  "primary_check": "Drums -100, Neutral",
+  "path": "tests/fixtures/rebalance/listening_cases/drum_heavy_loop",
+  "files": [
+    "_bass.wav",
+    "_drums.wav",
+    "_guitar.wav",
+    "_original.wav",
+    "_other.wav",
+    "_piano.wav",
+    "_vocals.wav"
+  ]
+}
