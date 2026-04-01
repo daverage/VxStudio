@@ -439,19 +439,18 @@ a:hover {
 }
 
 .notice-box {
-    padding: var(--spacing-xl);
-    border-radius: var(--radius-lg);
-    border-left: 4px solid;
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: transparent;
 }
 
 .notice-box.macos {
-    border-left-color: var(--primary);
-    background: rgba(0, 102, 255, 0.05);
+    border-color: var(--primary);
 }
 
 .notice-box.windows {
-    border-left-color: var(--accent);
-    background: rgba(48, 212, 130, 0.05);
+    border-color: var(--accent);
 }
 
 .notice-box h3 {
