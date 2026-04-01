@@ -1,7 +1,7 @@
-#include "../Source/vxsuite/products/cleanup/VxCleanupProcessor.h"
-#include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
-#include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
-#include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
+#include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
+#include "../Source/vxstudio/products/finish/VxFinishProcessor.h"
+#include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
+#include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
 #include <chrono>

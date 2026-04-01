@@ -1,4 +1,4 @@
-#include "../Source/vxsuite/products/deverb/VxDeverbProcessor.h"
+#include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
 
 #include <cmath>
 #include <iostream>

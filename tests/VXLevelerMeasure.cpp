@@ -1,4 +1,4 @@
-#include "../Source/vxsuite/products/leveler/VxLevelerProcessor.h"
+#include "../Source/vxstudio/products/leveler/VxLevelerProcessor.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 

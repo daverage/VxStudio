@@ -1,4 +1,4 @@
-#include "../Source/vxsuite/products/rebalance/VxRebalanceProcessor.h"
+#include "../Source/vxstudio/products/rebalance/VxRebalanceProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>

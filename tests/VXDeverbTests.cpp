@@ -1,6 +1,6 @@
-#include "../Source/vxsuite/products/deverb/VxDeverbProcessor.h"
-#include "../Source/vxsuite/products/deverb/dsp/VxDeverbRt60Estimator.h"
-#include "../Source/vxsuite/products/deverb/dsp/VxDeverbSpectralProcessor.h"
+#include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
+#include "../Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.h"
+#include "../Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.h"
 
 #include <cmath>
 #include <iostream>
