@@ -1,0 +1,24 @@
+#pragma once
+
+#include <string_view>
+
+namespace vxsuite::versions {
+
+inline constexpr std::string_view framework = "@VXSUITE_FRAMEWORK_VERSION@";
+
+namespace plugins {
+inline constexpr std::string_view deverb = "@VXSUITE_PLUGIN_VERSION_VXDEVERB@";
+inline constexpr std::string_view proximity = "@VXSUITE_PLUGIN_VERSION_VXPROXIMITY@";
+inline constexpr std::string_view cleanup = "@VXSUITE_PLUGIN_VERSION_VXCLEANUP@";
+inline constexpr std::string_view finish = "@VXSUITE_PLUGIN_VERSION_VXFINISH@";
+inline constexpr std::string_view optocomp = "@VXSUITE_PLUGIN_VERSION_VXOPTOCOMP@";
+inline constexpr std::string_view subtract = "@VXSUITE_PLUGIN_VERSION_VXSUBTRACT@";
+inline constexpr std::string_view denoiser = "@VXSUITE_PLUGIN_VERSION_VXDENOISER@";
+inline constexpr std::string_view deepfilternet = "@VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET@";
+inline constexpr std::string_view tone = "@VXSUITE_PLUGIN_VERSION_VXTONE@";
+inline constexpr std::string_view leveler = "@VXSUITE_PLUGIN_VERSION_VXLEVELER@";
+inline constexpr std::string_view rebalance = "@VXSUITE_PLUGIN_VERSION_VXREBALANCE@";
+inline constexpr std::string_view analyser = "@VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER@";
+} // namespace plugins
+
+} // namespace vxsuite::versions

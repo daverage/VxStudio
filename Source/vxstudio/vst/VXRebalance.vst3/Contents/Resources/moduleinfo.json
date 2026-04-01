@@ -1,0 +1,46 @@
+{
+  "Name": "VXRebalance",
+  "Version": "0.2.1",
+  "Factory Info": {
+    "Vendor": "VX Suite",
+    "URL": "",
+    "E-Mail": "",
+    "Flags": {
+      "Unicode": true,
+      "Classes Discardable": false,
+      "Component Non Discardable": false,
+    },
+  },
+  "Classes": [
+    {
+      "CID": "ABCDEF019182FAEB5658533156585242",
+      "Category": "Audio Module Class",
+      "Name": "VXRebalance",
+      "Vendor": "VX Suite",
+      "Version": "0.2.1",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+    {
+      "CID": "ABCDEF011234ABCD5658533156585242",
+      "Category": "Component Controller Class",
+      "Name": "VXRebalance",
+      "Vendor": "VX Suite",
+      "Version": "0.2.1",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+  ],
+}

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="VX Studio - Professional realtime audio processing plugins for macOS and Windows. Studio-grade VST3 effects for voice, music, and content creation.">
+    <meta name="keywords" content="VST3, audio plugin, voice processing, denoiser, reverb, EQ, professional audio">
+    <meta name="author" content="VX Studio">
+
+    <title>VX Studio - Professional Audio Processing Plugins</title>
+
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/images/favicon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/images/favicon-512.png">
+    <link rel="apple-touch-icon" href="assets/images/favicon-192.png">
+
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <a href="/">
+                    <img src="assets/images/logo.png" alt="VX Studio" class="logo">
+                </a>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#products">Products</a></li>
+                <li><a href="#download">Download</a></li>
+                <li><a href="docs/">Documentation</a></li>
+                <li><a href="support/">Support</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Professional Audio Processing, Refined</h1>
+            <p>Studio-grade VST3 plugins for voice, music, and realtime processing. Built for precision. Designed for speed.</p>
+            <div class="hero-buttons">
+                <a href="#download" class="btn btn-primary">Download Now</a>
+                <a href="#products" class="btn btn-secondary">Explore Products</a>
+            </div>
+            <p class="hero-meta">macOS 11+ and Windows 10+ | VST3 Format</p>
+        </div>
+        <div class="hero-graphic">
+            <div class="hero-waveform"></div>
+        </div>
+    </section>
+
+    <!-- Products Grid Section -->
+    <section id="products" class="products-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>The Suite</h2>
+                <p>12 specialized tools for modern audio production</p>
+            </div>
+
+            <div class="products-grid">
+                <!-- Tone -->
+                <div class="product-card" data-color="purple">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #8B47D9 0%, #5D2F8C 100%);">♪</div>
+                    <h3>Tone</h3>
+                    <p>Bass and treble shelf EQ with vocal and general modes for tonal shaping.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxtone" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/tone.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Cleanup -->
+                <div class="product-card" data-color="green">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #30D482 0%, #0E8E38 100%);">✓</div>
+                    <h3>Cleanup</h3>
+                    <p>Spectral trouble removal for voices. Eliminate mud, breaths, and harshness intelligently.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxcleanup" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/cleanup.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Denoiser -->
+                <div class="product-card" data-color="emerald">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #15D950 0%, #0A6B24 100%);">◯</div>
+                    <h3>Denoiser</h3>
+                    <p>Spectral noise reduction with harmonic guard. Studio-clean results in realtime.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxdenoiser" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/denoiser.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Deverb -->
+                <div class="product-card" data-color="blue">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #0066FF 0%, #0033AA 100%);">⟲</div>
+                    <h3>Deverb</h3>
+                    <p>Spatial reverb reduction with blend control. Keep the vocal, remove the room.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxdeverb" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/deverb.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Finish -->
+                <div class="product-card" data-color="gold">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #FFB700 0%, #CC8800 100%);">✨</div>
+                    <h3>Finish</h3>
+                    <p>Final EQ and warmth for polish. Add body, presence, and cohesion to any mix.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxfinish" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/finish.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- OptoComp -->
+                <div class="product-card" data-color="orange">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #FF6B00 0%, #CC4400 100%);">◐</div>
+                    <h3>OptoComp</h3>
+                    <p>Smooth optical compressor. Vintage character with modern control.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxoptocomp" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/optocomp.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Proximity -->
+                <div class="product-card" data-color="cyan">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #00BCD4 0%, #008FA3 100%);">⊡</div>
+                    <h3>Proximity</h3>
+                    <p>Proximity effect control. Adjust mic distance character without moving the mic.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxproximity" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/proximity.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Subtract -->
+                <div class="product-card" data-color="red">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #E53E3E 0(), #993333 100%);">−</div>
+                    <h3>Subtract</h3>
+                    <p>Sidechain-style subtraction. Remove specific content with precision.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxsubtract" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/subtract.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Leveler -->
+                <div class="product-card" data-color="violet">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #A855F7 0%, #7C3AED 100%);">≈</div>
+                    <h3>Leveler</h3>
+                    <p>Dynamic level control. Smooth, transparent riding without pumping.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxleveler" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/leveler.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- DeepFilterNet -->
+                <div class="product-card" data-color="teal">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #14B8A6 0%, #0D9488 100%);">◆</div>
+                    <h3>DeepFilterNet</h3>
+                    <p>ML-backed noise reduction. State-of-the-art deep learning models.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxdeepfilternet" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/deepfilternet.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Rebalance -->
+                <div class="product-card" data-color="pink">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #EC4899 0(), #BE185D 100%);">⚙</div>
+                    <h3>Rebalance</h3>
+                    <p>ML-backed source separation. Isolate and adjust individual mix elements.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxrebalance" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/rebalance.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+
+                <!-- Polish -->
+                <div class="product-card" data-color="indigo">
+                    <div class="product-icon" style="background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);">◈</div>
+                    <h3>Polish</h3>
+                    <p>Comprehensive tonal shaping. EQ, warmth, and character in one plugin.</p>
+                    <div class="card-actions">
+                        <a href="downloads/#vxpolish" class="btn btn-sm btn-primary">Download</a>
+                        <a href="products/polish.html" class="learn-more">Learn More →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Built for Professionals</h2>
+                <p>Production-grade features in every plugin</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Realtime Safe</h3>
+                    <p>Zero allocations on the audio thread. Rock-solid stability for live use.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Mode-Based</h3>
+                    <p>Vocal and General modes adapt DSP for optimal results on any material.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔊</div>
+                    <h3>Listen Control</h3>
+                    <p>Audition removed content in delta mode. Verify processing with confidence.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>Peak Protection</h3>
+                    <p>Built-in output safety trimmer prevents clipping and distortion.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <h3>Analysis Tools</h3>
+                    <p>Signal quality detection. Automatic adaptation to input conditions.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🎚️</div>
+                    <h3>Smooth Automation</h3>
+                    <p>Exponential parameter smoothing prevents clicks during automation.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Get Started Now</h2>
+                <p>Professional audio processing, ready to use</p>
+            </div>
+
+            <!-- Platform Notice -->
+            <div class="platform-notice">
+                <div class="notice-box macos">
+                    <h3>🍎 macOS</h3>
+                    <p><strong>Status:</strong> Fully available</p>
+                    <p>macOS 11+ | Intel & Apple Silicon</p>
+                    <p>VST3 | Audio Units</p>
+                </div>
+                <div class="notice-box windows">
+                    <h3>🪟 Windows</h3>
+                    <p><strong>Status:</strong> In Development</p>
+                    <p>Windows 10+ | 64-bit</p>
+                    <p>VST3 coming soon</p>
+                </div>
+            </div>
+
+            <!-- Download Button -->
+            <div class="download-button-container">
+                <a href="downloads/" class="btn btn-primary btn-large">
+                    Download VX Studio v1.0.0
+                </a>
+                <p class="download-note">Latest build • Free to download • Open source</p>
+            </div>
+
+            <!-- System Requirements -->
+            <div class="system-requirements">
+                <h3>System Requirements</h3>
+                <div class="requirements-grid">
+                    <div class="requirement">
+                        <h4>macOS</h4>
+                        <ul>
+                            <li>macOS 11 Monterey or later</li>
+                            <li>Intel 6th gen or later</li>
+                            <li>Apple Silicon M1, M2, M3</li>
+                            <li>8 GB RAM (16 GB recommended)</li>
+                            <li>DAW with VST3 support</li>
+                        </ul>
+                    </div>
+                    <div class="requirement">
+                        <h4>Windows</h4>
+                        <ul>
+                            <li>Windows 10 version 1909+</li>
+                            <li>Windows 11</li>
+                            <li>CPU with AVX support</li>
+                            <li>8 GB RAM (16 GB recommended)</li>
+                            <li>Coming soon</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Section -->
+    <section class="tech-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Built on Solid Ground</h2>
+                <p>Professional audio development standards</p>
+            </div>
+
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <h3>VST3 Standard</h3>
+                    <p>Modern plugin standard. Full parameter automation, low-latency processing, and precise UI scaling.</p>
+                </div>
+                <div class="tech-item">
+                    <h3>JUCE Framework</h3>
+                    <p>Industry-standard audio framework used by iZotope, Waves, and Native Instruments.</p>
+                </div>
+                <div class="tech-item">
+                    <h3>C++20 Implementation</h3>
+                    <p>Modern C++ for efficiency and maintainability. Zero unsafe allocations on audio thread.</p>
+                </div>
+                <div class="tech-item">
+                    <h3>Open Source</h3>
+                    <p>Transparent development. Community-driven improvements. Inspect the source code yourself.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation Section -->
+    <section class="docs-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Documentation & Support</h2>
+                <p>Everything you need to get the most from VX Suite</p>
+            </div>
+
+            <div class="docs-grid">
+                <a href="docs/" class="doc-link">
+                    <h3>📖 User Guide</h3>
+                    <p>Complete documentation for all plugins. Feature descriptions, tips, and best practices.</p>
+                </a>
+                <a href="docs/installation.html" class="doc-link">
+                    <h3>⚙️ Installation Guide</h3>
+                    <p>Step-by-step setup instructions for macOS and Windows. VST3 plugin discovery and troubleshooting.</p>
+                </a>
+                <a href="support/" class="doc-link">
+                    <h3>💬 Support</h3>
+                    <p>FAQ, troubleshooting, and technical support. Get help with any issues.</p>
+                </a>
+                <a href="docs/framework.html" class="doc-link">
+                    <h3>👨‍💻 Framework Docs</h3>
+                    <p>Technical documentation for developers. Build your own plugins on VX Suite framework.</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>VX Studio</h4>
+                    <p>Professional audio processing plugins for realtime production.</p>
+                    <p class="footer-version">v1.0.0 • Gold Release</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="docs/">Documentation</a></li>
+                        <li><a href="support/">Support</a></li>
+                        <li><a href="https://github.com/marczewski/VxStudio" target="_blank">Source Code</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="legal/license.html">License (MIT)</a></li>
+                        <li><a href="legal/privacy.html">Privacy</a></li>
+                        <li><a href="legal/terms.html">Terms</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 VX Studio. All rights reserved. | Made with ♪ by <a href="https://marczewski.me.uk" target="_blank">Andrzej Marczewski</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/script.js"></script>
+</body>
+</html>

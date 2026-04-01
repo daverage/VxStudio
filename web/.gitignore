@@ -1,0 +1,47 @@
+# Plugin Distribution Files (These are large and should be stored separately)
+downloads/*.zip
+downloads/*.zip.sha256
+downloads/*.exe
+downloads/older-versions/
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Build artifacts
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Logs
+*.log
+*.logs/
+
+# Dependencies (if using any)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Temporary files
+temp/
+tmp/
+*.temp

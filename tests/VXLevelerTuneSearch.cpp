@@ -1,5 +1,5 @@
 #include "../Source/vxsuite/products/leveler/VxLevelerProcessor.h"
-#include "VxSuiteProcessorTestUtils.h"
+#include "VxStudioProcessorTestUtils.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 

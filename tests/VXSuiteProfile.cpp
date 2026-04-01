@@ -2,7 +2,7 @@
 #include "../Source/vxsuite/products/finish/VxFinishProcessor.h"
 #include "../Source/vxsuite/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxsuite/products/subtract/VxSubtractProcessor.h"
-#include "VxSuiteProcessorTestUtils.h"
+#include "VxStudioProcessorTestUtils.h"
 
 #include <chrono>
 #include <iostream>

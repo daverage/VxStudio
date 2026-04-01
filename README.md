@@ -4,7 +4,7 @@ Focused, realtime-safe audio processors for voice, vocal production, and fast st
 
 VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, compact control surfaces, and product-specific DSP. Each plugin is meant to do one job clearly instead of acting like a broad channel strip.
 
-The shared framework lives in `Source/vxsuite/framework/`. It handles parameter registration, the default editor shell, smoothing, status/help UI, listen-mode plumbing, and output safety so each product can stay focused on its DSP contract. See `Source/vxsuite/framework/README.md` for framework-level guidance.
+The shared framework lives in `Source/vxstudio/framework/`. It handles parameter registration, the default editor shell, smoothing, status/help UI, listen-mode plumbing, and output safety so each product can stay focused on its DSP contract. See `Source/vxstudio/framework/README.md` for framework-level guidance.
 
 This README and the in-plugin Help popup are a shared documentation contract. When a plugin's UI, selector behavior, DSP contract, or recommended usage changes, update both together.
 
@@ -447,7 +447,7 @@ Build a single plugin:
 cmake --build build --target VXRebalancePlugin -j4
 ```
 
-Built `.vst3` bundles are staged into `Source/vxsuite/vst/`.
+Built `.vst3` bundles are staged into `Source/vxstudio/vst/`.
 
 VXDeepFilterNet also requires model files in `assets/deepfilternet/models/`. Without them the plugin still builds, but no model will be available at runtime.
 
@@ -501,7 +501,7 @@ Useful plugin targets:
 
 ```text
 Source/
-  vxsuite/
+  vxstudio/
     framework/        Shared processor, editor, parameters, help, analysis, safety
     products/
       deepfilternet/  VXDeepFilterNet processor and ML service
