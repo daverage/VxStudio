@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxleveler</string>
+    <string>com.vxstudio.vxleveler</string>
     <key>CFBundleName</key>
     <string>VXLeveler</string>
     <key>CFBundleDisplayName</key>

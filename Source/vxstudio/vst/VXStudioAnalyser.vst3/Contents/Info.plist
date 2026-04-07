@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxstudioanalyser</string>
+    <string>com.vxstudio.vxstudioanalyser</string>
     <key>CFBundleName</key>
     <string>VXStudioAnalyser</string>
     <key>CFBundleDisplayName</key>

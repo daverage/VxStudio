@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxdeepfilternet</string>
+    <string>com.vxstudio.vxdeepfilternet</string>
     <key>CFBundleName</key>
     <string>VXDeepFilterNet</string>
     <key>CFBundleDisplayName</key>

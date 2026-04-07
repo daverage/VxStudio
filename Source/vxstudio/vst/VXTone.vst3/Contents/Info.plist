@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxtone</string>
+    <string>com.vxstudio.vxtone</string>
     <key>CFBundleName</key>
     <string>VXTone</string>
     <key>CFBundleDisplayName</key>

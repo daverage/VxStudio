@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxcleanup</string>
+    <string>com.vxstudio.vxcleanup</string>
     <key>CFBundleName</key>
     <string>VXCleanup</string>
     <key>CFBundleDisplayName</key>

@@ -53,7 +53,7 @@ include(VxStudioValidation)
 set(VXSTUDIO_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxstudio/vst")
 
 function(vxstudio_stage_vst3_bundle target_name bundle_name)
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   add_custom_command(TARGET ${target_name} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_STAGE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
@@ -77,7 +77,7 @@ function(vxstudio_copy_vst3_resources target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   foreach(resource IN LISTS ARGN)
@@ -100,7 +100,7 @@ function(vxstudio_prune_vst3_resources target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   foreach(resource IN LISTS ARGN)
@@ -123,9 +123,9 @@ function(vxstudio_strip_vst3_binary target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
+  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
   set(stage_bundle_binary "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/Debug/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   add_custom_command(TARGET ${target_name} POST_BUILD
@@ -801,7 +801,7 @@ target_compile_definitions(VXStudioBatchAudioCheck PRIVATE VXSTUDIO_DISABLE_PLUG
 vxstudio_add_executable_test(VXStudioBatchAudioCheck)
 
 add_executable(VXSuiteProfile
-  tests/VXSuiteProfile.cpp
+  tests/VXStudioProfile.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp

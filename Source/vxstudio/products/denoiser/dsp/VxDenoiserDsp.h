@@ -56,6 +56,8 @@ public:
     float getSignalPresence() const noexcept { return signalPresence; }
 
 private:
+    [[nodiscard]] bool hasValidProcessingState(int numChannels, int numSamples) const noexcept;
+
     // ── STFT constants ────────────────────────────────────────────────────────
     static constexpr int kFftOrder = 10;
     static constexpr int kFftSize  = 1 << kFftOrder;    // 1024

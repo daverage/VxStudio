@@ -1207,6 +1207,74 @@ bool testDenoiserZeroCleanKeepsPdcAlignedIdentity() {
     return true;
 }
 
+bool testDenoiserResetAndReprepareStayFinite() {
+    constexpr double srA = 48000.0;
+    constexpr double srB = 44100.0;
+
+    auto noisyA = addBuffers(makeSpeechLike(srA, 0.8f), makeNoise(srA, 0.8f, 0.05f));
+    auto noisyB = addBuffers(makeSpeechLike(srB, 0.8f), makeNoise(srB, 0.8f, 0.05f));
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(srA, 256);
+    setParamNormalized(denoiser, "clean", 0.82f);
+    setParamNormalized(denoiser, "guard", 0.58f);
+    const auto first = render(denoiser, noisyA, 256);
+    if (!allFinite(first)) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser first render produced non-finite output\n";
+        return false;
+    }
+
+    denoiser.reset();
+    const auto second = render(denoiser, noisyA, 256);
+    if (!allFinite(second)) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser reset render produced non-finite output\n";
+        return false;
+    }
+
+    denoiser.prepareToPlay(srB, 512);
+    setParamNormalized(denoiser, "clean", 0.76f);
+    setParamNormalized(denoiser, "guard", 0.44f);
+    const auto third = render(denoiser, noisyB, 512);
+    if (!allFinite(third) || peakAbs(third) > 1.05f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser reprepare render became unstable\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testDenoiserOversizedHostBlocksStayConsistent() {
+    constexpr double sr = 48000.0;
+    auto noisy = addBuffers(makeSpeechLike(sr, 0.9f), makeNoise(sr, 0.9f, 0.06f));
+    std::vector<int> oversizedBlocks { 1536, 3072, 4096 };
+
+    VXDenoiserAudioProcessor reference;
+    reference.prepareToPlay(sr, 256);
+    setParamNormalized(reference, "clean", 0.78f);
+    setParamNormalized(reference, "guard", 0.52f);
+    const auto refOut = render(reference, noisy, 256);
+
+    VXDenoiserAudioProcessor oversized;
+    oversized.prepareToPlay(sr, 256);
+    setParamNormalized(oversized, "clean", 0.78f);
+    setParamNormalized(oversized, "guard", 0.52f);
+    const auto oversizedOut = renderWithBlocks(oversized, noisy, oversizedBlocks);
+
+    if (!allFinite(oversizedOut)) {
+        std::cerr << "[VXSuitePluginRegression] Oversized host-block denoiser output became non-finite\n";
+        return false;
+    }
+
+    const float corr = bufferCorrelationSkip(refOut, oversizedOut, 4096);
+    if (corr < 0.985f) {
+        std::cerr << "[VXSuitePluginRegression] Oversized host blocks changed denoiser behaviour too much: corr="
+                  << corr << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testSubtractZeroKeepsPdcAlignedIdentity() {
     constexpr double sr = 48000.0;
     auto input = addBuffers(makeSpeechLike(sr, 0.8f), makeNoise(sr, 0.8f, 0.04f));
@@ -1821,6 +1889,8 @@ int main() {
     ok &= testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes();
     ok &= testDenoiserStereoTreatsChannelsIndependently();
     ok &= testDenoiserZeroCleanKeepsPdcAlignedIdentity();
+    ok &= testDenoiserResetAndReprepareStayFinite();
+    ok &= testDenoiserOversizedHostBlocksStayConsistent();
     ok &= testSubtractZeroKeepsPdcAlignedIdentity();
     ok &= testCleanupBlockSizeInvariance();
     ok &= testFullChainBlockSizeInvariance();

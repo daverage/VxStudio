@@ -1,3 +1,34 @@
+# VXDenoiser crash investigation — 2026-04-07
+
+## Goal
+Investigate and fix the REAPER crash reported in `vxsuite::denoiser::DenoiserDsp::processFrame`
+on the CoreAudio realtime thread, then verify the plugin still behaves correctly.
+
+## Plan
+
+- [x] Review the supplied crash report and identify the faulting product/function
+- [x] Inspect `VxDenoiserDsp` / `VxDenoiserProcessor` / framework preparation paths for invalid-memory risks
+- [x] Implement the smallest safe fix for the realtime crash
+- [x] Build the affected targets and run targeted denoiser verification
+- [x] Add findings and review notes below
+
+## Review
+
+- Hardened `VxDenoiserDsp::processInPlace()` with `hasValidProcessingState()` so the denoiser now
+  fails dry instead of touching invalid or undersized prepared buffers/state on the realtime thread
+- Added denoiser regression coverage for reset/reprepare stability and oversized host-block consistency
+- Fixed a pre-existing build mismatch between `VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT` and
+  `VXSUITE_DISABLE_PLUGIN_ENTRYPOINT` so `VXStudioPluginRegressionTests` can link
+- Verified build: `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Result: the denoiser-specific regression additions passed silently, but the full regression binary
+  still reports unrelated existing failures in denoiser tuning, finish frequency response, and
+  cleanup steady-state allocation tracking
+- Follow-up: fixed VST3 staging helpers in `CMakeLists.txt` to use the active build config
+  (`$<CONFIG>`) instead of hardcoded `Debug`, corrected the stale `tests/VXSuiteProfile.cpp`
+  reference to `tests/VXStudioProfile.cpp`, rebuilt all plugin targets, and refreshed the single
+  shared bundle folder at `Source/vxstudio/vst`
+
 # Rebalance: htdemucs_6s integration + DSP guitar improvements — 2026-03-26
 
 ## Goal

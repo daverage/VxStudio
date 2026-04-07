@@ -179,6 +179,69 @@ void DenoiserDsp::updateMinStats(const int k, const float p,
     }
 }
 
+bool DenoiserDsp::hasValidProcessingState(const int numChannels, const int numSamples) const noexcept {
+    if (numChannels <= 0 || numSamples <= 0 || !fft.isReady())
+        return false;
+
+    const auto hasSize = [](const auto& container, const size_t expected) noexcept {
+        return container.size() == expected;
+    };
+    const auto hasMinSize = [](const auto& container, const size_t minimum) noexcept {
+        return container.size() >= minimum;
+    };
+
+    if (!hasSize(window, static_cast<size_t>(kFftSize))
+        || !hasSize(inFifo, static_cast<size_t>(kFftSize))
+        || !hasSize(frameBuffer, static_cast<size_t>(kFftSize))
+        || !hasSize(fftBuf, static_cast<size_t>(kFftSize * 2))
+        || !hasSize(binToBark, static_cast<size_t>(kBins))
+        || !hasSize(phaseAdv, static_cast<size_t>(kBins))
+        || !hasSize(erbKernelHW, static_cast<size_t>(kBins))
+        || !hasSize(lfStab, static_cast<size_t>(kBins))
+        || !hasSize(currPow, static_cast<size_t>(kBins))
+        || !hasSize(prevMag, static_cast<size_t>(kBins))
+        || !hasSize(tonalness, static_cast<size_t>(kBins))
+        || !hasSize(prevPhaseIn, static_cast<size_t>(kBins))
+        || !hasSize(prevPhaseOut, static_cast<size_t>(kBins))
+        || !hasSize(gainTarget, static_cast<size_t>(kBins))
+        || !hasSize(gainSmooth, static_cast<size_t>(kBins))
+        || !hasSize(gainFreqSmooth, static_cast<size_t>(kBins))
+        || !hasSize(harmonicFloor, static_cast<size_t>(kBins))
+        || !hasSize(barkMaskFloor, static_cast<size_t>(kBins))
+        || !hasSize(humTargetGain, static_cast<size_t>(kBins))
+        || !hasSize(narrowbandTargetGain, static_cast<size_t>(kBins))
+        || !hasSize(narrowbandConfidence, static_cast<size_t>(kBins))
+        || !hasSize(noisePow, static_cast<size_t>(kBins))
+        || !hasSize(xiDD, static_cast<size_t>(kBins))
+        || !hasSize(presenceProb, static_cast<size_t>(kBins))
+        || !hasSize(cleanPowPrev, static_cast<size_t>(kBins))
+        || !hasSize(suppressCount, static_cast<size_t>(kBins))
+        || !hasSize(msState, static_cast<size_t>(kBins))
+        || !hasMinSize(monoOut, static_cast<size_t>(numSamples))
+        || !hasMinSize(olaAcc, static_cast<size_t>(std::max(1, olaAccumSize)))
+        || olaAccumSize <= 0) {
+        return false;
+    }
+
+    if (numChannels >= 2) {
+        if (!hasMinSize(sideDelayBuf, static_cast<size_t>(std::max(1, sideDelaySize)))
+            || !hasMinSize(midDryDelayBuf, static_cast<size_t>(std::max(1, midDryDelaySize)))
+            || sideDelaySize <= 0
+            || midDryDelaySize <= 0) {
+            return false;
+        }
+    }
+
+    for (const auto& band : barkBins) {
+        for (const int idx : band) {
+            if (idx < 0 || idx >= kBins)
+                return false;
+        }
+    }
+
+    return true;
+}
+
 // ── processInPlace ────────────────────────────────────────────────────────────
 
 bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
@@ -186,7 +249,8 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                  const ProcessOptions&     options) {
     const int numCh  = buffer.getNumChannels();
     const int numSmp = buffer.getNumSamples();
-    if (numCh <= 0 || numSmp <= 0 || !fft.isReady()) return false;
+    if (!hasValidProcessingState(numCh, numSmp))
+        return false;
 
     const float wet = juce::jlimit(0.0f, 1.0f, amount);
     if (!fifoLive)

@@ -436,7 +436,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
-#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT)
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXCleanupAudioProcessor();
 }

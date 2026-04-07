@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxoptocomp</string>
+    <string>com.vxstudio.vxoptocomp</string>
     <key>CFBundleName</key>
     <string>VXOptoComp</string>
     <key>CFBundleDisplayName</key>

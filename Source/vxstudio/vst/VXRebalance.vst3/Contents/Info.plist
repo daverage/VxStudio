@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxsuite.vxrebalance</string>
+    <string>com.vxstudio.vxrebalance</string>
     <key>CFBundleName</key>
     <string>VXRebalance</string>
     <key>CFBundleDisplayName</key>
