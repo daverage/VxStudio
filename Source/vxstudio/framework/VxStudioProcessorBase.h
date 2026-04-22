@@ -17,6 +17,9 @@ public:
     explicit ProcessorBase(ProductIdentity identity);
     ProcessorBase(ProductIdentity identity,
                   juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout);
+    ProcessorBase(ProductIdentity identity,
+                  juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout,
+                  juce::AudioProcessor::BusesProperties busesProperties);
     ~ProcessorBase() override;
 
     const ProductIdentity& getProductIdentity() const noexcept { return productIdentity; }

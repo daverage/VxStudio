@@ -25,7 +25,7 @@ constexpr std::uint32_t kSharedVersion = 3u;
 constexpr auto kSharedLockName = "vxsuite-spectrum-telemetry-lock";
 constexpr auto kSharedFolderName = "VXSuiteShared";
 constexpr auto kSharedFileName = "vxsuite-spectrum-telemetry.bin";
-constexpr std::int64_t kSilentSlotReuseMs = 1500;
+constexpr std::int64_t kStaleSlotReuseMs = 1500;
 
 template <typename Value>
 std::atomic_ref<Value> atomicRef(Value& value) noexcept {
@@ -197,9 +197,7 @@ int SnapshotRegistry::registerSlot(const ProductIdentity& identity,
         auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
         if (atomicRef(slot.active).load(std::memory_order_acquire) == 0u)
             continue;
-        if (atomicRef(slot.silent).load(std::memory_order_acquire) == 0u)
-            continue;
-        if ((nowMs - slot.lastPublishMs) < kSilentSlotReuseMs)
+        if ((nowMs - slot.lastPublishMs) < kStaleSlotReuseMs)
             continue;
 
         atomicRef(slot.version).store(1u, std::memory_order_release);
@@ -381,6 +379,7 @@ SnapshotPublisher::~SnapshotPublisher() {
 }
 
 void SnapshotPublisher::prepare(const double sampleRate, const int maxBlockSize) noexcept {
+    registrationAttempted = false;
     ensureRegistered();
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     publishIntervalSamples = std::max(512, std::min(kHistorySamples, static_cast<int>(currentSampleRate / 30.0)));
@@ -398,6 +397,7 @@ void SnapshotPublisher::reset() noexcept {
     levelTraceBucketSampleCount = 0;
     dryLevelBucketSumSquares = 0.0;
     wetLevelBucketSumSquares = 0.0;
+    registrationAttempted = false;
     clearArray(dryHistory);
     clearArray(wetHistory);
     clearArray(dryWaveform);
@@ -411,13 +411,21 @@ void SnapshotPublisher::reset() noexcept {
 void SnapshotPublisher::ensureRegistered() noexcept {
     if (slotIndex >= 0 && instanceIdValue != 0)
         return;
+    if (registrationAttempted)
+        return;
+    registrationAttempted = true;
 
     slotIndex = SnapshotRegistry::instance().registerSlot(identityDescriptor, showTraceValue, instanceIdValue);
+    if (slotIndex < 0 || instanceIdValue == 0) {
+        slotIndex = -1;
+        instanceIdValue = 0;
+        registrationAttempted = false;
+    }
 }
 
 void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
                                 const juce::AudioBuffer<float>& wetBuffer) noexcept {
-    if (slotIndex < 0)
+    if (slotIndex < 0 && !registrationAttempted)
         ensureRegistered();
     if (slotIndex < 0)
         return;
@@ -450,13 +458,14 @@ void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
                                               wetLevelTrace)) {
         slotIndex = -1;
         instanceIdValue = 0;
+        registrationAttempted = false;
         ensureRegistered();
     }
     samplesUntilPublish = publishIntervalSamples;
 }
 
 void SnapshotPublisher::publishSilence() noexcept {
-    if (slotIndex < 0)
+    if (slotIndex < 0 && !registrationAttempted)
         ensureRegistered();
     if (slotIndex < 0)
         return;
@@ -492,6 +501,7 @@ void SnapshotPublisher::publishSilence() noexcept {
                                               wetLevelTrace)) {
         slotIndex = -1;
         instanceIdValue = 0;
+        registrationAttempted = false;
         ensureRegistered();
     }
 }
@@ -1338,6 +1348,7 @@ StagePublisher::~StagePublisher() {
 
 void StagePublisher::prepare(const double sampleRate, const int maxBlockSize) noexcept {
     juce::ignoreUnused(maxBlockSize);
+    registrationAttempted = false;
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     publishIntervalSamples = std::max(256, static_cast<int>(currentSampleRate / static_cast<double>(kTargetPublishHz)));
     samplesUntilPublish = publishIntervalSamples;
@@ -1355,6 +1366,7 @@ void StagePublisher::reset() noexcept {
         outputAccumulator->reset();
     samplesUntilPublish = publishIntervalSamples;
     domainRefreshCountdown = kDomainRefreshSamples;
+    registrationAttempted = false;
 }
 
 void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
@@ -1379,11 +1391,20 @@ void StagePublisher::publishBypassed(const juce::AudioBuffer<float>& buffer) noe
 void StagePublisher::ensureRegistered() noexcept {
     if (slotIndex >= 0)
         return;
+    if (registrationAttempted)
+        return;
+    registrationAttempted = true;
 
     slotIndex = StageRegistry::instance().registerStage(identityDescriptor,
                                                         analysisDomainIdValue,
                                                         instanceIdValue,
                                                         localOrderIdValue);
+    if (slotIndex < 0 || instanceIdValue == 0) {
+        slotIndex = -1;
+        instanceIdValue = 0;
+        localOrderIdValue = 0;
+        registrationAttempted = false;
+    }
 }
 
 void StagePublisher::refreshDomainBinding(const bool force) noexcept {
@@ -1400,14 +1421,27 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     const int domainCount = domainReg.allDomainsForProcess(pid, domainIds);
 
     std::uint64_t newDomainId = 0;
+    std::array<char, 32> myStageId {};
+    copyFixedLabel(identityDescriptor.stageId.empty() ? identityDescriptor.productName : identityDescriptor.stageId,
+                   myStageId.data(),
+                   myStageId.size());
 
-    if (domainCount == 1) {
-        newDomainId = domainIds[0];
-    } else if (domainCount > 1 && outputAccumulator != nullptr) {
+    for (int i = 0; i < domainCount; ++i) {
+        std::array<char, 32> ownerStageId {};
+        const auto domId = domainIds[static_cast<std::size_t>(i)];
+        if (!domainReg.ownerStageIdForDomain(domId, ownerStageId))
+            continue;
+        if (ownerStageId == myStageId) {
+            newDomainId = domId;
+            break;
+        }
+    }
+
+    if (domainCount > 0 && outputAccumulator != nullptr) {
         const auto myOutput = outputAccumulator->summary();
         const bool hasSignal = myOutput.rms > 1.0e-6f;
 
-        if (hasSignal) {
+        if (newDomainId == 0 && hasSignal) {
             constexpr float kMatchThreshold = 0.90f;
             float bestSim = kMatchThreshold;
 
@@ -1429,19 +1463,12 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
             }
         }
 
-        // No spectral match: if current binding is still valid in this process, keep it.
+        // No strong spectral match: if current binding is still valid in this process, keep it.
         if (newDomainId == 0 && !force && analysisDomainIdValue != 0) {
             for (int i = 0; i < domainCount; ++i) {
                 if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue)
                     return;
             }
-        }
-
-        // Fallback to the most recently created domain in this process.
-        if (newDomainId == 0) {
-            DomainView latest;
-            if (domainReg.latestDomainForProcess(pid, latest))
-                newDomainId = latest.analysisDomainId;
         }
     }
 
@@ -1477,6 +1504,7 @@ void StagePublisher::maybePublish(const bool bypassed, const int numChannels) no
         slotIndex = -1;
         instanceIdValue = 0;
         localOrderIdValue = 0;
+        registrationAttempted = false;
         return;
     }
 

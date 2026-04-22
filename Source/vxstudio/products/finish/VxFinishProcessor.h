@@ -4,7 +4,7 @@
 #include "../../framework/VxStudioBlockSmoothedControl.h"
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioProcessorBase.h"
-#include "dsp/VxFinishDsp.h"
+#include "../../framework/VxStudioFinishDsp.h"
 
 class VXFinishAudioProcessor final : public vxsuite::ProcessorBase {
 public:
@@ -26,7 +26,7 @@ protected:
 private:
     static vxsuite::ProductIdentity makeIdentity();
 
-    vxsuite::finish::Dsp polishChain;
+    vxsuite::finish::Dsp finishChain;
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlTriple controls;
 };

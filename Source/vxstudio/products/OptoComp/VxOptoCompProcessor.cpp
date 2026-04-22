@@ -124,7 +124,7 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                 ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
                                 : 1.0f));
     dspParams.outputGainDb = outputGainDb;
-    dspParams.body = 0.5f;
+    dspParams.body = smoothedBody;
 
     optoDsp.setParams(dspParams);
     optoDsp.process(buffer);

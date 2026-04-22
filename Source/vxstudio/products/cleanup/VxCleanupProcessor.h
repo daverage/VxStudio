@@ -7,8 +7,10 @@
 #include "../../framework/VxStudioSpectralHelpers.h"
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioProcessorBase.h"
-#include "../polish/VxPolishAnalysisEvidence.h"
-#include "../polish/VxPolishTonalAnalysis.h"
+#include "../../framework/VxStudioAnalysisEvidence.h"
+#include "../../framework/VxStudioReadabilityGuard.h"
+#include "../../framework/VxStudioTonalAnalysis.h"
+#include "../clarity/dsp/VxClarityDsp.h"
 #include "dsp/VxCleanupDsp.h"
 
 #include <vector>
@@ -33,8 +35,9 @@ protected:
 private:
     static vxsuite::ProductIdentity makeIdentity();
 
-    vxsuite::cleanup::Dsp polishChain;
-    vxsuite::polish::TonalAnalysisState tonalAnalysis;
+    vxsuite::cleanup::Dsp correctiveChain;
+    vxsuite::clarity::ClarityDsp persistentCleanupStage;
+    vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     vxsuite::RealFft spectralFft;
     std::vector<float> spectralFifo;
     std::vector<float> spectralWindow;
@@ -53,6 +56,10 @@ private:
     float plosiveEnv = 0.0f;
     float tonalMudEnv = 0.0f;
     float harshnessEnv = 0.0f;
+    float persistentLowMidDensity = 0.0f;
+    float shortLowMidDensity = 0.0f;
+    float persistentPresenceDensity = 0.0f;
+    float shortPresenceDensity = 0.0f;
     vxsuite::OutputTrimmer outputTrimmer;
     float smoothedMakeupGain = 1.0f;
     bool classifiersPrimed = false;

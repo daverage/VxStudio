@@ -1,6 +1,8 @@
 #include "VxStudioProcessorBase.h"
 #include "VxStudioEditorBase.h"
 
+#include <utility>
+
 namespace vxsuite {
 
 ProcessorBase::ProcessorBase(ProductIdentity identity)
@@ -8,8 +10,14 @@ ProcessorBase::ProcessorBase(ProductIdentity identity)
 
 ProcessorBase::ProcessorBase(ProductIdentity identity,
                              juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout)
-    : juce::AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
-                                            .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+    : ProcessorBase(std::move(identity), std::move(parameterLayout),
+                    BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
+                                     .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {}
+
+ProcessorBase::ProcessorBase(ProductIdentity identity,
+                             juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout,
+                             juce::AudioProcessor::BusesProperties busesProperties)
+    : juce::AudioProcessor(std::move(busesProperties)),
       productIdentity(std::move(identity)),
       parameters(*this, nullptr, "STATE", std::move(parameterLayout)),
       spectrumPublisher(productIdentity, productIdentity.showLevelTrace),

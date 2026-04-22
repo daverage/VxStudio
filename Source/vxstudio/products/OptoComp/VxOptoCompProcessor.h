@@ -4,7 +4,7 @@
 #include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioProcessorBase.h"
-#include "../finish/dsp/VxFinishDsp.h"
+#include "../../framework/VxStudioFinishDsp.h"
 
 class VXOptoCompAudioProcessor final : public vxsuite::ProcessorBase {
 public:

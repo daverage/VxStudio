@@ -66,7 +66,7 @@ void SubtractDsp::updateSmoothingCoeffs() {
 void SubtractDsp::prepare(double sampleRate, int maxBlockSize) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
     fft.prepare(static_cast<int>(fftOrder));
-    const size_t blockCap = static_cast<size_t>(std::max(1, maxBlockSize));
+    const size_t blockCap = static_cast<size_t>(std::max<int>(static_cast<int>(hop), std::max(1, maxBlockSize)));
     const float hopSec = static_cast<float>(hop) / std::max(1000.0f, static_cast<float>(sr));
     minStatsL = std::max(2, static_cast<int>(std::round(0.040f / hopSec)));
     minStatsD = std::max(4, static_cast<int>(std::round(1.5f / (hopSec * static_cast<float>(minStatsL)))));

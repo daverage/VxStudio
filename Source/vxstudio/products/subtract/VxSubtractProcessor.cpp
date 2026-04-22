@@ -213,8 +213,10 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     const auto& alignedDry = getLatencyAlignedListenDryBuffer();
 
     if (stereo) {
-        leftScratch.setSize(1, numSamples, false, false, true);
-        rightScratch.setSize(1, numSamples, false, false, true);
+        if (leftScratch.getNumSamples() < numSamples)
+            leftScratch.setSize(1, numSamples, false, false, true);
+        if (rightScratch.getNumSamples() < numSamples)
+            rightScratch.setSize(1, numSamples, false, false, true);
         leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
         rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
         auto leftOptions = options;

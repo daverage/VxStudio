@@ -176,10 +176,10 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const float programRestoreRelease = timeCoeff(sr, 5.5f);
 
     const float levelShape = (voiceMode ? 0.35f : 0.24f) + (voiceMode ? 0.70f : 0.46f) * level;
-    const float maxUpwardGain = 1.0f + (voiceMode ? 1.05f : 0.18f) * level;
+    const float maxUpwardGain = 1.0f + (voiceMode ? 1.05f : 0.48f) * level;
     const float maxDownwardGain = std::max(voiceMode ? 0.24f : 0.50f,
                                            1.0f - (voiceMode ? 0.55f : 0.46f) * level);
-    const float maxLiftAmount = (voiceMode ? 0.28f : 0.18f) + 0.82f * level;
+    const float maxLiftAmount = (voiceMode ? 0.28f : 0.26f) + (voiceMode ? 0.82f : 0.96f) * level;
     const float maxTameDepth = (voiceMode ? 0.15f : 0.10f) + (voiceMode ? 0.60f : 0.42f) * control;
     const bool mixOfflineMode = !voiceMode
         && params.analysisMode == MixAnalysisMode::offline

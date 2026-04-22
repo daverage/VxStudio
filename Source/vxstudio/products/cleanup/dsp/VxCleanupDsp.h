@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../../polish/dsp/VxPolishCorrectiveStage.h"
+#include "../../../framework/VxStudioCorrectiveStage.h"
 
 namespace vxsuite::cleanup {
 
 class Dsp {
 public:
-    using Params = vxsuite::polish::SharedParams;
+    using Params = vxsuite::corrective::SharedParams;
 
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void setParams(const Params& params);
@@ -20,7 +20,7 @@ public:
     float getTroubleActivity() const noexcept { return corrective.getTroubleActivity(); }
 
 private:
-    vxsuite::polish::CorrectiveStage corrective;
+    vxsuite::corrective::CorrectiveStage corrective;
 };
 
 } // namespace vxsuite::cleanup

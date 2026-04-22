@@ -57,7 +57,7 @@ bool expectNoSteadyStateAllocations(const char* label,
     return true;
 }
 
-bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr);
+bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr, int blockSize = 256);
 
 float renderCleanupAndMeasureMaxPlosiveActivity(VXCleanupAudioProcessor& cleanup,
                                                 const juce::AudioBuffer<float>& input,
@@ -80,7 +80,7 @@ juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double 
                                                                    const juce::AudioBuffer<float>& input) {
     VXSubtractAudioProcessor subtract;
     subtract.prepareToPlay(sr, blockSize);
-    if (!primeSubtractLearn(subtract, sr))
+    if (!primeSubtractLearn(subtract, sr, blockSize))
         return {};
     setParamNormalized(subtract, "subtract", 0.78f);
     setParamNormalized(subtract, "protect", 0.48f);
@@ -257,8 +257,9 @@ bool testCleanupZeroIsIdentity() {
     return true;
 }
 
-bool primeSubtractLearn(VXSubtractAudioProcessor& processor, const double sr) {
-    juce::AudioBuffer<float> warmup(2, 256);
+bool primeSubtractLearn(VXSubtractAudioProcessor& processor, const double sr, const int blockSize) {
+    const int learnBlockSize = std::max(1, blockSize);
+    juce::AudioBuffer<float> warmup(2, learnBlockSize);
     warmup.clear();
     setParamNormalized(processor, "learn", 0.0f);
     processSingleBlock(processor, warmup);
@@ -269,9 +270,8 @@ bool primeSubtractLearn(VXSubtractAudioProcessor& processor, const double sr) {
     float lastProgress = 0.0f;
     float lastObserved = 0.0f;
     juce::MidiBuffer midi;
-    constexpr int blockSize = 256;
-    for (int start = 0; start < noise.getNumSamples(); start += blockSize) {
-        const int num = std::min(blockSize, noise.getNumSamples() - start);
+    for (int start = 0; start < noise.getNumSamples(); start += learnBlockSize) {
+        const int num = std::min(learnBlockSize, noise.getNumSamples() - start);
         juce::AudioBuffer<float> block(2, num);
         for (int ch = 0; ch < 2; ++ch)
             block.copyFrom(ch, 0, noise, ch, start, num);
@@ -718,6 +718,44 @@ bool testCleanupVoicedEdgeCaseStaysClean() {
     if (residualRatio > 0.102f) {
         std::cerr << "[VXSuitePluginRegression] Cleanup added too much edge-case harmonic damage: residualRatio="
                   << residualRatio << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testCleanupFocusPreservesVoicedArticulation() {
+    constexpr double sr = 48000.0;
+    const auto input = makeCleanupVoicedEdgeCaseInput(sr, 1.0f);
+
+    VXCleanupAudioProcessor lowFocus;
+    lowFocus.prepareToPlay(sr, 256);
+    setParamNormalized(lowFocus, "cleanup", 0.95f);
+    setParamNormalized(lowFocus, "body", 0.20f);
+    setParamNormalized(lowFocus, "focus", 0.18f);
+    setParamNormalized(lowFocus, "hishelf_on", 1.0f);
+    const auto lowOut = render(lowFocus, input, 256);
+
+    VXCleanupAudioProcessor highFocus;
+    highFocus.prepareToPlay(sr, 256);
+    setParamNormalized(highFocus, "cleanup", 0.95f);
+    setParamNormalized(highFocus, "body", 0.20f);
+    setParamNormalized(highFocus, "focus", 0.84f);
+    setParamNormalized(highFocus, "hishelf_on", 1.0f);
+    const auto highOut = render(highFocus, input, 256);
+
+    const float lowSpeechCorr = std::abs(speechBandCorrelation(input, lowOut, sr));
+    const float highSpeechCorr = std::abs(speechBandCorrelation(input, highOut, sr));
+    if (highSpeechCorr + 0.003f < lowSpeechCorr) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup focus no longer protects voiced articulation: low="
+                  << lowSpeechCorr << " high=" << highSpeechCorr << "\n";
+        return false;
+    }
+
+    const float highResidualRatio = bestGainResidualRatioSkip(input, highOut, 2048);
+    if (highResidualRatio > 0.11f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup high-focus path still damages voiced articulation too much: residualRatio="
+                  << highResidualRatio << "\n";
         return false;
     }
 
@@ -1870,6 +1908,7 @@ int main() {
     ok &= testCleanupFinishSubtractChainStaysStable();
     ok &= testCleanupStrongSettingIsAudibleButBounded();
     ok &= testCleanupHighShelfStrongSettingStaysBounded();
+    ok &= testCleanupFocusPreservesVoicedArticulation();
     ok &= testCleanupDeEssAndPlosivesStayHeadroomSafe();
     ok &= testCleanupVoicedMaterialStaysClean();
     ok &= testCleanupVoicedEdgeCaseStaysClean();

@@ -5,8 +5,11 @@ function(vxstudio_add_framework target_name)
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioLevelTraceView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioModelAssets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioProcessorBase.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioSignalQuality.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioEditorBase.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioFinishDsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioUiHelpers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp

@@ -9,6 +9,7 @@ set(VXSTUDIO_FRAMEWORK_VERSION "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXDEVERB "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXCLEANUP "0.2.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXCLARITY "0.1.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXFINISH "0.3.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXSUBTRACT "0.2.0")
@@ -322,7 +323,7 @@ juce_generate_juce_header(VXCleanup)
 target_sources(VXCleanup PRIVATE
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/polish/dsp/VxPolishCorrectiveStage.cpp
+  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
 )
 target_include_directories(VXCleanup PRIVATE Source)
 target_link_libraries(VXCleanup PRIVATE VxStudioFramework juce::juce_dsp)
@@ -351,9 +352,6 @@ target_compile_definitions(VXFinish PRIVATE
 juce_generate_juce_header(VXFinish)
 target_sources(VXFinish PRIVATE
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
-  Source/vxstudio/products/finish/dsp/VxFinishDsp.cpp
-  Source/vxstudio/products/OptoComp/OptoCompressorLA2A.cpp
-  Source/vxstudio/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXFinish PRIVATE Source)
 target_link_libraries(VXFinish PRIVATE VxStudioFramework juce::juce_dsp)
@@ -382,8 +380,6 @@ target_compile_definitions(VXOptoComp PRIVATE
 juce_generate_juce_header(VXOptoComp)
 target_sources(VXOptoComp PRIVATE
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
-  Source/vxstudio/products/finish/dsp/VxFinishDsp.cpp
-  Source/vxstudio/products/OptoComp/OptoCompressorLA2A.cpp
 )
 target_include_directories(VXOptoComp PRIVATE Source)
 target_link_libraries(VXOptoComp PRIVATE VxStudioFramework juce::juce_dsp)
@@ -732,6 +728,7 @@ add_executable(VXStudioPluginRegressionTests
   tests/VXStudioPluginRegressionTests.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -739,8 +736,6 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/denoiser/VxDenoiserProcessor.cpp
   Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
-  Source/vxstudio/products/finish/dsp/VxFinishDsp.cpp
-  Source/vxstudio/products/OptoComp/OptoCompressorLA2A.cpp
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
@@ -752,7 +747,6 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
-  Source/vxstudio/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXStudioPluginRegressionTests PRIVATE Source tests)
 target_link_libraries(VXStudioPluginRegressionTests PRIVATE
@@ -767,6 +761,7 @@ add_executable(VXStudioBatchAudioCheck
   tests/VXStudioBatchAudioCheck.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -774,8 +769,6 @@ add_executable(VXStudioBatchAudioCheck
   Source/vxstudio/products/denoiser/VxDenoiserProcessor.cpp
   Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
-  Source/vxstudio/products/finish/dsp/VxFinishDsp.cpp
-  Source/vxstudio/products/OptoComp/OptoCompressorLA2A.cpp
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
@@ -787,7 +780,6 @@ add_executable(VXStudioBatchAudioCheck
   Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
-  Source/vxstudio/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXStudioBatchAudioCheck PRIVATE Source tests)
 target_link_libraries(VXStudioBatchAudioCheck PRIVATE
@@ -804,14 +796,12 @@ add_executable(VXSuiteProfile
   tests/VXStudioProfile.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
-  Source/vxstudio/products/finish/dsp/VxFinishDsp.cpp
-  Source/vxstudio/products/OptoComp/OptoCompressorLA2A.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
-  Source/vxstudio/products/polish/dsp/VxPolishCorrectiveStage.cpp
 )
 target_include_directories(VXSuiteProfile PRIVATE Source tests)
 target_link_libraries(VXSuiteProfile PRIVATE

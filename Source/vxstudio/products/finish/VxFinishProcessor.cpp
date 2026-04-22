@@ -60,9 +60,9 @@ int VXFinishAudioProcessor::getActivityLightCount() const noexcept { return 3; }
 
 float VXFinishAudioProcessor::getActivityLight(int index) const noexcept {
   switch (index) {
-    case 0: return polishChain.getCompActivity();
-    case 1: return juce::jlimit(0.0f, 1.0f, polishChain.getGainReductionDb() / 20.0f);
-    case 2: return polishChain.getLimiterActivity();
+    case 0: return finishChain.getCompActivity();
+    case 1: return juce::jlimit(0.0f, 1.0f, finishChain.getGainReductionDb() / 20.0f);
+    case 2: return finishChain.getLimiterActivity();
     default: return 0.0f;
   }
 }
@@ -79,12 +79,12 @@ std::string_view VXFinishAudioProcessor::getActivityLightLabel(int index) const 
 
 void VXFinishAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    polishChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
+    finishChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     resetSuite();
 }
 
 void VXFinishAudioProcessor::resetSuite() {
-    polishChain.reset();
+    finishChain.reset();
     controls.reset(0.0f, 0.5f, 0.5f);
 }
 
@@ -123,10 +123,10 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                 ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
                                 : 1.0f));
     dspParams.outputGainDb = outputGainDb;
-    dspParams.body = 0.5f;
+    dspParams.body = smoothedBody;
 
-    polishChain.setParams(dspParams);
-    polishChain.process(buffer);
+    finishChain.setParams(dspParams);
+    finishChain.process(buffer);
 }
 
 void VXFinishAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

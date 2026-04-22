@@ -1,3 +1,97 @@
+claude# Stronger high-end effect pass - 2026-04-22
+
+## Goal
+Fix the issues found in the effect-strength audit so high values stop feeling overly polite, compression recovers level more convincingly, and the main realtime-safety bug is removed.
+
+## Plan
+
+- [x] Remove the steady-state audio-thread allocation in `VXSubtract`
+- [x] Strengthen shared `Finish` / `OptoComp` compression so high settings clamp harder and recover output level more confidently
+- [x] Increase `VXLeveler` general-mode upward authority so mix mode feels like real levelling instead of mostly attenuation
+- [x] Make `VXCleanup` audibly stronger at high settings without regressing voiced-material guardrails
+- [x] Rebuild the affected plugins and reinstall the updated VST3 bundles
+- [x] Run the regression suite and record residual risk
+
+## Review
+
+- `VXFinish` / `VXOptoComp` now drive the shared opto compressor harder near the top of the knob and apply measured recovery after compression/limiting, so loud passages do not stay dipped as easily after gain reduction.
+- `VXLeveler` general mode now has meaningfully more upward lift available, which should make mix-mode levelling read as active instead of overly cautious.
+- `VXCleanup` now includes the merged persistent cleanup stage, a later-ramping high-end strength curve, and looser makeup recovery so high settings read more clearly while still staying inside the voiced-material Cleanup regressions.
+- `VXSubtract` no longer resizes its stereo scratch buffers every block during normal processing; it only grows them on oversize input blocks.
+- Verified build: `cmake --build build --target VXCleanupStage VXFinishStage VXOptoCompStage VXSubtractStage VXLevelerStage VXStudioPluginRegressionTests -j4`
+- Installed refreshed bundles to `/Library/Audio/Plug-Ins/VST3/`: `VXCleanup`, `VXFinish`, `VXOptoComp`, `VXSubtract`, `VXLeveler`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Remaining regression output is now:
+  - pre-existing denoiser tuning failures
+  - no new Cleanup / Finish / Leveler / Subtract regressions from this pass
+- Follow-up investigation on the former full-chain block-size failure showed the problem was in the regression helper, not the shipped subtract DSP: the test learned a subtract profile with hardcoded `256`-sample blocks even when the plugin instance had been prepared for `64` or `512`, which made the learned profile differ before the actual comparison run.
+- Fixed the test helper so `primeSubtractLearn(...)` now learns with the same block size the subtract instance was prepared/rendered with; after that change, `./build/VXStudioPluginRegressionTests` falls back to only the long-standing denoiser failures.
+
+claude# Cleanup readability-guard upgrade - 2026-04-10
+
+## Goal
+Upgrade the existing Cleanup plugin so it preserves readability, body, and articulation more intelligently while still behaving like Cleanup, not Clarity.
+
+## Plan
+
+- [x] Audit the current Cleanup evidence flow, corrective stage, and test coverage for the right guard insertion points.
+- [x] Add persistent density awareness, self-masking metrics, readability-preservation logic, cumulative harm guards, and tonal drift protection to the Cleanup corrective path.
+- [x] Keep the existing Cleanup identity and controls intact while refining Vocal mode and Focus behavior.
+- [x] Extend regression coverage for over-cleaning, readability preservation, and cooperative stage behavior.
+- [x] Build the affected targets and run targeted regression checks.
+
+## Review
+
+- Added a framework-level readability guard resolver and persistent density tracking for Cleanup so the DSP can distinguish persistent mud from short corrective events before it commits to cuts.
+- Cleanup now threads focus, density persistence, articulation risk, body-loss risk, cumulative correction risk, and tonal drift risk into the shared corrective stage.
+- Focused Cleanup regression coverage now checks that high Focus preserves voiced articulation better than low Focus on edge-case voiced material.
+- Verified build: `cmake --build build --target VXCleanup VXStudioPluginRegressionTests -j4`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Result: the new Cleanup focus regression passed, the Cleanup strong-setting audibility check now clears, and the plosive false-trigger guard stays within range on voiced material.
+- Remaining regression output is limited to the unrelated denoiser baseline failures already present in the tree.
+
+# Finish/OptoComp shared-core extraction - 2026-04-10
+
+## Goal
+Move the shared LA-2A-style opto/finish DSP into `Source/vxstudio/framework/` as the single source of truth, then make `VXFinish` and `VXOptoComp` consume that framework implementation directly.
+
+## Plan
+
+- [x] Copy the shared opto/finish DSP into framework-owned sources
+- [x] Repoint `VXFinish` and `VXOptoComp` to the framework-owned DSP
+- [x] Remove the obsolete product-local Finish/OptoComp DSP sources from the tree
+- [x] Build the affected targets and run regression verification
+
+## Review
+
+- The shared opto/finish DSP now lives in `Source/vxstudio/framework/` and is linked from both products
+- The old product-local `VxFinishDsp` and `OptoCompressorLA2A` sources were removed so the code only exists in one place
+- The shared `Body` control now reaches the DSP instead of being smoothed and discarded, and it stays neutral at center while still working when `Finish` is bypassed
+- Verified build: `cmake --build build --target VXCleanup VXFinish VXOptoComp VXStudioPluginRegressionTests -j4`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Result: the Finish body-control regression cleared; the remaining warnings are the pre-existing Cleanup and Denoiser baseline failures plus the cleanup allocation warning
+
+# Cleanup self-containment fix - 2026-04-10
+
+## Goal
+Make `VXCleanup` self-contained by moving the shared corrective DSP and tonal-analysis helpers out of the `polish` product tree and into the VX framework.
+
+## Plan
+
+- [x] Move the shared corrective DSP and analysis helpers into `Source/vxstudio/framework/`
+- [x] Repoint `VXCleanup` to the framework-owned helpers and remove `polish` includes
+- [x] Update the framework CMake wiring and stop compiling the `polish` DSP file into Cleanup targets
+- [x] Build the affected targets and verify the Cleanup product still compiles
+
+## Review
+
+- `VXCleanup` now depends on framework-owned corrective implementation instead of importing `../polish/...` directly from the product tree
+- The shared corrective DSP, tonal analysis, and evidence helpers now live in `Source/vxstudio/framework/` as real framework code, and the old `polish` copies were removed
+- Cleanup no longer needs any `polish` source files in its own target list
+- Verified build: `cmake --build build --target VXCleanup VXStudioPluginRegressionTests -j4`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Result: the regression binary still reports the existing denoiser and finish failures, plus the pre-existing cleanup allocation tracking warning; it also still flags the Cleanup strong-setting threshold, which should be treated as a follow-up tuning item rather than a dependency issue
+
 # VXDenoiser crash investigation — 2026-04-07
 
 ## Goal
@@ -431,3 +525,43 @@ Address the latest ReBalance code-review findings without breaking the current o
 - Changed the diagnostics panel to start collapsed by default
 - Verified builds: `cmake --build build --target VXRebalanceMeasure -j4` and `cmake --build build --target VXRebalancePlugin -j4`
 - Synced the installed bundle: `/Library/Audio/Plug-Ins/VST3/VXRebalance.vst3`
+# VxClarity build — 2026-04-10
+
+## Goal
+Build `VxClarity` as a standalone VX Suite product that follows the supplied brief instead of reusing `Cleanup`'s product identity.
+
+## Plan
+
+- [x] Map the brief against existing VX Suite products and confirm `VxClarity` should live alongside `Cleanup`
+- [x] Extend the shared processor base so a product can declare an optional sidechain bus
+- [x] Add `VxClarity` product files, help content, version wiring, and build registration
+- [x] Build the new plugin target and verify the new product compiles cleanly
+
+## Review
+
+- Added a standalone `VXClarity` plugin target with its own identity, help content, version entry, and VST3 staging
+- Extended `vxsuite::ProcessorBase` with an optional buses-properties constructor so `VxClarity` can expose a sidechain bus cleanly
+- Implemented `VxClarity` as a two-knob clarity processor with `Clean` and `Focus`, shared `Voice` / `General` mode mapping, and optional sidechain-aware adaptive space-making
+- Verified build: `cmake --build /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build --target VXClarity_VST3 -j4`
+- Verified compile-only regression target: `cmake --build /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build --target VXStudioPluginRegressionTests -j4`
+- Residual risk: the DSP is intentionally broad and zero-latency, but it still needs in-host listening and corpus tuning to confirm the brief's subjective "clearer / less cloudy / not pumpy" goal
+
+# VxLeveler audio pickup investigation - 2026-04-22
+
+## Goal
+Verify why `VxLeveler` no longer seems to pick up input audio / process it, fix the root cause, and prove the signal path works again.
+
+## Plan
+
+- [x] Inspect the VxLeveler processor/editor/DSP signal path and recent framework interactions
+- [x] Reproduce or isolate where audio stops being observed or processed
+- [x] Implement the smallest correct fix
+- [x] Build and run targeted verification
+- [x] Add review notes with outcome and residual risk
+
+## Review
+
+- `VXLeveler`'s processor path is active in the local harness: `./build/VXLevelerMeasure tests/fixtures/rebalance/listening_cases/studio_vocal_guitar/_original.wav /tmp/vxleveler_out.wav general 1.0 1.0 smart 2` produced changing trace values and a rendered output file, so the plugin code is still receiving audio and processing it.
+- The staged host-loaded bundle at `Source/vxstudio/vst/VXLeveler.vst3` was stale before this check and still dated `2026-04-07`; rebuilding `VXLevelerStage` refreshed the actual bundle your DAW loads to `2026-04-22`.
+- Verified the staged bundle now matches the freshly built binary via identical `shasum` values for `build/VXLeveler_artefacts/Release/VST3/VXLeveler.vst3/Contents/MacOS/VXLeveler` and `Source/vxstudio/vst/VXLeveler.vst3/Contents/MacOS/VXLeveler`.
+- `./build/VXStudioPluginRegressionTests` still fails, but only on the pre-existing denoiser regressions; no Leveler regression failed during this check.

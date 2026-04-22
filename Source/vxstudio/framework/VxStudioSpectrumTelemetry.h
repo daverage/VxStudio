@@ -117,6 +117,7 @@ private:
     int levelTraceBucketSampleCount = 0;
     double dryLevelBucketSumSquares = 0.0;
     double wetLevelBucketSumSquares = 0.0;
+    bool registrationAttempted = false;
     std::array<float, kHistorySamples> dryHistory {};
     std::array<float, kHistorySamples> wetHistory {};
     std::array<float, kWaveformSamples> dryWaveform {};
@@ -310,6 +311,7 @@ private:
     int domainRefreshCountdown = 0;
     std::unique_ptr<SummaryAccumulator> inputAccumulator;
     std::unique_ptr<SummaryAccumulator> outputAccumulator;
+    bool registrationAttempted = false;
 };
 
 } // namespace vxsuite::analysis
