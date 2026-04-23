@@ -1,5 +1,6 @@
 # Lessons
 
+- When investigating a DAW project report, inspect the exact project file the user names before generalising from nearby sibling `.RPP` files; REAPER folders often contain several similar project copies with different FX chains and saved states.
 - For shared VX parameter displays, never present a neutral-centered control as a raw `0..1` or as if `50%` were unity by default; if the product meaning is unity at centre, the text and mapping must read that way explicitly, such as `50% .. 150%` with `100%` at the midpoint.
 - When a user asks whether a plugin concept can be built, do not anchor too early on the illustrative example signal pair; restate and design around the broader outcome contract first, then narrow the DSP and wording only after confirming the real capture scenario.
 - When a user clarifies that the goal is overall perceived level consistency rather than recovery of one source within a mix, re-center the plugin contract around whole-track levelling immediately; source-preservation heuristics should become guard rails, not the headline behavior.

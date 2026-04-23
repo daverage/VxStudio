@@ -1,3 +1,30 @@
+# REAPER VST effects silent-processing investigation - 2026-04-23
+
+## Goal
+Find and fix why the VXStudio VST effects appear to make no audible change in REAPER,
+covering Denoise, Proximity, Deverb, Subtract, and the other suite effects.
+
+## Plan
+
+- [x] Verify which plugin binaries/bundles REAPER is likely loading and whether the latest build was installed to the active VST3 path
+- [x] Trace the shared plugin processing path from host audio input through parameter state, bypass/wet mix, DSP execution, and output copy
+- [x] Inspect representative products with different DSP paths: Denoiser, Proximity, Deverb, Subtract, plus one known-simple effect
+- [x] Build or run a focused offline harness proving whether non-neutral settings alter audio outside the host
+- [x] Implement the smallest root-cause fix, rebuild affected bundles, and reinstall/stage them for REAPER
+- [x] Run regression or targeted audio-delta verification and record the result
+
+## Review
+
+- REAPER project inspection found many named instances saved bypassed, which explains the "nothing happens" symptom for those effects in the tested projects:
+  `VXProximity`, `VXSubtract`, `VXTone`, `VXFinish`, and `VXOptoComp` were bypassed in the inspected `Untitled.RPP`;
+  `VXCleanup`, `VXDeverb`, `VXFinish`, `VXProximity`, `VXSubtract`, `VXTone`, and `VXOptoComp` were bypassed in the inspected `gx.RPP`.
+- REAPER's arm64 VST cache has scanned the `/Library/Audio/Plug-Ins/VST3/` VX Suite bundles, and the installed binaries match the staged repo bundles where checked.
+- Offline regression confirmed the shared processor/parameter path does process audio; the broad "all plugins are dry" symptom is not reproduced in the direct processor harness.
+- Denoiser had a real high-setting weakness on noise-only material, so `VXDenoiser` now applies a conservative residual trim when shared voice evidence says the input is mostly non-speech/noise.
+- Rebuilt and staged `VXDenoiserStage`, then refreshed `/Library/Audio/Plug-Ins/VST3/VXDenoiser.vst3`; the installed binary verifies with `codesign` and matches the staged bundle hash.
+- Verification: `cmake --build build --target VXStudioPluginRegressionTests -j4` succeeds.
+- Verification: `./build/VXStudioPluginRegressionTests` now reports only the pre-existing Denoiser speech-coherence failure; the previous noise-only "barely reduced" failure no longer appears.
+
 claude# Stronger high-end effect pass - 2026-04-22
 
 ## Goal

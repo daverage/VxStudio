@@ -35,5 +35,6 @@ private:
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlPair controls;
     float  smoothedMakeupGain  = 1.0f;
+    float  smoothedResidualTrim = 1.0f;
     std::array<float, 2> smoothedStereoMakeupGain { 1.0f, 1.0f };
 };

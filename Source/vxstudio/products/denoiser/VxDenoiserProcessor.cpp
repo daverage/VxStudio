@@ -77,6 +77,7 @@ void VXDenoiserAudioProcessor::resetSuite() {
     denoiserDspRight.reset();
     controls.reset(0.0f, 0.5f);
     smoothedMakeupGain = 1.0f;
+    smoothedResidualTrim = 1.0f;
     smoothedStereoMakeupGain = { 1.0f, 1.0f };
     outputTrimmer.reset();
 }
@@ -207,6 +208,22 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                                            0.120f);
         }
     }
+
+    const float speechEvidence = vxsuite::clamp01(0.70f * vocalPriority
+                                                + 0.35f * voiceContext.speechPresence
+                                                + 0.25f * voiceContext.phraseActivity
+                                                + 0.20f * voiceContext.intelligibility);
+    const float residualTrimDrive = vxsuite::clamp01((effectiveClean - 0.45f) / 0.55f);
+    const float nonSpeechResidual = vxsuite::clamp01(1.0f - speechEvidence);
+    const float residualTrimDepth = isVoice ? 0.34f : 0.46f;
+    const float residualTrimTarget = 1.0f - residualTrimDepth * residualTrimDrive * nonSpeechResidual;
+    smoothedResidualTrim = vxsuite::smoothBlockValue(smoothedResidualTrim,
+                                                     juce::jlimit(0.45f, 1.0f, residualTrimTarget),
+                                                     currentSampleRateHz,
+                                                     numSamples,
+                                                     residualTrimTarget < smoothedResidualTrim ? 0.080f : 0.160f);
+    if (std::abs(smoothedResidualTrim - 1.0f) > 1.0e-4f)
+        buffer.applyGain(smoothedResidualTrim);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

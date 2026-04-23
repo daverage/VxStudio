@@ -1,0 +1,18 @@
+# Large binary/asset directories — not source code
+build/
+distribution/
+data/
+assets/
+JUCE/
+tests/
+tasks/
+
+# VST3 bundles inside Source
+Source/vxstudio/vst/
+
+# Compiled files
+**/*.a
+**/*.o
+**/*.dylib
+**/*.so
+**/*.dll

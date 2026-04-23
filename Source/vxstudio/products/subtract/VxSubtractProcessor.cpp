@@ -221,26 +221,26 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
         auto leftOptions = options;
         auto rightOptions = options;
-        const float leftBlindAmount = (!learningActiveNow && !leftReady && !rightReady) ? blindAmount : 0.0f;
-        const float rightBlindAmount = (!learningActiveNow && !rightReady && !leftReady) ? blindAmount : 0.0f;
+        const float leftProcessAmount = leftReady ? subtractStrength : ((!learningActiveNow && !rightReady) ? blindAmount : 0.0f);
+        const float rightProcessAmount = rightReady ? subtractStrength : ((!learningActiveNow && !leftReady) ? blindAmount : 0.0f);
         if (!leftReady)
             leftOptions.subtract = 0.0f;
         if (!rightReady)
             rightOptions.subtract = 0.0f;
-        if (learningActiveNow || leftReady || leftBlindAmount > 1.0e-5f) {
-            subtractDspLeft.processInPlace(leftScratch, leftBlindAmount, leftOptions);
+        if (learningActiveNow || leftReady || leftProcessAmount > 1.0e-5f) {
+            subtractDspLeft.processInPlace(leftScratch, leftProcessAmount, leftOptions);
             buffer.copyFrom(0, 0, leftScratch, 0, 0, numSamples);
         } else {
             buffer.copyFrom(0, 0, alignedDry, 0, 0, numSamples);
         }
-        if (learningActiveNow || rightReady || rightBlindAmount > 1.0e-5f) {
-            subtractDspRight.processInPlace(rightScratch, rightBlindAmount, rightOptions);
+        if (learningActiveNow || rightReady || rightProcessAmount > 1.0e-5f) {
+            subtractDspRight.processInPlace(rightScratch, rightProcessAmount, rightOptions);
             buffer.copyFrom(1, 0, rightScratch, 0, 0, numSamples);
         } else {
             buffer.copyFrom(1, 0, alignedDry, 1, 0, numSamples);
         }
     } else {
-        subtractDspMono.processInPlace(buffer, blindAmount, options);
+        subtractDspMono.processInPlace(buffer, learnedReady ? subtractStrength : blindAmount, options);
     }
 
     // RMS makeup: restore level lost to spectral subtraction.
