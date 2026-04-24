@@ -323,7 +323,7 @@ juce_generate_juce_header(VXCleanup)
 target_sources(VXCleanup PRIVATE
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
+  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
 )
 target_include_directories(VXCleanup PRIVATE Source)
 target_link_libraries(VXCleanup PRIVATE VxStudioFramework juce::juce_dsp)
@@ -728,7 +728,7 @@ add_executable(VXStudioPluginRegressionTests
   tests/VXStudioPluginRegressionTests.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
+  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -761,7 +761,7 @@ add_executable(VXStudioBatchAudioCheck
   tests/VXStudioBatchAudioCheck.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
+  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -796,7 +796,7 @@ add_executable(VXSuiteProfile
   tests/VXStudioProfile.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/clarity/dsp/VxClarityDsp.cpp
+  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp

@@ -127,6 +127,9 @@ void VXDeverbAudioProcessor::resetSuite() {
     wetScratch.clear();
     controls.reset(0.0f);
     smoothedCompensationGain = 1.0f;
+    smoothedBody = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
+    bodyShelfZ1.fill(0.0f);
+    bodyShelfZ2.fill(0.0f);
     firstBlockProcessed = false;
 }
 
@@ -181,6 +184,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         return;
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
+    const float bodyTarget   = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     const float dryRms = computeBufferRms(buffer);
     const bool isFirstBlock = !firstBlockProcessed;
     const float smoothedReduce = controls.process(reduceTarget, currentSampleRateHz, numSamples, 0.060f);
@@ -231,6 +235,44 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
     applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock);
+
+    // Body: post-deverb low shelf to restore low-end weight lost to subtraction.
+    // 250 Hz shelf, +6 dB max at body=1.0, neutral at body=0.
+    smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget,
+                                             currentSampleRateHz, numSamples, 0.120f);
+    if (smoothedBody > 1.0e-4f) {
+        const float gainDb = 6.0f * smoothedBody;
+        const float A   = std::pow(10.0f, gainDb / 40.0f);
+        const float w0  = 2.0f * juce::MathConstants<float>::pi * 250.0f
+                          / static_cast<float>(currentSampleRateHz);
+        const float cosW = std::cos(w0);
+        const float sinW = std::sin(w0);
+        const float sqA  = std::sqrt(A);
+        const float alph = sinW / (2.0f * 0.7071067811865476f);
+        const float a0   = (A + 1.0f) + (A - 1.0f) * cosW + 2.0f * sqA * alph;
+        const float invA0 = 1.0f / a0;
+        const float cb0 =  A * ((A + 1.0f) - (A - 1.0f) * cosW + 2.0f * sqA * alph) * invA0;
+        const float cb1 =  2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosW) * invA0;
+        const float cb2 =  A * ((A + 1.0f) - (A - 1.0f) * cosW - 2.0f * sqA * alph) * invA0;
+        const float ca1 = -2.0f * ((A - 1.0f) + (A + 1.0f) * cosW) * invA0;
+        const float ca2 =        ((A + 1.0f) + (A - 1.0f) * cosW - 2.0f * sqA * alph) * invA0;
+
+        const int numChannels = std::min(buffer.getNumChannels(),
+                                         static_cast<int>(bodyShelfZ1.size()));
+        for (int ch = 0; ch < numChannels; ++ch) {
+            float z1 = bodyShelfZ1[static_cast<size_t>(ch)];
+            float z2 = bodyShelfZ2[static_cast<size_t>(ch)];
+            float* data = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                const float w = data[i] - ca1 * z1 - ca2 * z2;
+                data[i] = safeValue(cb0 * w + cb1 * z1 + cb2 * z2);
+                z2 = z1;
+                z1 = w;
+            }
+            bodyShelfZ1[static_cast<size_t>(ch)] = z1;
+            bodyShelfZ2[static_cast<size_t>(ch)] = z2;
+        }
+    }
 }
 
 void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {

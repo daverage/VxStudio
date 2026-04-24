@@ -166,31 +166,6 @@ inline constexpr HelpContent cleanup {
     "VXCleanup"
 };
 
-inline constexpr HelpContent clarity {
-    "VXClarity Help",
-    R"(
-<h1>VXClarity</h1>
-<p>Adaptive clarity processing for tracks, buses, and full mixes. It combines gentle persistent cleanup with short-term space-making so material feels clearer without turning hollow or hyped.</p>
-<h2>How to use it</h2>
-<ul>
-<li>Raise Clean until muddiness and overlap start to back off.</li>
-<li>Move Focus toward Clarity when you want more separation, or toward Body when the result feels too lean.</li>
-<li>Use Voice mode when the material needs speech-friendly protection and General mode when you want the broadest mix behavior.</li>
-</ul>
-<h2>Example settings</h2>
-<ul>
-<li>Boxy mix bus: Clean 55%, Focus 62%.</li>
-<li>Vocal plus instrument overlap: Clean 50%, Focus 70%.</li>
-<li>Gentle body-safe cleanup: Clean 38%, Focus 45%.</li>
-</ul>
-<h2>Practical scenarios</h2>
-<ul>
-<li>Muddy buses that need more separation without obvious EQ.</li>
-<li>Full mixes where masking builds up over time.</li>
-<li>Sidechain-assisted space-making for vocals, kicks, leads, or other key material.</li>
-</ul>)",
-    "VXClarity"
-};
 
 inline constexpr HelpContent tone {
     "VXTone Help",

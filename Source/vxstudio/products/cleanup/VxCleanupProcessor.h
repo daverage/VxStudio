@@ -10,7 +10,7 @@
 #include "../../framework/VxStudioAnalysisEvidence.h"
 #include "../../framework/VxStudioReadabilityGuard.h"
 #include "../../framework/VxStudioTonalAnalysis.h"
-#include "../clarity/dsp/VxClarityDsp.h"
+#include "dsp/VxClarityDsp.h"
 #include "dsp/VxCleanupDsp.h"
 
 #include <vector>

@@ -187,7 +187,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
             const float retentionWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.75f * speechWeight + 0.25f * contextWeight)
                                                   : speechWeight;
             const float retentionTarget = isVoice
-                ? juce::jlimit(0.72f, 0.88f, (0.72f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
+                ? juce::jlimit(0.88f, 1.0f, (0.90f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
                 : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
             const float targetRms = dryRms * retentionTarget;
             const float compensationTarget = juce::jlimit(1.0f,

@@ -64,7 +64,9 @@ void VXProximityAudioProcessor::prepareSuite(const double sampleRate,
 
 void VXProximityAudioProcessor::resetSuite() {
     proximityDsp.reset();
-    controls.reset(0.0f, 0.0f);
+    const float closer = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
+    const float air    = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
+    controls.reset(closer, air);
 }
 
 void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,

@@ -51,9 +51,9 @@ public:
     float lastTailPrior() const noexcept { return tailPrior; }
     juce::String lastStatus() const;
     bool hasRealtimeBackend() const noexcept { return rtBackend != RealtimeBackend::none; }
-    bool isRealtimeReady() const noexcept { return rtReady; }
+    bool isRealtimeReady() const noexcept { return rtReady.load(std::memory_order_acquire); }
     bool supportsRealtimeForSelectedVariant() const noexcept {
-        return rtCapability == RealtimeCapability::embeddedRuntime && rtReady;
+        return rtCapability == RealtimeCapability::embeddedRuntime && rtReady.load(std::memory_order_acquire);
     }
     RealtimeCapability realtimeCapability() const noexcept { return rtCapability; }
     RealtimeBackend realtimeBackend() const noexcept { return rtBackend; }
@@ -144,7 +144,7 @@ private:
     std::atomic<int> requestedVariant { static_cast<int>(ModelVariant::dfn3) };
     int latencySamples = 0;
     float tailPrior = 0.0f;
-    bool rtReady = false;
+    std::atomic<bool> rtReady { false };
     juce::String rtBackendTag { "none" };
     RealtimeCapability rtCapability = RealtimeCapability::unavailable;
     RealtimeBackend rtBackend = RealtimeBackend::none;

@@ -104,8 +104,9 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
     subtractDspMono.prepare(currentSampleRateHz, samplesPerBlock);
     subtractDspLeft.prepare(currentSampleRateHz, samplesPerBlock);
     subtractDspRight.prepare(currentSampleRateHz, samplesPerBlock);
-    leftScratch.setSize(1, std::max(1, samplesPerBlock), false, false, true);
-    rightScratch.setSize(1, std::max(1, samplesPerBlock), false, false, true);
+    const int maxBlockSize = std::max(samplesPerBlock, 4096);
+    leftScratch.setSize(1, maxBlockSize, false, false, true);
+    rightScratch.setSize(1, maxBlockSize, false, false, true);
     applySavedProfiles();
     setReportedLatencySamples(subtractDspMono.getLatencySamples());
     resetSuite();
@@ -158,7 +159,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         subtractDspLeft.setLearning(true);
         subtractDspRight.setLearning(true);
     }
-    if (learnStopEdge && subtractDspMono.isLearning()) {
+    if (learnStopEdge) {
         subtractDspMono.setLearning(false);
         subtractDspLeft.setLearning(false);
         subtractDspRight.setLearning(false);

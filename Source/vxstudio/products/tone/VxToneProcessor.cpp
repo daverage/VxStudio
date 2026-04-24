@@ -74,7 +74,9 @@ void VXToneAudioProcessor::prepareSuite(const double sampleRate, const int /*sam
 void VXToneAudioProcessor::resetSuite() {
     for (auto& s : bassState)   s = BiquadState{};
     for (auto& s : trebleState) s = BiquadState{};
-    controls.reset(0.5f, 0.5f);
+    const float bass   = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
+    const float treble = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
+    controls.reset(bass, treble);
 }
 
 void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -143,12 +145,8 @@ VXToneAudioProcessor::lowShelfCoeffs(const double sampleRate,
     const float w0  = 2.f * juce::MathConstants<float>::pi * freqHz / static_cast<float>(sampleRate);
     const float cw  = std::cos(w0);
     const float sw  = std::sin(w0);
-    const float al  = sw * 0.5f * std::sqrt((A + 1.f / A) * (1.f / 1.f - 1.f) + 2.f); // S=1
-
-    // Simpler form for S=1: alpha = sin(w0)/2 * sqrt(2) = sin(w0) / sqrt(2)
-    const float alpha = sw / std::sqrt(2.f);
+    const float alpha = sw / std::sqrt(2.f);  // S=1: sin(w0) / sqrt(2)
     const float twoSqrtA = 2.f * std::sqrt(A);
-    const float juce_unused = al; (void)juce_unused;
 
     const float b0 =   A * ((A + 1.f) - (A - 1.f) * cw + twoSqrtA * alpha);
     const float b1 = 2.f * A * ((A - 1.f) - (A + 1.f) * cw);

@@ -24,14 +24,18 @@ float VoiceContextState::timeAlpha(const double sampleRate, const float seconds)
     return std::exp(-1.0f / samples);
 }
 
-void VoiceContextState::prepare(const double sampleRate, const int /*maxSamplesPerBlock*/) {
+void VoiceContextState::prepare(const double sampleRate, const int maxSamplesPerBlock) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    const float blockSize = static_cast<float>(std::max(1, maxSamplesPerBlock));
+    // coeff150/2000/4000 are applied per-sample in the inner loop — keep as per-sample alphas.
     coeff150 = onePoleAlpha(sr, 150.0f);
     coeff2000 = onePoleAlpha(sr, 2000.0f);
     coeff4000 = onePoleAlpha(sr, 4000.0f);
-    alphaBand = timeAlpha(sr, 0.080f);
-    alphaPhrase = timeAlpha(sr, 0.350f);
-    alphaScore = timeAlpha(sr, 0.180f);
+    // alphaBand/Phrase/Score are applied once per block — raise to blockSize power
+    // so the effective time constant matches the intended value regardless of block size.
+    alphaBand   = std::pow(timeAlpha(sr, 0.080f), blockSize);
+    alphaPhrase = std::pow(timeAlpha(sr, 0.350f), blockSize);
+    alphaScore  = std::pow(timeAlpha(sr, 0.180f), blockSize);
     reset();
 }
 
@@ -131,8 +135,10 @@ void VoiceContextState::update(const juce::AudioBuffer<float>& input, const Voic
     current.buriedSpeech += (1.0f - alphaScore) * (buriedSpeech - current.buriedSpeech);
     current.intelligibility += (1.0f - alphaScore) * (intelligibility - current.intelligibility);
     current.phraseActivity += (1.0f - alphaScore) * (phraseEnv - current.phraseActivity);
-    current.phraseStart += (1.0f - alphaScore) * (phraseStart - current.phraseStart);
-    current.phraseEnd += (1.0f - alphaScore) * (phraseEnd - current.phraseEnd);
+    // phraseStart/End are momentary pulse events (1.0 for one block, then 0).
+    // Pass them through directly — smoothing a one-block pulse destroys it.
+    current.phraseStart = phraseStart;
+    current.phraseEnd   = phraseEnd;
 }
 
 } // namespace vxsuite

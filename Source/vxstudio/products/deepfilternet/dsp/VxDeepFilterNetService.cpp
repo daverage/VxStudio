@@ -346,7 +346,7 @@ void DeepFilterService::prepareRealtime(const double sampleRate, const int maxBl
 
     latencySamples = bundle.latencySamples;
     rtPreparedVariant = bundle.preparedVariant;
-    rtReady = true;
+    rtReady.store(true, std::memory_order_release);
     rtCapability = bundle.capability;
     rtBackend = bundle.backend;
     rtBackendTag = bundle.backendTag;
@@ -369,7 +369,7 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
     juce::ignoreUnused(key);
 
     const int activeIndex = activeBundleIndex.load(std::memory_order_acquire);
-    if (activeIndex < 0 || !rtReady || !hasRealtimeBackend())
+    if (activeIndex < 0 || !rtReady.load(std::memory_order_acquire) || !hasRealtimeBackend())
         return false;
     auto& bundle = bundles[static_cast<size_t>(activeIndex)];
     if (!bundle.ready)

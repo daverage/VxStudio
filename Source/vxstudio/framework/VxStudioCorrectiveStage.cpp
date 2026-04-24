@@ -305,7 +305,6 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
     float compGain = 1.0f;
 
     if (troubleAmt > 1.0e-6f) {
-        std::array<detail::BiquadCoeffs, 6> troubleCoeffs {};
         std::array<float, 6> troubleCutDbAccum {};
         for (int i = 0; i < numSamples; ++i) {
             float monoLinear = 0.0f;

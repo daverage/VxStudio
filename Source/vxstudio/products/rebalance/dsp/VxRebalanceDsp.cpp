@@ -1775,6 +1775,29 @@ void Dsp::buildForegroundBackgroundRender() noexcept
     }
 
     const bool nearIsolation = activeSources <= 1 && suppressedSources >= 3;
+
+    // Pre-compute per-source slider-derived values once (constant across all bins).
+    struct SourceFrame {
+        float curved = 0.0f;
+        float separation = 0.0f;
+        float contribution = 0.0f;
+        float ownershipBiasPos = 0.0f;  // bias when slider > 0
+        float ownershipBiasNeg = 0.0f;  // bias when slider < 0
+    };
+    std::array<SourceFrame, kSourceCount> sourceFrames {};
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float slider = currentControlValues[static_cast<size_t>(s)];
+        const float sliderSigned = (slider - 0.5f) * 2.0f;
+        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.8f), sliderSigned);
+        const float separation = std::abs(curved) * strength;
+        const float contribution = computeSourceContributionMultiplier(s, slider, strength);
+        sourceFrames[static_cast<size_t>(s)].curved = curved;
+        sourceFrames[static_cast<size_t>(s)].separation = separation;
+        sourceFrames[static_cast<size_t>(s)].contribution = contribution;
+        sourceFrames[static_cast<size_t>(s)].ownershipBiasPos = 1.0f + 1.20f * separation;
+        sourceFrames[static_cast<size_t>(s)].ownershipBiasNeg = std::max(0.80f, 1.0f - 0.20f * separation);
+    }
+
     std::array<int, kDebugBins> debugDominant {};
     std::array<float, kDebugBins> debugBestConfidence {};
     std::array<float, kDebugBins> debugDominantMask {};
@@ -1795,26 +1818,19 @@ void Dsp::buildForegroundBackgroundRender() noexcept
             : nullptr;
 
         for (int s = 0; s < kSourceCount; ++s) {
-            const float slider = currentControlValues[static_cast<size_t>(s)];
-            const float sliderSigned = (slider - 0.5f) * 2.0f;
-            const float curved =
-                std::copysign(std::pow(std::abs(sliderSigned), 1.8f), sliderSigned);
-            const float separation = std::abs(curved) * strength;
-            const float contribution = computeSourceContributionMultiplier(
-                s,
-                slider,
-                strength);
+            const auto& sf = sourceFrames[static_cast<size_t>(s)];
+            const float sliderSigned = (currentControlValues[static_cast<size_t>(s)] - 0.5f) * 2.0f;
 
-            separationForces[static_cast<size_t>(s)] = separation;
-            contributions[static_cast<size_t>(s)] = contribution;
+            separationForces[static_cast<size_t>(s)] = sf.separation;
+            contributions[static_cast<size_t>(s)] = sf.contribution;
 
             float ownershipBias = 1.0f;
             if (sliderSigned > 0.0f)
-                ownershipBias += 1.20f * separation;
+                ownershipBias = sf.ownershipBiasPos;
             else if (sliderSigned < 0.0f)
-                ownershipBias *= std::max(0.80f, 1.0f - 0.20f * separation);
+                ownershipBias = sf.ownershipBiasNeg;
 
-            ownershipBias *= std::sqrt(std::max(0.04f, contribution));
+            ownershipBias *= std::sqrt(std::max(0.04f, sf.contribution));
 
             if (s == otherSource)
                 ownershipBias = juce::jlimit(0.10f, 1.12f, ownershipBias);
