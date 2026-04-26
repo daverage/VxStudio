@@ -1,3 +1,120 @@
+# DSP strength pass — all effects to near-over-the-top at 100% — 2026-04-24
+
+## Goal
+Make every effect clearly audible at moderate settings and deliberately dramatic at 100%.
+Prior audit: Denoiser 0.998 (nearly bypassed), Proximity 0.373, Tone 0.272, all too polite.
+
+## Plan
+- [x] Proximity: raise gain ceiling (vocal 6→10 dB, general 5.2→8 dB), linearise mapping, air 3→6 dB
+- [x] Tone: raise kVocalMaxGainDb 5→9, kGeneralMaxGainDb 6→12; vocalPriority attenuation 0.18→0.08
+- [x] Cleanup: remove cleanupStrength dead zone (cleanupStrength = cleanupDrive, no threshold)
+- [x] Denoiser: cap speechPreserveBlend 0.85→0.55, residualTrimDepth voice keeps 0.56, general 0.54→0.72
+- [x] Deverb: overSubtract multiplier 1.5→3.5
+- [x] Finish: exponent 0.72/0.78→0.45/0.50, autoMakeupMaxDb voice 11.5→16, general 9.5→13; recovery ceiling raised
+- [x] Build full suite — clean, only pre-existing Subtract wet/listen failure remains
+- [x] Subtract wet/listen: fixed by resetting outputSafetyTrimmer at learnStopEdge; all regression tests pass
+
+---
+
+# Full regression tuning fix - 2026-04-24
+
+## Goal
+Fix the remaining known regression failures: `VXSubtract` listen/recombine and chain stability, `VXDenoiser` speech/noise tuning, and `VXCleanup` strength without voiced-material damage.
+
+## Plan
+
+- [x] Reproduce the current failing regression output and map each failure to the responsible processor path
+- [x] Fix `VXSubtract` so wet/listen recombine is complementary and chain/block-size behavior is stable
+- [x] Fix `VXDenoiser` so strong vocal denoise preserves speech while reducing noise-only input
+- [x] Re-check `VXCleanup` strong settings against voiced-material guardrails and max-effect audit
+- [x] Run focused audits plus the full regression suite
+- [x] Rebuild and install refreshed VST3 bundles
+- [x] Record final results and remaining risks
+
+## Review
+
+- `VXSubtract` now resets its streaming, control, voice-analysis, voice-context, and signal-quality state when Learn is stopped and a profile is finalized. This makes wet and listen renders complementary again and prevents learned noise context from contaminating the first processing pass.
+- Replaced the blunt silent-block clear with a latency-tail-aware guard so true idle silence stays silent while render/host latency tails can still flush correctly.
+- Added a protect-weighted vocal dry preserve blend for Subtract only when stereo profile coverage is complete, avoiding the right-only learned-profile regression while stabilizing the full chain.
+- `VXDenoiser` now blends protected vocal speech back in at high Guard/Clean settings and applies faster/deeper residual trim when the input evidence is non-speech, fixing the previous "damages speech but barely reduces noise" split.
+- `VXCleanup` stayed at the guarded strength from the audit pass; final regression confirms the stronger settings no longer trip voiced-material damage tests.
+- Verification passed: `cmake --build build --target VXStudioPluginRegressionTests -j4`, `./build/VXStudioPluginRegressionTests`, max-effect audit on `data/voice_corpus/wav_clip`, `cmake --build build --target VXSuite_VST3 -j4`, install to `/Library/Audio/Plug-Ins/VST3/`, and `codesign --verify --deep --strict` on installed `VX*.vst3` bundles.
+- Current max-effect report: `tasks/reports/max-effect-audit-clip-2026-04-24.md`.
+
+# Full-suite maximum effect audit - 2026-04-24
+
+## Goal
+Audit every VX effect at maximum meaningful controls and make sure 100% settings produce a clear, measurable audio change rather than polite or near-neutral output.
+
+## Plan
+
+- [x] Build a focused strength-audit harness that renders representative audio through each effect at strong settings
+- [x] Measure per-effect delta, RMS change, and any relevant target reduction/boost
+- [x] Identify weak effects and inspect their processor/DSP laws
+- [x] Strengthen weak 100% paths without breaking neutral identity or realtime safety
+- [x] Re-run the audit and regression/build targets
+- [x] Rebuild and install refreshed VST3 bundles
+- [x] Record measured results and residual risks
+
+## Review
+
+- Added `VXStudioBatchAudioCheck` coverage for maximum-strength settings across the suite, including `VXRebalance`, and fixed the report summary delta-RMS accumulator so averages match the per-file rows.
+- Wrote the current max-strength report to `tasks/reports/max-effect-audit-clip-2026-04-24.md`. On the clip corpus the measured residual ratios are: Leveler `0.206`, Cleanup `0.071`, Denoiser `0.998`, Deverb `0.366`, Finish `0.181`, OptoComp `0.181`, Tone `0.272`, Proximity `0.373`, Subtract `0.162`, Rebalance `0.127`.
+- Strengthened `VXCleanup` high-strength intent, but backed off the extra assertive contour to stay inside voiced-material guardrails. Cleanup remains the least dramatic effect by design/tests; pushing it to ~`0.15` residual caused voiced articulation regressions.
+- Added a `VXSubtract` max-strength anti-mute rescue that only engages at very high subtract or low protect, plus a live-input silence guard so blind/learned processing cannot generate output on truly silent input blocks.
+- Rebuilt the full VST3 suite with `cmake --build build --target VXSuite_VST3 -j4`, installed all staged `VX*.vst3` bundles to `/Library/Audio/Plug-Ins/VST3/`, and verified installed bundle signatures with `codesign --verify --deep --strict`.
+- Regression run after the audit/build still reports residual known tuning failures: Subtract wet/listen recombination (`diff=0.061174`), combined-chain coherence/block-size instability, and Denoiser speech/noise tuning. Cleanup no longer reports after the final backoff.
+
+# VXRebalance track-isolation fix - 2026-04-24
+
+## Goal
+Fix `VXRebalance` so each plugin instance only processes the host track it is inserted on, and cannot pick up audio/state from other tracks or other VX effects.
+
+## Plan
+
+- [x] Trace `VXRebalance` processor/DSP routing and any shared framework/global state it consumes
+- [x] Reproduce or isolate the cross-instance / cross-track leakage in a focused regression
+- [x] Patch the smallest ownership boundary so Rebalance uses only its own input buffer and instance state
+- [x] Verify the fix with targeted regression/build
+- [x] Rebuild and stage/install `VXRebalance.vst3`
+- [x] Record results and residual risk
+
+## Review
+
+- Root cause found in shared VX stage telemetry, not the `VXRebalance` DSP buffer path: `StagePublisher::refreshDomainBinding()` was inferring analyser/track membership from spectral similarity inside the same host process.
+- Removed the spectral auto-binding fallback so a VX effect no longer attaches itself to an unrelated analyser domain merely because another track/effect has similar spectrum.
+- Added `testRebalanceInstancesStayTrackLocal()` to the plugin regression suite. It runs an active loud Rebalance instance beside an active silent Rebalance instance and verifies the silent instance stays silent.
+- Verified build: `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- Verification run: `./build/VXStudioPluginRegressionTests`; the new Rebalance isolation test passed. Remaining failures are the pre-existing Subtract wet/listen, chain coherence/block-size/silence, and Denoiser tuning failures.
+- Because the telemetry fix is in the statically linked framework, rebuilt the full suite: `cmake --build build --target VXSuite_VST3 -j4`
+- Installed all 12 refreshed staged VST3 bundles to `/Library/Audio/Plug-Ins/VST3/` and verified `codesign --verify` for each installed bundle.
+
+# VXSubtract silent-learn runaway fix - 2026-04-24
+
+## Goal
+Fix `VXSubtract` learning so silence does not instantly show as a complete learned profile, trigger feedback-like behavior, or mute plugin output.
+
+## Plan
+
+- [x] Trace the Subtract learn/profile state machine and telemetry path
+- [x] Reproduce the silent-learning failure with a focused regression or harness
+- [x] Prevent silent/near-silent input from being accepted as valid profile progress or profile readiness
+- [x] Verify normal non-silent learning still works
+- [x] Rebuild and stage the affected VST3 bundle
+- [x] Record result and residual risk
+
+## Review
+
+- `VXSubtract` now keeps Learn armed on silent input without feeding the DSP learner, so digital silence does not advance progress, confidence, observed seconds, or profile readiness.
+- While Learn is armed, the processor analyzes a scratch copy and leaves the audible buffer dry, avoiding feedback/latency-path output during capture.
+- Added a regression covering silent Learn: no generated output, no progress/confidence, no finalized profile, and no mute after stopping Learn.
+- Hardened Subtract learn/processing math against non-finite confidence and presence values so a bad analysis metric cannot poison profile readiness or collapse the signal path.
+- Verified build: `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- Verification run: `./build/VXStudioPluginRegressionTests` confirms the new silent-learn regression and normal non-silent learn lifecycle no longer fail.
+- Residual regression output still includes existing/tuning failures in Subtract wet/listen recombination, chain coherence/block-size coverage, chain silence, and Denoiser strength. These are not silent-learn failures, but they should be handled in a separate tuning pass.
+- Rebuilt and staged `VXSubtract.vst3`: `cmake --build build --target VXSubtractStage -j4`
+- Installed refreshed `/Library/Audio/Plug-Ins/VST3/VXSubtract.vst3`; installed binary hash matches `Source/vxstudio/vst/VXSubtract.vst3`.
+
 # REAPER VST effects silent-processing investigation - 2026-04-23
 
 ## Goal
@@ -592,3 +709,24 @@ Verify why `VxLeveler` no longer seems to pick up input audio / process it, fix 
 - The staged host-loaded bundle at `Source/vxstudio/vst/VXLeveler.vst3` was stale before this check and still dated `2026-04-07`; rebuilding `VXLevelerStage` refreshed the actual bundle your DAW loads to `2026-04-22`.
 - Verified the staged bundle now matches the freshly built binary via identical `shasum` values for `build/VXLeveler_artefacts/Release/VST3/VXLeveler.vst3/Contents/MacOS/VXLeveler` and `Source/vxstudio/vst/VXLeveler.vst3/Contents/MacOS/VXLeveler`.
 - `./build/VXStudioPluginRegressionTests` still fails, but only on the pre-existing denoiser regressions; no Leveler regression failed during this check.
+
+# VST compile pass - 2026-04-24
+
+## Goal
+Compile the current VXStudio VST3 plugin suite and refresh the staged bundles.
+
+## Plan
+
+- [x] Confirm available VST3/staging targets in the configured build tree
+- [x] Build the aggregate VST3 suite target
+- [x] Verify the staged VST3 bundles exist after compilation
+- [x] Record build result and any residual issues
+
+## Review
+
+- Verified configured build targets include the aggregate `VXSuite_VST3` target and individual plugin `*Stage` targets.
+- Verified build: `cmake --build build --target VXSuite_VST3 -j4`
+- Result: build completed successfully and refreshed staged VST3 bundles in `Source/vxstudio/vst/`.
+- Verified staged bundles exist with executable payloads for: `VXCleanup`, `VXDeepFilterNet`, `VXDenoiser`, `VXDeverb`, `VXFinish`, `VXLeveler`, `VXOptoComp`, `VXProximity`, `VXRebalance`, `VXStudioAnalyser`, `VXSubtract`, and `VXTone`.
+- Verified `codesign --verify` succeeds for all staged `.vst3` bundles.
+- No source fixes were needed for this compile pass.

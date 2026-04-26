@@ -5,6 +5,7 @@
 #include "../Source/vxstudio/products/leveler/VxLevelerProcessor.h"
 #include "../Source/vxstudio/products/OptoComp/VxOptoCompProcessor.h"
 #include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
+#include "../Source/vxstudio/products/rebalance/VxRebalanceProcessor.h"
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
@@ -314,8 +315,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
         setParamNormalized(processor, "cleanup", 1.0f);
-        setParamNormalized(processor, "body", 0.55f);
-        setParamNormalized(processor, "focus", 0.65f);
+        setParamNormalized(processor, "body", 0.50f);
+        setParamNormalized(processor, "focus", 1.0f);
         return render(processor, input, 256);
     }});
 
@@ -331,8 +332,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         VXDenoiserAudioProcessor processor;
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "clean", 0.85f);
-        setParamNormalized(processor, "guard", 0.90f);
+        setParamNormalized(processor, "clean", 1.0f);
+        setParamNormalized(processor, "guard", 0.35f);
         return render(processor, input, 256);
     }});
 
@@ -345,8 +346,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         VXDeverbAudioProcessor processor;
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "reduce", 0.75f);
-        setParamNormalized(processor, "body", 0.35f);
+        setParamNormalized(processor, "reduce", 1.0f);
+        setParamNormalized(processor, "body", 0.50f);
         return render(processor, input, 256);
     }});
 
@@ -357,8 +358,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         VXFinishAudioProcessor processor;
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "finish", 0.72f);
-        setParamNormalized(processor, "body", 0.52f);
+        setParamNormalized(processor, "finish", 1.0f);
+        setParamNormalized(processor, "body", 1.0f);
         setParamNormalized(processor, "gain", 0.5f);
         return render(processor, input, 256);
     }});
@@ -370,8 +371,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         VXOptoCompAudioProcessor processor;
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "peak_reduction", 0.70f);
-        setParamNormalized(processor, "body", 0.52f);
+        setParamNormalized(processor, "peak_reduction", 1.0f);
+        setParamNormalized(processor, "body", 1.0f);
         setParamNormalized(processor, "gain", 0.5f);
         return render(processor, input, 256);
     }});
@@ -383,8 +384,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         VXToneAudioProcessor processor;
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "bass", 0.60f);
-        setParamNormalized(processor, "treble", 0.58f);
+        setParamNormalized(processor, "bass", 1.0f);
+        setParamNormalized(processor, "treble", 1.0f);
         return render(processor, input, 256);
     }});
 
@@ -395,8 +396,8 @@ std::vector<ProductSpec> makeProductSpecs() {
         VXProximityAudioProcessor processor;
         processor.prepareToPlay(sr, 256);
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "closer", 0.72f);
-        setParamNormalized(processor, "air", 0.40f);
+        setParamNormalized(processor, "closer", 1.0f);
+        setParamNormalized(processor, "air", 1.0f);
         return render(processor, input, 256);
     }});
 
@@ -412,8 +413,24 @@ std::vector<ProductSpec> makeProductSpecs() {
         if (!primeSubtractLearn(processor, sr))
             return input;
         setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "subtract", 0.80f);
-        setParamNormalized(processor, "protect", 0.92f);
+        setParamNormalized(processor, "subtract", 1.0f);
+        setParamNormalized(processor, "protect", 0.15f);
+        return render(processor, input, 256);
+    }});
+
+    specs.push_back({"rebalance", "rebalance",
+    [](const juce::AudioBuffer<float>& input, double) { return input; },
+    [](const juce::AudioBuffer<float>& original, const juce::AudioBuffer<float>&, double) { return original; },
+    [](const juce::AudioBuffer<float>& input, double sr) {
+        VXRebalanceAudioProcessor processor;
+        processor.prepareToPlay(sr, 256);
+        setParamNormalized(processor, "recordingType", 0.0f);
+        setParamNormalized(processor, "vocals", 1.0f);
+        setParamNormalized(processor, "drums", 0.0f);
+        setParamNormalized(processor, "bass", 0.0f);
+        setParamNormalized(processor, "guitar", 0.0f);
+        setParamNormalized(processor, "other", 0.0f);
+        setParamNormalized(processor, "strength", 1.0f);
         return render(processor, input, 256);
     }});
 
@@ -439,7 +456,7 @@ void writeReport(const juce::File& reportFile,
     std::ostringstream md;
     md << "# VX Suite Batch Audio Check\n\n";
     md << "Corpus: `" << corpusRoot.getFullPathName() << "`\n\n";
-    md << "Products checked in `Voice` mode with representative tuning presets.\n\n";
+    md << "Products checked in `Voice` mode with maximum meaningful effect settings.\n\n";
 
     md << "## Summary\n\n";
     md << "| Product | Avg spread in (dB) | Avg spread out (dB) | Avg spread improvement (dB) | Avg corr | Avg speech-band corr | Avg residual ratio | Avg target corr | Avg target speech corr | Avg target residual | Avg delta RMS (dB) | Avg peak out (dBFS) |\n";
@@ -447,6 +464,10 @@ void writeReport(const juce::File& reportFile,
 
     for (size_t p = 0; p < specs.size(); ++p) {
         Metrics avg;
+        avg.inputRmsDb = 0.0f;
+        avg.outputRmsDb = 0.0f;
+        avg.deltaRmsDb = 0.0f;
+        avg.outputPeakDbfs = 0.0f;
         for (const auto& m : allMetrics[p]) {
             avg.inputSpreadDb += m.inputSpreadDb;
             avg.outputSpreadDb += m.outputSpreadDb;

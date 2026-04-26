@@ -214,7 +214,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const float effectiveReduce = voiceMode
         ? vxsuite::clamp01(reduce * (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech))
         : reduce;
-    deverbProcessor.setOverSubtract(1.0f + 1.5f * effectiveReduce);
+    deverbProcessor.setOverSubtract(1.0f + 3.5f * effectiveReduce);
 
     const auto renderWet = [&](const float amount) {
         for (int ch = 0; ch < outputChannels; ++ch)

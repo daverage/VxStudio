@@ -88,13 +88,10 @@ void ProximityDsp::reset() noexcept {
 // ── processInPlace ────────────────────────────────────────────────────────────
 //
 // Mode tuning:
-//   Vocal   – low shelf 80–200 Hz (closer sweeps fc), +9 dB max (quadratic)
-//             high shelf 3500 Hz, +4 dB max
-//   General – low shelf 120–300 Hz (closer sweeps fc), +7 dB max (quadratic)
-//             high shelf 8000 Hz, +4 dB max
-//
-// Quadratic gain mapping models the inverse-square proximity effect:
-//   gainDb = maxGainDb * closer²
+//   Vocal   – low shelf 80–200 Hz (closer sweeps fc), +10 dB max (linear)
+//             high shelf 3500 Hz, +6 dB max
+//   General – low shelf 120–300 Hz (closer sweeps fc), +8 dB max (linear)
+//             high shelf 8000 Hz, +6 dB max
 
 void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                    const int numSamples,
@@ -115,14 +112,14 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     // Low-shelf tuning
     const float lowFcMin = isVoice ?  80.f : 120.f;
     const float lowFcMax = isVoice ? 200.f : 300.f;
-    const float lowGainMax = isVoice ? 6.0f : 5.2f;
+    const float lowGainMax = isVoice ? 10.0f : 8.0f;
 
     const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * closer;
-    const float lowGain  = lowGainMax * closer * closer;
+    const float lowGain  = lowGainMax * closer;
 
     // High-shelf tuning
     const float highFc   = isVoice ? 3500.f : 8000.f;
-    const float highGain = 3.0f * air;
+    const float highGain = 6.0f * air;
 
     const BiquadCoeffs lowC  = makeLowShelf (sr, lowFc,  lowGain);
     const BiquadCoeffs highC = makeHighShelf(sr, highFc, highGain);

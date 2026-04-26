@@ -20,10 +20,10 @@ constexpr std::string_view kListenParam  = "listen";
 // General mode: full-range shelves with more headroom.
 constexpr float kVocalBassFreqHz    = 200.f;
 constexpr float kVocalTrebleFreqHz  = 6000.f;
-constexpr float kVocalMaxGainDb     = 5.f;
+constexpr float kVocalMaxGainDb     = 9.f;
 constexpr float kGeneralBassFreqHz  = 120.f;
 constexpr float kGeneralTrebleFreqHz = 8000.f;
-constexpr float kGeneralMaxGainDb   = 6.f;
+constexpr float kGeneralMaxGainDb   = 12.f;
 
 } // namespace
 
@@ -102,7 +102,7 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
                          + 0.10f * voiceContext.speechPresence)
         : 0.0f;
     const float maxGainDb = voiceMode
-        ? kVocalMaxGainDb * (1.0f - 0.18f * vocalPriority)
+        ? kVocalMaxGainDb * (1.0f - 0.08f * vocalPriority)
         : kGeneralMaxGainDb;
     const float bassFreqHz = voiceMode
         ? juce::jlimit(150.0f, 220.0f, kVocalBassFreqHz - 40.0f * vocalPriority)

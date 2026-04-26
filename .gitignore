@@ -1,12 +1,45 @@
+# OS
 .DS_Store
-build/
-Source/vxsuite/vst/.DS_Store
+*.DS_Store
+Thumbs.db
+
+# Editor
 *.swp
 *.swo
-tasks/reports/rebalance-openunmix-v20/brightside_masks.npz
-assets/rebalance/models/demucs/htdemucs_6s.onnx
-assets/rebalance/models/demucs/htdemucs_6s.onnx.data
+*.orig
+
+# Build
+build/
+
+# Audio and media — never commit binary audio to this repo
+*.wav
+*.mp3
+*.ogg
+*.oga
+*.flac
+*.aiff
+*.aif
+*.m4a
+
+# Numpy / scientific data blobs
+*.npz
+*.npy
+
+# Large model and archive files not tracked by git
+assets/rebalance/models/demucs/
 assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json
 assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.tar.gz
 assets/rebalance/models/vx_rebalance_spleeter5.onnx
-assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json
+
+# Render output directories (generated, not source)
+data/voice_corpus/renders/
+data/voice_corpus/raw/
+data/voice_corpus/wav/
+data/voice_corpus/wav_clip/
+data/voice_corpus/wav_one/
+data/voice_corpus/wav_short/
+tasks/reports/max-effect-renders-*/
+tests/fixtures/rebalance/listening_cases/*/
+
+# musdb preview dataset
+tests/fixtures/rebalance/musdb_preview/

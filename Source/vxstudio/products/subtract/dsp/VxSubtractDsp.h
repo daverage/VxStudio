@@ -30,7 +30,7 @@ public:
     bool  hasLearnedProfile() const { return learnedProfileReady; }
     float getLearnProgress() const;
     float getLearnObservedSeconds() const;
-    float getLearnConfidence() const noexcept { return learnedProfileConfidence; }
+    float getLearnConfidence() const noexcept { return learning ? liveLearnConfidence : learnedProfileConfidence; }
 
     bool getLearnedProfileData(std::vector<float>& outProfile, float& outConfidence) const;
     void restoreLearnedProfile(const std::vector<float>& profile, float confidence);
@@ -57,6 +57,7 @@ private:
     bool learnedProfileReady = false;
     float learnedSensitivity = 0.0f;
     float learnedProfileConfidence = 0.0f;
+    float liveLearnConfidence = 0.0f;
     float learnQualityAccum = 0.0f;
     float learnInputEnergyAccum = 0.0f;
     int learnQualityFrames = 0;

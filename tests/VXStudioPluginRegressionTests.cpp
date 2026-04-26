@@ -5,6 +5,7 @@
 #include "../Source/vxstudio/products/leveler/VxLevelerProcessor.h"
 #include "../Source/vxstudio/products/finish/VxFinishProcessor.h"
 #include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
+#include "../Source/vxstudio/products/rebalance/VxRebalanceProcessor.h"
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
@@ -301,7 +302,11 @@ bool primeSubtractLearn(VXSubtractAudioProcessor& processor, const double sr, co
     processSingleBlock(processor, stopBlock);
 
     if (processor.isLearnActive() || !processor.isLearnReady()) {
-        std::cerr << "[VXSuitePluginRegression] Subtract learn did not finalize into a ready profile\n";
+        std::cerr << "[VXSuitePluginRegression] Subtract learn did not finalize into a ready profile: active="
+                  << processor.isLearnActive() << " ready=" << processor.isLearnReady()
+                  << " progress=" << processor.getLearnProgress()
+                  << " confidence=" << processor.getLearnConfidence()
+                  << " observed=" << processor.getLearnObservedSeconds() << "\n";
         return false;
     }
     if (processor.getLearnConfidence() < 0.0f || processor.getLearnConfidence() > 1.0f) {
@@ -365,6 +370,63 @@ bool testSubtractLearnStartsOnFirstPress() {
     return true;
 }
 
+bool testSubtractSilentLearnDoesNotCreateProfileOrMuteOutput() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, blockSize);
+    setParamNormalized(processor, "subtract", 1.0f);
+    setParamNormalized(processor, "protect", 0.5f);
+
+    setParamNormalized(processor, "learn", 1.0f);
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> silentBlock(2, blockSize);
+    silentBlock.clear();
+    for (int i = 0; i < 420; ++i) {
+        auto block = silentBlock;
+        processor.processBlock(block, midi);
+        if (rms(block) > 3.0e-6f) {
+            std::cerr << "[VXSuitePluginRegression] Subtract silent learn generated output: rms="
+                      << rms(block) << "\n";
+            return false;
+        }
+    }
+
+    if (!processor.isLearnActive()) {
+        std::cerr << "[VXSuitePluginRegression] Subtract silent learn did not stay active while armed\n";
+        return false;
+    }
+    if (processor.getLearnProgress() > 1.0e-4f || processor.getLearnObservedSeconds() > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract silent learn accumulated progress: progress="
+                  << processor.getLearnProgress() << " observed=" << processor.getLearnObservedSeconds() << "\n";
+        return false;
+    }
+    if (processor.getLearnConfidence() > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract silent learn accumulated confidence: confidence="
+                  << processor.getLearnConfidence() << "\n";
+        return false;
+    }
+
+    setParamNormalized(processor, "learn", 0.0f);
+    auto stopBlock = silentBlock;
+    processor.processBlock(stopBlock, midi);
+    if (processor.isLearnReady()) {
+        std::cerr << "[VXSuitePluginRegression] Subtract finalized silence into a ready learned profile\n";
+        return false;
+    }
+
+    auto speech = makeSpeechLike(sr, 1.0f);
+    const float inputRms = rmsSkip(speech, 4096);
+    auto out = render(processor, speech, blockSize);
+    const float outputRms = rmsSkip(out, 4096);
+    if (outputRms < inputRms * 0.25f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract muted output after failed silent learn: input="
+                  << inputRms << " output=" << outputRms << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool testSubtractListenOutputsMeaningfulRemovedDelta() {
     constexpr double sr = 48000.0;
     VXSubtractAudioProcessor processor;
@@ -397,6 +459,42 @@ bool testSubtractListenOutputsMeaningfulRemovedDelta() {
     if (recombineDiff > 5.0e-2f) {
         std::cerr << "[VXSuitePluginRegression] Subtract wet/listen steady-state no longer recombines close to dry input: diff="
                   << recombineDiff << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testRebalanceInstancesStayTrackLocal() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    VXRebalanceAudioProcessor silentTrack;
+    VXRebalanceAudioProcessor loudTrack;
+    silentTrack.prepareToPlay(sr, blockSize);
+    loudTrack.prepareToPlay(sr, blockSize);
+
+    setParamNormalized(silentTrack, "vocals", 1.0f);
+    setParamNormalized(silentTrack, "drums", 0.0f);
+    setParamNormalized(silentTrack, "strength", 1.0f);
+    setParamNormalized(loudTrack, "bass", 0.0f);
+    setParamNormalized(loudTrack, "guitar", 1.0f);
+    setParamNormalized(loudTrack, "strength", 1.0f);
+
+    juce::AudioBuffer<float> silent(2, static_cast<int>(sr * 1.0));
+    silent.clear();
+    auto loud = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.12f));
+
+    auto loudOut = render(loudTrack, loud, blockSize);
+    auto silentOut = render(silentTrack, silent, blockSize);
+
+    if (rms(loudOut) <= 1.0e-5f) {
+        std::cerr << "[VXSuitePluginRegression] Rebalance loud reference unexpectedly rendered silent\n";
+        return false;
+    }
+
+    if (rms(silentOut) > 1.0e-6f) {
+        std::cerr << "[VXSuitePluginRegression] Rebalance silent instance picked up another instance/track: rms="
+                  << rms(silentOut) << "\n";
         return false;
     }
     return true;
@@ -1901,8 +1999,10 @@ int main() {
     bool ok = true;
     ok &= testCleanupZeroIsIdentity();
     ok &= testSubtractLearnStartsOnFirstPress();
+    ok &= testSubtractSilentLearnDoesNotCreateProfileOrMuteOutput();
     ok &= testSubtractLearnLifecycleMakesSense();
     ok &= testSubtractListenOutputsMeaningfulRemovedDelta();
+    ok &= testRebalanceInstancesStayTrackLocal();
     ok &= testSubtractStereoLearnTreatsChannelsIndependently();
     ok &= testDeverbExtremeBlendStaysStable();
     ok &= testCleanupFinishSubtractChainStaysStable();

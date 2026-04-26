@@ -60,6 +60,8 @@ private:
     float shortLowMidDensity = 0.0f;
     float persistentPresenceDensity = 0.0f;
     float shortPresenceDensity = 0.0f;
+    std::vector<float> assertiveLowState;
+    std::vector<float> assertivePresenceState;
     vxsuite::OutputTrimmer outputTrimmer;
     float smoothedMakeupGain = 1.0f;
     bool classifiersPrimed = false;

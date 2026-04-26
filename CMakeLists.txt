@@ -739,6 +739,9 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
+  Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxstudio/products/tone/VxToneProcessor.cpp
@@ -772,6 +775,9 @@ add_executable(VXStudioBatchAudioCheck
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
+  Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxstudio/products/tone/VxToneProcessor.cpp

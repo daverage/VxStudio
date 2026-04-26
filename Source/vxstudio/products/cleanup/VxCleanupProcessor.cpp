@@ -121,6 +121,8 @@ void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int sa
     vxsuite::spectral::prepareSqrtHannWindow(spectralWindow, spectralSize);
     persistentCleanupStage.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     correctiveChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
+    assertiveLowState.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())), 0.0f);
+    assertivePresenceState.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())), 0.0f);
     resetSuite();
 }
 
@@ -145,6 +147,8 @@ void VXCleanupAudioProcessor::resetSuite() {
     shortLowMidDensity = 0.0f;
     persistentPresenceDensity = 0.0f;
     shortPresenceDensity = 0.0f;
+    std::fill(assertiveLowState.begin(), assertiveLowState.end(), 0.0f);
+    std::fill(assertivePresenceState.begin(), assertivePresenceState.end(), 0.0f);
     outputTrimmer.reset();
     smoothedMakeupGain = 1.0f;
     classifiersPrimed = false;
@@ -183,8 +187,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     const auto signalQuality = getSignalQualitySnapshot();
     const float cleanup = vxsuite::clamp01(smoothedCleanup);
     const float cleanupDrive = vxsuite::clamp01(std::sqrt(cleanup));
-    const float cleanupStrength = juce::jlimit(0.0f, 1.0f,
-        (cleanupDrive - 0.46f) / 0.54f);
+    const float cleanupStrength = cleanupDrive;
     const float body = vxsuite::clamp01(smoothedBody);
     const float focus = vxsuite::clamp01(smoothedFocus);
     const float lowBias = 1.0f - focus;
@@ -524,24 +527,57 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     params.speechPresence = vxsuite::clamp01(params.speechPresence);
 
     const float strongCleanupFloor = juce::jlimit(0.0f, 1.0f,
-        (cleanupDrive - 0.48f) / 0.52f) * cleanupRamp * (0.38f + 0.52f * densityPressure) * voicedMaterialGuard;
+        (cleanupDrive - 0.36f) / 0.64f) * cleanupRamp * (0.72f + 0.28f * densityPressure) * voicedMaterialGuard;
     if (strongCleanupFloor > 0.0f) {
         params.deMud = std::max(params.deMud,
-            0.115f * strongCleanupFloor * (0.74f + 0.26f * lowBias)
-            * (1.0f - 0.30f * readabilityGuard.bodyLossRisk));
+            0.205f * strongCleanupFloor * (0.74f + 0.26f * lowBias)
+            * (1.0f - 0.24f * readabilityGuard.bodyLossRisk));
         params.deEss = std::max(params.deEss,
-            0.072f * strongCleanupFloor * (0.68f + 0.32f * highBias) * highBandSpeechGuard
-            * (1.0f - 0.34f * readabilityGuard.articulationRisk));
+            0.135f * strongCleanupFloor * (0.68f + 0.32f * highBias) * highBandSpeechGuard
+            * (1.0f - 0.26f * readabilityGuard.articulationRisk));
         params.breath = std::max(params.breath,
-            0.042f * strongCleanupFloor * (0.62f + 0.38f * highBias) * highBandSpeechGuard
-            * (1.0f - 0.30f * readabilityGuard.articulationRisk));
+            0.090f * strongCleanupFloor * (0.62f + 0.38f * highBias) * highBandSpeechGuard
+            * (1.0f - 0.24f * readabilityGuard.articulationRisk));
         params.troubleSmooth = std::max(params.troubleSmooth,
-            0.060f * strongCleanupFloor * (0.58f + 0.42f * highBias) * highBandSpeechGuard
-            * (1.0f - 0.32f * readabilityGuard.cumulativeRisk));
+            0.115f * strongCleanupFloor * (0.58f + 0.42f * highBias) * highBandSpeechGuard
+            * (1.0f - 0.24f * readabilityGuard.cumulativeRisk));
     }
 
     correctiveChain.setParams(params);
     correctiveChain.processCorrective(buffer);
+
+    if (dryRms <= 1.0e-5f) {
+        std::fill(assertiveLowState.begin(), assertiveLowState.end(), 0.0f);
+        std::fill(assertivePresenceState.begin(), assertivePresenceState.end(), 0.0f);
+    } else if (strongCleanupFloor > 0.0f && currentSampleRateHz > 1000.0) {
+        const float lowCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * 320.0f
+            / static_cast<float>(currentSampleRateHz));
+        const float presenceCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * 2900.0f
+            / static_cast<float>(currentSampleRateHz));
+        const float mudKeep = juce::jlimit(0.80f, 1.0f,
+            1.0f - strongCleanupFloor * (0.12f + 0.08f * lowBias)
+                  * (1.0f - 0.14f * readabilityGuard.bodyLossRisk));
+        const float glareKeep = juce::jlimit(0.88f, 1.0f,
+            1.0f - strongCleanupFloor * (0.07f + 0.05f * highBias) * highBandSpeechGuard
+                  * (1.0f - 0.12f * readabilityGuard.articulationRisk));
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+            float low = ch < static_cast<int>(assertiveLowState.size()) ? assertiveLowState[static_cast<size_t>(ch)] : 0.0f;
+            float presence = ch < static_cast<int>(assertivePresenceState.size()) ? assertivePresenceState[static_cast<size_t>(ch)] : 0.0f;
+            auto* data = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                const float x = data[i];
+                low = x + lowCoeff * (low - x);
+                presence = x + presenceCoeff * (presence - x);
+                const float lowMid = presence - low;
+                const float glare = x - presence;
+                data[i] = low + lowMid * mudKeep + glare * glareKeep;
+            }
+            if (ch < static_cast<int>(assertiveLowState.size())) {
+                assertiveLowState[static_cast<size_t>(ch)] = low;
+                assertivePresenceState[static_cast<size_t>(ch)] = presence;
+            }
+        }
+    }
 
     // RMS makeup: restore level lost to subtractive EQ corrections.
     double wetRmsSq = 0.0;

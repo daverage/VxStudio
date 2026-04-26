@@ -102,6 +102,7 @@ protected:
     }
     void ensureLatencyAlignedListenDry(int numSamples);
     const juce::AudioBuffer<float>& getLatencyAlignedListenDryBuffer() const noexcept;
+    void resetOutputSafetyTrimmer() noexcept;
 
     ProductIdentity productIdentity;
     juce::AudioProcessorValueTreeState parameters;

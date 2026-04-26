@@ -1414,7 +1414,6 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     domainRefreshCountdown = kDomainRefreshSamples;
 
     const auto& domainReg = DomainRegistry::instance();
-    const auto& stageReg  = StageRegistry::instance();
     const auto pid = domainReg.currentProcessId();
 
     std::array<std::uint64_t, kMaxDomains> domainIds {};
@@ -1437,33 +1436,11 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
         }
     }
 
-    if (domainCount > 0 && outputAccumulator != nullptr) {
-        const auto myOutput = outputAccumulator->summary();
-        const bool hasSignal = myOutput.rms > 1.0e-6f;
-
-        if (newDomainId == 0 && hasSignal) {
-            constexpr float kMatchThreshold = 0.90f;
-            float bestSim = kMatchThreshold;
-
-            for (int i = 0; i < domainCount; ++i) {
-                const auto domId = domainIds[static_cast<std::size_t>(i)];
-                std::array<char, 32> ownerStageId {};
-                if (!domainReg.ownerStageIdForDomain(domId, ownerStageId))
-                    continue;
-                StageView analyserStage;
-                if (!stageReg.findStageByDomainAndStageId(domId, ownerStageId, analyserStage))
-                    continue;
-                const float sim = spectrumCosineSimilarity(
-                    myOutput.spectrum,
-                    analyserStage.telemetry.inputSummary.spectrum);
-                if (sim > bestSim) {
-                    bestSim = sim;
-                    newDomainId = domId;
-                }
-            }
-        }
-
-        // No strong spectral match: if current binding is still valid in this process, keep it.
+    if (domainCount > 0) {
+        // Keep an existing explicit binding while its domain is still alive.
+        // Do not infer track membership from spectrum similarity: in REAPER a
+        // single process can host many tracks, and spectral matching can bind a
+        // stage to an unrelated track or another VX effect.
         if (newDomainId == 0 && !force && analysisDomainIdValue != 0) {
             for (int i = 0; i < domainCount; ++i) {
                 if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue)

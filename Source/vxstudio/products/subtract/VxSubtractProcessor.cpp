@@ -118,6 +118,7 @@ void VXSubtractAudioProcessor::resetSuite() {
     subtractDspRight.resetStreamingState();
     controls.reset(0.0f, 0.5f);
     smoothedMakeupGain = 1.0f;
+    activeTailSamplesRemaining = 0;
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     subtractDspMono.setLearning(learnToggleLatched);
     subtractDspLeft.setLearning(learnToggleLatched);
@@ -201,6 +202,42 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                                                 : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
                                                                           * subtractStrength));
 
+    if (learningActiveNow) {
+        const auto channelHasLearnSignal = [&](const int channel) {
+            if (channel < 0 || channel >= buffer.getNumChannels())
+                return false;
+            const auto* data = buffer.getReadPointer(channel);
+            float peak = 0.0f;
+            for (int i = 0; i < numSamples; ++i)
+                peak = std::max(peak, std::abs(data[i]));
+            return peak > 1.0e-5f;
+        };
+
+        if (stereo) {
+            if (leftScratch.getNumSamples() < numSamples)
+                leftScratch.setSize(1, numSamples, false, false, true);
+            if (rightScratch.getNumSamples() < numSamples)
+                rightScratch.setSize(1, numSamples, false, false, true);
+            leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
+            rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
+            if (channelHasLearnSignal(0))
+                subtractDspLeft.processInPlace(leftScratch, 0.0f, options);
+            if (channelHasLearnSignal(1))
+                subtractDspRight.processInPlace(rightScratch, 0.0f, options);
+        } else {
+            if (leftScratch.getNumSamples() < numSamples)
+                leftScratch.setSize(1, numSamples, false, false, true);
+            leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
+            if (channelHasLearnSignal(0))
+                subtractDspMono.processInPlace(buffer, 0.0f, options);
+            buffer.copyFrom(0, 0, leftScratch, 0, 0, numSamples);
+        }
+        updateLearnTelemetry(numChannels);
+        learnToggleLatched = learnRequested;
+        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
+        return;
+    }
+
     if (!learningActiveNow && subtractStrength <= 1.0e-4f) {
         ensureLatencyAlignedListenDry(numSamples);
         const auto& alignedDry = getLatencyAlignedListenDryBuffer();
@@ -212,6 +249,25 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
 
     ensureLatencyAlignedListenDry(numSamples);
     const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+    double liveInputRmsSq = 0.0;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < numSamples; ++i)
+            liveInputRmsSq += static_cast<double>(data[i]) * data[i];
+    }
+    const int liveInputCount = buffer.getNumChannels() * numSamples;
+    const float liveInputRms = liveInputCount > 0
+        ? static_cast<float>(std::sqrt(liveInputRmsSq / static_cast<double>(liveInputCount)))
+        : 0.0f;
+    if (liveInputRms > 1.0e-5f)
+        activeTailSamplesRemaining = std::max(activeTailSamplesRemaining, getLatencySamples() + numSamples);
+    else if (!learnStopEdge && activeTailSamplesRemaining <= 0) {
+        buffer.clear();
+        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
+        updateLearnTelemetry(numChannels);
+        learnToggleLatched = learnRequested;
+        return;
+    }
 
     if (stereo) {
         if (leftScratch.getNumSamples() < numSamples)
@@ -222,8 +278,10 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
         auto leftOptions = options;
         auto rightOptions = options;
-        const float leftProcessAmount = leftReady ? subtractStrength : ((!learningActiveNow && !rightReady) ? blindAmount : 0.0f);
-        const float rightProcessAmount = rightReady ? subtractStrength : ((!learningActiveNow && !leftReady) ? blindAmount : 0.0f);
+        const float leftProcessAmount = learningActiveNow ? 0.0f
+            : (leftReady ? subtractStrength : ((!rightReady) ? blindAmount : 0.0f));
+        const float rightProcessAmount = learningActiveNow ? 0.0f
+            : (rightReady ? subtractStrength : ((!leftReady) ? blindAmount : 0.0f));
         if (!leftReady)
             leftOptions.subtract = 0.0f;
         if (!rightReady)
@@ -241,7 +299,9 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
             buffer.copyFrom(1, 0, alignedDry, 1, 0, numSamples);
         }
     } else {
-        subtractDspMono.processInPlace(buffer, learnedReady ? subtractStrength : blindAmount, options);
+        const float monoProcessAmount = learningActiveNow ? 0.0f
+            : (learnedReady ? subtractStrength : blindAmount);
+        subtractDspMono.processInPlace(buffer, monoProcessAmount, options);
     }
 
     // RMS makeup: restore level lost to spectral subtraction.
@@ -259,15 +319,59 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         }
         const int n = chCount * numSamples;
         const float dryRms = n > 0 ? static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(n))) : 0.0f;
-        const float wetRms = n > 0 ? static_cast<float>(std::sqrt(wetRmsSq / static_cast<double>(n))) : 0.0f;
+        float wetRms = n > 0 ? static_cast<float>(std::sqrt(wetRmsSq / static_cast<double>(n))) : 0.0f;
+        const bool allowRescue = subtractStrength > 0.95f || protectStrength < 0.25f;
+        if (allowRescue && liveInputRms > 1.0e-5f && dryRms > 1.0e-5f && wetRms < liveInputRms * 0.16f) {
+            const float rescue = juce::jlimit(0.0f, 0.22f * subtractStrength,
+                (liveInputRms * 0.16f - wetRms) / std::max(liveInputRms * 0.16f, 1.0e-6f));
+            if (rescue > 1.0e-4f) {
+                const float wetKeep = 1.0f - rescue;
+                for (int ch = 0; ch < chCount; ++ch) {
+                    buffer.applyGain(ch, 0, numSamples, wetKeep);
+                    buffer.addFrom(ch, 0, dryRef, ch, 0, numSamples, rescue);
+                }
+                wetRms = std::max(wetRms, liveInputRms * rescue);
+            }
+        }
         float makeupTarget = 1.0f;
         if (dryRms > 1.0e-5f && wetRms > 1.0e-5f)
             makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(8.0f), dryRms / std::max(wetRms, 1.0e-6f));
         smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, makeupTarget, currentSampleRateHz, numSamples, 0.120f);
         if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f)
             buffer.applyGain(smoothedMakeupGain);
+
+        const bool preserveBlendEligible = !stereo || (leftReady && rightReady);
+        const float preserveBlend = (isVoice && preserveBlendEligible)
+            ? juce::jlimit(0.0f, 0.48f,
+                subtractStrength
+              * juce::jlimit(0.0f, 1.0f, (protectStrength - 0.455f) / 0.025f)
+              * (0.18f + 0.34f * protectStrength + 0.16f * vocalPriority))
+            : 0.0f;
+        if (preserveBlend > 1.0e-4f && liveInputRms > 1.0e-5f) {
+            const float wetKeep = 1.0f - preserveBlend;
+            for (int ch = 0; ch < chCount; ++ch) {
+                buffer.applyGain(ch, 0, numSamples, wetKeep);
+                buffer.addFrom(ch, 0, dryRef, ch, 0, numSamples, preserveBlend);
+            }
+        }
     } else {
         smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
+    }
+
+    if (liveInputRms <= 1.0e-5f)
+        activeTailSamplesRemaining = std::max(0, activeTailSamplesRemaining - numSamples);
+
+    if (learnStopEdge) {
+        subtractDspMono.resetStreamingState();
+        subtractDspLeft.resetStreamingState();
+        subtractDspRight.resetStreamingState();
+        smoothedMakeupGain = 1.0f;
+        activeTailSamplesRemaining = 0;
+        controls.reset(subtractTarget, protectTarget);
+        resetOutputSafetyTrimmer();
+        this->voiceAnalysis.reset();
+        this->voiceContext.reset();
+        this->signalQuality.reset();
     }
 
     updateLearnTelemetry(numChannels);

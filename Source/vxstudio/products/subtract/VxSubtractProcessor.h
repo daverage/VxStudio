@@ -43,6 +43,7 @@ private:
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlPair controls;
     float smoothedMakeupGain = 1.0f;
+    int activeTailSamplesRemaining = 0;
     bool learnToggleLatched = false;
     juce::AudioBuffer<float> leftScratch;
     juce::AudioBuffer<float> rightScratch;

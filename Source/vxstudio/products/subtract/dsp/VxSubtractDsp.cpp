@@ -137,6 +137,7 @@ void SubtractDsp::reset() {
     learnedProfileReady = false;
     learnedSensitivity  = 0.0f;
     learnedProfileConfidence = 0.0f;
+    liveLearnConfidence = 0.0f;
     learnQualityAccum = 0.0f;
     learnInputEnergyAccum = 0.0f;
     learnQualityFrames = 0;
@@ -217,6 +218,7 @@ void SubtractDsp::clearLearnedProfile() {
     learnedProfileReady = false;
     learnedSensitivity = 0.0f;
     learnedProfileConfidence = 0.0f;
+    liveLearnConfidence = 0.0f;
     learnQualityAccum = 0.0f;
     learnInputEnergyAccum = 0.0f;
     learnQualityFrames = 0;
@@ -242,6 +244,7 @@ void SubtractDsp::restoreLearnedProfile(const std::vector<float>& profile, float
         return;
     noisePowFrozen = profile;
     learnedProfileConfidence = confidence;
+    liveLearnConfidence = 0.0f;
     learnedProfileReady = true;
 }
 
@@ -337,7 +340,9 @@ bool SubtractDsp::finalizeLearnedProfile() {
     const float quality = learnQualityFrames > 0
         ? vxsuite::clamp01(learnQualityAccum / static_cast<float>(learnQualityFrames))
         : 0.0f;
-    learnedProfileConfidence = vxsuite::clamp01(0.55f * progress + 0.45f * quality);
+    const float finiteQuality = std::isfinite(quality) ? quality : 0.0f;
+    learnedProfileConfidence = vxsuite::clamp01(0.55f * progress + 0.45f * finiteQuality);
+    liveLearnConfidence = learnedProfileConfidence;
     learningPrev = learning;
     return true;
 }
@@ -416,6 +421,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         for (auto& history : learnHistory)
             history.clear();
         learnFrames = 0;
+        liveLearnConfidence = 0.0f;
         learnQualityAccum = 0.0f;
         learnInputEnergyAccum = 0.0f;
         learnQualityFrames = 0;
@@ -455,6 +461,8 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
             float frameEnergy = 1.0e-8f;
             for (size_t i = 0; i < fftSize; ++i)
                 frameEnergy += frameBuffer[i] * frameBuffer[i];
+            const float frameMeanPower = frameEnergy / static_cast<float>(fftSize);
+            const bool learnFrameHasSignal = frameMeanPower >= kMinimumLearnFramePower;
 
             std::fill(frame.begin(), frame.end(), 0.0f);
             for (size_t i = 0; i < fftSize; ++i)
@@ -525,7 +533,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 updateMinStats(k, p, presenceProb[k]);
 
                 // Manual learn accumulator (true mean estimator, Audacity-like learn semantics).
-                if (learning) {
+                if (learning && learnFrameHasSignal) {
                     learnAccum[k] += p;
                     learnAccumSq[k] += p * p;
                 }
@@ -535,13 +543,16 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 // OM-LSA
                 const float Gamma  = p / n;
                 const float xiInst = std::max(0.0f, Gamma - 1.0f);
-                xiDD[k] = std::max(0.0f, 0.97f * (cleanPowPrev[k] / n) + 0.03f * xiInst);
+                const float xiCandidate = std::max(0.0f, 0.97f * (cleanPowPrev[k] / n) + 0.03f * xiInst);
+                xiDD[k] = std::isfinite(xiCandidate) ? xiCandidate : 0.0f;
 
                 const float gH1  = xiDD[k] / (xiDD[k] + 1.0f);
                 const float vk   = Gamma * gH1;
                 const float LR   = (1.0f + xiDD[k]) * std::exp(-std::min(vk, 30.0f));
-                const float p_H1 = 1.0f / (1.0f + (q_absence / (1.0f - q_absence)) * LR);
-                presenceProb[k]  = 0.90f * presenceProb[k] + 0.10f * p_H1;
+                const float p_H1Raw = 1.0f / (1.0f + (q_absence / (1.0f - q_absence)) * LR);
+                const float p_H1 = std::isfinite(p_H1Raw) ? vxsuite::clamp01(p_H1Raw) : 0.0f;
+                const float presenceCandidate = 0.90f * presenceProb[k] + 0.10f * p_H1;
+                presenceProb[k] = std::isfinite(presenceCandidate) ? vxsuite::clamp01(presenceCandidate) : 0.5f;
 
                 const float pSm = presenceProb[k];
                 const float lnG = pSm         * std::log(std::max(kEps, gH1))
@@ -631,8 +642,9 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                     g = std::max(g * gSub, effectiveFloor);
                 }
 
-                gainTarget[k] = vxsuite::clamp01(g);
-                cleanPowPrev[k] = std::max(1.0e-10f, p * gainTarget[k] * gainTarget[k]);
+                gainTarget[k] = std::isfinite(g) ? vxsuite::clamp01(g) : 1.0f;
+                const float cleanPow = p * gainTarget[k] * gainTarget[k];
+                cleanPowPrev[k] = std::isfinite(cleanPow) ? std::max(1.0e-10f, cleanPow) : 1.0e-10f;
             }
 
             std::fill(barkMaskFloor.begin(), barkMaskFloor.end(), 0.0f);
@@ -652,28 +664,31 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
             for (size_t k = 0; k < bins; ++k)
                 gainTarget[k] = std::max(gainTarget[k], barkMaskFloor[k]);
 
-            if (learning) {
+            if (learning && learnFrameHasSignal) {
                 ++learnFrames;
-                learnInputEnergyAccum += frameEnergy / static_cast<float>(fftSize);
+                learnInputEnergyAccum += frameMeanPower;
                 const float noiseLike = vxsuite::clamp01((spectralFlatness - 0.12f) / 0.38f);
                 const float steady = vxsuite::clamp01(1.0f - std::abs(std::log(std::max(0.25f, std::min(4.0f, energyRatio)))) / 1.2f);
-                const float quietSpeech = 1.0f - vxsuite::clamp01(signalPresenceAvg);
+                const float speechPresenceForLearn = std::isfinite(signalPresenceAvg) ? signalPresenceAvg : 0.5f;
+                const float quietSpeech = 1.0f - vxsuite::clamp01(speechPresenceForLearn);
                 // Reduce noiseLike weight: colored real-world noise has low spectral
                 // flatness and should not be penalised — steadiness and absence of
                 // speech matter more for a reliable learned profile.
-                const float quality = juce::jlimit(0.0f, 1.0f,
-                                                   0.15f * noiseLike
-                                                 + 0.45f * steady
-                                                 + 0.40f * quietSpeech
-                                                 - (energyRatio > 1.38f ? 0.12f : 0.0f));
+                const float qualityRaw = 0.15f * noiseLike
+                                       + 0.45f * steady
+                                       + 0.40f * quietSpeech
+                                       - (energyRatio > 1.38f ? 0.12f : 0.0f);
+                const float quality = std::isfinite(qualityRaw)
+                    ? juce::jlimit(0.0f, 1.0f, qualityRaw)
+                    : 0.0f;
                 learnQualityAccum += quality;
                 ++learnQualityFrames;
                 // Use cumulative average for a stable, monotonically-improving display.
                 const float cumulativeQuality = learnQualityAccum
                                               / static_cast<float>(learnQualityFrames);
-                learnedProfileConfidence = vxsuite::clamp01(
-                                                        0.55f * getLearnProgress()
-                                                      + 0.45f * cumulativeQuality);
+                const float finiteCumulativeQuality = std::isfinite(cumulativeQuality) ? cumulativeQuality : 0.0f;
+                liveLearnConfidence = vxsuite::clamp01(0.55f * getLearnProgress()
+                                                     + 0.45f * finiteCumulativeQuality);
             }
 
             // Frequency smoothing
@@ -738,7 +753,8 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                     if (lfStab > 0.0f)
                         coeff = std::max(coeff, lerp(0.93f, 0.992f, lfStab));
                 }
-                gainSmooth[k] = coeff * gainSmooth[k] + (1.0f - coeff) * gainSmoothedFreq[k];
+                const float smoothCandidate = coeff * gainSmooth[k] + (1.0f - coeff) * gainSmoothedFreq[k];
+                gainSmooth[k] = std::isfinite(smoothCandidate) ? smoothCandidate : 1.0f;
             }
 
             // Apply spectral gain with phase propagation to maintain continuity
@@ -766,12 +782,15 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                     prevOutputPhase[k] = phaseOut;
                 }
 
-                presenceSum += presenceProb[k];
+                presenceSum += std::isfinite(presenceProb[k]) ? presenceProb[k] : 0.5f;
             }
             phaseHistoryReady = true;
 
-            signalPresenceAvg = 0.94f * signalPresenceAvg
-                              + 0.06f * (presenceSum / static_cast<float>(bins));
+            const float presenceAverage = presenceSum / static_cast<float>(bins);
+            const float signalPresenceCandidate = 0.94f * signalPresenceAvg + 0.06f * presenceAverage;
+            signalPresenceAvg = std::isfinite(signalPresenceCandidate)
+                ? vxsuite::clamp01(signalPresenceCandidate)
+                : 0.5f;
 
             // IFFT + OLA
             fft.performInverse(frame.data());

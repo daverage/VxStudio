@@ -195,6 +195,10 @@ const juce::AudioBuffer<float>& ProcessorBase::getLatencyAlignedListenDryBuffer(
     return processCoordinator.alignedDryBuffer();
 }
 
+void ProcessorBase::resetOutputSafetyTrimmer() noexcept {
+    outputSafetyTrimmer.reset();
+}
+
 void ProcessorBase::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                        const juce::AudioBuffer<float>& inputBuffer) {
     juce::ignoreUnused(inputBuffer);

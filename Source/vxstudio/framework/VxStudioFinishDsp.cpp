@@ -50,8 +50,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     const int dryCount = std::max(1, numChannels * numSamples);
     const float dryRms = static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(dryCount)));
 
-    const float autoMakeupMaxDb = voiceMode ? 11.5f : 9.5f;
-    const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, voiceMode ? 0.72f : 0.78f);
+    const float autoMakeupMaxDb = voiceMode ? 16.0f : 13.0f;
+    const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, voiceMode ? 0.45f : 0.50f);
     if (!finishStageEnabled)
         smoothedAutoMakeupDb = 0.0f;
     else
@@ -87,11 +87,11 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     const float measuredLossDb = std::max(0.0f, dryDb - wetDb - (voiceMode ? 0.75f : 0.95f));
     const float peakCeiling = juce::Decibels::decibelsToGain(voiceMode ? -1.0f : -1.2f);
     const float headroomDb = juce::Decibels::gainToDecibels(std::max(peakCeiling / std::max(wetPeak, 1.0e-6f), 1.0e-6f), 0.0f);
-    const float grRecoveryDb = std::max(0.0f, opto.getGainReductionDb() - (voiceMode ? 0.8f : 1.1f))
-        * (voiceMode ? 0.58f : 0.44f);
-    const float limiterRecoveryDb = limiterActivity * (voiceMode ? 2.1f : 1.6f);
-    const float desiredRecoveryDb = std::max(grRecoveryDb + limiterRecoveryDb, measuredLossDb * 0.55f);
-    const float recoveryMaxDb = (voiceMode ? 4.0f : 3.2f) + (voiceMode ? 4.2f : 2.8f) * peakReduction;
+    const float grRecoveryDb = std::max(0.0f, opto.getGainReductionDb() - (voiceMode ? 0.5f : 0.7f))
+        * (voiceMode ? 0.72f : 0.60f);
+    const float limiterRecoveryDb = limiterActivity * (voiceMode ? 3.0f : 2.4f);
+    const float desiredRecoveryDb = std::max(grRecoveryDb + limiterRecoveryDb, measuredLossDb * 0.65f);
+    const float recoveryMaxDb = (voiceMode ? 6.0f : 5.0f) + (voiceMode ? 6.0f : 4.5f) * peakReduction;
     const float recoveryTargetDb = juce::jlimit(0.0f,
                                                 std::max(0.0f, headroomDb),
                                                 std::min(recoveryMaxDb, desiredRecoveryDb));

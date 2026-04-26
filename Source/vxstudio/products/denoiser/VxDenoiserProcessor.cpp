@@ -146,6 +146,27 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         denoiserDspMono.processInPlace(buffer, effectiveClean, opts);
     }
 
+    const float speechEvidence = vxsuite::clamp01(0.70f * vocalPriority
+                                                + 0.35f * voiceContext.speechPresence
+                                                + 0.25f * voiceContext.phraseActivity
+                                                + 0.20f * voiceContext.intelligibility);
+    const float speechPreserveBlend = isVoice
+        ? juce::jlimit(0.0f, 0.55f,
+            effectiveClean
+          * juce::jlimit(0.0f, 1.0f, (smoothedGuard - 0.38f) / 0.42f)
+          * speechEvidence
+          * (0.72f + 0.20f * smoothedGuard))
+        : 0.0f;
+    if (speechPreserveBlend > 1.0e-4f && dryRms > 1.0e-5f) {
+        const auto& dryRef = getLatencyAlignedListenDryBuffer();
+        const int dryChannels = std::min(buffer.getNumChannels(), dryRef.getNumChannels());
+        const float wetKeep = 1.0f - speechPreserveBlend;
+        for (int ch = 0; ch < dryChannels; ++ch) {
+            buffer.applyGain(ch, 0, numSamples, wetKeep);
+            buffer.addFrom(ch, 0, dryRef, ch, 0, numSamples, speechPreserveBlend);
+        }
+    }
+
     const int channels = buffer.getNumChannels();
     const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 6.0f : 5.0f);
     if (channels >= 2) {
@@ -209,19 +230,15 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         }
     }
 
-    const float speechEvidence = vxsuite::clamp01(0.70f * vocalPriority
-                                                + 0.35f * voiceContext.speechPresence
-                                                + 0.25f * voiceContext.phraseActivity
-                                                + 0.20f * voiceContext.intelligibility);
     const float residualTrimDrive = vxsuite::clamp01((effectiveClean - 0.45f) / 0.55f);
     const float nonSpeechResidual = vxsuite::clamp01(1.0f - speechEvidence);
-    const float residualTrimDepth = isVoice ? 0.34f : 0.46f;
+    const float residualTrimDepth = isVoice ? 0.56f : 0.72f;
     const float residualTrimTarget = 1.0f - residualTrimDepth * residualTrimDrive * nonSpeechResidual;
     smoothedResidualTrim = vxsuite::smoothBlockValue(smoothedResidualTrim,
-                                                     juce::jlimit(0.45f, 1.0f, residualTrimTarget),
+                                                     juce::jlimit(0.34f, 1.0f, residualTrimTarget),
                                                      currentSampleRateHz,
                                                      numSamples,
-                                                     residualTrimTarget < smoothedResidualTrim ? 0.080f : 0.160f);
+                                                     residualTrimTarget < smoothedResidualTrim ? 0.030f : 0.160f);
     if (std::abs(smoothedResidualTrim - 1.0f) > 1.0e-4f)
         buffer.applyGain(smoothedResidualTrim);
 
