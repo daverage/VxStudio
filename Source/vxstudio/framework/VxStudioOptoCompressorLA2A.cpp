@@ -61,8 +61,8 @@ float OptoCompressorLA2A::gainReductionSoftKneeDb(const float inDb,
 
 float OptoCompressorLA2A::peakReductionToDriveDb(const float peakReduction01, const Mode mode) noexcept {
   const float pr = clamp01(peakReduction01);
-  const float tapered = std::pow(pr, mode == Mode::limit ? 1.20f : 1.35f);
-  const float maxDriveDb = (mode == Mode::limit) ? 44.0f : 40.0f;
+  const float tapered = std::pow(pr, mode == Mode::limit ? 1.12f : 1.24f);
+  const float maxDriveDb = (mode == Mode::limit) ? 50.0f : 44.0f;
   return tapered * maxDriveDb;
 }
 

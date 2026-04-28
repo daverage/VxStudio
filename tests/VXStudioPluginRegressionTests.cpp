@@ -1,4 +1,5 @@
 #include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
+#include "../Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.h"
 #include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
 #include "../Source/vxstudio/products/denoiser/VxDenoiserProcessor.h"
 #include "../Source/vxstudio/products/OptoComp/VxOptoCompProcessor.h"
@@ -59,6 +60,47 @@ bool expectNoSteadyStateAllocations(const char* label,
 }
 
 bool primeSubtractLearn(VXSubtractAudioProcessor& processor, double sr, int blockSize = 256);
+
+bool ensureDeepFilterTestModelsInstalled() {
+    const auto repoRoot = juce::File(__FILE__).getParentDirectory().getParentDirectory();
+    const auto sourceDir = repoRoot.getChildFile("assets").getChildFile("deepfilternet").getChildFile("models");
+    const auto cacheRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("VX Suite")
+        .getChildFile("Models");
+
+    struct ModelFile {
+        const char* packageId;
+        const char* fileName;
+    };
+
+    for (const auto& model : std::array<ModelFile, 2> {{
+             { "deepfilternet3", "DeepFilterNet3_onnx.tar.gz" },
+             { "deepfilternet2", "DeepFilterNet2_onnx_ll.tar.gz" },
+         }}) {
+        const auto source = sourceDir.getChildFile(model.fileName);
+        if (!source.existsAsFile()) {
+            std::cerr << "[VXSuitePluginRegression] Missing DeepFilter test model asset: "
+                      << source.getFullPathName() << "\n";
+            return false;
+        }
+
+        const auto packageDir = cacheRoot.getChildFile(model.packageId);
+        if (!packageDir.exists() && !packageDir.createDirectory()) {
+            std::cerr << "[VXSuitePluginRegression] Could not create DeepFilter model cache directory: "
+                      << packageDir.getFullPathName() << "\n";
+            return false;
+        }
+
+        const auto destination = packageDir.getChildFile(model.fileName);
+        if (!destination.existsAsFile() && !source.copyFileTo(destination)) {
+            std::cerr << "[VXSuitePluginRegression] Could not install DeepFilter test model into cache: "
+                      << destination.getFullPathName() << "\n";
+            return false;
+        }
+    }
+
+    return true;
+}
 
 float renderCleanupAndMeasureMaxPlosiveActivity(VXCleanupAudioProcessor& cleanup,
                                                 const juce::AudioBuffer<float>& input,
@@ -202,6 +244,52 @@ juce::AudioBuffer<float> makePerformInstrumentInput(const double sr, const float
         buffer.setSample(1, i, sample * 0.98f);
     }
     return buffer;
+}
+
+juce::AudioBuffer<float> makeDeverbSyntheticRoom(const juce::AudioBuffer<float>& dry,
+                                                 const double sr,
+                                                 const float rt60Seconds) {
+    const float safeRt60 = juce::jlimit(0.1f, 4.0f, rt60Seconds);
+    const int rirSamples = std::max(1, static_cast<int>(std::ceil(sr * safeRt60 * 1.5f)));
+    std::vector<float> rir(static_cast<size_t>(rirSamples), 0.0f);
+    std::mt19937 rng(12345);
+    std::normal_distribution<float> dist(0.0f, 1.0f);
+
+    rir[0] = 1.0f;
+    for (int n = 1; n < rirSamples; ++n) {
+        const float decay = std::exp(-6.908f * static_cast<float>(n)
+                                     / (safeRt60 * static_cast<float>(sr)));
+        rir[static_cast<size_t>(n)] = 0.35f * dist(rng) * decay;
+    }
+
+    juce::AudioBuffer<float> wet(dry.getNumChannels(), dry.getNumSamples());
+    wet.clear();
+    for (int ch = 0; ch < dry.getNumChannels(); ++ch) {
+        const auto* src = dry.getReadPointer(ch);
+        auto* dst = wet.getWritePointer(ch);
+        for (int i = 0; i < dry.getNumSamples(); ++i) {
+            double acc = 0.0;
+            const int taps = std::min(i + 1, rirSamples);
+            for (int n = 0; n < taps; ++n)
+                acc += static_cast<double>(src[i - n]) * rir[static_cast<size_t>(n)];
+            dst[i] = static_cast<float>(acc);
+        }
+    }
+    return wet;
+}
+
+float tailRmsFromSample(const juce::AudioBuffer<float>& buffer, const int startSample) {
+    double energy = 0.0;
+    int count = 0;
+    const int start = juce::jlimit(0, buffer.getNumSamples(), startSample);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = start; i < buffer.getNumSamples(); ++i) {
+            energy += static_cast<double>(data[i]) * data[i];
+            ++count;
+        }
+    }
+    return count > 0 ? static_cast<float>(std::sqrt(energy / static_cast<double>(count))) : 0.0f;
 }
 
 float windowedLevelSpreadDb(const juce::AudioBuffer<float>& buffer,
@@ -464,6 +552,71 @@ bool testSubtractListenOutputsMeaningfulRemovedDelta() {
     return true;
 }
 
+bool testSubtractLearnedProfileSurvivesResetAndStillActs() {
+    constexpr double sr = 48000.0;
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, 256);
+    if (!primeSubtractLearn(processor, sr))
+        return false;
+
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noise = makeNoise(sr, 1.0f, 0.08f);
+    auto noisy = addBuffers(speech, noise);
+
+    setParamNormalized(processor, "mode", 1.0f);
+    setParamNormalized(processor, "subtract", 0.86f);
+    setParamNormalized(processor, "protect", 0.22f);
+    const auto first = render(processor, noisy, 256);
+    const float firstResidual = bestGainResidualRatioSkip(noisy, first, 4096);
+
+    processor.reset();
+    setParamNormalized(processor, "mode", 1.0f);
+    setParamNormalized(processor, "subtract", 0.86f);
+    setParamNormalized(processor, "protect", 0.22f);
+    const auto second = render(processor, noisy, 256);
+    const float secondResidual = bestGainResidualRatioSkip(noisy, second, 4096);
+
+    if (firstResidual > 0.94f || secondResidual > 0.94f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract forgot or stopped applying its learned profile after reset: firstResidual="
+                  << firstResidual << " secondResidual=" << secondResidual << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractGeneralModeStaysUsefulAndNonSilent() {
+    constexpr double sr = 48000.0;
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, 256);
+    if (!primeSubtractLearn(processor, sr))
+        return false;
+
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noise = makeNoise(sr, 1.0f, 0.10f);
+    auto noisy = addBuffers(speech, noise);
+
+    setParamNormalized(processor, "mode", 1.0f);
+    setParamNormalized(processor, "subtract", 1.0f);
+    setParamNormalized(processor, "protect", 0.15f);
+    const auto generalOut = render(processor, noisy, 256);
+    const float inputRms = rmsSkip(noisy, 4096);
+    const float outputRms = rmsSkip(generalOut, 4096);
+    const float residual = bestGainResidualRatioSkip(noisy, generalOut, 4096);
+    const float diff = maxAbsDiffSkip(noisy, generalOut, 4096);
+
+    if (outputRms < inputRms * 0.16f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract general mode collapsed toward silence: input="
+                  << inputRms << " output=" << outputRms << "\n";
+        return false;
+    }
+    if (residual > 0.97f || diff < 0.01f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract general mode no longer does enough useful work: residual="
+                  << residual << " diff=" << diff << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool testRebalanceInstancesStayTrackLocal() {
     constexpr double sr = 48000.0;
     constexpr int blockSize = 256;
@@ -589,6 +742,43 @@ bool testDeverbExtremeBlendStaysStable() {
     if (rms(tail) > 0.02f) {
         std::cerr << "[VXSuitePluginRegression] Deverb extreme Blend left too much sustained tail / buzzing: rms="
                   << rms(tail) << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDeverbStrongSettingActuallyReducesSyntheticRoomTail() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    const int tailStart = static_cast<int>(std::ceil(0.060 * sr));
+
+    auto dry = makeSpeechLike(sr, 1.6f);
+    auto room = makeDeverbSyntheticRoom(dry, sr, 1.0f);
+
+    VXDeverbAudioProcessor deverb;
+    deverb.prepareToPlay(sr, blockSize);
+    setParamNormalized(deverb, "mode", 1.0f);
+    setParamNormalized(deverb, "reduce", 1.0f);
+    setParamNormalized(deverb, "body", 0.0f);
+    auto out = render(deverb, room, blockSize);
+
+    const float tailIn = tailRmsFromSample(room, tailStart);
+    const float tailOut = tailRmsFromSample(out, tailStart);
+    const float tailRatio = tailOut / std::max(tailIn, 1.0e-6f);
+    const float residual = bestGainResidualRatioSkip(room, out, 4096);
+
+    if (!allFinite(out) || peakAbs(out) > 1.05f) {
+        std::cerr << "[VXSuitePluginRegression] Deverb strong synthetic-room case became unstable\n";
+        return false;
+    }
+    if (tailRatio > 0.22f) {
+        std::cerr << "[VXSuitePluginRegression] Deverb still leaves too much synthetic room tail at strong settings: ratio="
+                  << tailRatio << "\n";
+        return false;
+    }
+    if (residual > 0.97f) {
+        std::cerr << "[VXSuitePluginRegression] Deverb strong synthetic-room case no longer changes the input enough: residual="
+                  << residual << "\n";
         return false;
     }
     return true;
@@ -1194,6 +1384,66 @@ bool testProximityExtremeIsBoundedAndAdditive() {
     return true;
 }
 
+bool testProximityDefaultsAreNearNeutral() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    const auto out = render(proximity, input, 256);
+
+    if (maxAbsDiffSkip(input, out, 128) > 2.0e-3f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity defaults are no longer near-neutral\n";
+        return false;
+    }
+    return true;
+}
+
+bool testToneAndProximityModesAreClearlyDifferentAtExtremes() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXToneAudioProcessor toneVoice;
+    toneVoice.prepareToPlay(sr, 256);
+    setParamNormalized(toneVoice, "mode", 0.0f);
+    setParamNormalized(toneVoice, "bass", 1.0f);
+    setParamNormalized(toneVoice, "treble", 1.0f);
+    const auto toneVoiceOut = render(toneVoice, input, 256);
+
+    VXToneAudioProcessor toneGeneral;
+    toneGeneral.prepareToPlay(sr, 256);
+    setParamNormalized(toneGeneral, "mode", 1.0f);
+    setParamNormalized(toneGeneral, "bass", 1.0f);
+    setParamNormalized(toneGeneral, "treble", 1.0f);
+    const auto toneGeneralOut = render(toneGeneral, input, 256);
+
+    if (maxAbsDiffSkip(toneVoiceOut, toneGeneralOut, 128) < 0.02f) {
+        std::cerr << "[VXSuitePluginRegression] Tone voice/general extremes are still too similar\n";
+        return false;
+    }
+
+    VXProximityAudioProcessor proximityVoice;
+    proximityVoice.prepareToPlay(sr, 256);
+    setParamNormalized(proximityVoice, "mode", 0.0f);
+    setParamNormalized(proximityVoice, "closer", 1.0f);
+    setParamNormalized(proximityVoice, "air", 1.0f);
+    const auto proximityVoiceOut = render(proximityVoice, input, 256);
+
+    VXProximityAudioProcessor proximityGeneral;
+    proximityGeneral.prepareToPlay(sr, 256);
+    setParamNormalized(proximityGeneral, "mode", 1.0f);
+    setParamNormalized(proximityGeneral, "closer", 1.0f);
+    setParamNormalized(proximityGeneral, "air", 1.0f);
+    const auto proximityGeneralOut = render(proximityGeneral, input, 256);
+
+    if (maxAbsDiffSkip(proximityVoiceOut, proximityGeneralOut, 128) < 0.015f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity voice/general extremes are still too similar\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testDenoiserStrongSettingStaysCoherentAndBounded() {
     constexpr double sr = 48000.0;
     auto speech = makeSpeechLike(sr, 1.0f);
@@ -1215,6 +1465,58 @@ bool testDenoiserStrongSettingStaysCoherentAndBounded() {
                   << corr << "\n";
         return false;
     }
+    return true;
+}
+
+bool testDenoiserAndLevelerModesAreClearlyDifferentAtStrongSettings() {
+    constexpr double sr = 48000.0;
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noisySpeech = addBuffers(speech, makeNoise(sr, 1.0f, 0.10f));
+
+    VXDenoiserAudioProcessor denoiseVoice;
+    denoiseVoice.prepareToPlay(sr, 256);
+    setParamNormalized(denoiseVoice, "mode", 0.0f);
+    setParamNormalized(denoiseVoice, "clean", 1.0f);
+    setParamNormalized(denoiseVoice, "guard", 0.75f);
+    const auto denoiseVoiceOut = render(denoiseVoice, noisySpeech, 256);
+
+    VXDenoiserAudioProcessor denoiseGeneral;
+    denoiseGeneral.prepareToPlay(sr, 256);
+    setParamNormalized(denoiseGeneral, "mode", 1.0f);
+    setParamNormalized(denoiseGeneral, "clean", 1.0f);
+    setParamNormalized(denoiseGeneral, "guard", 0.75f);
+    const auto denoiseGeneralOut = render(denoiseGeneral, noisySpeech, 256);
+
+    if (maxAbsDiffSkip(denoiseVoiceOut, denoiseGeneralOut, 512) < 0.012f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser voice/general strong settings are still too similar\n";
+        return false;
+    }
+
+    auto instrument = makePerformInstrumentInput(sr, 1.0f);
+    auto mixedInput = addBuffers(noisySpeech, instrument);
+    const float peak = peakAbs(mixedInput);
+    if (peak > 1.0e-6f)
+        mixedInput.applyGain(0.88f / peak);
+
+    VXLevelerAudioProcessor levelerVoice;
+    levelerVoice.prepareToPlay(sr, 256);
+    setParamNormalized(levelerVoice, "mode", 0.0f);
+    setParamNormalized(levelerVoice, "level", 1.0f);
+    setParamNormalized(levelerVoice, "control", 0.90f);
+    const auto levelerVoiceOut = render(levelerVoice, mixedInput, 256);
+
+    VXLevelerAudioProcessor levelerGeneral;
+    levelerGeneral.prepareToPlay(sr, 256);
+    setParamNormalized(levelerGeneral, "mode", 1.0f);
+    setParamNormalized(levelerGeneral, "level", 1.0f);
+    setParamNormalized(levelerGeneral, "control", 0.90f);
+    const auto levelerGeneralOut = render(levelerGeneral, mixedInput, 256);
+
+    if (maxAbsDiffSkip(levelerVoiceOut, levelerGeneralOut, 256) < 0.015f) {
+        std::cerr << "[VXSuitePluginRegression] Leveler voice/general strong settings are still too similar\n";
+        return false;
+    }
+
     return true;
 }
 
@@ -1405,6 +1707,75 @@ bool testDenoiserOversizedHostBlocksStayConsistent() {
     if (corr < 0.985f) {
         std::cerr << "[VXSuitePluginRegression] Oversized host blocks changed denoiser behaviour too much: corr="
                   << corr << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testDeepFilterOfflineRenderModeSwitchRecoversCleanly() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    if (!ensureDeepFilterTestModelsInstalled())
+        return false;
+
+    VXDeepFilterNetAudioProcessor processor;
+    processor.prepareToPlay(sr, blockSize);
+    setParamNormalized(processor, "clean", 1.0f);
+    setParamNormalized(processor, "guard", 0.18f);
+    setParamNormalized(processor, "model", 0.0f);
+
+    const auto input = addBuffers(makeSpeechLike(sr, 1.2f), makeNoise(sr, 1.2f, 0.08f));
+    const auto liveBefore = render(processor, input, blockSize);
+    const float liveBeforeRms = rmsSkip(liveBefore, 4096);
+    if (processor.getLatencySamples() <= 0
+        || processor.getStatusText().containsIgnoreCase("not installed")
+        || processor.getStatusText().containsIgnoreCase("init failed")
+        || processor.getStatusText().containsIgnoreCase("fallback")
+        || !allFinite(liveBefore)
+        || liveBeforeRms <= 1.0e-6f) {
+        std::cerr << "[VXSuitePluginRegression] DeepFilter did not reach a healthy live baseline before mode switch: latency="
+                  << processor.getLatencySamples() << " status=" << processor.getStatusText()
+                  << " rms=" << liveBeforeRms << "\n";
+            return false;
+        }
+
+    processor.setNonRealtime(true);
+    processor.prepareToPlay(sr, 2048);
+    setParamNormalized(processor, "clean", 1.0f);
+    setParamNormalized(processor, "guard", 0.18f);
+    setParamNormalized(processor, "model", 0.0f);
+    const auto offlineOut = render(processor, input, 2048);
+    const float offlineVsLiveResidual = bestGainResidualRatioSkip(liveBefore, offlineOut, 4096);
+    const float offlineRms = rmsSkip(offlineOut, 4096);
+    if (processor.getStatusText().containsIgnoreCase("init failed")
+        || processor.getStatusText().containsIgnoreCase("fallback")
+        || !allFinite(offlineOut)
+        || offlineRms <= liveBeforeRms * 0.35f
+        || offlineVsLiveResidual > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] DeepFilter offline render path broke after entering non-realtime mode: residual="
+                  << offlineVsLiveResidual << " status=" << processor.getStatusText()
+                  << " liveRms=" << liveBeforeRms << " offlineRms=" << offlineRms << "\n";
+        return false;
+    }
+
+    processor.setNonRealtime(false);
+    processor.prepareToPlay(sr, blockSize);
+    setParamNormalized(processor, "clean", 1.0f);
+    setParamNormalized(processor, "guard", 0.18f);
+    setParamNormalized(processor, "model", 0.0f);
+    const auto liveAfter = render(processor, input, blockSize);
+    const float liveAfterVsBeforeResidual = bestGainResidualRatioSkip(liveBefore, liveAfter, 4096);
+    const float liveAfterRms = rmsSkip(liveAfter, 4096);
+    if (processor.getStatusText().containsIgnoreCase("init failed")
+        || processor.getStatusText().containsIgnoreCase("fallback")
+        || !allFinite(liveAfter)
+        || liveAfterRms <= liveBeforeRms * 0.35f
+        || liveAfterVsBeforeResidual > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] DeepFilter stayed broken after leaving non-realtime mode: residual="
+                  << liveAfterVsBeforeResidual << " status=" << processor.getStatusText()
+                  << " liveRms=" << liveBeforeRms << " liveAfterRms=" << liveAfterRms << "\n";
         return false;
     }
 
@@ -1836,6 +2207,7 @@ bool testProximityAndFinishFrequencyResponseRegression() {
     constexpr int skip = 4096;
 
     auto low = makeSine(sr, 0.8f, 90.0f, 0.08f);
+    auto presence = makeSine(sr, 0.8f, 3800.0f, 0.08f);
     auto mid = makeSine(sr, 0.8f, 1000.0f, 0.08f);
     auto high = makeSine(sr, 0.8f, 9000.0f, 0.04f);
 
@@ -1850,6 +2222,25 @@ bool testProximityAndFinishFrequencyResponseRegression() {
     const float midCloser = rmsSkip(render(proximity, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
     if (!(lowCloser > midCloser * 1.20f)) {
         std::cerr << "[VXSuitePluginRegression] Proximity closer control no longer favors low-frequency boost\n";
+        return false;
+    }
+
+    proximity.reset();
+    auto lowMid = makeSine(sr, 0.8f, 250.0f, 0.08f);
+    setParamNormalized(proximity, "closer", 1.0f);
+    setParamNormalized(proximity, "air", 0.0f);
+    const float lowMidCloser = rmsSkip(render(proximity, lowMid, 256), skip) / std::max(rmsSkip(lowMid, skip), 1.0e-6f);
+    if (!(lowCloser > lowMidCloser * 1.18f)) {
+        std::cerr << "[VXSuitePluginRegression] Proximity closer control is still lifting low mids too much relative to true proximity bass\n";
+        return false;
+    }
+
+    proximity.reset();
+    setParamNormalized(proximity, "closer", 1.0f);
+    setParamNormalized(proximity, "air", 0.0f);
+    const float presenceCloser = rmsSkip(render(proximity, presence, 256), skip) / std::max(rmsSkip(presence, skip), 1.0e-6f);
+    if (!(presenceCloser > midCloser * 1.04f)) {
+        std::cerr << "[VXSuitePluginRegression] Proximity closer model no longer adds directness/presence beyond a broad mid boost\n";
         return false;
     }
 
@@ -2002,9 +2393,12 @@ int main() {
     ok &= testSubtractSilentLearnDoesNotCreateProfileOrMuteOutput();
     ok &= testSubtractLearnLifecycleMakesSense();
     ok &= testSubtractListenOutputsMeaningfulRemovedDelta();
+    ok &= testSubtractLearnedProfileSurvivesResetAndStillActs();
+    ok &= testSubtractGeneralModeStaysUsefulAndNonSilent();
     ok &= testRebalanceInstancesStayTrackLocal();
     ok &= testSubtractStereoLearnTreatsChannelsIndependently();
     ok &= testDeverbExtremeBlendStaysStable();
+    ok &= testDeverbStrongSettingActuallyReducesSyntheticRoomTail();
     ok &= testCleanupFinishSubtractChainStaysStable();
     ok &= testCleanupStrongSettingIsAudibleButBounded();
     ok &= testCleanupHighShelfStrongSettingStaysBounded();
@@ -2023,13 +2417,17 @@ int main() {
     ok &= testLevelerZeroIsTransparentAndIdle();
     ok &= testLevelerImprovesLevelConsistencyOnHotInstrumentMix();
     ok &= testProximityExtremeIsBoundedAndAdditive();
+    ok &= testProximityDefaultsAreNearNeutral();
+    ok &= testToneAndProximityModesAreClearlyDifferentAtExtremes();
     ok &= testDenoiserStrongSettingStaysCoherentAndBounded();
     ok &= testDenoiserStrongSettingRetainsUsefulLevelInBothModes();
     ok &= testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes();
+    ok &= testDenoiserAndLevelerModesAreClearlyDifferentAtStrongSettings();
     ok &= testDenoiserStereoTreatsChannelsIndependently();
     ok &= testDenoiserZeroCleanKeepsPdcAlignedIdentity();
     ok &= testDenoiserResetAndReprepareStayFinite();
     ok &= testDenoiserOversizedHostBlocksStayConsistent();
+    ok &= testDeepFilterOfflineRenderModeSwitchRecoversCleanly();
     ok &= testSubtractZeroKeepsPdcAlignedIdentity();
     ok &= testCleanupBlockSizeInvariance();
     ok &= testFullChainBlockSizeInvariance();

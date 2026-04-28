@@ -1,5 +1,6 @@
 # Lessons
 
+- When a user says a corrective ambience tool like `VXDeverb` is still too weak, do not just check for audible change or stability; measure tail reduction directly and retune the actual suppression law until strong settings behave like decisive room removal, not a polite cleanup.
 - When investigating a DAW project report, inspect the exact project file the user names before generalising from nearby sibling `.RPP` files; REAPER folders often contain several similar project copies with different FX chains and saved states.
 - For shared VX parameter displays, never present a neutral-centered control as a raw `0..1` or as if `50%` were unity by default; if the product meaning is unity at centre, the text and mapping must read that way explicitly, such as `50% .. 150%` with `100%` at the midpoint.
 - When a user asks whether a plugin concept can be built, do not anchor too early on the illustrative example signal pair; restate and design around the broader outcome contract first, then narrow the DSP and wording only after confirming the real capture scenario.
@@ -148,3 +149,4 @@
 - In Rebalance, do not smooth the same UI controls in both the processor and the DSP. Keep one authoritative smoothing layer inside the DSP so response time and ownership timing stay predictable.
 - For review-only diagnostics in plugin UIs, default the panel to collapsed on instantiation unless the product is explicitly meant to ship with debugging visible.
 - When a DSP helper takes a parameter like per-bin `analysisMag` or `confidence`, either use it in the actual law or remove the parameter. Leaving it unused hides real review gaps and makes later tuning harder to reason about.
+- When fixing a review-found hidden cap in a dynamics product, do not widen every related gain law at once. Keep the proven baseline rider/compressor behavior, add a narrow extreme-only escape hatch, and verify separately that the cap is gone before treating any broader tonal change as acceptable.

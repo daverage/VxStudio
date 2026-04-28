@@ -206,7 +206,7 @@ void ClarityDsp::analyzeBlock(const juce::AudioBuffer<float>& buffer,
 
     const float trust = juce::jlimit(0.30f, 1.0f, 0.35f + 0.65f * params.separationConfidence);
     const float voiceProtect = params.voiceMode
-        ? juce::jlimit(0.55f, 1.0f, params.sourceProtect)
+        ? juce::jlimit(0.48f, 1.0f, params.sourceProtect)
         : 0.90f;
     const float focus = clamp01(params.focus);
     const float clean = clamp01(params.clean);
@@ -220,9 +220,9 @@ void ClarityDsp::analyzeBlock(const juce::AudioBuffer<float>& buffer,
             0.50f * longDensity[band] + 0.30f * mainBandNorm + 0.20f * coreDensity);
         const float bodyWeight = lerp(kBodyWeights[band], kClarityWeights[band], focus);
         const float modeWeight = params.voiceMode
-            ? (0.85f + 0.15f * params.speechFocus)
-            : 1.0f;
-        const float guardMod = juce::jlimit(0.75f, 1.0f, 1.0f - 0.20f * params.guardStrictness);
+            ? (0.78f + 0.18f * params.speechFocus)
+            : 1.08f;
+        const float guardMod = juce::jlimit(0.68f, 1.0f, 1.0f - 0.26f * params.guardStrictness);
         const float bandBodyProtect = lerp(1.0f, 0.70f, focus) * voiceProtect * guardMod;
         const float persistentNeed = juce::jlimit(0.0f, 1.0f, densityNeed);
         const float adaptiveNeed = hasSidechain
@@ -230,7 +230,7 @@ void ClarityDsp::analyzeBlock(const juce::AudioBuffer<float>& buffer,
             : juce::jlimit(0.0f, 1.0f, 0.40f * transientScore + 0.25f * blockVariance + 0.35f * coreDensity);
         const float combinedNeed = juce::jlimit(0.0f, 1.0f,
             0.60f * persistentNeed + 0.40f * adaptiveNeed);
-        const float effectStrength = juce::jlimit(0.0f, 1.0f, 0.55f + 0.75f * clean);
+        const float effectStrength = juce::jlimit(0.0f, 1.0f, 0.68f + 0.92f * clean);
         const float maxCutDb = kMaxCutDb[band] * clean * effectStrength * trust * modeWeight;
         const float shapedNeed = juce::jlimit(0.0f, 1.0f, combinedNeed * bodyWeight * bandBodyProtect);
         outTargetsDb[band] = -maxCutDb * shapedNeed;
@@ -247,7 +247,7 @@ void ClarityDsp::analyzeBlock(const juce::AudioBuffer<float>& buffer,
                     ? static_cast<float>(sideBandEnergy[band] / (mainBandEnergy[band] + sideBandEnergy[band] + 1.0e-12))
                     : juce::jlimit(0.0f, 1.0f, 0.55f * transientScore + 0.45f * blockVariance)));
 
-        const float bias = params.voiceMode && band <= 2 ? 0.82f : 1.0f;
+        const float bias = params.voiceMode && band <= 2 ? 0.76f : 1.0f;
         targetGainDb[band] = outTargetsDb[band] * bias * (0.88f + 0.12f * cleanupLift);
     }
 }

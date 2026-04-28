@@ -436,8 +436,13 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 const float biasGain = juce::jlimit(0.55f,
                                                     1.45f,
                                                     1.0f + voiceDecision.levelBias * (0.8f + 0.7f * level));
-                targetGain = juce::jlimit(maxDownwardGain,
-                                          maxUpwardGain,
+                const float voiceCapBase = clamp01((std::max(level, control) - 0.82f) / 0.18f);
+                const float voiceLiftDrive = voiceCapBase * envUnderAnchor;
+                const float voiceTameDrive = voiceCapBase * envOverAnchor;
+                const float adaptiveMaxUpwardGain = maxUpwardGain + (1.95f - maxUpwardGain) * voiceLiftDrive;
+                const float adaptiveMaxDownwardGain = maxDownwardGain + (0.18f - maxDownwardGain) * voiceTameDrive;
+                targetGain = juce::jlimit(adaptiveMaxDownwardGain,
+                                          adaptiveMaxUpwardGain,
                                           ratioGain * biasGain);
             } else {
                 const float envDb = juce::Decibels::gainToDecibels(safeEnv, -120.0f);
@@ -446,14 +451,24 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 const float deadbandDb = 1.4f - 0.5f * level;
                 const float generalStrength = 0.34f + 0.46f * level;
                 if (std::abs(diffDb) > deadbandDb) {
-                    const float wantedGainDb = juce::jlimit(-9.0f * level,
-                                                            1.8f * level,
+                    const float generalCapBase = clamp01((level - 0.84f) / 0.16f);
+                    const float downwardDrive = generalCapBase * clamp01(((-diffDb) - 4.0f) / 8.0f);
+                    const float upwardDrive = generalCapBase * clamp01((diffDb - 4.5f) / 10.0f);
+                    const float minGainDb = juce::jmap(downwardDrive, -9.0f * level, -13.0f * level);
+                    const float maxGainDb = juce::jmap(upwardDrive, 1.8f * level, 2.2f * level);
+                    const float wantedGainDb = juce::jlimit(minGainDb,
+                                                            maxGainDb,
                                                             (std::abs(diffDb) - deadbandDb)
                                                                 * generalStrength
                                                                 * (diffDb >= 0.0f ? 1.0f : -1.0f));
                     targetGain = juce::Decibels::decibelsToGain(wantedGainDb);
+                    const float adaptiveMaxUpwardGain = maxUpwardGain + (1.6f - maxUpwardGain) * upwardDrive;
+                    const float adaptiveMaxDownwardGain = maxDownwardGain + (0.34f - maxDownwardGain) * downwardDrive;
+                    targetGain = juce::jlimit(adaptiveMaxDownwardGain, adaptiveMaxUpwardGain, targetGain);
                 }
-                targetGain = juce::jlimit(maxDownwardGain, maxUpwardGain, targetGain);
+                else {
+                    targetGain = juce::jlimit(maxDownwardGain, maxUpwardGain, targetGain);
+                }
             }
         }
 

@@ -113,8 +113,7 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                          + 0.10f * voiceContext.speechPresence
                          + 0.08f * voiceContext.centerConfidence)
         : 0.0f;
-    const float outputGainLinear = juce::jmap(smoothedGain, 0.0f, 1.0f, 0.5f, 1.5f);
-    const float outputGainDb = juce::Decibels::gainToDecibels(outputGainLinear, -120.0f);
+    const float outputGainDb = juce::jmap(smoothedGain, 0.0f, 1.0f, -12.0f, 12.0f);
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;

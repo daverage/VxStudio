@@ -18,12 +18,12 @@ constexpr std::string_view kListenParam  = "listen";
 
 // Vocal mode: narrower shelves that leave the fundamental speech band (200-4kHz) untouched.
 // General mode: full-range shelves with more headroom.
-constexpr float kVocalBassFreqHz    = 200.f;
-constexpr float kVocalTrebleFreqHz  = 6000.f;
-constexpr float kVocalMaxGainDb     = 9.f;
-constexpr float kGeneralBassFreqHz  = 120.f;
-constexpr float kGeneralTrebleFreqHz = 8000.f;
-constexpr float kGeneralMaxGainDb   = 12.f;
+constexpr float kVocalBassFreqHz    = 180.f;
+constexpr float kVocalTrebleFreqHz  = 5600.f;
+constexpr float kVocalMaxGainDb     = 12.f;
+constexpr float kGeneralBassFreqHz  = 90.f;
+constexpr float kGeneralTrebleFreqHz = 10500.f;
+constexpr float kGeneralMaxGainDb   = 18.f;
 
 } // namespace
 
@@ -102,13 +102,13 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
                          + 0.10f * voiceContext.speechPresence)
         : 0.0f;
     const float maxGainDb = voiceMode
-        ? kVocalMaxGainDb * (1.0f - 0.08f * vocalPriority)
+        ? kVocalMaxGainDb * (1.0f - 0.05f * vocalPriority)
         : kGeneralMaxGainDb;
     const float bassFreqHz = voiceMode
-        ? juce::jlimit(150.0f, 220.0f, kVocalBassFreqHz - 40.0f * vocalPriority)
+        ? juce::jlimit(130.0f, 200.0f, kVocalBassFreqHz - 36.0f * vocalPriority)
         : kGeneralBassFreqHz;
     const float trebleFreqHz = voiceMode
-        ? juce::jlimit(6000.0f, 7200.0f, kVocalTrebleFreqHz + 900.0f * vocalPriority)
+        ? juce::jlimit(5200.0f, 6600.0f, kVocalTrebleFreqHz + 700.0f * vocalPriority)
         : kGeneralTrebleFreqHz;
 
     // Map [0,1] → [-maxGainDb, +maxGainDb] with 0.5 = neutral

@@ -1,4 +1,5 @@
 #include "VxProximityDsp.h"
+#include "../../../framework/VxStudioDspCommon.h"
 
 #include <juce_core/juce_core.h>
 
@@ -6,6 +7,8 @@
 #include <cmath>
 
 namespace vxsuite::proximity {
+
+namespace dspcommon = vxsuite::corrective::detail;
 
 // ── Biquad coefficient builders ───────────────────────────────────────────────
 // Audio EQ Cookbook shelf formulas (Zölzer / RBJ).  Q = 1/sqrt(2) for both.
@@ -88,16 +91,21 @@ void ProximityDsp::reset() noexcept {
 // ── processInPlace ────────────────────────────────────────────────────────────
 //
 // Mode tuning:
-//   Vocal   – low shelf 80–200 Hz (closer sweeps fc), +10 dB max (linear)
-//             high shelf 3500 Hz, +6 dB max
-//   General – low shelf 120–300 Hz (closer sweeps fc), +8 dB max (linear)
-//             high shelf 8000 Hz, +6 dB max
+//   Model a plausible close directional mic transfer rather than a raw bass
+//   shelf:
+//   1. proximity low shelf in true body bands
+//   2. compensating low-mid cut to avoid boom/mud
+//   3. presence contour for articulation / directness
+//   4. separate air shelf for capsule openness
+// This stays lightweight and realtime-safe, but behaves more like a voiced mic
+// model than a one-shelf EQ gimmick.
 
 void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                    const int numSamples,
                                    const float closerAmount,
                                    const float airAmount,
-                                   const bool isVoice) noexcept {
+                                   const bool isVoice,
+                                   const float vocalFocus) noexcept {
     if (numSamples <= 0)
         return;
 
@@ -108,26 +116,62 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
     const float closer = juce::jlimit(0.f, 1.f, closerAmount);
     const float air    = juce::jlimit(0.f, 1.f, airAmount);
+    const float focus  = juce::jlimit(0.0f, 1.0f, vocalFocus);
+    const float shapedCloser = std::pow(closer, isVoice ? 1.10f : 1.02f);
+    const float shapedAir    = std::pow(air, isVoice ? 0.90f : 0.82f);
+    const float modelDepth   = juce::jlimit(0.0f, 1.0f,
+        shapedCloser * (isVoice ? (0.90f + 0.10f * focus) : 1.0f));
 
-    // Low-shelf tuning
-    const float lowFcMin = isVoice ?  80.f : 120.f;
-    const float lowFcMax = isVoice ? 200.f : 300.f;
-    const float lowGainMax = isVoice ? 10.0f : 8.0f;
+    // 1) Proximity low shelf: keep this in the genuine body/proximity region.
+    const float lowFcMin = isVoice ?  85.f : 95.f;
+    const float lowFcMax = isVoice ? 135.f : 180.f;
+    const float lowGainMax = isVoice ? 6.5f : 5.8f;
+    const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * modelDepth;
+    const float lowGain  = lowGainMax * modelDepth;
 
-    const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * closer;
-    const float lowGain  = lowGainMax * closer;
+    // 2) Mud compensation: directional close mics are usually designed to stay
+    // usable, not simply boomy. This cut reins in the 220-350 Hz clutter zone.
+    const float mudCutCenter = isVoice
+        ? juce::jlimit(220.0f, 320.0f, 255.0f + 22.0f * (1.0f - focus))
+        : 300.0f;
+    const float mudCutQ = isVoice ? 0.82f : 0.75f;
+    const float mudCutDb = -modelDepth * (isVoice ? (2.8f + 1.0f * (1.0f - focus)) : 2.2f);
 
-    // High-shelf tuning
-    const float highFc   = isVoice ? 3500.f : 8000.f;
-    const float highGain = 6.0f * air;
+    // 3) Presence contour: closer placement also reads as more direct and more
+    // articulate, not just bassier. This is intentionally moderate.
+    const float presenceCenter = isVoice
+        ? juce::jlimit(2800.0f, 4300.0f, 3600.0f + 450.0f * focus)
+        : 3200.0f;
+    const float presenceQ = isVoice ? 0.78f : 0.70f;
+    const float presenceDb = juce::jlimit(0.0f, isVoice ? 4.2f : 3.2f,
+        modelDepth * (isVoice ? (1.5f + 1.2f * focus) : 1.4f)
+      + shapedAir * (isVoice ? 1.2f : 0.8f));
+
+    // 4) Capsule/open-top air.
+    const float highFc   = isVoice ? 7600.f : 11000.f;
+    const float highGain = (isVoice ? 5.0f : 6.5f) * shapedAir;
+
+    const auto convertCoeffs = [](const dspcommon::BiquadCoeffs& c) noexcept {
+        return BiquadCoeffs { c.b0, c.b1, c.b2, c.a1, c.a2 };
+    };
 
     const BiquadCoeffs lowC  = makeLowShelf (sr, lowFc,  lowGain);
+    const BiquadCoeffs mudC = convertCoeffs(dspcommon::makePeakingEq(sr, mudCutCenter, mudCutQ, mudCutDb));
+    const BiquadCoeffs presenceC = convertCoeffs(dspcommon::makePeakingEq(sr, presenceCenter, presenceQ, presenceDb));
     const BiquadCoeffs highC = makeHighShelf(sr, highFc, highGain);
+    const float outputTrimDb = -juce::jlimit(0.0f, 3.0f,
+        0.22f * lowGain + 0.30f * presenceDb + 0.15f * highGain);
+    const float outputTrim = juce::Decibels::decibelsToGain(outputTrimDb);
 
     for (int ch = 0; ch < channels; ++ch) {
         float* data = buffer.getWritePointer(ch);
-        applyBiquad(lowC,  chans[static_cast<size_t>(ch)].lowShelf,  data, numSamples);
-        applyBiquad(highC, chans[static_cast<size_t>(ch)].highShelf, data, numSamples);
+        auto& state = chans[static_cast<size_t>(ch)];
+        applyBiquad(lowC,  state.lowShelf,  data, numSamples);
+        applyBiquad(mudC, state.mudBell, data, numSamples);
+        applyBiquad(presenceC, state.presenceBell, data, numSamples);
+        applyBiquad(highC, state.highShelf, data, numSamples);
+        if (std::abs(outputTrim - 1.0f) > 1.0e-4f)
+            juce::FloatVectorOperations::multiply(data, outputTrim, numSamples);
     }
 }
 

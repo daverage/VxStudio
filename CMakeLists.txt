@@ -733,6 +733,8 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
+  Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.cpp
+  Source/vxstudio/products/deepfilternet/dsp/VxDeepFilterNetService.cpp
   Source/vxstudio/products/denoiser/VxDenoiserProcessor.cpp
   Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
@@ -754,6 +756,9 @@ add_executable(VXStudioPluginRegressionTests
 target_include_directories(VXStudioPluginRegressionTests PRIVATE Source tests)
 target_link_libraries(VXStudioPluginRegressionTests PRIVATE
   VxStudioFramework
+  VxStudioDeepFilterRuntime
+  VxStudioDeepFilterRuntimeDfn2
+  ${VXSTUDIO_DF_SYSTEM_LIBS}
   juce::juce_dsp
   juce::juce_audio_processors
 )

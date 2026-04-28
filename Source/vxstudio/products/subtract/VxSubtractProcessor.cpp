@@ -116,10 +116,12 @@ void VXSubtractAudioProcessor::resetSuite() {
     subtractDspMono.resetStreamingState();
     subtractDspLeft.resetStreamingState();
     subtractDspRight.resetStreamingState();
-    controls.reset(0.0f, 0.5f);
+    controls.reset(vxsuite::readNormalized(parameters, productIdentity.primaryParamId, productIdentity.primaryDefaultValue),
+                   vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, productIdentity.secondaryDefaultValue));
     smoothedMakeupGain = 1.0f;
     activeTailSamplesRemaining = 0;
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
+    controlsNeedRelatchAfterLearn = false;
     subtractDspMono.setLearning(learnToggleLatched);
     subtractDspLeft.setLearning(learnToggleLatched);
     subtractDspRight.setLearning(learnToggleLatched);
@@ -138,6 +140,10 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
 
     const float subtractTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float protectTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
+    if (controlsNeedRelatchAfterLearn) {
+        controls.reset(subtractTarget, protectTarget);
+        controlsNeedRelatchAfterLearn = false;
+    }
 
     const auto [smoothedSubtract, smoothedProtect] = controls.process(
         subtractTarget, protectTarget,
@@ -166,6 +172,31 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         subtractDspRight.setLearning(false);
     }
 
+    const auto finalizeLearnStopTransition = [&] {
+        if (!learnStopEdge)
+            return;
+
+        // Finalizing a learned profile should start the next processing pass from
+        // a clean latency/STFT state while keeping the frozen profile itself.
+        subtractDspMono.resetStreamingState();
+        subtractDspLeft.resetStreamingState();
+        subtractDspRight.resetStreamingState();
+        resetProcessCoordinator();
+        smoothedMakeupGain = 1.0f;
+        activeTailSamplesRemaining = 0;
+        controls.reset(subtractTarget, protectTarget);
+        controlsNeedRelatchAfterLearn = true;
+        resetOutputSafetyTrimmer();
+        this->voiceAnalysis.reset();
+        this->voiceContext.reset();
+        this->signalQuality.reset();
+    };
+
+    const auto publishLearnStateAndLatch = [&] {
+        updateLearnTelemetry(numChannels);
+        learnToggleLatched = learnRequested;
+    };
+
     const bool stereo = numChannels >= 2;
     const bool leftReady = subtractDspLeft.hasLearnedProfile()
         && subtractDspLeft.getLearnConfidence() >= kMinimumStereoProfileConfidence;
@@ -185,7 +216,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                       : vxsuite::clamp01(0.30f * protectStrength);
     options.speechFocus = isVoice ? vxsuite::clamp01(0.78f + 0.22f * protectStrength + 0.12f * vocalPriority) : 0.12f;
     options.learningActive = learningActiveNow;
-    options.subtract = isVoice ? (3.45f * subtractStrength * (1.0f - 0.18f * vocalPriority))
+    options.subtract = isVoice ? (5.00f * subtractStrength * (1.0f - 0.06f * vocalPriority))
                                : (5.00f * subtractStrength);
     options.sensitivity = isVoice ? ((0.78f + 0.42f * (1.0f - protectStrength)) * (1.0f - 0.08f * vocalPriority))
                                   : (1.10f + 0.55f * (1.0f - protectStrength));
@@ -232,8 +263,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                 subtractDspMono.processInPlace(buffer, 0.0f, options);
             buffer.copyFrom(0, 0, leftScratch, 0, 0, numSamples);
         }
-        updateLearnTelemetry(numChannels);
-        learnToggleLatched = learnRequested;
+        publishLearnStateAndLatch();
         smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
         return;
     }
@@ -244,6 +274,8 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
         for (int ch = 0; ch < channels; ++ch)
             buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        finalizeLearnStopTransition();
+        publishLearnStateAndLatch();
         return;
     }
 
@@ -264,8 +296,8 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     else if (!learnStopEdge && activeTailSamplesRemaining <= 0) {
         buffer.clear();
         smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
-        updateLearnTelemetry(numChannels);
-        learnToggleLatched = learnRequested;
+        finalizeLearnStopTransition();
+        publishLearnStateAndLatch();
         return;
     }
 
@@ -361,21 +393,8 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     if (liveInputRms <= 1.0e-5f)
         activeTailSamplesRemaining = std::max(0, activeTailSamplesRemaining - numSamples);
 
-    if (learnStopEdge) {
-        subtractDspMono.resetStreamingState();
-        subtractDspLeft.resetStreamingState();
-        subtractDspRight.resetStreamingState();
-        smoothedMakeupGain = 1.0f;
-        activeTailSamplesRemaining = 0;
-        controls.reset(subtractTarget, protectTarget);
-        resetOutputSafetyTrimmer();
-        this->voiceAnalysis.reset();
-        this->voiceContext.reset();
-        this->signalQuality.reset();
-    }
-
-    updateLearnTelemetry(numChannels);
-    learnToggleLatched = learnRequested;
+    finalizeLearnStopTransition();
+    publishLearnStateAndLatch();
 }
 
 void VXSubtractAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {

@@ -40,7 +40,7 @@ vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     identity.theme.backgroundRgb  = { 0.06f, 0.05f, 0.04f };
     identity.theme.panelRgb       = { 0.10f, 0.09f, 0.07f };
     identity.theme.textRgb        = { 0.95f, 0.90f, 0.80f };
-    identity.primaryDefaultValue = 0.5f;
+    identity.primaryDefaultValue = 0.0f;
     identity.secondaryDefaultValue = 0.0f;
     return identity;
 }
@@ -49,9 +49,10 @@ juce::String VXProximityAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen - removed distance shaping only";
 
-    const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
-    return isVoice ? "Vocal - low body + consonant presence"
-                   : "General - full-range bass + upper air";
+    const auto& modePolicy = currentModePolicy();
+    return modePolicy.mode == vxsuite::Mode::vocal
+        ? "Vocal - close-mic body with controlled low-mid cleanup and presence focus"
+        : "General - broader close-mic weight with capsule air and restrained mud";
 }
 
 void VXProximityAudioProcessor::prepareSuite(const double sampleRate,
@@ -85,7 +86,8 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         currentSampleRateHz, numSamples,
         0.060f, 0.090f);
 
-    const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto& modePolicy = currentModePolicy();
+    const bool isVoice = modePolicy.mode == vxsuite::Mode::vocal;
     const auto voiceContext = getVoiceContextSnapshot();
     const float vocalPriority = isVoice
         ? vxsuite::clamp01(0.35f * voiceContext.vocalDominance
@@ -94,16 +96,17 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                          + 0.20f * voiceContext.transientRisk)
         : 0.0f;
     const float effectiveCloser = isVoice
-        ? vxsuite::clamp01(smoothedCloser * (1.0f + 0.12f * voiceContext.buriedSpeech + 0.04f * voiceContext.phraseActivity))
-        : vxsuite::clamp01(smoothedCloser);
+        ? vxsuite::clamp01(smoothedCloser * (0.96f + 0.14f * voiceContext.buriedSpeech + 0.06f * modePolicy.bodyRecovery))
+        : vxsuite::clamp01(smoothedCloser * (0.96f + 0.06f * modePolicy.bodyRecovery));
     const float effectiveAir = isVoice
-        ? vxsuite::clamp01(smoothedAir * (1.0f - 0.12f * vocalPriority + 0.08f * voiceContext.intelligibility))
-        : vxsuite::clamp01(smoothedAir);
+        ? vxsuite::clamp01(smoothedAir * (0.94f - 0.10f * vocalPriority + 0.10f * voiceContext.intelligibility))
+        : vxsuite::clamp01(smoothedAir * (0.92f + 0.08f * modePolicy.speechFocus));
 
     proximityDsp.processInPlace(buffer, numSamples,
                                 effectiveCloser,
                                 effectiveAir,
-                                isVoice);
+                                isVoice,
+                                vocalPriority);
 }
 
 void VXProximityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

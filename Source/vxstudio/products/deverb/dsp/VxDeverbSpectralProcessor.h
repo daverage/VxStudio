@@ -207,13 +207,17 @@ private:
 
     // ── Algorithm constants ───────────────────────────────────────────────────
 
-    /** Minimum Wiener gain (−20 dB floor).  Prevents complete bin nulling. */
+    /** Base minimum Wiener gain (~−20 dB floor). */
     static constexpr float kFloor        = 0.10f;
+    /** Strong-setting minimum Wiener gain (~−29 dB floor). */
+    static constexpr float kMinFloor     = 0.035f;
 
-    /** Minimum Wiener gain for speech bins in voice mode (~−9 dB).
+    /** Base minimum Wiener gain for speech bins in voice mode (~−12 dB).
      *  Applied to bins in the 200–4000 Hz range to protect vocal fundamentals
      *  and formants — consistent with Polish's voice-preserve policy. */
-    static constexpr float kVoiceFloor   = 0.35f;
+    static constexpr float kVoiceFloor   = 0.18f;
+    /** Strong-setting minimum speech-bin floor in voice mode (~−16 dB). */
+    static constexpr float kMinVoiceFloor = 0.14f;
 
     /**
      * Per-frame gain IIR coefficient.

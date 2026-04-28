@@ -48,7 +48,7 @@ void SpectralProcessor::setDeterministicReset(const bool shouldUseDefaultRt60) n
 }
 
 void SpectralProcessor::setOverSubtract(const float newOverSubtract) noexcept {
-    overSubtract = juce::jlimit(1.0f, 2.5f, newOverSubtract);
+    overSubtract = juce::jlimit(1.0f, 6.0f, newOverSubtract);
 }
 
 float SpectralProcessor::getTrackedRt60Seconds(const int channel) const noexcept {
@@ -299,7 +299,10 @@ void SpectralProcessor::processFrame(ChannelState& ch,
         const float suppressRatio = std::min(1.0f, lrsv / std::max(curPow, 1.0e-20f));
         const bool  inSpeechBand  = voiceMode && (static_cast<int>(k) >= speechBinLo)
                                                && (static_cast<int>(k) <= speechBinHi);
-        const float binFloor      = inSpeechBand ? kVoiceFloor : kFloor;
+        const float baseFloor     = inSpeechBand ? kVoiceFloor : kFloor;
+        const float minFloor      = inSpeechBand ? kMinVoiceFloor : kMinFloor;
+        const float floorDepth    = juce::jlimit(0.0f, 1.0f, amount);
+        const float binFloor      = juce::jmap(floorDepth, baseFloor, minFloor);
         const float wienerPow = std::max(binFloor * binFloor,
                                          1.0f - amount * suppressRatio);
         const float gainTarget = std::sqrt(wienerPow);

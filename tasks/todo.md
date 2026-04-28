@@ -1,3 +1,91 @@
+# VXSubtract full review and repair pass - 2026-04-27
+
+## Goal
+Review the full `VXSubtract` plugin against current user-reported failures, fix the confirmed defects, and leave stronger regression coverage for learn persistence, wet/listen behavior, and general-mode usefulness.
+
+## Plan
+
+- [x] Reproduce current `VXSubtract` regressions and compare them against the existing subtract audit and recent local diff
+- [x] Fix the confirmed learn-to-process transition bug and any other processor/DSP defects found during review
+- [x] Add focused subtract regression coverage for learned-profile persistence and general-mode non-silent/useful behavior
+- [x] Run focused/full regression verification and record outcomes plus remaining risks
+
+## Review
+
+- Reproduced the current live subtract failure in `./build/VXStudioPluginRegressionTests`: wet/listen recombination had regressed again even though older audit items like profile-format metadata had already been addressed in the tree.
+- Root cause was a bad learn-stop transition in [`Source/vxstudio/products/subtract/VxSubtractProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/subtract/VxSubtractProcessor.cpp): when `Learn` was turned off, the processor could carry stale subtract streaming state and stale latency-aligned dry history into the first real processing pass, so the learned profile looked weak/inconsistent and listen no longer complemented wet output cleanly.
+- Fixed the transition by resetting subtract streaming state, the process coordinator, output safety, and voice/signal analysis state on the learn-stop edge, and by publishing that cleanup on all early-return paths instead of only the tail path.
+- Fixed a control-state mismatch by making `resetSuite()` relatch the subtract/protect smoother from the current APVTS parameter values instead of a hardcoded `0.0/0.5`, then added a one-shot post-learn control relatch so the first block after learning respects the user’s actual current settings.
+- Added subtract regression coverage in [`tests/VXStudioPluginRegressionTests.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXStudioPluginRegressionTests.cpp) for learned-profile persistence across reset and for general-mode usefulness/non-silence after a learned capture.
+- Verification passed:
+- `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- `./build/VXStudioPluginRegressionTests`
+- Residual note: the adaptive subtract engine is still not sample-identical across every reset boundary, but the learned profile now survives, remains effective, general mode stays active, and the full regression suite is green again.
+
+---
+
+# VXProximity full mic model upgrade - 2026-04-27
+
+## Goal
+Upgrade `VXProximity` from a simple shelf EQ into a more believable close directional mic model that feels intelligent, product-worthy, and still fits the suite’s two-knob realtime-safe contract.
+
+## Plan
+
+- [x] Read VX Suite framework/product guidance and inspect the current `VXProximity` implementation
+- [x] Design a realtime-safe close-mic transfer model that keeps the existing UI contract
+- [x] Implement the upgraded model and extend proximity regression coverage
+- [x] Build/verify and document results plus external best-practice references
+
+## Review
+
+- The prior implementation was still basically “low shelf + high shelf,” which is too thin a model for something sold as a smart mic-closeness product.
+- Reworked [`Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp) into a lightweight close-mic transfer model with four audible stages:
+- proximity low shelf in true body bands
+- low-mid mud compensation bell
+- presence bell for directness/intelligibility
+- separate air shelf plus light output trim
+- Updated [`Source/vxstudio/products/proximity/VxProximityProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/proximity/VxProximityProcessor.cpp) to use the shared mode-policy path and thread vocal-focus evidence into the DSP so Vocal mode behaves more intentionally than a static EQ table.
+- Kept the earlier neutral-default fix: `Closer=0.0` now ships as the true neutral state instead of quietly boosting lows at load.
+- Strengthened regression coverage in [`tests/VXStudioPluginRegressionTests.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXStudioPluginRegressionTests.cpp) to check:
+- near-neutral defaults
+- bass lift dominating low-mid mud
+- closer adding some presence/directness instead of only broadband warmth
+- External best-practice references used to shape the model:
+- DPA: proximity effect is a low-frequency rise in directional mics, strongest on-axis, and meaningful relative to a mic’s neutral distance. [DPA proximity effect article](https://www.dpamicrophones.com/mic-university/background-knowledge/proximity-effect-in-microphones-explained/)
+- Shure: too much proximity effect becomes boomy/muddy, and practical close vocal mics often compensate lows while keeping presence/intelligibility. [Shure mic basics](https://www.shure.com/en-US/insights/microphone-basics-transducers-polar-patterns-frequency-response) and [Shure vocal miking tips](https://www.shure.com/en-US/insights/vocal-miking-tips-2)
+- Verification:
+- `cmake --build build --target VXStudioPluginRegressionTests -j4` passed
+- `./build/VXStudioPluginRegressionTests` still ends on the unrelated dirty-tree `VXSubtract` wet/listen regression; no new `VXProximity` failure was emitted during that run
+
+---
+
+# VXProximity mud review - 2026-04-27
+
+## Goal
+Review `VXProximity` for the reported muddy low-mid buildup and make the effect behave more like a believable close-mic move than a broad bass/mud shelf.
+
+## Plan
+
+- [x] Inspect current processor/DSP laws, defaults, and regression coverage for `VXProximity`
+- [x] Fix confirmed muddy/unnatural tuning issues with minimal impact
+- [x] Add regression coverage for neutral defaults and low-mid restraint
+- [x] Run focused verification and record findings/results
+
+## Review
+
+- The main proximity bug was that [`Source/vxstudio/products/proximity/VxProximityProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/proximity/VxProximityProcessor.cpp) shipped with `Closer` defaulting to `0.5`, so the plugin was materially boosting lows by default instead of starting from neutral.
+- The live DSP law in [`Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp) was also sweeping the low-shelf corner too high into the low mids, especially in General mode, which made the effect read as mud/boxiness rather than a believable proximity bass rise.
+- Updated the product default so `Closer=0.0` is the shipped neutral state, then tightened the shelf law so the low boost stays focused around true proximity/body bands instead of 250-400 Hz.
+- Added regression coverage in [`tests/VXStudioPluginRegressionTests.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXStudioPluginRegressionTests.cpp) for near-neutral defaults and for keeping true bass lift materially stronger than 250 Hz low-mid lift.
+- External sanity check matched the code review:
+- DPA explains that proximity effect is a low-frequency rise in directional microphones, strongest on-axis, and that microphones have a specific distance where bass response is neutral/flat.
+- Shure notes that too much proximity effect becomes boomy/muddy, and that close vocal mics often compensate with low-band roll-off / shaped response to stay natural and intelligible.
+- Verification:
+- `cmake --build build --target VXStudioPluginRegressionTests -j4` passed.
+- `./build/VXStudioPluginRegressionTests` still ends red on the unrelated dirty-tree `VXSubtract` wet/listen regression already present in this workspace; no new proximity-specific regression output appeared before that failure.
+
+---
+
 # DSP strength pass — all effects to near-over-the-top at 100% — 2026-04-24
 
 ## Goal
@@ -730,3 +818,117 @@ Compile the current VXStudio VST3 plugin suite and refresh the staged bundles.
 - Verified staged bundles exist with executable payloads for: `VXCleanup`, `VXDeepFilterNet`, `VXDenoiser`, `VXDeverb`, `VXFinish`, `VXLeveler`, `VXOptoComp`, `VXProximity`, `VXRebalance`, `VXStudioAnalyser`, `VXSubtract`, and `VXTone`.
 - Verified `codesign --verify` succeeds for all staged `.vst3` bundles.
 - No source fixes were needed for this compile pass.
+# DSP aggressiveness audit - 2026-04-26
+
+## Goal
+Review every product DSP path and make sure the controls are not overly polite:
+- `100%` should push right up to the edge of audible break-up without falling apart.
+- `Voice` and `General` modes should sound meaningfully different, not like minor EQ variants.
+- Products that already had a recent "stronger at 100%" pass still need a fresh top-end audit.
+
+## Plan
+
+- [x] Inventory all shipping DSP products and locate their effective parameter-to-processing mappings
+- [x] Audit each processor/DSP pair for max-range intensity, dead zones, and Voice-vs-General divergence
+- [x] Tighten any polite mappings or conservative caps so the top of the range feels unmistakable
+- [x] Run targeted verification and capture findings, changed products, and remaining risks
+
+## Review
+
+- Audited the suite DSP inventory with the code graph, then focused the tuning pass on the products that still had conservative top-end laws or weak Voice-vs-General separation: `Tone`, `Proximity`, `Finish`, `Denoiser`, `Deverb`, `Cleanup`, and the general engine inside `Leveler`.
+- `Tone` now has a much wider split between the two modes: Vocal stays narrower and speech-aware, while General reaches much broader shelves with significantly more boost/cut range.
+- `Proximity` now leans harder into “dial feel”: stronger shelf ceilings, more aggressive amount shaping, and a bigger spectral split between the vocal presence voicing and the general full-range hype curve.
+- `Finish` and the shared opto core now drive harder at the top, recover more level, and sit closer to the limiter ceiling without clipping the regression path.
+- `Denoiser` now suppresses harder at full settings, especially in General mode, while Voice mode still keeps a distinct speech-preserving branch instead of collapsing into the same behavior.
+- `Deverb` now cuts further before hitting the voice safety floor, drives stronger oversubtraction, and restores more body afterward so the high end feels more committed instead of merely tidier.
+- `Cleanup` and `Leveler` now have less polite protection ceilings at strong settings, with the general levelling side allowed to move significantly more than before.
+- Added regression coverage that explicitly checks `Tone`, `Proximity`, `Denoiser`, and `Leveler` for audible Voice-vs-General divergence under strong settings.
+- Verified build: `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Result: all newly tuned products and the new mode-separation checks passed; the only remaining failures are the already-dirty `Subtract` wet/listen recombine regression and the full-chain block-size test that depends on `Subtract`.
+
+# VXDeepFilterNet offline render recovery fix - 2026-04-27
+
+## Goal
+Fix `VXDeepFilterNet` so switching a DAW track into offline/non-realtime render mode does not break the render itself or leave the live track instance poisoned afterward.
+
+## Plan
+
+- [x] Trace the DeepFilter host-mode transition path and confirm where offline rendering differs from live playback
+- [x] Patch the processor/service so realtime <-> non-realtime switches force a safe DeepFilter reset/reprepare path
+- [x] Add a regression covering offline render entry/exit and post-render live playback recovery
+- [x] Build and run focused verification, then record the outcome and any residual risks
+
+## Review
+
+- Root cause was the DeepFilter processor treating offline/non-realtime render entry as just another pass through the same runtime state. The host can switch processing mode and block size for render, but `VXDeepFilterNet` did not explicitly reset/rebuild its DeepFilter runtime on those mode transitions.
+- Fixed [`Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.cpp) so `setNonRealtime()` now resets shared processor state and immediately reparses/reprepares the DeepFilter engine for the current host setup, and so `resetSuite()` invalidates the DeepFilter runtime state before the next prepare.
+- Hardened the product source for test builds by guarding `createPluginFilter()` behind the same `VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT` macro used by the other plugins.
+- Extended [`tests/VXStudioPluginRegressionTests.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXStudioPluginRegressionTests.cpp) with a DeepFilter regression that installs the bundled test models into the expected cache, then exercises the host-like sequence `live prepare -> offline/non-realtime prepare -> live prepare` and checks that DeepFilter stays healthy across the transition.
+- Wired the DeepFilter processor/service into the regression target in [`CMakeLists.txt`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt) so the new test is actually linked and exercised in CI/local runs.
+- Verification passed:
+- `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- `./build/VXStudioPluginRegressionTests`
+- Residual note: the new regression validates render/live recovery and runtime health across host mode changes; subjective DAW listening is still worth doing on the exact project that originally broke.
+
+---
+
+# VXDeverb stronger room-removal pass - 2026-04-27
+
+## Goal
+Make `VXDeverb` remove room/reverb much more decisively at strong settings so it behaves like an actual room-noise eliminator rather than a mild tidy-up.
+
+## Plan
+
+- [x] Inspect the current deverb processor, spectral law, and measurement/regression coverage
+- [x] Capture the new user-feedback pattern in `tasks/lessons.md` and establish a measurable deverb baseline
+- [x] Tighten the deverb reduction law so strong settings remove more room while staying stable and voice-safe
+- [x] Add or strengthen coverage proving stronger room-tail reduction
+- [x] Build, verify, and stage the updated `VXDeverb` bundle
+
+## Review
+
+- Found a direct strength cap in [`Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp): the processor asked for up to `1.0 + 4.4 * reduce`, but `setOverSubtract()` hard-limited the actual value to `2.5`, so the top of the dial could never reach the intended room-removal depth.
+- Strengthened the dereverb law in [`VxDeverbSpectralProcessor.h`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.h) and [`VxDeverbSpectralProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp) by:
+- raising the oversubtract clamp to `6.0`
+- lowering the full-band and speech-band residual floors at strong settings
+- letting the floor scale down with the actual reduce amount instead of staying overly protective at `100%`
+- Tightened [`Source/vxstudio/products/deverb/VxDeverbProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deverb/VxDeverbProcessor.cpp) so the product drives stronger oversubtraction in both modes and restores less makeup gain at high reduction, which keeps room tail from being amplified back in after subtraction.
+- Added `testDeverbStrongSettingActuallyReducesSyntheticRoomTail()` to [`tests/VXStudioPluginRegressionTests.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXStudioPluginRegressionTests.cpp). It synthesizes a decaying room response, runs `VXDeverb` at strong settings, and now requires the late-tail RMS ratio to stay below `0.22`.
+- Measured improvement with [`VXDeverbMeasure`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VXDeverbMeasure.cpp):
+- synthetic `RT60=1.2s` tail ratio improved from about `0.2127` to `0.1854`
+- synthetic `RT60=0.7s` tail ratio improved from about `0.3242` to `0.2020`
+- Verification passed:
+- `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- `./build/VXStudioPluginRegressionTests`
+- `cmake --build build --target VXDeverbMeasure -j4`
+- `cmake --build build --target VXDeverbStage -j4`
+- `codesign --verify Source/vxstudio/vst/VXDeverb.vst3`
+- Residual note: this is now materially stronger in the harness, but the exact DAW track the user reported is still the right subjective check because some rooms may want even more aggressive tuning in `General` mode.
+
+---
+
+# Hidden VST cap follow-up fixes - 2026-04-27
+
+## Goal
+Remove the three remaining user-facing hidden caps called out in review so `Finish`, `Leveler`, and `Subtract` can all reach a stronger top-of-range behavior.
+
+## Plan
+
+- [x] Widen `Finish` output gain so the user-facing knob is no longer capped to a narrow linear range
+- [x] Let `Subtract` vocal mode reach the DSP's real subtract ceiling instead of a lower product-side cap
+- [x] Replace `Leveler`'s always-on tight ceiling with an extreme-only expansion path that preserves its normal behavior
+- [x] Rebuild and run the regression suite, then record which outcomes are verified versus still blocked by existing failures
+
+## Review
+
+- [`Source/vxstudio/products/finish/VxFinishProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/finish/VxFinishProcessor.cpp) now maps the user-facing `Gain` control directly to `-12 dB .. +12 dB` instead of the earlier `0.5x .. 1.5x` linear range, so the top and bottom of the knob are no longer quietly flattened.
+- [`Source/vxstudio/products/subtract/VxSubtractProcessor.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/subtract/VxSubtractProcessor.cpp) now lets vocal mode drive up to the same `5.0` subtract ceiling as general mode, with only a light vocal-priority trim instead of the previous much lower product-side cap.
+- [`Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp`](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp) keeps the proven base rider law but adds directional cap expansion only when the user is near the top of the control range and the detected level mismatch is clearly extreme. That removes the hidden ceiling without globally changing normal sessions.
+- Verification:
+- `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- `./build/VXStudioPluginRegressionTests`
+- Current result:
+- the suite still reports the already-dirty `Subtract` wet/listen recombine regression
+- the suite also still reports the existing `Leveler` hot-instrument consistency regression in this worktree, so there is not yet a clean end-to-end proof that the Leveler cap fix improves that lane
+- Residual note: `Finish` and `Subtract` are direct law changes with clear source-level verification. `Leveler` is now implemented as a surgical cap expansion rather than a broad aggression increase, but it still needs a dedicated behavior proof or a clean regression baseline in this branch before I would call it fully signed off.

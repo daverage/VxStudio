@@ -212,9 +212,12 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     // overSubtract still scales with reduce so depth ramps up with the knob.
     const float reduce = vxsuite::clamp01(smoothedReduce);
     const float effectiveReduce = voiceMode
-        ? vxsuite::clamp01(reduce * (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech))
+        ? vxsuite::clamp01(reduce * (1.0f - 0.04f * vocalPriority + 0.14f * voiceContext.buriedSpeech))
         : reduce;
-    deverbProcessor.setOverSubtract(1.0f + 3.5f * effectiveReduce);
+    const float overSubtractTarget = voiceMode
+        ? (1.0f + 4.8f * effectiveReduce)
+        : (1.0f + 5.6f * effectiveReduce);
+    deverbProcessor.setOverSubtract(overSubtractTarget);
 
     const auto renderWet = [&](const float amount) {
         for (int ch = 0; ch < outputChannels; ++ch)
@@ -241,7 +244,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget,
                                              currentSampleRateHz, numSamples, 0.120f);
     if (smoothedBody > 1.0e-4f) {
-        const float gainDb = 6.0f * smoothedBody;
+        const float gainDb = 8.0f * smoothedBody;
         const float A   = std::pow(10.0f, gainDb / 40.0f);
         const float w0  = 2.0f * juce::MathConstants<float>::pi * 250.0f
                           / static_cast<float>(currentSampleRateHz);
@@ -294,7 +297,10 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     const float dryDb = juce::Decibels::gainToDecibels(dryRms, -120.0f);
     const float wetDb = juce::Decibels::gainToDecibels(wetRms, -120.0f);
     const float lostDb = std::max(0.0f, dryDb - wetDb);
-    const float compensationDb = std::min(12.0f, lostDb * 0.95f);
+    const float compensationScale = juce::jmap(juce::jlimit(0.0f, 1.0f, reduceAmount),
+                                               0.0f, 1.0f,
+                                               0.82f, 0.52f);
+    const float compensationDb = std::min(8.0f, lostDb * compensationScale);
     const float targetGain = juce::Decibels::decibelsToGain(compensationDb);
 
     if (isFirstBlock) {
@@ -308,7 +314,7 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     }
 
     const float wetPeak = computePeakAbs(wetBuffer);
-    const float peakSafeGain = wetPeak > 1.0e-6f ? std::min(1.0f / wetPeak, 1.8f) : 1.0f;
+    const float peakSafeGain = wetPeak > 1.0e-6f ? std::min(1.0f / wetPeak, 1.55f) : 1.0f;
     const float appliedGain = std::min(smoothedCompensationGain, peakSafeGain);
     wetBuffer.applyGain(appliedGain);
 }

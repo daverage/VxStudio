@@ -1,4 +1,4 @@
-#include "vxsuite/framework/VxStudioVoiceAnalysis.h"
+#include "vxstudio/framework/VxStudioVoiceAnalysis.h"
 
 #include <cmath>
 #include <iostream>

@@ -45,6 +45,7 @@ private:
     float smoothedMakeupGain = 1.0f;
     int activeTailSamplesRemaining = 0;
     bool learnToggleLatched = false;
+    bool controlsNeedRelatchAfterLearn = false;
     juce::AudioBuffer<float> leftScratch;
     juce::AudioBuffer<float> rightScratch;
     std::vector<float> savedLearnProfile;

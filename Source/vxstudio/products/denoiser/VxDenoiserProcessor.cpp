@@ -182,9 +182,9 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                                     : 0.0f;
                 const float retentionWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.75f * speechWeight + 0.25f * contextWeight)
                                                       : speechWeight;
-                const float retentionTarget = isVoice
-                    ? juce::jlimit(0.88f, 1.0f, (0.90f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect) * retentionWeight)
-                    : juce::jlimit(0.85f, 1.0f, (0.88f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
+            const float retentionTarget = isVoice
+                ? juce::jlimit(0.86f, 1.0f, (0.89f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect) * retentionWeight)
+                : juce::jlimit(0.78f, 0.96f, (0.80f + 0.07f * smoothedGuard + 0.04f * policy.sourceProtect) * speechWeight);
                 const float targetRms = channelDryRms * retentionTarget;
                 compensationTarget = juce::jlimit(1.0f, maxCompensation, targetRms / std::max(wetRms, 1.0e-6f));
             }
@@ -208,8 +208,8 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
             const float retentionWeight = isVoice ? juce::jlimit(0.0f, 1.0f, 0.75f * speechWeight + 0.25f * contextWeight)
                                                   : speechWeight;
             const float retentionTarget = isVoice
-                ? juce::jlimit(0.88f, 1.0f, (0.90f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
-                : juce::jlimit(0.66f, 0.84f, (0.66f + 0.07f * smoothedGuard + 0.05f * policy.sourceProtect) * speechWeight);
+                ? juce::jlimit(0.86f, 1.0f, (0.89f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect + 0.03f * vocalPriority) * retentionWeight)
+                : juce::jlimit(0.56f, 0.78f, (0.58f + 0.06f * smoothedGuard + 0.04f * policy.sourceProtect) * speechWeight);
             const float targetRms = dryRms * retentionTarget;
             const float compensationTarget = juce::jlimit(1.0f,
                                                           maxCompensation,
@@ -232,7 +232,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     const float residualTrimDrive = vxsuite::clamp01((effectiveClean - 0.45f) / 0.55f);
     const float nonSpeechResidual = vxsuite::clamp01(1.0f - speechEvidence);
-    const float residualTrimDepth = isVoice ? 0.56f : 0.72f;
+    const float residualTrimDepth = isVoice ? 0.60f : 0.80f;
     const float residualTrimTarget = 1.0f - residualTrimDepth * residualTrimDrive * nonSpeechResidual;
     smoothedResidualTrim = vxsuite::smoothBlockValue(smoothedResidualTrim,
                                                      juce::jlimit(0.34f, 1.0f, residualTrimTarget),

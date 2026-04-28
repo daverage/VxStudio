@@ -6,6 +6,8 @@
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxDeepFilterNetService.h"
 
+#include <mutex>
+
 class VXDeepFilterNetAudioProcessor final : public vxsuite::ProcessorBase,
                                             private juce::Timer {
 public:
@@ -23,6 +25,7 @@ public:
     juce::String getModelDownloadPromptBody() const override;
     void requestModelDownload() override;
     void declineModelDownloadPrompt() override;
+    void setNonRealtime(bool isNonRealtime) noexcept override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -47,4 +50,5 @@ private:
     float smoothedClean = 0.0f;
     float smoothedGuard = 0.5f;
     bool controlsPrimed = false;
+    std::mutex enginePrepareMutex;
 };

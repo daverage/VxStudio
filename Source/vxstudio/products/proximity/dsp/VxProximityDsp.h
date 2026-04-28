@@ -7,15 +7,16 @@
 namespace vxsuite::proximity {
 
 /**
- * Zero-latency proximity effect DSP.
+ * Zero-latency close-mic model DSP.
  *
- * Two cascaded biquad shelves per channel:
- *   1. Low-shelf  — simulates bass buildup from close mic placement (proximity effect)
- *   2. High-shelf — adds upper presence/air that characterises a close placement
+ * Four cascaded tonal stages per channel:
+ *   1. Low-shelf    — simulates directional-mic proximity/body rise
+ *   2. Mud bell     — compensates low-mid boom so the result stays usable
+ *   3. Presence bell— adds close/direct articulation
+ *   4. High-shelf   — adds capsule openness / air
  *
- * Both shelves are parameterised by two scalar amounts (0–1) and a voice/general flag.
- * When either amount is zero the corresponding filter collapses to the identity, so
- * bypass transparency is guaranteed.
+ * The model is parameterised by two scalar amounts (0–1), a voice/general flag,
+ * and optional vocal-focus evidence from the shared analysis layer.
  *
  * Designed to be owned by VXProximityAudioProcessor and called from processProduct().
  */
@@ -39,7 +40,8 @@ public:
                         int numSamples,
                         float closerAmount,
                         float airAmount,
-                        bool isVoice) noexcept;
+                        bool isVoice,
+                        float vocalFocus = 0.0f) noexcept;
 
 private:
     struct BiquadCoeffs {
@@ -53,6 +55,8 @@ private:
 
     struct ChannelState {
         BiquadState lowShelf;
+        BiquadState mudBell;
+        BiquadState presenceBell;
         BiquadState highShelf;
     };
 

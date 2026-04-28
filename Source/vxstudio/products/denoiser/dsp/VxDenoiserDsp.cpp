@@ -539,12 +539,15 @@ void DenoiserDsp::processFrame(const float amount,
     const bool  voiceMode     = options.isVoiceMode;
     const float speechFocus   = juce::jlimit(0.0f, 1.0f, options.speechFocus);
     const float binHz         = static_cast<float>(sr) / static_cast<float>(kFftSize);
-    const float aggression    = juce::jlimit(0.3f, 2.5f,
-                                    0.38f + amount * (options.lateTailAggression * 0.74f + 0.26f));
+    const float aggression    = juce::jlimit(0.35f, 3.1f,
+                                    (voiceMode ? 0.40f : 0.46f)
+                                    + amount * (options.lateTailAggression * (voiceMode ? 0.78f : 1.02f)
+                                              + (voiceMode ? 0.28f : 0.40f)));
     const float guardLevel    = juce::jlimit(0.0f, 1.0f, options.sourceProtect);
     const float guardStrict   = juce::jlimit(0.0f, 1.0f, options.guardStrictness);
-    const float globalFloor   = juce::jlimit(0.010f, 0.12f,
-                                    0.06f - 0.045f * amount);
+    const float globalFloor   = juce::jlimit(voiceMode ? 0.010f : 0.006f,
+                                    0.10f,
+                                    (voiceMode ? 0.055f : 0.045f) - 0.040f * amount);
 
     for (int k = 0; k < kBins; ++k) {
         const float p = currPow[k];
@@ -590,7 +593,7 @@ void DenoiserDsp::processFrame(const float amount,
                                  ? (1.0f - 0.45f * guardStrict)
                                  : 1.0f;
         const float speechWeightedProtect = bandProtectBase * pSm;
-        const float speechGuard = 1.0f - 0.35f * speechWeightedProtect;
+        const float speechGuard = 1.0f - (voiceMode ? 0.32f : 0.18f) * speechWeightedProtect;
         const float strength = std::max(0.20f, (betaBin * transProtect * speechGuard) - 0.40f * tonalness[k]);
 
         g = std::pow(std::max(0.0f, g), strength);
@@ -598,16 +601,16 @@ void DenoiserDsp::processFrame(const float amount,
 
         // Tonal and transient restoration
         if (tonalness[k] > 0.0f)
-            g = g + (1.0f - g) * (0.30f * tonalness[k]);
+            g = g + (1.0f - g) * ((voiceMode ? 0.28f : 0.18f) * tonalness[k]);
         if (inTransient)
-            g = g + (1.0f - g) * (0.40f * guardStrict);
+            g = g + (1.0f - g) * ((voiceMode ? 0.34f : 0.20f) * guardStrict);
 
         // SNR-adaptive minimum gain floor
         const float maskHead = clamp01(snr_dB / 35.0f);
-        const float minGain  = juce::jlimit(globalFloor, 0.18f,
-                                            (0.03f + 0.08f * maskHead) * 0.85f);
-        const float speechFloor = juce::jlimit(0.0f, 0.22f,
-                                               (voiceMode ? 0.12f : 0.07f) * speechWeightedProtect * (0.75f + 0.25f * guardLevel));
+        const float minGain  = juce::jlimit(globalFloor, voiceMode ? 0.16f : 0.12f,
+                                            (0.026f + 0.070f * maskHead) * (voiceMode ? 0.88f : 0.76f));
+        const float speechFloor = juce::jlimit(0.0f, voiceMode ? 0.18f : 0.07f,
+                                               (voiceMode ? 0.10f : 0.03f) * speechWeightedProtect * (0.72f + 0.20f * guardLevel));
         g = std::max(clamp01(g), std::max(minGain, speechFloor));
 
         if (speechWeightedProtect > 0.0f)

@@ -153,14 +153,26 @@ void VXDeepFilterNetAudioProcessor::declineModelDownloadPrompt() {
     vxsuite::ModelAssetService::instance().declinePrompt(currentModelPackage());
 }
 
+void VXDeepFilterNetAudioProcessor::setNonRealtime(const bool shouldProcessOffline) noexcept {
+    const bool modeChanged = shouldProcessOffline != isNonRealtime();
+    juce::AudioProcessor::setNonRealtime(shouldProcessOffline);
+
+    if (!modeChanged)
+        return;
+
+    ProcessorBase::reset();
+    prepareEngineIfNeeded();
+}
+
 void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
-    prepareEngineIfNeeded();
     resetSuite();
+    prepareEngineIfNeeded();
 }
 
 void VXDeepFilterNetAudioProcessor::resetSuite() {
+    engine.resetRealtime();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
     controlsPrimed = false;
@@ -173,6 +185,7 @@ VXDeepFilterNetAudioProcessor::ModelVariant VXDeepFilterNetAudioProcessor::selec
 }
 
 void VXDeepFilterNetAudioProcessor::prepareEngineIfNeeded() {
+    std::lock_guard lock(enginePrepareMutex);
     if (currentSampleRateHz <= 1000.0 || currentBlockSize <= 0)
         return;
     engine.setModelVariant(selectedModelVariant());
@@ -183,7 +196,8 @@ void VXDeepFilterNetAudioProcessor::prepareEngineIfNeeded() {
 }
 
 void VXDeepFilterNetAudioProcessor::timerCallback() {
-    prepareEngineIfNeeded();
+    if (!isNonRealtime())
+        prepareEngineIfNeeded();
 }
 
 void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -235,6 +249,8 @@ void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<floa
     }
 }
 
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXDeepFilterNetAudioProcessor();
 }
+#endif

@@ -287,7 +287,23 @@ void SubtractDsp::resetStreamingState() {
 
     prevFrameEnergy = 1.0e-8f;
     phaseHistoryReady = false;
-    learningPrev = learning;
+
+    // Always clear the learn transition flag so that if learning is active
+    // when the stream is reset (e.g. DAW stops/restarts mid-learn), the
+    // learning && !learningPrev edge fires on the next block and properly
+    // initialises learnTargetFrames.  Also reset the per-session counters so
+    // a fresh learn cycle starts — the frozen profile is intentionally kept.
+    learningPrev = false;
+    learnFrames = 0;
+    learnTargetFrames = 0;
+    liveLearnConfidence = 0.0f;
+    learnQualityAccum = 0.0f;
+    learnInputEnergyAccum = 0.0f;
+    learnQualityFrames = 0;
+    std::fill(learnAccum.begin(), learnAccum.end(), 0.0f);
+    std::fill(learnAccumSq.begin(), learnAccumSq.end(), 0.0f);
+    for (auto& h : learnHistory) h.clear();
+
     updateSmoothingCoeffs();
 
     if (outQueueCap > 0 && sideDelayCap > 0) {
