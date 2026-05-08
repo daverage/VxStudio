@@ -109,7 +109,9 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     // Map user controls + ModePolicy onto ProcessOptions
     vxsuite::ProcessOptions opts;
-    const float effectiveClean = vxsuite::clamp01(smoothedClean);
+    const float effectiveClean = smoothedClean <= 1.0e-4f
+        ? 0.0f
+        : vxsuite::clamp01(std::pow(smoothedClean, isVoice ? 0.92f : 0.78f));
     opts.isVoiceMode        = isVoice;
     opts.sourceProtect      = isVoice ? vxsuite::clamp01(0.48f
                                                        + 0.40f * smoothedGuard * policy.sourceProtect
@@ -151,7 +153,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                                 + 0.25f * voiceContext.phraseActivity
                                                 + 0.20f * voiceContext.intelligibility);
     const float speechPreserveBlend = isVoice
-        ? juce::jlimit(0.0f, 0.55f,
+        ? juce::jlimit(0.0f, 0.48f,
             effectiveClean
           * juce::jlimit(0.0f, 1.0f, (smoothedGuard - 0.38f) / 0.42f)
           * speechEvidence
@@ -168,7 +170,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     const int channels = buffer.getNumChannels();
-    const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 6.0f : 5.0f);
+    const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 5.0f : 4.4f);
     if (channels >= 2) {
         for (int ch = 0; ch < 2; ++ch) {
             const float wetRms = vxsuite::analysis::rmsChannel(buffer, ch);
@@ -232,10 +234,10 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     const float residualTrimDrive = vxsuite::clamp01((effectiveClean - 0.45f) / 0.55f);
     const float nonSpeechResidual = vxsuite::clamp01(1.0f - speechEvidence);
-    const float residualTrimDepth = isVoice ? 0.60f : 0.80f;
+    const float residualTrimDepth = isVoice ? 0.66f : 0.82f;
     const float residualTrimTarget = 1.0f - residualTrimDepth * residualTrimDrive * nonSpeechResidual;
     smoothedResidualTrim = vxsuite::smoothBlockValue(smoothedResidualTrim,
-                                                     juce::jlimit(0.34f, 1.0f, residualTrimTarget),
+                                                     juce::jlimit(0.26f, 1.0f, residualTrimTarget),
                                                      currentSampleRateHz,
                                                      numSamples,
                                                      residualTrimTarget < smoothedResidualTrim ? 0.030f : 0.160f);

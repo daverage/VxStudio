@@ -175,12 +175,19 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const float programRestoreAttack = timeCoeff(sr, 2.2f);
     const float programRestoreRelease = timeCoeff(sr, 5.5f);
 
-    const float levelShape = (voiceMode ? 0.35f : 0.24f) + (voiceMode ? 0.70f : 0.46f) * level;
-    const float maxUpwardGain = 1.0f + (voiceMode ? 1.05f : 0.48f) * level;
-    const float maxDownwardGain = std::max(voiceMode ? 0.24f : 0.50f,
-                                           1.0f - (voiceMode ? 0.55f : 0.46f) * level);
-    const float maxLiftAmount = (voiceMode ? 0.28f : 0.26f) + (voiceMode ? 0.82f : 0.96f) * level;
-    const float maxTameDepth = (voiceMode ? 0.15f : 0.10f) + (voiceMode ? 0.60f : 0.42f) * control;
+    const float levelShape = (voiceMode ? 0.35f : 0.34f) + (voiceMode ? 0.70f : 0.72f) * level;
+    const float maxUpwardGain = voiceMode
+        ? 1.0f + 1.05f * level
+        : 1.0f + 0.95f * std::pow(level, 0.90f);
+    const float maxDownwardGain = voiceMode
+        ? std::max(0.24f, 1.0f - 0.55f * level)
+        : std::max(0.30f, 1.0f - 0.62f * std::pow(level, 0.92f));
+    const float maxLiftAmount = voiceMode
+        ? 0.28f + 0.82f * level
+        : 0.30f + 1.05f * std::pow(level, 0.92f);
+    const float maxTameDepth = voiceMode
+        ? 0.15f + 0.60f * control
+        : 0.12f + 0.52f * std::pow(control, 0.90f);
     const bool mixOfflineMode = !voiceMode
         && params.analysisMode == MixAnalysisMode::offline
         && offlineAnalysis.isValid();
@@ -285,15 +292,19 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
             const float deadbandDb = (tuning.mixDeadbandBase - tuning.mixDeadbandLevelWeight * level)
                 + (1.0f - targetConfidence) * 0.85f;
             const float rampWidthDb = 2.00f - 0.45f * level;
+            const float hotMixGuard = clamp01((peakAbs - 0.52f) / 0.24f)
+                * (0.45f + 0.55f * compressionPenalty)
+                * (0.35f + 0.65f * control);
             float rideTargetDb = 0.0f;
             if (!neutral && std::abs(errorDb) > deadbandDb) {
                 const float excessDb = std::abs(errorDb) - deadbandDb;
                 const float ramp = clamp01(excessDb / std::max(0.5f, rampWidthDb));
                 const float shapedRamp = ramp * ramp * (3.0f - 2.0f * ramp);
                 const float downLimitDb = juce::jmap(primeRelax,
-                                                     (2.4f + 3.2f * level) * (0.88f + 0.12f * control),
-                                                     1.25f + 1.35f * level);
-                const float upLimitDb = (1.1f + 2.4f * level) * (0.92f + 0.08f * control);
+                                                     (3.0f + 4.6f * level) * (0.90f + 0.14f * control),
+                                                     1.6f + 2.0f * level) * (1.0f + 0.22f * hotMixGuard);
+                const float upLimitDb = (1.4f + 3.2f * level) * (0.94f + 0.10f * control)
+                    * (1.0f - 0.92f * hotMixGuard);
                 rideTargetDb = errorDb > 0.0f
                     ? -downLimitDb * shapedRamp
                     : upLimitDb * shapedRamp;
@@ -314,7 +325,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
             float spikeTarget = 1.0f;
             if (!neutral && overshootDb > overshootThresholdDb) {
                 const float overshootExcess = overshootDb - overshootThresholdDb;
-                const float spikeDb = std::min(4.5f + 4.0f * control, overshootExcess * (0.85f + 0.45f * control));
+                const float spikeDb = std::min(5.8f + 5.0f * control, overshootExcess * (0.92f + 0.55f * control));
                 spikeTarget = juce::Decibels::decibelsToGain(-spikeDb * (0.70f + 0.30f * mixDecisionTrust));
             }
 
@@ -361,6 +372,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 : juce::jlimit(0.0f,
                                std::max(0.0f, normalizeHeadroomDb - 0.3f),
                                allowedNormalizeDb
+                                   * (1.0f - 0.88f * hotMixGuard)
                                    * (1.0f - tuning.mixNormalizeSpikePenalty * spikePenalty)
                                    * (0.55f + 0.45f * targetConfidence));
             const float normalizeCoeff = normalizeTargetDb > generalNormalizeGainDb ? generalNormalizeAttack : generalNormalizeRelease;
@@ -381,7 +393,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 : std::max(0.0f,
                            programmeLostDb - (1.10f + 0.35f * (1.0f - level)));
             const float maxProgramRestoreDb = 7.0f * (0.35f + 0.65f * level);
-            const float restorePenalty = 1.0f - 0.40f * spikePenalty;
+            const float restorePenalty = (1.0f - 0.40f * spikePenalty) * (1.0f - 0.90f * hotMixGuard);
             const float programRestoreTargetDb = juce::jlimit(0.0f,
                                                               std::max(0.0f, programHeadroomDb - 0.15f),
                                                               std::min(maxProgramRestoreDb,
@@ -428,6 +440,10 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float safeAnchor = voiceMode ? vocalAnchor : std::max(anchorEnv, 1.0e-5f);
         const float envOverAnchor = clamp01((safeEnv - safeAnchor) / (safeAnchor + 1.0e-5f));
         const float envUnderAnchor = clamp01((safeAnchor - safeEnv) / (safeAnchor + 1.0e-5f));
+        const float hotInstrumentGuard = voiceMode
+            ? clamp01((peakAbs - 0.46f) / 0.24f)
+                * clamp01(0.62f * detector.instrumentDominance + 0.38f * detector.transientStrength)
+            : 0.0f;
         float targetGain = 1.0f;
         if (!neutral) {
             if (voiceMode) {
@@ -439,8 +455,12 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 const float voiceCapBase = clamp01((std::max(level, control) - 0.82f) / 0.18f);
                 const float voiceLiftDrive = voiceCapBase * envUnderAnchor;
                 const float voiceTameDrive = voiceCapBase * envOverAnchor;
-                const float adaptiveMaxUpwardGain = maxUpwardGain + (1.95f - maxUpwardGain) * voiceLiftDrive;
-                const float adaptiveMaxDownwardGain = maxDownwardGain + (0.18f - maxDownwardGain) * voiceTameDrive;
+                const float adaptiveMaxUpwardGain = juce::jmap(hotInstrumentGuard,
+                                                               maxUpwardGain + (1.95f - maxUpwardGain) * voiceLiftDrive,
+                                                               1.08f + 0.12f * envUnderAnchor);
+                const float adaptiveMaxDownwardGain = juce::jmap(hotInstrumentGuard,
+                                                                 maxDownwardGain + (0.18f - maxDownwardGain) * voiceTameDrive,
+                                                                 0.14f + 0.10f * (1.0f - envOverAnchor));
                 targetGain = juce::jlimit(adaptiveMaxDownwardGain,
                                           adaptiveMaxUpwardGain,
                                           ratioGain * biasGain);
@@ -502,7 +522,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         overrideGain = overrideGainCoeff * overrideGain + (1.0f - overrideGainCoeff) * targetOverrideGain;
 
         const float liftGain = voiceMode
-            ? 1.0f + voiceDecision.speechLift * maxLiftAmount
+            ? 1.0f + voiceDecision.speechLift * maxLiftAmount * (1.0f - 0.68f * hotInstrumentGuard)
             : 1.0f;
         const float liftCoeff = liftGain > speechLiftGain ? liftAttack : liftRelease;
         speechLiftGain = liftCoeff * speechLiftGain + (1.0f - liftCoeff) * liftGain;
@@ -511,7 +531,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
             ? juce::jlimit(1.0f,
                            3.2f,
                            1.0f + overrideZone * speechNeed * overrideTrigger
-                                     * (0.14f + 1.35f * level + 0.12f * detector.phraseActivity))
+                                     * (0.14f + 1.35f * level + 0.12f * detector.phraseActivity)
+                                     * (1.0f - 0.78f * hotInstrumentGuard))
             : 1.0f;
         const float overrideLiftCoeff = targetOverrideLiftGain > overrideLiftGain ? overrideAttack : overrideRelease;
         overrideLiftGain = overrideLiftCoeff * overrideLiftGain

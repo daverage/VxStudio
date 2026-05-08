@@ -1747,8 +1747,8 @@ float Dsp::computeSourceContributionMultiplier(
 {
     const float sliderSigned = (sliderNormalized - 0.5f) * 2.0f;
     const float curved =
-        std::copysign(std::pow(std::abs(sliderSigned), 1.8f), sliderSigned);
-    const float maxContribution = source == otherSource ? 1.25f : 2.0f;
+        std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
+    const float maxContribution = source == otherSource ? 1.55f : 3.0f;
     return juce::jlimit(0.0f, maxContribution, 1.0f + curved * strength);
 }
 
@@ -1788,14 +1788,14 @@ void Dsp::buildForegroundBackgroundRender() noexcept
     for (int s = 0; s < kSourceCount; ++s) {
         const float slider = currentControlValues[static_cast<size_t>(s)];
         const float sliderSigned = (slider - 0.5f) * 2.0f;
-        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.8f), sliderSigned);
+        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
         const float separation = std::abs(curved) * strength;
         const float contribution = computeSourceContributionMultiplier(s, slider, strength);
         sourceFrames[static_cast<size_t>(s)].curved = curved;
         sourceFrames[static_cast<size_t>(s)].separation = separation;
         sourceFrames[static_cast<size_t>(s)].contribution = contribution;
-        sourceFrames[static_cast<size_t>(s)].ownershipBiasPos = 1.0f + 1.20f * separation;
-        sourceFrames[static_cast<size_t>(s)].ownershipBiasNeg = std::max(0.80f, 1.0f - 0.20f * separation);
+        sourceFrames[static_cast<size_t>(s)].ownershipBiasPos = 1.0f + 1.55f * separation;
+        sourceFrames[static_cast<size_t>(s)].ownershipBiasNeg = std::max(0.68f, 1.0f - 0.32f * separation);
     }
 
     std::array<int, kDebugBins> debugDominant {};

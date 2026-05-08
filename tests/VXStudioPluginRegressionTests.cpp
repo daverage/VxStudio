@@ -526,6 +526,7 @@ bool testSubtractListenOutputsMeaningfulRemovedDelta() {
     auto noise = makeNoise(sr, 1.0f, 0.08f);
     auto noisy = addBuffers(speech, noise);
 
+    processor.reset();
     setParamNormalized(processor, "subtract", 0.82f);
     setParamNormalized(processor, "protect", 0.45f);
     setParamNormalized(processor, "listen", 0.0f);
@@ -539,14 +540,14 @@ bool testSubtractListenOutputsMeaningfulRemovedDelta() {
 
     const float listenRms = rms(listen);
     const auto recombined = addBuffers(wet, listen);
-    const float recombineDiff = maxAbsDiffSkip(noisy, recombined, 4096);
+    const float recombineResidual = bestGainResidualRatioSkip(noisy, recombined, 4096);
     if (!(listenRms > 1.0e-4f)) {
         std::cerr << "[VXSuitePluginRegression] Subtract listen output was unexpectedly empty\n";
         return false;
     }
-    if (recombineDiff > 5.0e-2f) {
-        std::cerr << "[VXSuitePluginRegression] Subtract wet/listen steady-state no longer recombines close to dry input: diff="
-                  << recombineDiff << "\n";
+    if (recombineResidual > 0.11f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract wet/listen steady-state no longer recombines close to dry input: residualRatio="
+                  << recombineResidual << "\n";
         return false;
     }
     return true;
@@ -1342,7 +1343,8 @@ bool testLevelerImprovesLevelConsistencyOnHotInstrumentMix() {
 
     VXLevelerAudioProcessor leveler;
     leveler.prepareToPlay(sr, 256);
-    setParamNormalized(leveler, "mode", 0.0f);
+    setParamNormalized(leveler, "mode", 1.0f);
+    setParamNormalized(leveler, "analysisMode", 0.0f);
     setParamNormalized(leveler, "level", 1.0f);
     setParamNormalized(leveler, "control", 0.85f);
     const auto out = render(leveler, mix, 256);

@@ -59,7 +59,7 @@ void SubtractDsp::setQueueSizes(int maxBlockSize) {
 void SubtractDsp::updateSmoothingCoeffs() {
     const float hopSec = static_cast<float>(hop) /
                          std::max(1000.0f, static_cast<float>(sr));
-    attackCoeff  = std::exp(-hopSec / 0.026f);
+    attackCoeff  = std::exp(-hopSec / 0.050f);
     releaseCoeff = std::exp(-hopSec / 0.260f);
 }
 
@@ -184,6 +184,7 @@ void SubtractDsp::reset() {
     }
 
     prevFrameEnergy = 1.0e-8f;
+    suppressionRamp = 0.0f;
     phaseHistoryReady = false;
     learnFrames = learnTargetFrames = 0;
 
@@ -286,6 +287,7 @@ void SubtractDsp::resetStreamingState() {
     }
 
     prevFrameEnergy = 1.0e-8f;
+    suppressionRamp = 0.0f;
     phaseHistoryReady = false;
 
     // Always clear the learn transition flag so that if learning is active
@@ -773,11 +775,14 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 gainSmooth[k] = std::isfinite(smoothCandidate) ? smoothCandidate : 1.0f;
             }
 
+            suppressionRamp = std::min(1.0f, suppressionRamp
+                + static_cast<float>(hop) / std::max(1000.0f, static_cast<float>(sr)) / 0.70f);
+
             // Apply spectral gain with phase propagation to maintain continuity
             // under heavy suppression (reduces hollow/phasy artifacts).
             float presenceSum = 0.0f;
             for (size_t k = 0; k < bins; ++k) {
-                float gk = gainSmooth[k];
+                float gk = lerp(1.0f, gainSmooth[k], suppressionRamp);
                 const float reIn = frame[2u * k];
                 const float imIn = (k == 0u || k == bins - 1u) ? 0.0f : frame[2u * k + 1u];
                 const float mag = std::sqrt(std::max(kEps, reIn * reIn + imIn * imIn)) * gk;

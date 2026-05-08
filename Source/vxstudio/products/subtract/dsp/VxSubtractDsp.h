@@ -135,6 +135,7 @@ private:
     float prevFrameEnergy = 1.0e-8f;
 
     float attackCoeff = 0.80f, releaseCoeff = 0.97f;
+    float suppressionRamp = 0.0f;
     bool phaseHistoryReady = false;
 
     void  pushInputSample (float x);

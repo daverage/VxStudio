@@ -175,6 +175,7 @@ void VXDeepFilterNetAudioProcessor::resetSuite() {
     engine.resetRealtime();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
+    startupWetRamp = 0.0f;
     controlsPrimed = false;
 }
 
@@ -231,8 +232,11 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     const bool processed = engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
 
     if (processed) {
+        startupWetRamp = vxsuite::smoothBlockValue(startupWetRamp, 1.0f, currentSampleRateHz, numSamples, 0.040f);
         ensureLatencyAlignedListenDry(numSamples);
-        blendProcessedWithDry(buffer, wetMix);
+        blendProcessedWithDry(buffer, effectiveClean * startupWetRamp);
+    } else {
+        startupWetRamp = 0.0f;
     }
 }
 

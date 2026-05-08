@@ -49,6 +49,7 @@ private:
     int currentBlockSize = 0;
     float smoothedClean = 0.0f;
     float smoothedGuard = 0.5f;
+    float startupWetRamp = 0.0f;
     bool controlsPrimed = false;
     std::mutex enginePrepareMutex;
 };

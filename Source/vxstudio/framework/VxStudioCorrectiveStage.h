@@ -51,6 +51,7 @@ private:
     float cTroubleRefA = 0.0f;
     float cTroubleAtk = 0.0f;
     float cTroubleRel = 0.0f;
+    float cTroubleCoeffSmooth = 0.0f;
 
     float hpfB0 = 1.0f, hpfB1 = 0.0f, hpfB2 = 0.0f, hpfA1 = 0.0f, hpfA2 = 0.0f;
     std::vector<float> hpfZ1, hpfZ2;
@@ -65,6 +66,7 @@ private:
     std::array<float, 6> troubleBandZ1 {};
     std::array<float, 6> troubleBandZ2 {};
     std::array<float, 6> troubleBandRms {};
+    std::array<float, 6> troubleSmoothedCutDb {};
 
     float deMudEnv = 0.0f;
     float deMudDetMudZ1 = 0.0f;

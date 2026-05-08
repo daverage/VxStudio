@@ -117,15 +117,15 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float closer = juce::jlimit(0.f, 1.f, closerAmount);
     const float air    = juce::jlimit(0.f, 1.f, airAmount);
     const float focus  = juce::jlimit(0.0f, 1.0f, vocalFocus);
-    const float shapedCloser = std::pow(closer, isVoice ? 1.10f : 1.02f);
-    const float shapedAir    = std::pow(air, isVoice ? 0.90f : 0.82f);
+    const float shapedCloser = std::pow(closer, isVoice ? 0.78f : 0.70f);
+    const float shapedAir    = std::pow(air, isVoice ? 0.74f : 0.66f);
     const float modelDepth   = juce::jlimit(0.0f, 1.0f,
         shapedCloser * (isVoice ? (0.90f + 0.10f * focus) : 1.0f));
 
     // 1) Proximity low shelf: keep this in the genuine body/proximity region.
     const float lowFcMin = isVoice ?  85.f : 95.f;
     const float lowFcMax = isVoice ? 135.f : 180.f;
-    const float lowGainMax = isVoice ? 6.5f : 5.8f;
+    const float lowGainMax = isVoice ? 10.0f : 8.6f;
     const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * modelDepth;
     const float lowGain  = lowGainMax * modelDepth;
 
@@ -135,7 +135,7 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         ? juce::jlimit(220.0f, 320.0f, 255.0f + 22.0f * (1.0f - focus))
         : 300.0f;
     const float mudCutQ = isVoice ? 0.82f : 0.75f;
-    const float mudCutDb = -modelDepth * (isVoice ? (2.8f + 1.0f * (1.0f - focus)) : 2.2f);
+    const float mudCutDb = -modelDepth * (isVoice ? (4.8f + 1.4f * (1.0f - focus)) : 3.8f);
 
     // 3) Presence contour: closer placement also reads as more direct and more
     // articulate, not just bassier. This is intentionally moderate.
@@ -143,13 +143,13 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         ? juce::jlimit(2800.0f, 4300.0f, 3600.0f + 450.0f * focus)
         : 3200.0f;
     const float presenceQ = isVoice ? 0.78f : 0.70f;
-    const float presenceDb = juce::jlimit(0.0f, isVoice ? 4.2f : 3.2f,
-        modelDepth * (isVoice ? (1.5f + 1.2f * focus) : 1.4f)
-      + shapedAir * (isVoice ? 1.2f : 0.8f));
+    const float presenceDb = juce::jlimit(0.0f, isVoice ? 7.2f : 5.8f,
+        modelDepth * (isVoice ? (2.7f + 1.8f * focus) : 2.2f)
+      + shapedAir * (isVoice ? 2.0f : 1.4f));
 
     // 4) Capsule/open-top air.
     const float highFc   = isVoice ? 7600.f : 11000.f;
-    const float highGain = (isVoice ? 5.0f : 6.5f) * shapedAir;
+    const float highGain = (isVoice ? 7.5f : 9.0f) * shapedAir;
 
     const auto convertCoeffs = [](const dspcommon::BiquadCoeffs& c) noexcept {
         return BiquadCoeffs { c.b0, c.b1, c.b2, c.a1, c.a2 };
@@ -159,8 +159,8 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const BiquadCoeffs mudC = convertCoeffs(dspcommon::makePeakingEq(sr, mudCutCenter, mudCutQ, mudCutDb));
     const BiquadCoeffs presenceC = convertCoeffs(dspcommon::makePeakingEq(sr, presenceCenter, presenceQ, presenceDb));
     const BiquadCoeffs highC = makeHighShelf(sr, highFc, highGain);
-    const float outputTrimDb = -juce::jlimit(0.0f, 3.0f,
-        0.22f * lowGain + 0.30f * presenceDb + 0.15f * highGain);
+    const float outputTrimDb = -juce::jlimit(0.0f, 2.2f,
+        0.14f * lowGain + 0.18f * presenceDb + 0.10f * highGain);
     const float outputTrim = juce::Decibels::decibelsToGain(outputTrimDb);
 
     for (int ch = 0; ch < channels; ++ch) {

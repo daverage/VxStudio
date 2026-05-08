@@ -61,8 +61,8 @@ float OptoCompressorLA2A::gainReductionSoftKneeDb(const float inDb,
 
 float OptoCompressorLA2A::peakReductionToDriveDb(const float peakReduction01, const Mode mode) noexcept {
   const float pr = clamp01(peakReduction01);
-  const float tapered = std::pow(pr, mode == Mode::limit ? 1.12f : 1.24f);
-  const float maxDriveDb = (mode == Mode::limit) ? 50.0f : 44.0f;
+  const float tapered = std::pow(pr, mode == Mode::limit ? 0.92f : 0.98f);
+  const float maxDriveDb = (mode == Mode::limit) ? 58.0f : 52.0f;
   return tapered * maxDriveDb;
 }
 
@@ -180,7 +180,7 @@ void OptoCompressorLA2A::applyBodyShelf(juce::AudioBuffer<float>& buffer) noexce
   if (std::abs(delta) <= 1.0e-4f)
     return;
 
-  const float lowGainDb = 1.5f * delta;
+  const float lowGainDb = 4.5f * delta;
   const float lowGain = dbToGain(lowGainDb);
   const float fc = 180.0f;
   const float a = std::exp(-2.0f * juce::MathConstants<float>::pi * fc / static_cast<float>(sr));

@@ -539,15 +539,15 @@ void DenoiserDsp::processFrame(const float amount,
     const bool  voiceMode     = options.isVoiceMode;
     const float speechFocus   = juce::jlimit(0.0f, 1.0f, options.speechFocus);
     const float binHz         = static_cast<float>(sr) / static_cast<float>(kFftSize);
-    const float aggression    = juce::jlimit(0.35f, 3.1f,
-                                    (voiceMode ? 0.40f : 0.46f)
-                                    + amount * (options.lateTailAggression * (voiceMode ? 0.78f : 1.02f)
-                                              + (voiceMode ? 0.28f : 0.40f)));
+    const float aggression    = juce::jlimit(0.42f, 3.35f,
+                                    (voiceMode ? 0.42f : 0.56f)
+                                    + amount * (options.lateTailAggression * (voiceMode ? 0.76f : 1.08f)
+                                              + (voiceMode ? 0.26f : 0.50f)));
     const float guardLevel    = juce::jlimit(0.0f, 1.0f, options.sourceProtect);
     const float guardStrict   = juce::jlimit(0.0f, 1.0f, options.guardStrictness);
-    const float globalFloor   = juce::jlimit(voiceMode ? 0.010f : 0.006f,
-                                    0.10f,
-                                    (voiceMode ? 0.055f : 0.045f) - 0.040f * amount);
+    const float globalFloor   = juce::jlimit(voiceMode ? 0.010f : 0.0045f,
+                                    0.085f,
+                                    (voiceMode ? 0.050f : 0.036f) - 0.032f * amount);
 
     for (int k = 0; k < kBins; ++k) {
         const float p = currPow[k];

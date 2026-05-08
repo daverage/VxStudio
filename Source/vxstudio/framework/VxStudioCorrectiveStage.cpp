@@ -32,6 +32,7 @@ void CorrectiveStage::prepare(double sampleRate, int numChannels) {
     cTroubleRefA = detail::onePoleCoeff(sr, 800.0f);
     cTroubleAtk = std::exp(-1.0f / (0.006f * fsr));
     cTroubleRel = std::exp(-1.0f / (0.080f * fsr));
+    cTroubleCoeffSmooth = std::exp(-1.0f / (0.025f * fsr));
 
     const std::array<float, 6> centers { 1400.0f, 2400.0f, 3600.0f, 5200.0f, 7600.0f, 10500.0f };
     const std::array<float, 6> qVals   { 1.10f,   1.20f,   1.20f,   1.15f,   1.05f,   0.90f   };
@@ -161,6 +162,7 @@ void CorrectiveStage::reset() {
     troubleBandZ1.fill(0.0f);
     troubleBandZ2.fill(0.0f);
     troubleBandRms.fill(0.0f);
+    troubleSmoothedCutDb.fill(0.0f);
 }
 
 void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
@@ -335,11 +337,14 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
         }
 
         const float invSamples = 1.0f / static_cast<float>(numSamples);
+        const float cSmooth = cTroubleCoeffSmooth;
         for (size_t b = 0; b < 6; ++b) {
+            const float target = troubleCutDbAccum[b] * invSamples;
+            troubleSmoothedCutDb[b] = cSmooth * troubleSmoothedCutDb[b] + (1.0f - cSmooth) * target;
             troubleCoeffs[b] = detail::makePeakingEq(sr,
                                                      troubleCenters[b],
                                                      troubleQVals[b],
-                                                     troubleCutDbAccum[b] * invSamples);
+                                                     troubleSmoothedCutDb[b]);
         }
     }
 

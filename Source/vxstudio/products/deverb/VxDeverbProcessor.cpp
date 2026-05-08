@@ -211,12 +211,13 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     // Wiener gains collapse to 1.0 (true bypass with no dry blend needed).
     // overSubtract still scales with reduce so depth ramps up with the knob.
     const float reduce = vxsuite::clamp01(smoothedReduce);
+    const float reduceDrive = reduce <= 1.0e-4f ? 0.0f : std::pow(reduce, voiceMode ? 0.76f : 0.72f);
     const float effectiveReduce = voiceMode
-        ? vxsuite::clamp01(reduce * (1.0f - 0.04f * vocalPriority + 0.14f * voiceContext.buriedSpeech))
-        : reduce;
+        ? vxsuite::clamp01(reduceDrive * (1.0f - 0.02f * vocalPriority + 0.18f * voiceContext.buriedSpeech))
+        : reduceDrive;
     const float overSubtractTarget = voiceMode
-        ? (1.0f + 4.8f * effectiveReduce)
-        : (1.0f + 5.6f * effectiveReduce);
+        ? (1.0f + 5.8f * effectiveReduce)
+        : (1.0f + 6.6f * effectiveReduce);
     deverbProcessor.setOverSubtract(overSubtractTarget);
 
     const auto renderWet = [&](const float amount) {
@@ -244,7 +245,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget,
                                              currentSampleRateHz, numSamples, 0.120f);
     if (smoothedBody > 1.0e-4f) {
-        const float gainDb = 8.0f * smoothedBody;
+        const float gainDb = 10.0f * smoothedBody;
         const float A   = std::pow(10.0f, gainDb / 40.0f);
         const float w0  = 2.0f * juce::MathConstants<float>::pi * 250.0f
                           / static_cast<float>(currentSampleRateHz);
@@ -299,7 +300,7 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     const float lostDb = std::max(0.0f, dryDb - wetDb);
     const float compensationScale = juce::jmap(juce::jlimit(0.0f, 1.0f, reduceAmount),
                                                0.0f, 1.0f,
-                                               0.82f, 0.52f);
+                                               0.68f, 0.24f);
     const float compensationDb = std::min(8.0f, lostDb * compensationScale);
     const float targetGain = juce::Decibels::decibelsToGain(compensationDb);
 
