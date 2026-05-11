@@ -50,6 +50,7 @@ private:
         juce::String diagnosticsText;
         std::vector<ChainRow> chainRows;
         std::vector<int> chainRowStageIndices;
+        std::vector<std::uint64_t> chainRowStageInstanceIds;
         std::vector<int> sparseToneBands;
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterToneDb {};
@@ -134,6 +135,7 @@ private:
     vxsuite::SuiteLookAndFeel lookAndFeel;
 
     std::atomic<int> selectedStageIndex { -1 };
+    std::atomic<std::uint64_t> selectedStageInstanceId { 0 };
     std::atomic<bool> fullChainSelected { true };
     std::atomic<int> currentTabIndex { static_cast<int>(Tab::tone) };
     std::atomic<int> averageTimeIndex { 3 };

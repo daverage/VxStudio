@@ -251,6 +251,7 @@ void SpectralProcessor::processFrame(ChannelState& ch,
                                      const float   lrsvCoeff) noexcept {
     const auto fftSz = static_cast<size_t>(fftSize);
     const auto nbins = static_cast<size_t>(numBins);
+    const int earlyFrames = std::max(1, tHistFrames / 3);
 
     // ── 1. Extract the last fftSize input samples and apply analysis window ───
     //
@@ -277,16 +278,21 @@ void SpectralProcessor::processFrame(ChannelState& ch,
     //   We READ it first, then OVERWRITE it with the current frame's power.
     //   This avoids a separate "delayed index" calculation.
     const size_t histBase = static_cast<size_t>(ch.histWriteIdx) * nbins;
+    const size_t earlyHistIdx = static_cast<size_t>((ch.histWriteIdx + tHistFrames - earlyFrames) % tHistFrames) * nbins;
 
     for (size_t k = 0; k < nbins; ++k) {
         const float re = ch.fftBuf[2 * k];
         const float im = ch.fftBuf[2 * k + 1];
         const float curPow     = re * re + im * im;
         const float delayedPow = ch.magSqHist[histBase + k]; // T_boundary ago
+        const float earlyPow   = ch.magSqHist[earlyHistIdx + k];
 
         // Late-reverberant spectral variance (Habets 2009, eq. 11):
         //   Γ_late(m,k) = κ · exp(−2δT) · |Y(m − T_frames, k)|²
         const float lrsv = kKappa * lrsvCoeff * delayedPow * overSubtract;
+        const float lateToEarlyRatio = delayedPow / std::max(earlyPow, 1.0e-20f);
+        const float latePersistence = juce::jlimit(0.0f, 1.0f, (lateToEarlyRatio - 0.16f) / 0.36f);
+        const float lateEvidence = juce::jlimit(0.22f, 1.0f, 0.22f + 0.78f * latePersistence);
 
         // Wiener power gain, floored to prevent full bin nulling.
         // suppressRatio is clamped to [0,1] so that LRSV noise exceeding the
@@ -296,7 +302,7 @@ void SpectralProcessor::processFrame(ChannelState& ch,
         // In voice mode, bins in the 200–4000 Hz speech range use kVoiceFloor
         // (~−9 dB) to protect vocal fundamentals and formants from over-suppression,
         // consistent with Polish's voice-preserve policy.
-        const float suppressRatio = std::min(1.0f, lrsv / std::max(curPow, 1.0e-20f));
+        const float suppressRatio = std::min(1.0f, (lrsv / std::max(curPow, 1.0e-20f)) * lateEvidence);
         const bool  inSpeechBand  = voiceMode && (static_cast<int>(k) >= speechBinLo)
                                                && (static_cast<int>(k) <= speechBinHi);
         const float baseFloor     = inSpeechBand ? kVoiceFloor : kFloor;

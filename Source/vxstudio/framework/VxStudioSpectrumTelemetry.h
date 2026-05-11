@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
@@ -277,6 +278,9 @@ public:
                                                     StageView& out) const noexcept;
     [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
 };
+
+[[nodiscard]] std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candidates,
+                                                                const AnalysisSummary& analyserInput) noexcept;
 
 class StagePublisher {
 public:

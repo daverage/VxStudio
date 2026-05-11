@@ -2,6 +2,13 @@
 
 Professional, modern website for VX Studio audio plugins. Ready to deploy to vxstudio.marczewski.me.uk
 
+The website copy should track the current suite contract:
+
+- `12` plugins in the suite
+- stronger top-of-range behavior across the main processing products
+- track-local `VXStudioAnalyser` behavior
+- the latest regression pass completing successfully
+
 ## Quick Start
 
 ### Prerequisites
@@ -44,7 +51,7 @@ web/
 
 ### Public Pages
 - **Home** (`index.html`) - Landing page with product overview
-- **Downloads** (`downloads/`) - macOS available, Windows coming soon
+- **Downloads** (`downloads/`) - current verified macOS build, Windows coming soon
 - **Products** (`products/`) - Individual product pages (12 plugins)
 - **Documentation** (`docs/`) - User guides and technical docs
 - **Support** (`support/`) - FAQ and troubleshooting
@@ -183,6 +190,7 @@ Edit `web/downloads/index.html`:
 - Update file size
 - Update SHA256 checksum
 - Add release notes
+- Keep the highlighted build notes aligned with the current regression-verified suite state
 
 ## Content Updates
 

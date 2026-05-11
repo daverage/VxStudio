@@ -38,6 +38,11 @@ private:
 
     using ModelVariant = vxsuite::deepfilternet::DeepFilterService::ModelVariant;
 
+    void ensureAnalysisScratch(int channels, int samples);
+    float estimateArtifactRisk(const juce::AudioBuffer<float>& dry,
+                               const juce::AudioBuffer<float>& wet,
+                               int channels,
+                               int samples) const noexcept;
     void prepareEngineIfNeeded();
     ModelVariant selectedModelVariant() const noexcept;
     void timerCallback() override;
@@ -50,6 +55,8 @@ private:
     float smoothedClean = 0.0f;
     float smoothedGuard = 0.5f;
     float startupWetRamp = 0.0f;
+    float lastArtifactRisk = 0.0f;
     bool controlsPrimed = false;
+    juce::AudioBuffer<float> analysisScratch;
     std::mutex enginePrepareMutex;
 };

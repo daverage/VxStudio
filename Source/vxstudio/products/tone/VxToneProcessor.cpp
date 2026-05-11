@@ -20,10 +20,17 @@ constexpr std::string_view kListenParam  = "listen";
 // General mode: full-range shelves with more headroom.
 constexpr float kVocalBassFreqHz    = 180.f;
 constexpr float kVocalTrebleFreqHz  = 5600.f;
-constexpr float kVocalMaxGainDb     = 12.f;
+constexpr float kVocalMaxGainDb     = 14.f;
 constexpr float kGeneralBassFreqHz  = 90.f;
 constexpr float kGeneralTrebleFreqHz = 10500.f;
-constexpr float kGeneralMaxGainDb   = 18.f;
+constexpr float kGeneralMaxGainDb   = 22.f;
+constexpr float kToneCurveExponent  = 0.72f;
+
+float shapeToneControl(const float value) noexcept {
+    const float centered = juce::jlimit(-1.0f, 1.0f, value * 2.0f - 1.0f);
+    const float shaped = std::copysign(std::pow(std::abs(centered), kToneCurveExponent), centered);
+    return 0.5f * (shaped + 1.0f);
+}
 
 } // namespace
 
@@ -104,16 +111,20 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     const float maxGainDb = voiceMode
         ? kVocalMaxGainDb * (1.0f - 0.05f * vocalPriority)
         : kGeneralMaxGainDb;
+    const float bassControl = shapeToneControl(smoothedBass);
+    const float trebleControl = shapeToneControl(smoothedTreble);
+    const float bassExcursion = bassControl - 0.5f;
+    const float trebleExcursion = trebleControl - 0.5f;
     const float bassFreqHz = voiceMode
-        ? juce::jlimit(130.0f, 200.0f, kVocalBassFreqHz - 36.0f * vocalPriority)
-        : kGeneralBassFreqHz;
+        ? juce::jlimit(120.0f, 210.0f, kVocalBassFreqHz - 28.0f * vocalPriority - 24.0f * bassExcursion)
+        : juce::jlimit(72.0f, 125.0f, kGeneralBassFreqHz - 20.0f * bassExcursion);
     const float trebleFreqHz = voiceMode
-        ? juce::jlimit(5200.0f, 6600.0f, kVocalTrebleFreqHz + 700.0f * vocalPriority)
-        : kGeneralTrebleFreqHz;
+        ? juce::jlimit(5000.0f, 6900.0f, kVocalTrebleFreqHz + 760.0f * vocalPriority + 420.0f * trebleExcursion)
+        : juce::jlimit(8600.0f, 12000.0f, kGeneralTrebleFreqHz + 900.0f * trebleExcursion);
 
     // Map [0,1] → [-maxGainDb, +maxGainDb] with 0.5 = neutral
-    const float bassGainDb   = (smoothedBass   - 0.5f) * 2.0f * maxGainDb;
-    const float trebleGainDb = (smoothedTreble - 0.5f) * 2.0f * maxGainDb;
+    const float bassGainDb   = bassExcursion   * 2.0f * maxGainDb;
+    const float trebleGainDb = trebleExcursion * 2.0f * maxGainDb;
 
     const BiquadCoeffs bassC   = lowShelfCoeffs (currentSampleRateHz, bassGainDb,   bassFreqHz);
     const BiquadCoeffs trebleC = highShelfCoeffs(currentSampleRateHz, trebleGainDb, trebleFreqHz);

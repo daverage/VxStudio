@@ -120,6 +120,20 @@ private:
                                      float amount) noexcept;
     static float shapeConfidence(float confidence) noexcept;
     MixTargetFrame makeMixTargetFrame(float shortDb, float baselineDb, float level) const noexcept;
+    void processGeneralMode(juce::AudioBuffer<float>& buffer,
+                            const DetectorSnapshot& detector,
+                            float level,
+                            float control,
+                            bool neutral,
+                            float signalTrust,
+                            float monoPenalty,
+                            float compressionPenalty,
+                            float tiltPenalty) noexcept;
+    void updateActivity(float levelActivityAccum,
+                        float liftActivityAccum,
+                        float tameActivityAccum,
+                        int numSamples,
+                        bool neutral) noexcept;
 
     Params params {};
     Tuning tuning {};

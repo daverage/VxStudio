@@ -90,18 +90,26 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
     if (hiShelfConfigChanged) {
         if (newParams.hiShelfOn) {
             const bool voiceMode = newParams.contentMode == 0;
+            const bool bypassVoiceShelf = voiceMode;
+            if (bypassVoiceShelf) {
+                hiShelfCoeffs = {};
+            } else {
             const float fc = voiceMode ? 6200.0f : 7200.0f;
             const float q = 0.66f;
-            const float shelfProtect = juce::jlimit(0.38f, 1.0f,
-                1.0f - 0.62f * juce::jlimit(0.0f, 1.0f, newParams.voicePreserve)
+            const float shelfProtect = juce::jlimit(0.50f, 1.0f,
+                1.0f - 0.75f * juce::jlimit(0.0f, 1.0f, newParams.voicePreserve)
                     * juce::jlimit(0.0f, 1.0f, newParams.speechPresence));
             const float driftGuard = juce::jlimit(0.42f, 1.0f,
                 1.0f - 0.52f * juce::jlimit(0.0f, 1.0f, newParams.tonalDriftRisk)
                     - 0.14f * juce::jlimit(0.0f, 1.0f, newParams.articulationRisk));
-            const float gainDb = (-(voiceMode ? 1.25f : 1.0f)
-                - 3.0f * juce::jlimit(0.0f, 1.0f, newParams.deEss)
-                - 2.0f * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth)) * shelfProtect * driftGuard;
+            const float baseGainDb = voiceMode ? 0.25f : 0.90f;
+            const float deEssScale = voiceMode ? 0.80f : 2.4f;
+            const float troubleScale = voiceMode ? 0.50f : 1.6f;
+            const float gainDb = (-baseGainDb
+                - deEssScale * juce::jlimit(0.0f, 1.0f, newParams.deEss)
+                - troubleScale * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth)) * shelfProtect * driftGuard;
             hiShelfCoeffs = detail::makeHighShelf(sr, fc, q, gainDb);
+            }
         } else {
             hiShelfCoeffs = {};
         }
@@ -177,6 +185,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
     const float plosiveAmt = juce::jlimit(0.0f, 1.0f, params.plosive);
     const float compAmt = juce::jlimit(0.0f, 1.0f, params.compress);
     const float troubleAmt = juce::jlimit(0.0f, 1.0f, params.troubleSmooth);
+    const float troubleConfidence = juce::jlimit(0.0f, 1.0f, params.troubleConfidence);
     const float proxCtx = juce::jlimit(0.0f, 1.0f, params.proximityContext);
     const float speechPresence = juce::jlimit(0.0f, 1.0f, params.speechPresence);
     const float voicePreserve = juce::jlimit(0.0f, 1.0f, params.voicePreserve);
@@ -237,6 +246,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
         ? std::array<float, 6>{ 2.0f, 1.5f, 1.0f, 0.5f, 0.0f, 1.5f }
         : std::array<float, 6>{ 2.0f, 1.5f, 0.5f, 0.0f, 0.0f, 0.5f };
     constexpr float troubleRange = 6.0f;
+    const float troubleDrive = troubleAmt * juce::jlimit(0.22f, 1.0f, 0.22f + 0.78f * troubleConfidence);
     const float smoothCtx = juce::jlimit(0.90f, 1.35f,
         1.00f + 0.30f * params.artifactRisk - 0.03f * speechPresence);
     const float troubleProtect = juce::jlimit(0.72f, 1.0f,
@@ -245,6 +255,12 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
       * tonalProtect
       * globalCorrectionGuard
       * juce::jlimit(0.78f, 1.0f, 0.90f - 0.18f * selfMaskHigh - 0.10f * cumulativeRisk));
+    const float troubleRiskGate = juce::jlimit(0.40f, 1.0f,
+        1.0f - (voiceMode ? 0.42f : 0.26f) * articulationRisk
+              - 0.22f * tonalDriftRisk
+              - 0.18f * cumulativeRisk
+              - 0.12f * std::max(0.0f, deEssAmt - 0.55f * troubleConfidence)
+              - 0.08f * std::max(0.0f, breathAmt - 0.65f * troubleConfidence));
 
     const float a180 = cA180;
     const auto mudDetBpf = detail::makeBandpass(sr, 300.0f, 0.8f);
@@ -306,7 +322,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
     float troubleAcc = 0.0f;
     float compGain = 1.0f;
 
-    if (troubleAmt > 1.0e-6f) {
+    if (troubleDrive > 1.0e-6f) {
         std::array<float, 6> troubleCutDbAccum {};
         for (int i = 0; i < numSamples; ++i) {
             float monoLinear = 0.0f;
@@ -329,9 +345,9 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
                 const float ratioDb = 20.0f * std::log10(bandEnv / refEnv + 1.0e-12f);
                 const float excessDb = std::max(0.0f, ratioDb - troubleThresh[b]);
                 const float drive = juce::jlimit(0.0f, 1.0f, excessDb / troubleRange);
-                const float cutDb = -troubleMaxCut[b] * troubleAmt * drive * smoothCtx * troubleProtect;
+                const float cutDb = -troubleMaxCut[b] * troubleDrive * drive * smoothCtx * troubleProtect * troubleRiskGate;
                 troubleCutDbAccum[b] += cutDb;
-                bandCutSum += troubleMaxCut[b] * troubleAmt * drive * troubleProtect;
+                bandCutSum += troubleMaxCut[b] * troubleDrive * drive * troubleProtect * troubleRiskGate;
             }
             troubleAcc += bandCutSum / 6.0f;
         }
@@ -463,7 +479,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
             x = breathLp + breathBand * breathGain;
 
             x *= compGain;
-            if (troubleAmt > 1.0e-6f) {
+            if (troubleDrive > 1.0e-6f) {
                 for (size_t b = 0; b < troubleCoeffs.size(); ++b) {
                     x = detail::processBiquadDf2(x, troubleCoeffs[b],
                                                  troubleEqZ1[b][static_cast<size_t>(ch)],

@@ -7,6 +7,55 @@
 
 namespace vxsuite::finish {
 
+namespace {
+
+inline float clamp01(const float x) noexcept {
+    return juce::jlimit(0.0f, 1.0f, x);
+}
+
+inline float catmullRomSample(const float p0,
+                              const float p1,
+                              const float p2,
+                              const float p3,
+                              const float t) noexcept {
+    const float t2 = t * t;
+    const float t3 = t2 * t;
+    return 0.5f * ((2.0f * p1)
+                   + (-p0 + p2) * t
+                   + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2
+                   + (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+}
+
+float estimateTruePeak(const juce::AudioBuffer<float>& buffer, const int numChannels) noexcept {
+    const int samples = buffer.getNumSamples();
+    if (numChannels <= 0 || samples <= 0)
+        return 0.0f;
+
+    float peak = 0.0f;
+    constexpr std::array<float, 3> kProbePoints { 0.25f, 0.5f, 0.75f };
+
+    for (int ch = 0; ch < numChannels; ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i) {
+            const float p1 = data[i];
+            peak = std::max(peak, std::abs(p1));
+
+            if (i >= samples - 1)
+                continue;
+
+            const float p0 = data[i > 0 ? i - 1 : i];
+            const float p2 = data[i + 1];
+            const float p3 = data[i + 2 < samples ? i + 2 : i + 1];
+            for (const float t : kProbePoints)
+                peak = std::max(peak, std::abs(catmullRomSample(p0, p1, p2, p3, t)));
+        }
+    }
+
+    return peak;
+}
+
+} // namespace
+
 void Dsp::prepare(const double sampleRate, const int maxBlockSize, const int numChannels) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
     channels = std::max(0, numChannels);
@@ -38,10 +87,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     const int numChannels = std::min(channels, buffer.getNumChannels());
 
     double dryRmsSq = 0.0;
-    float dryPeak = 0.0f;
     if (numChannels > 0) {
         for (int ch = 0; ch < numChannels; ++ch) {
-            dryPeak = std::max(dryPeak, buffer.getMagnitude(ch, 0, numSamples));
             const auto* data = buffer.getReadPointer(ch);
             for (int i = 0; i < numSamples; ++i)
                 dryRmsSq += static_cast<double>(data[i]) * data[i];
@@ -49,6 +96,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     }
     const int dryCount = std::max(1, numChannels * numSamples);
     const float dryRms = static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(dryCount)));
+    const float dryTruePeak = estimateTruePeak(buffer, numChannels);
 
     const float autoMakeupMaxDb = voiceMode ? 18.0f : 16.0f;
     const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, voiceMode ? 0.40f : 0.43f);
@@ -72,25 +120,31 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     processLimiter(buffer);
 
     double wetRmsSq = 0.0;
-    float wetPeak = 0.0f;
     if (numChannels > 0) {
         for (int ch = 0; ch < numChannels; ++ch) {
-            wetPeak = std::max(wetPeak, buffer.getMagnitude(ch, 0, numSamples));
             const auto* data = buffer.getReadPointer(ch);
             for (int i = 0; i < numSamples; ++i)
                 wetRmsSq += static_cast<double>(data[i]) * data[i];
         }
     }
     const float wetRms = static_cast<float>(std::sqrt(wetRmsSq / static_cast<double>(dryCount)));
+    const float wetTruePeak = estimateTruePeak(buffer, numChannels);
     const float dryDb = juce::Decibels::gainToDecibels(std::max(dryRms, 1.0e-6f), -120.0f);
     const float wetDb = juce::Decibels::gainToDecibels(std::max(wetRms, 1.0e-6f), -120.0f);
     const float measuredLossDb = std::max(0.0f, dryDb - wetDb - (voiceMode ? 0.55f : 0.70f));
-    const float peakCeiling = juce::Decibels::decibelsToGain(voiceMode ? -0.8f : -0.9f);
-    const float headroomDb = juce::Decibels::gainToDecibels(std::max(peakCeiling / std::max(wetPeak, 1.0e-6f), 1.0e-6f), 0.0f);
+    const float dryCrestDb = juce::Decibels::gainToDecibels(std::max(dryTruePeak / std::max(dryRms, 1.0e-6f), 1.0e-6f), 0.0f);
+    const float wetCrestDb = juce::Decibels::gainToDecibels(std::max(wetTruePeak / std::max(wetRms, 1.0e-6f), 1.0e-6f), 0.0f);
+    const float crestPenalty = clamp01((wetCrestDb - (voiceMode ? 11.0f : 9.5f)) / 10.0f);
+    const float peakCeiling = juce::Decibels::decibelsToGain(voiceMode ? -1.2f : -1.1f);
+    const float headroomDb = juce::Decibels::gainToDecibels(std::max(peakCeiling / std::max(wetTruePeak, 1.0e-6f), 1.0e-6f), 0.0f);
     const float grRecoveryDb = std::max(0.0f, opto.getGainReductionDb() - (voiceMode ? 0.4f : 0.5f))
         * (voiceMode ? 0.82f : 0.72f);
     const float limiterRecoveryDb = limiterActivity * (voiceMode ? 3.4f : 3.0f);
-    const float desiredRecoveryDb = std::max(grRecoveryDb + limiterRecoveryDb, measuredLossDb * 0.65f);
+    const float measuredRecoveryWeight = (voiceMode ? 0.65f : 0.60f)
+        * (1.0f - 0.30f * crestPenalty)
+        * (1.0f - 0.12f * clamp01(std::max(0.0f, wetCrestDb - dryCrestDb) / 6.0f));
+    const float desiredRecoveryDb = std::max(grRecoveryDb + limiterRecoveryDb,
+                                             measuredLossDb * measuredRecoveryWeight);
     const float recoveryMaxDb = (voiceMode ? 7.0f : 6.0f) + (voiceMode ? 8.0f : 6.0f) * peakReduction;
     const float recoveryTargetDb = juce::jlimit(0.0f,
                                                 std::max(0.0f, headroomDb),

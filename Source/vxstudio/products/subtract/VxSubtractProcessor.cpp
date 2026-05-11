@@ -81,6 +81,20 @@ juce::String VXSubtractAudioProcessor::getStatusText() const {
                    : "General - learn a profile, then remove it more aggressively";
 }
 
+float VXSubtractAudioProcessor::getProfileTrust() const noexcept {
+    const bool leftReady = subtractDspLeft.hasLearnedProfile()
+        && subtractDspLeft.getLearnConfidence() >= kMinimumStereoProfileConfidence;
+    const bool rightReady = subtractDspRight.hasLearnedProfile()
+        && subtractDspRight.getLearnConfidence() >= kMinimumStereoProfileConfidence;
+    if (leftReady || rightReady) {
+        const float leftTrust = leftReady ? subtractDspLeft.getLearnedProfileTrust() : 0.0f;
+        const float rightTrust = rightReady ? subtractDspRight.getLearnedProfileTrust() : 0.0f;
+        const float count = static_cast<float>((leftReady ? 1 : 0) + (rightReady ? 1 : 0));
+        return count > 0.0f ? (leftTrust + rightTrust) / count : 1.0f;
+    }
+    return subtractDspMono.hasLearnedProfile() ? subtractDspMono.getLearnedProfileTrust() : 1.0f;
+}
+
 void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     {
@@ -216,8 +230,8 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                       : vxsuite::clamp01(0.30f * protectStrength);
     options.speechFocus = isVoice ? vxsuite::clamp01(0.78f + 0.22f * protectStrength + 0.12f * vocalPriority) : 0.12f;
     options.learningActive = learningActiveNow;
-    options.subtract = isVoice ? (5.00f * subtractStrength * (1.0f - 0.06f * vocalPriority))
-                               : (5.00f * subtractStrength);
+    options.subtract = isVoice ? (6.00f * subtractStrength * (1.0f - 0.06f * vocalPriority))
+                               : (6.00f * subtractStrength);
     options.sensitivity = isVoice ? ((0.78f + 0.42f * (1.0f - protectStrength)) * (1.0f - 0.08f * vocalPriority))
                                   : (1.10f + 0.55f * (1.0f - protectStrength));
     options.labRawMode = false;

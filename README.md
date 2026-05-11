@@ -4,6 +4,8 @@ Focused, realtime-safe audio processors for voice, vocal production, and fast st
 
 VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, compact control surfaces, and product-specific DSP. Each plugin is meant to do one job clearly instead of acting like a broad channel strip.
 
+The current suite pass is complete: the core products, shared finishing framework, and analyser have all been retuned and reverified together. The most recent work focused on making top-of-range controls less polite, tightening source-local analyser behavior, removing pop-prone adaptive retuning in `VXProximity`, and keeping the full regression harness green.
+
 The shared framework lives in `Source/vxstudio/framework/`. It handles parameter registration, the default editor shell, smoothing, status/help UI, listen-mode plumbing, and output safety so each product can stay focused on its DSP contract. See `Source/vxstudio/framework/README.md` for framework-level guidance.
 
 This README and the in-plugin Help popup are a shared documentation contract. When a plugin's UI, selector behavior, DSP contract, or recommended usage changes, update both together.
@@ -48,6 +50,25 @@ Framework and plugin DSP versions are tracked independently.
 | VXLeveler | `0.2.0` |
 | VXRebalance | `0.2.1` |
 | VXStudioAnalyser | `0.2.0` |
+
+---
+
+## Current status
+
+- `12` focused plugins are implemented and shipping in the shared VX Suite shell.
+- The latest suite-wide upgrade pass is complete across `Rebalance`, `Leveler`, `Finish` / `OptoComp`, `Cleanup`, `Denoiser`, `Deverb`, `Subtract`, `Proximity`, `Tone`, `DeepFilterNet`, and `VXStudioAnalyser`.
+- Strong-setting behavior has been retuned so extreme control travel is more decisive instead of being overly compensated back toward unity.
+- The analyser is now explicitly track-local and ignores bypassed/non-live upstream stages.
+- The full regression harness currently passes end-to-end.
+
+Latest verification:
+
+```text
+cmake --build build --target VXStudioPluginRegressionTests -j4
+./build/VXStudioPluginRegressionTests
+```
+
+On the latest clean run, `VXStudioPluginRegressionTests` completed with exit code `0`.
 
 ---
 
@@ -463,7 +484,7 @@ Prerequisites:
 
 ```bat
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release -- /m
+ç
 ```
 
 ### Install built plugins

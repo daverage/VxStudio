@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 #include <juce_core/juce_core.h>
@@ -1332,6 +1333,72 @@ bool StageRegistry::findStageByDomainAndStageId(const std::uint64_t domainId,
             return true;
     }
     return false;
+}
+
+std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candidates,
+                                                  const AnalysisSummary& analyserInput) noexcept {
+    auto summaryMatchDistance = [](const AnalysisSummary& candidate,
+                                   const AnalysisSummary& target) noexcept {
+        auto toDb = [](const float linear) noexcept {
+            return juce::Decibels::gainToDecibels(std::max(1.0e-6f, linear), -120.0f);
+        };
+
+        float spectrumDistance = 0.0f;
+        int weightedBands = 0;
+        for (int i = 0; i < kSummarySpectrumBins; ++i) {
+            const float candidateDb = toDb(candidate.spectrum[static_cast<std::size_t>(i)]);
+            const float targetDb = toDb(target.spectrum[static_cast<std::size_t>(i)]);
+            const float maxDb = std::max(candidateDb, targetDb);
+            if (maxDb <= -72.0f)
+                continue;
+            spectrumDistance += std::abs(candidateDb - targetDb);
+            ++weightedBands;
+        }
+
+        if (weightedBands > 0)
+            spectrumDistance /= static_cast<float>(weightedBands);
+        else
+            spectrumDistance = 12.0f;
+
+        const float rmsDistance = std::abs(toDb(candidate.rms) - toDb(target.rms));
+        const float peakDistance = std::abs(toDb(candidate.peak) - toDb(target.peak));
+        const float stereoDistance = 2.0f * std::abs(candidate.stereoWidth - target.stereoWidth)
+            + std::abs(candidate.correlation - target.correlation);
+        return 0.58f * spectrumDistance + 0.24f * rmsDistance + 0.08f * peakDistance + 0.10f * stereoDistance;
+    };
+
+    constexpr float kMaxChainMatchDistance = 2.40f;
+
+    std::vector<StageView> selected;
+    selected.reserve(candidates.size());
+
+    auto targetSummary = analyserInput;
+    while (!candidates.empty()) {
+        int bestIndex = -1;
+        float bestDistance = std::numeric_limits<float>::max();
+
+        for (int i = 0; i < static_cast<int>(candidates.size()); ++i) {
+            const auto& stage = candidates[static_cast<std::size_t>(i)];
+            if (!stage.telemetry.state.isLive || stage.telemetry.state.isBypassed)
+                continue;
+            const float distance = summaryMatchDistance(stage.telemetry.outputSummary, targetSummary);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+
+        if (bestIndex < 0 || bestDistance > kMaxChainMatchDistance)
+            break;
+
+        auto chosen = std::move(candidates[static_cast<std::size_t>(bestIndex)]);
+        targetSummary = chosen.telemetry.inputSummary;
+        selected.push_back(std::move(chosen));
+        candidates.erase(candidates.begin() + bestIndex);
+    }
+
+    std::reverse(selected.begin(), selected.end());
+    return selected;
 }
 
 StagePublisher::StagePublisher(const ProductIdentity& identity)

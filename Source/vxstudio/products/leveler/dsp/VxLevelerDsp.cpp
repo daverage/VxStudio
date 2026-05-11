@@ -130,7 +130,20 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                   * (1.0f - 0.18f * compressionPenalty));
     const float mixTiltPenalty = voiceMode ? 0.0f : tiltPenalty;
 
-    const auto desiredState = (!voiceMode || neutral) ? MixState::neutral : detectState(detector);
+    if (!voiceMode) {
+        processGeneralMode(buffer,
+                           detector,
+                           level,
+                           control,
+                           neutral,
+                           signalTrust,
+                           monoPenalty,
+                           compressionPenalty,
+                           tiltPenalty);
+        return;
+    }
+
+    const auto desiredState = neutral ? MixState::neutral : detectState(detector);
     if (desiredState != targetState) {
         activeState = targetState;
         targetState = desiredState;
@@ -647,6 +660,271 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
             offlineProcessedSamples += numSamples;
     } else {
         offlineActive = false;
+    }
+}
+
+void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
+                             const DetectorSnapshot& detector,
+                             const float level,
+                             const float control,
+                             const bool neutral,
+                             const float signalTrust,
+                             const float monoPenalty,
+                             const float compressionPenalty,
+                             const float tiltPenalty) noexcept {
+    static_cast<void>(detector);
+    static_cast<void>(monoPenalty);
+
+    const int numChannels = std::min<int>({ buffer.getNumChannels(), static_cast<int>(channels.size()), 2 });
+    const int numSamples = buffer.getNumSamples();
+    if (numChannels <= 0 || numSamples <= 0)
+        return;
+
+    const float mixDecisionTrust = clamp01(signalTrust
+                                           * (1.0f - 0.22f * clamp01(params.monoScore))
+                                           * (1.0f - 0.18f * compressionPenalty));
+    const float generalMomentaryCoeff = timeCoeff(sr, 0.40f);
+    const float generalShortCoeff = timeCoeff(sr, 3.0f);
+    const float generalBaselineRiseCoeff = timeCoeff(sr, 4.2f);
+    const float generalBaselineFallCoeff = timeCoeff(sr, 8.0f);
+    const float tameAttack = timeCoeff(sr, 0.004f);
+    const float tameRelease = timeCoeff(sr, 0.180f);
+    const float generalSpikeRelease = timeCoeff(sr, 0.085f);
+    const float generalNormalizeAttack = timeCoeff(sr, 1.2f);
+    const float generalNormalizeRelease = timeCoeff(sr, 3.0f);
+    const float programLoudnessCoeff = timeCoeff(sr, 12.0f);
+    const float programRestoreAttack = timeCoeff(sr, 2.2f);
+    const float programRestoreRelease = timeCoeff(sr, 5.5f);
+    const bool mixOfflineMode = params.analysisMode == MixAnalysisMode::offline && offlineAnalysis.isValid();
+    const int offlineBlockIndex = mixOfflineMode
+        ? std::clamp(static_cast<int>(offlineProcessedSamples / std::max(1, offlineAnalysis.blockSize)),
+                     0,
+                     std::max(0, static_cast<int>(offlineAnalysis.targetCurveDb.size()) - 1))
+        : 0;
+    const float offlineTargetDb = mixOfflineMode
+        ? offlineAnalysis.targetCurveDb[static_cast<size_t>(offlineBlockIndex)]
+        : 0.0f;
+
+    float levelActivityAccum = 0.0f;
+    float tameActivityAccum = 0.0f;
+
+    for (int i = 0; i < numSamples; ++i) {
+        std::array<float, 2> delayedSample { 0.0f, 0.0f };
+        float monoAbs = 0.0f;
+        float peakAbs = 0.0f;
+        float lowAbs = 0.0f;
+        float lowMidAbs = 0.0f;
+        float presenceAbs = 0.0f;
+        float highAbs = 0.0f;
+
+        for (int ch = 0; ch < numChannels; ++ch) {
+            const float x = buffer.getSample(ch, i);
+            const float absX = std::abs(x);
+            monoAbs += absX;
+            peakAbs = std::max(peakAbs, absX);
+
+            const int delayIndex = ch * delaySamples + delayWriteIndex;
+            const float delayed = delayLine[static_cast<size_t>(delayIndex)];
+            delayLine[static_cast<size_t>(delayIndex)] = x;
+            delayedSample[static_cast<size_t>(ch)] = delayed;
+
+            auto& state = channels[static_cast<size_t>(ch)];
+            state.lp150 = coeff150 * state.lp150 + (1.0f - coeff150) * delayed;
+            state.lp2000 = coeff2000 * state.lp2000 + (1.0f - coeff2000) * delayed;
+            state.lp4000 = coeff4000 * state.lp4000 + (1.0f - coeff4000) * delayed;
+
+            const float lowBand = state.lp150;
+            const float lowMidBand = state.lp2000 - state.lp150;
+            const float presenceBand = state.lp4000 - state.lp2000;
+            const float highBand = delayed - state.lp4000;
+
+            lowAbs += std::abs(lowBand);
+            lowMidAbs += std::abs(lowMidBand);
+            presenceAbs += std::abs(presenceBand);
+            highAbs += std::abs(highBand);
+        }
+        delayWriteIndex = (delayWriteIndex + 1) % delaySamples;
+
+        monoAbs /= static_cast<float>(numChannels);
+        lowAbs /= static_cast<float>(numChannels);
+        lowMidAbs /= static_cast<float>(numChannels);
+        presenceAbs /= static_cast<float>(numChannels);
+        highAbs /= static_cast<float>(numChannels);
+
+        const float weightedLevel = 0.06f * lowAbs
+            + 0.82f * monoAbs
+            + 0.12f * lowMidAbs
+            + 0.42f * presenceAbs
+            + 0.18f * highAbs;
+        const float weightedLevelDb = gainToDbFloor(weightedLevel);
+        const bool startupActivity = weightedLevelDb > -65.0f || peakAbs > 0.015f;
+        if (!generalPrimed && !startupActivity) {
+            generalSpikeGain = 1.0f;
+            for (int ch = 0; ch < numChannels; ++ch)
+                buffer.setSample(ch, i, delayedSample[static_cast<size_t>(ch)]);
+            continue;
+        }
+
+        if (!generalPrimed) {
+            generalMomentary = weightedLevel;
+            generalShort = weightedLevel;
+            generalBaseline = weightedLevel;
+            generalWetShort = weightedLevel;
+            generalWetBaseline = weightedLevel;
+            generalPrimed = true;
+            generalPrimeCooldownSamples = std::max(1, juce::roundToInt(static_cast<float>(sr) * 1.25f));
+        } else {
+            generalMomentary = generalMomentaryCoeff * generalMomentary + (1.0f - generalMomentaryCoeff) * weightedLevel;
+            generalShort = generalShortCoeff * generalShort + (1.0f - generalShortCoeff) * weightedLevel;
+            const float baselineCoeff = generalShort > generalBaseline ? generalBaselineRiseCoeff : generalBaselineFallCoeff;
+            generalBaseline = baselineCoeff * generalBaseline + (1.0f - baselineCoeff) * generalShort;
+        }
+
+        const float primeRelax = params.analysisMode == MixAnalysisMode::smartRealtime && generalPrimeCooldownSamples > 0
+            ? clamp01(static_cast<float>(generalPrimeCooldownSamples) / std::max(1.0f, static_cast<float>(sr) * 1.25f))
+            : 0.0f;
+        if (generalPrimeCooldownSamples > 0)
+            --generalPrimeCooldownSamples;
+
+        generalHighEnv = (highAbs > generalHighEnv ? tameAttack : tameRelease) * generalHighEnv
+            + (1.0f - (highAbs > generalHighEnv ? tameAttack : tameRelease)) * highAbs;
+
+        const float momentaryDb = gainToDbFloor(generalMomentary);
+        const float shortDb = gainToDbFloor(generalShort);
+        const float baselineDb = gainToDbFloor(generalBaseline);
+        const auto targetFrame = mixOfflineMode
+            ? MixTargetFrame { baselineDb, offlineTargetDb, offlineTargetDb, 1.0f }
+            : makeMixTargetFrame(shortDb, baselineDb, level);
+        const float errorDb = shortDb - targetFrame.finalTargetDb;
+        const float targetConfidence = clamp01(targetFrame.confidence * mixDecisionTrust);
+        const float deadbandDb = (tuning.mixDeadbandBase - tuning.mixDeadbandLevelWeight * level)
+            + (1.0f - targetConfidence) * 0.85f;
+        const float rampWidthDb = 2.00f - 0.45f * level;
+        const float hotMixGuard = clamp01((peakAbs - 0.52f) / 0.24f)
+            * (0.45f + 0.55f * compressionPenalty)
+            * (0.35f + 0.65f * control);
+
+        float rideTargetDb = 0.0f;
+        if (!neutral && std::abs(errorDb) > deadbandDb) {
+            const float excessDb = std::abs(errorDb) - deadbandDb;
+            const float ramp = clamp01(excessDb / std::max(0.5f, rampWidthDb));
+            const float shapedRamp = ramp * ramp * (3.0f - 2.0f * ramp);
+            const float downLimitDb = juce::jmap(primeRelax,
+                                                 (3.0f + 4.6f * level) * (0.90f + 0.14f * control),
+                                                 1.6f + 2.0f * level) * (1.0f + 0.22f * hotMixGuard);
+            const float upLimitDb = (1.4f + 3.2f * level) * (0.94f + 0.10f * control)
+                * (1.0f - 0.92f * hotMixGuard);
+            rideTargetDb = errorDb > 0.0f ? -downLimitDb * shapedRamp : upLimitDb * shapedRamp;
+            rideTargetDb *= targetConfidence;
+        }
+
+        const float downRate = (1.4f + 5.2f * level) / static_cast<float>(sr);
+        const float upRate = (0.28f + 1.40f * level) / static_cast<float>(sr);
+        generalRideGainDb = stepToward(generalRideGainDb,
+                                       rideTargetDb,
+                                       rideTargetDb < generalRideGainDb ? downRate : upRate);
+
+        const float rideGain = juce::Decibels::decibelsToGain(generalRideGainDb);
+        const float overshootDb = momentaryDb - shortDb;
+        const float overshootThresholdDb = ((1.35f - 0.55f * control)
+                                            + primeRelax * (0.90f - 0.20f * control))
+            * juce::jmap(compressionPenalty, 1.0f, 0.82f);
+        float spikeTarget = 1.0f;
+        if (!neutral && overshootDb > overshootThresholdDb) {
+            const float overshootExcess = overshootDb - overshootThresholdDb;
+            const float spikeDb = std::min(5.8f + 5.0f * control, overshootExcess * (0.92f + 0.55f * control));
+            spikeTarget = juce::Decibels::decibelsToGain(-spikeDb * (0.70f + 0.30f * mixDecisionTrust));
+        }
+
+        const float predictedPeak = peakAbs * rideGain * spikeTarget;
+        const float peakCeiling = juce::jmap(control, 0.0f, 1.0f, 0.992f, 0.94f);
+        if (!neutral && predictedPeak > peakCeiling && predictedPeak > 1.0e-5f)
+            spikeTarget = std::min(spikeTarget, peakCeiling / predictedPeak);
+
+        if (spikeTarget < generalSpikeGain)
+            generalSpikeGain = spikeTarget;
+        else
+            generalSpikeGain = generalSpikeRelease * generalSpikeGain + (1.0f - generalSpikeRelease) * spikeTarget;
+
+        const float wetWeightedLevel = weightedLevel * rideGain * generalSpikeGain;
+        generalWetShort = generalShortCoeff * generalWetShort + (1.0f - generalShortCoeff) * wetWeightedLevel;
+        const float wetBaselineCoeff = generalWetShort > generalWetBaseline ? generalBaselineRiseCoeff : generalBaselineFallCoeff;
+        generalWetBaseline = wetBaselineCoeff * generalWetBaseline + (1.0f - wetBaselineCoeff) * generalWetShort;
+
+        const float dryShortDb = gainToDbFloor(generalShort);
+        const float wetShortDb = gainToDbFloor(generalWetShort);
+        const float dryBaselineDb = gainToDbFloor(generalBaseline);
+        const float wetBaselineDb = gainToDbFloor(generalWetBaseline);
+        const float shortLostDb = dryShortDb - wetShortDb;
+        const float baselineLostDb = dryBaselineDb - wetBaselineDb;
+        const float normalizeShortThreshold = tuning.mixNormalizeShortThresholdBase
+            + tuning.mixNormalizeShortThresholdLevelWeight * level
+            + tuning.mixNormalizeSpikePenalty * clamp01((1.0f - generalSpikeGain) / 0.25f);
+        const float normalizeBaselineThreshold = tuning.mixNormalizeBaselineThresholdBase
+            + tuning.mixNormalizeBaselineThresholdLevelWeight * level;
+        const float shortRecoverDb = std::max(0.0f, shortLostDb - normalizeShortThreshold)
+            * (tuning.mixNormalizeShortScaleBase + tuning.mixNormalizeShortScaleLevelWeight * level);
+        const float baselineRecoverDb = std::max(0.0f, baselineLostDb - normalizeBaselineThreshold)
+            * (tuning.mixNormalizeBaselineScaleBase + tuning.mixNormalizeBaselineScaleLevelWeight * level);
+        const float restoreLimitDb = neutral ? 0.0f : 0.65f + 3.4f * level;
+        const float restoreTargetDb = juce::jlimit(0.0f,
+                                                   restoreLimitDb,
+                                                   std::max(shortRecoverDb, baselineRecoverDb));
+
+        const float restoreCoeff = restoreTargetDb > programRestoreGainDb ? programRestoreAttack : programRestoreRelease;
+        programRestoreGainDb = restoreCoeff * programRestoreGainDb
+            + (1.0f - restoreCoeff) * restoreTargetDb;
+
+        programDry = programLoudnessCoeff * programDry + (1.0f - programLoudnessCoeff) * weightedLevel;
+        const float normalizedWetLevel = wetWeightedLevel * juce::Decibels::decibelsToGain(programRestoreGainDb);
+        programWet = programLoudnessCoeff * programWet + (1.0f - programLoudnessCoeff) * normalizedWetLevel;
+
+        float normalizeTargetDb = programRestoreGainDb;
+        if (programWet > 1.0e-6f && programDry > 1.0e-6f) {
+            const float programErrorDb = gainToDbFloor(programDry) - gainToDbFloor(programWet);
+            const float normalizeErrorDb = clampf(programErrorDb, -2.0f, tuning.mixNormalizeMaxDb);
+            normalizeTargetDb = std::max(normalizeTargetDb, normalizeErrorDb);
+        }
+        normalizeTargetDb = juce::jlimit(0.0f, tuning.mixNormalizeMaxDb, normalizeTargetDb);
+
+        const float normalizeCoeff = normalizeTargetDb > generalNormalizeGainDb ? generalNormalizeAttack : generalNormalizeRelease;
+        generalNormalizeGainDb = normalizeCoeff * generalNormalizeGainDb
+            + (1.0f - normalizeCoeff) * normalizeTargetDb;
+
+        const float localFinalGain =
+            juce::Decibels::decibelsToGain(generalNormalizeGainDb) * rideGain * generalSpikeGain;
+        for (int ch = 0; ch < numChannels; ++ch)
+            buffer.setSample(ch, i, delayedSample[static_cast<size_t>(ch)] * localFinalGain);
+
+        levelActivityAccum += (std::abs(generalRideGainDb)
+                               + 0.45f * std::abs(generalNormalizeGainDb)
+                               + 0.30f * std::abs(programRestoreGainDb)) / 9.0f;
+        tameActivityAccum += std::abs(1.0f - generalSpikeGain);
+    }
+
+    updateActivity(levelActivityAccum, 0.0f, tameActivityAccum, numSamples, neutral);
+    globalTracker.update(gainToDbFloor(generalShort),
+                         gainToDbFloor(generalMomentary),
+                         gainToDbFloor(generalShort) > -72.0f,
+                         numSamples);
+    offlineActive = mixOfflineMode;
+    if (mixOfflineMode && offlineAnalysis.isValid())
+        offlineProcessedSamples += numSamples;
+}
+
+void Dsp::updateActivity(const float levelActivityAccum,
+                         const float liftActivityAccum,
+                         const float tameActivityAccum,
+                         const int numSamples,
+                         const bool neutral) noexcept {
+    const float invSamples = 1.0f / static_cast<float>(std::max(1, numSamples));
+    levelActivity = clamp01(levelActivityAccum * invSamples * 1.8f);
+    liftActivity = clamp01(liftActivityAccum * invSamples * 1.2f);
+    tameActivity = clamp01(tameActivityAccum * invSamples * 1.5f);
+    if (neutral) {
+        levelActivity = 0.0f;
+        liftActivity = 0.0f;
+        tameActivity = 0.0f;
     }
 }
 

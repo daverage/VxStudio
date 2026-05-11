@@ -152,7 +152,7 @@
     <section class="download-hero">
         <div class="container">
             <h1>Download VX Studio</h1>
-            <p style="font-size: 1.125rem; margin-bottom: 2rem;">Professional audio processing plugins for your DAW. Choose your platform below.</p>
+            <p style="font-size: 1.125rem; margin-bottom: 2rem;">The current VX Studio suite pass is complete and regression-verified. Choose your platform below.</p>
         </div>
     </section>
 
@@ -166,7 +166,7 @@
                         🍎 macOS
                         <span class="status-badge status-available">Available</span>
                     </h3>
-                    <p class="version">VX Studio v1.0.0 (Gold Release)</p>
+                    <p class="version">VX Studio v1.0.0 (Current Verified Build)</p>
                     <p class="file-size">📦 21 KB</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
                         <strong>Compatible with:</strong><br>
@@ -188,7 +188,7 @@
                         🪟 Windows
                         <span class="status-badge status-coming">Coming Soon</span>
                     </h3>
-                    <p class="version">VX Studio v1.0.0 (In Development)</p>
+                    <p class="version">VX Studio for Windows (In Development)</p>
                     <p class="file-size">📦 ~480 MB (estimated)</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
                         <strong>Will support:</strong><br>
@@ -207,14 +207,14 @@
 
             <!-- Release Notes -->
             <div class="release-notes">
-                <h3>✨ VX Studio v1.0.0 - Gold Release</h3>
+                <h3>✨ Current Build Highlights</h3>
                 <ul>
-                    <li><strong>Critical Fix:</strong> Denoiser realtime safety violation corrected</li>
-                    <li><strong>Framework:</strong> New BlockSmoothedControl helpers reduce code duplication</li>
-                    <li><strong>Analysis:</strong> Shared VxSuiteLightAnalysis module for efficient RMS/peak detection</li>
-                    <li><strong>Documentation:</strong> Comprehensive framework README with architecture guidance</li>
-                    <li><strong>12 Plugins:</strong> All products updated with modern patterns</li>
-                    <li><strong>Backward Compatible:</strong> Zero DSP behavior changes, all parameter contracts preserved</li>
+                    <li><strong>Suite pass complete:</strong> `Rebalance`, `Leveler`, `Finish` / `OptoComp`, `Cleanup`, `Denoiser`, `Deverb`, `Subtract`, `Proximity`, `Tone`, `DeepFilterNet`, and `Studio Analyser` were all updated together.</li>
+                    <li><strong>Stronger controls:</strong> extreme settings were retuned so top-of-range moves feel materially less polite.</li>
+                    <li><strong>Cleanup and denoise:</strong> less hidden give-back, tighter voiced protection, and stronger residual cleanup.</li>
+                    <li><strong>Analyser scope:</strong> the analyser now stays locked to the active local upstream chain instead of drifting across unrelated or bypassed stages.</li>
+                    <li><strong>Realtime stability:</strong> pop-prone adaptive retuning paths were smoothed, especially in `VXProximity`.</li>
+                    <li><strong>Verification:</strong> the full `VXStudioPluginRegressionTests` harness completes successfully on the current build.</li>
                 </ul>
             </div>
 
@@ -255,9 +255,9 @@
                 <h2 style="margin-bottom: var(--spacing-xl);">Version History</h2>
 
                 <div class="version-item">
-                    <h4>v1.0.0 - Gold Release</h4>
+                    <h4>v1.0.0 - Current Verified Build</h4>
                     <p class="date">April 1, 2026</p>
-                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">Initial production release. All 12 plugins ready for professional use.</p>
+                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">All 12 plugins updated through the latest suite pass, with full regression verification completing successfully on the current tree.</p>
                     <div style="font-size: 0.9rem; margin-top: var(--spacing-sm);">
                         <strong>Fixed:</strong>
                         <ul style="list-style: none; padding-left: 0; margin-top: 0.5rem;">

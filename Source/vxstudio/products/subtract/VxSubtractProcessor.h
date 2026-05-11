@@ -22,6 +22,7 @@ public:
     float getLearnObservedSeconds() const noexcept override { return learnObservedSeconds.load(std::memory_order_relaxed); }
     bool isLearnActive() const noexcept override { return learnActive.load(std::memory_order_relaxed); }
     bool isLearnReady() const noexcept override { return learnReady.load(std::memory_order_relaxed); }
+    float getProfileTrust() const noexcept;
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VX Studio - Professional realtime audio processing plugins for macOS and Windows. Studio-grade VST3 effects for voice, music, and content creation.">
+    <meta name="description" content="VX Studio - 12 focused realtime audio plugins for voice, mix cleanup, tonal shaping, levelling, and chain-aware analysis.">
     <meta name="keywords" content="VST3, audio plugin, voice processing, denoiser, reverb, EQ, professional audio">
     <meta name="author" content="VX Studio">
 
@@ -32,8 +32,8 @@
             <ul class="nav-menu">
                 <li><a href="#products">Products</a></li>
                 <li><a href="#download">Download</a></li>
-                <li><a href="docs/">Documentation</a></li>
-                <li><a href="support/">Support</a></li>
+                <li><a href="#documentation">Documentation</a></li>
+                <li><a href="#documentation">Support</a></li>
             </ul>
         </div>
     </nav>
@@ -41,16 +41,37 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="hero-content">
-            <h1>Professional Audio Processing, Refined</h1>
-            <p>Studio-grade VST3 plugins for voice, music, and realtime processing. Built for precision. Designed for speed.</p>
+            <p class="hero-kicker">Realtime-safe audio tools for decisive cleanup and finish work</p>
+            <h1>12 Focused Plugins. One Shared Studio Workflow.</h1>
+            <p>Realtime-safe VST3 tools for noise removal, cleanup, levelling, proximity shaping, finishing, rebalance, and chain-aware analysis. Tuned to feel decisive at the top of the dial.</p>
             <div class="hero-buttons">
                 <a href="#download" class="btn btn-primary">Download Now</a>
                 <a href="#products" class="btn btn-secondary">Explore Products</a>
             </div>
-            <p class="hero-meta">macOS 11+ and Windows 10+ | VST3 Format</p>
+            <p class="hero-meta">macOS 11+ available now | Windows build in progress | VST3 format</p>
+            <div class="hero-stats">
+                <div class="hero-stat">
+                    <strong>12</strong>
+                    <span>focused plugins</span>
+                </div>
+                <div class="hero-stat">
+                    <strong>0</strong>
+                    <span>audio-thread allocations</span>
+                </div>
+                <div class="hero-stat">
+                    <strong>1</strong>
+                    <span>shared workflow</span>
+                </div>
+            </div>
         </div>
         <div class="hero-graphic">
-            <div class="hero-waveform"></div>
+            <div class="hero-waveform">
+                <div class="waveform-panel waveform-panel-a"></div>
+                <div class="waveform-panel waveform-panel-b"></div>
+                <div class="waveform-line waveform-line-a"></div>
+                <div class="waveform-line waveform-line-b"></div>
+                <div class="waveform-chip">Noise → Cleanup → Finish</div>
+            </div>
         </div>
     </section>
 
@@ -59,7 +80,7 @@
         <div class="container">
             <div class="section-header">
                 <h2>The Suite</h2>
-                <p>12 specialized tools for modern audio production</p>
+                <p>12 specialized tools for modern voice and mix processing</p>
             </div>
 
             <div class="products-grid">
@@ -67,10 +88,10 @@
                 <div class="product-card" data-color="purple">
                     <div class="product-icon" style="background: linear-gradient(135deg, #8B47D9 0%, #5D2F8C 100%);">♪</div>
                     <h3>Tone</h3>
-                    <p>Bass and treble shelf EQ with vocal and general modes for tonal shaping.</p>
+                    <p>Perceptual bass and treble shaping with stronger edge behavior and cleaner center neutrality.</p>
                     <div class="card-actions">
                         <a href="downloads/vxtone-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/tone.html" class="learn-more">Learn More →</a>
+                        <a href="#product-tone" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -78,10 +99,10 @@
                 <div class="product-card" data-color="green">
                     <div class="product-icon" style="background: linear-gradient(135deg, #30D482 0%, #0E8E38 100%);">✓</div>
                     <h3>Cleanup</h3>
-                    <p>Spectral trouble removal for voices. Eliminate mud, breaths, and harshness intelligently.</p>
+                    <p>Confidence-aware corrective cleanup for mud, harshness, breaths, and plosive trouble without a giant channel strip UI.</p>
                     <div class="card-actions">
                         <a href="downloads/vxcleanup-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/cleanup.html" class="learn-more">Learn More →</a>
+                        <a href="#product-cleanup" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -89,10 +110,10 @@
                 <div class="product-card" data-color="emerald">
                     <div class="product-icon" style="background: linear-gradient(135deg, #15D950 0%, #0A6B24 100%);">◯</div>
                     <h3>Denoiser</h3>
-                    <p>Spectral noise reduction with harmonic guard. Studio-clean results in realtime.</p>
+                    <p>Broadband denoise with stronger real cleanup at high settings and less hidden give-back.</p>
                     <div class="card-actions">
                         <a href="downloads/vxdenoiser-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/denoiser.html" class="learn-more">Learn More →</a>
+                        <a href="#product-denoiser" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -100,10 +121,10 @@
                 <div class="product-card" data-color="blue">
                     <div class="product-icon" style="background: linear-gradient(135deg, #0066FF 0%, #0033AA 100%);">⟲</div>
                     <h3>Deverb</h3>
-                    <p>Spatial reverb reduction with blend control. Keep the vocal, remove the room.</p>
+                    <p>Room-tail reduction with improved early/late discrimination so strong settings act on real tail evidence.</p>
                     <div class="card-actions">
                         <a href="downloads/vxdeverb-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/deverb.html" class="learn-more">Learn More →</a>
+                        <a href="#product-deverb" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -111,10 +132,10 @@
                 <div class="product-card" data-color="gold">
                     <div class="product-icon" style="background: linear-gradient(135deg, #FFB700 0%, #CC8800 100%);">✨</div>
                     <h3>Finish</h3>
-                    <p>Final EQ and warmth for polish. Add body, presence, and cohesion to any mix.</p>
+                    <p>Shared finishing engine for polish, cohesion, and safer true-peak-aware recovery lift.</p>
                     <div class="card-actions">
                         <a href="downloads/vxfinish-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/finish.html" class="learn-more">Learn More →</a>
+                        <a href="#product-finish" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -122,10 +143,10 @@
                 <div class="product-card" data-color="orange">
                     <div class="product-icon" style="background: linear-gradient(135deg, #FF6B00 0%, #CC4400 100%);">◐</div>
                     <h3>OptoComp</h3>
-                    <p>Smooth optical compressor. Vintage character with modern control.</p>
+                    <p>Smooth opto-style levelling with wider output authority and the same shared true-peak-aware finish core.</p>
                     <div class="card-actions">
                         <a href="downloads/vxoptocomp-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/optocomp.html" class="learn-more">Learn More →</a>
+                        <a href="#product-optocomp" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -133,10 +154,10 @@
                 <div class="product-card" data-color="cyan">
                     <div class="product-icon" style="background: linear-gradient(135deg, #00BCD4 0%, #008FA3 100%);">⊡</div>
                     <h3>Proximity</h3>
-                    <p>Proximity effect control. Adjust mic distance character without moving the mic.</p>
+                    <p>Source-aware close-mic modeling with smoother adaptive retuning and steadier loudness across different inputs.</p>
                     <div class="card-actions">
                         <a href="downloads/vxproximity-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/proximity.html" class="learn-more">Learn More →</a>
+                        <a href="#product-proximity" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -144,10 +165,10 @@
                 <div class="product-card" data-color="red">
                     <div class="product-icon" style="background: linear-gradient(135deg, #E53E3E 0(), #993333 100%);">−</div>
                     <h3>Subtract</h3>
-                    <p>Sidechain-style subtraction. Remove specific content with precision.</p>
+                    <p>Learned-profile subtraction with smarter trust for stale or mismatched captures.</p>
                     <div class="card-actions">
                         <a href="downloads/vxsubtract-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/subtract.html" class="learn-more">Learn More →</a>
+                        <a href="#product-subtract" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -155,10 +176,10 @@
                 <div class="product-card" data-color="violet">
                     <div class="product-icon" style="background: linear-gradient(135deg, #A855F7 0%, #7C3AED 100%);">≈</div>
                     <h3>Leveler</h3>
-                    <p>Dynamic level control. Smooth, transparent riding without pumping.</p>
+                    <p>Split vocal-rider and mix-leveler behavior with clearer perceptual loudness targeting.</p>
                     <div class="card-actions">
                         <a href="downloads/vxleveler-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/leveler.html" class="learn-more">Learn More →</a>
+                        <a href="#product-leveler" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -166,10 +187,10 @@
                 <div class="product-card" data-color="teal">
                     <div class="product-icon" style="background: linear-gradient(135deg, #14B8A6 0%, #0D9488 100%);">◆</div>
                     <h3>DeepFilterNet</h3>
-                    <p>ML-backed noise reduction. State-of-the-art deep learning models.</p>
+                    <p>ML-backed denoise with stronger runtime orchestration and artifact-aware Guard behavior.</p>
                     <div class="card-actions">
                         <a href="downloads/vxdeepfilternet-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/deepfilternet.html" class="learn-more">Learn More →</a>
+                        <a href="#product-deepfilternet" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
@@ -177,23 +198,83 @@
                 <div class="product-card" data-color="pink">
                     <div class="product-icon" style="background: linear-gradient(135deg, #EC4899 0(), #BE185D 100%);">⚙</div>
                     <h3>Rebalance</h3>
-                    <p>ML-backed source separation. Isolate and adjust individual mix elements.</p>
+                    <p>Confidence-driven source-family rebalance with stronger extreme moves and cleaner ownership/render separation.</p>
                     <div class="card-actions">
                         <a href="downloads/vxrebalance-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/rebalance.html" class="learn-more">Learn More →</a>
+                        <a href="#product-rebalance" class="learn-more">Learn More →</a>
                     </div>
                 </div>
 
-                <!-- Polish -->
+                <!-- Studio Analyser -->
                 <div class="product-card" data-color="indigo">
                     <div class="product-icon" style="background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);">◈</div>
-                    <h3>Polish</h3>
-                    <p>Comprehensive tonal shaping. EQ, warmth, and character in one plugin.</p>
+                    <h3>Studio Analyser</h3>
+                    <p>Track-local chain analysis that follows only the active upstream path feeding the plugin instance you are inspecting.</p>
                     <div class="card-actions">
                         <a href="downloads/vxstudioanalyser-1.0.0-macos.zip" download class="btn btn-sm btn-primary">Download</a>
-                        <a href="products/polish.html" class="learn-more">Learn More →</a>
+                        <a href="#product-analyser" class="learn-more">Learn More →</a>
                     </div>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="product-details" class="product-details-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>What Each Plugin Does</h2>
+                <p>Quick reference notes for the full suite</p>
+            </div>
+
+            <div class="detail-grid">
+                <article id="product-tone" class="detail-card">
+                    <h3>Tone</h3>
+                    <p>Perceptual bass and treble shaping for broad tonal balance moves, with a neutral center and stronger edge behavior.</p>
+                </article>
+                <article id="product-cleanup" class="detail-card">
+                    <h3>Cleanup</h3>
+                    <p>Corrective cleanup for mud, harshness, breaths, plosives, and sibilance using confidence-aware shared analysis.</p>
+                </article>
+                <article id="product-denoiser" class="detail-card">
+                    <h3>Denoiser</h3>
+                    <p>Broadband denoise for hiss, fan noise, and steady background beds, with less hidden restoration at strong settings.</p>
+                </article>
+                <article id="product-deverb" class="detail-card">
+                    <h3>Deverb</h3>
+                    <p>Room-tail reduction tuned to act on late ambience more intentionally instead of flattening the whole source.</p>
+                </article>
+                <article id="product-finish" class="detail-card">
+                    <h3>Finish</h3>
+                    <p>Final polish, recovery lift, and safer shared finishing with true-peak-aware behavior.</p>
+                </article>
+                <article id="product-optocomp" class="detail-card">
+                    <h3>OptoComp</h3>
+                    <p>Smooth opto-style levelling built on the shared finishing core, with wider output authority than the earlier polite build.</p>
+                </article>
+                <article id="product-proximity" class="detail-card">
+                    <h3>Proximity</h3>
+                    <p>Source-aware close-mic modeling for intimacy, body, and air, with smoothing to avoid pop-prone retuning.</p>
+                </article>
+                <article id="product-subtract" class="detail-card">
+                    <h3>Subtract</h3>
+                    <p>Learn a repeatable noise profile, then subtract it with smarter trust when the learned bed no longer matches the input.</p>
+                </article>
+                <article id="product-leveler" class="detail-card">
+                    <h3>Leveler</h3>
+                    <p>Adaptive levelling with a clearer split between vocal riding and whole-mix level control.</p>
+                </article>
+                <article id="product-deepfilternet" class="detail-card">
+                    <h3>DeepFilterNet</h3>
+                    <p>ML-backed denoise for heavier or more complex interference, with runtime guard behavior shaped by artifact risk.</p>
+                </article>
+                <article id="product-rebalance" class="detail-card">
+                    <h3>Rebalance</h3>
+                    <p>Confidence-driven source-family rebalance for vocals, drums, bass, guitar, and other mix content without stems.</p>
+                </article>
+                <article id="product-analyser" class="detail-card">
+                    <h3>Studio Analyser</h3>
+                    <p>Track-local chain analysis that follows only the active upstream path feeding the instance you are inspecting.</p>
+                </article>
             </div>
         </div>
     </section>
@@ -215,12 +296,12 @@
                 <div class="feature">
                     <div class="feature-icon">🎯</div>
                     <h3>Mode-Based</h3>
-                    <p>Vocal and General modes adapt DSP for optimal results on any material.</p>
+                    <p>Shared selector behavior and product-specific modes keep simple UIs while letting the DSP adapt intentionally.</p>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">🔊</div>
                     <h3>Listen Control</h3>
-                    <p>Audition removed content in delta mode. Verify processing with confidence.</p>
+                    <p>Removal tools audition what they remove, while additive tools audition what they add.</p>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">🛡️</div>
@@ -230,7 +311,7 @@
                 <div class="feature">
                     <div class="feature-icon">📊</div>
                     <h3>Analysis Tools</h3>
-                    <p>Signal quality detection. Automatic adaptation to input conditions.</p>
+                    <p>Shared voice and signal-quality analysis help the suite react to directness, speech presence, and artifact risk.</p>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">🎚️</div>
@@ -246,20 +327,20 @@
         <div class="container">
             <div class="section-header">
                 <h2>Get Started Now</h2>
-                <p>Professional audio processing, ready to use</p>
+                <p>The latest suite pass is complete and regression-verified</p>
             </div>
 
             <!-- Platform Notice -->
             <div class="platform-notice">
                 <div class="notice-box macos">
                     <h3>🍎 macOS</h3>
-                    <p><strong>Status:</strong> Fully available</p>
+                    <p><strong>Status:</strong> Available now</p>
                     <p>macOS 11+ | Intel & Apple Silicon</p>
                     <p>VST3 | Audio Units</p>
                 </div>
                 <div class="notice-box windows">
                     <h3>🪟 Windows</h3>
-                    <p><strong>Status:</strong> In Development</p>
+                    <p><strong>Status:</strong> In development</p>
                     <p>Windows 10+ | 64-bit</p>
                     <p>VST3 coming soon</p>
                 </div>
@@ -268,9 +349,9 @@
             <!-- Download Button -->
             <div class="download-button-container">
                 <a href="downloads/" class="btn btn-primary btn-large">
-                    Download VX Studio v1.0.0
+                    Download VX Studio
                 </a>
-                <p class="download-note">Latest build • Free to download • Open source</p>
+                <p class="download-note">12 plugins • Latest regression pass complete • Open source</p>
             </div>
 
             <!-- System Requirements -->
@@ -332,7 +413,7 @@
     </section>
 
     <!-- Documentation Section -->
-    <section class="docs-section">
+    <section id="documentation" class="docs-section">
         <div class="container">
             <div class="section-header">
                 <h2>Documentation & Support</h2>
@@ -372,8 +453,8 @@
                 <div class="footer-section">
                     <h4>Resources</h4>
                     <ul>
-                        <li><a href="docs/">Documentation</a></li>
-                        <li><a href="support/">Support</a></li>
+                        <li><a href="#documentation">Documentation</a></li>
+                        <li><a href="#documentation">Support</a></li>
                         <li><a href="https://github.com/marczewski/VxStudio" target="_blank">Source Code</a></li>
                     </ul>
                 </div>

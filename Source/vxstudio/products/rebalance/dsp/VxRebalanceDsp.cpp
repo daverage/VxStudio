@@ -730,6 +730,29 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
         if (hz < 110.0f)
             semanticSupport[otherSource] *= 0.10f;
 
+        const float confidentCore =
+            clamp01(0.42f * semanticSupport[vocalsSource]
+                    + 0.26f * semanticSupport[drumsSource]
+                    + 0.32f * semanticSupport[bassSource]);
+        const float directGuitarEvidence =
+            clamp01(0.58f * semanticSupport[guitarSource]
+                    + 0.22f * guitarEnv
+                    + 0.10f * steadyPrior
+                    + 0.08f * wide
+                    + 0.06f * (1.0f - centered)
+                    - 0.14f * semanticSupport[vocalsSource]
+                    - 0.16f * centered);
+        const float guitarResidualOpportunity =
+            clamp01((1.0f - confidentCore)
+                    * (0.42f + 0.24f * steadyPrior + 0.34f * wide));
+        const float guitarClaim =
+            clamp01(0.78f * directGuitarEvidence + 0.22f * guitarResidualOpportunity);
+        const float otherResidualNeed =
+            clamp01(1.0f - (0.26f * semanticSupport[vocalsSource]
+                          + 0.22f * semanticSupport[drumsSource]
+                          + 0.22f * semanticSupport[bassSource]
+                          + 0.30f * guitarClaim));
+
         float conditionedMasks[kSourceCount] {};
         float conditionedTotal = 0.0f;
 
@@ -761,13 +784,29 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
         }
 
         if ((phoneMode || liveMode) && hz >= 250.0f && hz <= 2200.0f) {
-            const float guitarClaim = clamp01(
-                0.50f * semanticSupport[guitarSource]
-                + 0.25f * steadyPrior
-                + 0.15f * wide
-                + 0.10f * (1.0f - centered));
             conditionedMasks[guitarSource] *= lerp(1.0f, phoneMode ? 1.14f : 1.20f, guitarClaim);
             conditionedMasks[otherSource] *= lerp(1.0f, phoneMode ? 0.72f : 0.62f, guitarClaim);
+        }
+
+        if (hz >= 220.0f && hz <= 3200.0f) {
+            conditionedMasks[guitarSource] *= lerp(0.74f, 1.52f, guitarClaim);
+            conditionedMasks[otherSource] *= lerp(0.52f, 1.22f, otherResidualNeed);
+
+            if (directGuitarEvidence < 0.32f && confidentCore > 0.48f)
+                conditionedMasks[guitarSource] *= 0.74f;
+
+            if (guitarClaim > 0.42f && directGuitarEvidence > 0.28f)
+                conditionedMasks[otherSource] *= 0.58f;
+
+            if (wide > 0.18f && centered < 0.74f && steadyPrior > 0.35f) {
+                conditionedMasks[guitarSource] *= 1.12f;
+                conditionedMasks[otherSource] *= 0.78f;
+            }
+
+            if (centered > 0.78f && wide < 0.14f) {
+                conditionedMasks[guitarSource] *= 0.56f;
+                conditionedMasks[otherSource] *= 1.16f;
+            }
         }
 
         // Reduce 'other' as fallback sink when top two named sources dominate
@@ -1594,12 +1633,22 @@ void Dsp::updateObjectSourceProbabilities(const std::array<float, kBins>& analys
         tracked.sourceProbabilities[static_cast<size_t>(vocalsSource)] = 
             clamp01(0.3f + vocalCenterBias + vocalSustain - 0.2f * tracked.stereoWidth);
         
-        // Guitar probability: harmonic body, pick attack history, reduced center lock
+        // Guitar probability: direct evidence first, then some leftover opportunity
         const float guitarWidth = tracked.stereoWidth * 0.45f;
         const float guitarReducedCenter = (1.0f - tracked.stereoCenter) * 0.18f;
         const float guitarSustain = tracked.sustainStrength * 0.30f;
+        const float confidentCore = clamp01(
+            0.42f * tracked.sourceProbabilities[static_cast<size_t>(vocalsSource)]
+            + 0.28f * tracked.sourceProbabilities[static_cast<size_t>(drumsSource)]
+            + 0.30f * tracked.sourceProbabilities[static_cast<size_t>(bassSource)]);
+        const float guitarResidualOpportunity = clamp01(
+            (1.0f - confidentCore)
+            * (0.44f + 0.18f * tracked.sustainStrength + 0.38f * tracked.stereoWidth));
+        const float directGuitarEvidence = clamp01(
+            guitarWidth + guitarReducedCenter + guitarSustain + tracked.onsetStrength * 0.15f
+            - tracked.stereoCenter * 0.16f);
         tracked.sourceProbabilities[static_cast<size_t>(guitarSource)] = 
-            clamp01(0.22f + guitarWidth + guitarReducedCenter + guitarSustain + tracked.onsetStrength * 0.15f);
+            clamp01(0.10f + 0.72f * directGuitarEvidence + 0.18f * guitarResidualOpportunity);
         if (recordingType == RecordingType::live) {
             tracked.sourceProbabilities[static_cast<size_t>(guitarSource)] = clamp01(
                 tracked.sourceProbabilities[static_cast<size_t>(guitarSource)]
@@ -1624,14 +1673,14 @@ void Dsp::updateObjectSourceProbabilities(const std::array<float, kBins>& analys
                 tracked.sourceProbabilities[static_cast<size_t>(drumsSource)] + 0.12f * transientPrior);
         }
         
-        // Other: residual when no source ownership is strong
-        float maxSourceProb = 0.0f;
-        for (int s = 0; s < kSourceCount - 1; ++s) {
-            maxSourceProb = std::max(maxSourceProb, 
-                                     tracked.sourceProbabilities[static_cast<size_t>(s)]);
-        }
+        // Other: unresolved residual after the named lanes claim what they can
+        const float namedCoverage = clamp01(
+            0.34f * tracked.sourceProbabilities[static_cast<size_t>(vocalsSource)]
+            + 0.24f * tracked.sourceProbabilities[static_cast<size_t>(drumsSource)]
+            + 0.18f * tracked.sourceProbabilities[static_cast<size_t>(bassSource)]
+            + 0.24f * tracked.sourceProbabilities[static_cast<size_t>(guitarSource)]);
         tracked.sourceProbabilities[static_cast<size_t>(otherSource)] = 
-            clamp01(0.1f + (1.0f - maxSourceProb) * 0.3f);
+            clamp01(0.05f + (1.0f - namedCoverage) * 0.42f + 0.06f * tracked.stereoWidth);
         
         // Update dominant source
         float maxProb = 0.0f;
@@ -1743,22 +1792,277 @@ void Dsp::applyObjectOwnershipToMasks(
 float Dsp::computeSourceContributionMultiplier(
     int source,
     float sliderNormalized,
-    float strength) const noexcept
+    float strength,
+    float signalTrust) const noexcept
 {
     const float sliderSigned = (sliderNormalized - 0.5f) * 2.0f;
     const float curved =
-        std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
-    const float maxContribution = source == otherSource ? 1.55f : 3.0f;
-    return juce::jlimit(0.0f, maxContribution, 1.0f + curved * strength);
+        std::copysign(std::pow(std::abs(sliderSigned), 0.78f), sliderSigned);
+    const float trustedStrength = strength * juce::jlimit(0.35f, 1.0f, 0.35f + 0.65f * signalTrust);
+    const float targetGain = juce::jlimit(0.0f, 2.0f, 1.0f + curved);
+    const float maxContribution = source == otherSource ? 2.30f : 4.80f;
+    return juce::jlimit(0.0f, maxContribution, lerp(1.0f, targetGain, trustedStrength));
+}
+
+Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
+    const int bin,
+    const std::array<float, kSourceCount>& sourceContributions,
+    const bool allowHardIsolation,
+    const int activeSourceIndex) const noexcept
+{
+    OwnershipFrame frame;
+    frame.allowHardIsolation = allowHardIsolation;
+
+    const auto mode = static_cast<RecordingType>(
+        juce::jlimit(0, static_cast<int>(kModeProfiles.size()) - 1,
+                     targetRecordingType.load(std::memory_order_relaxed)));
+    const int clusterId = binOwningCluster[static_cast<size_t>(bin)];
+    const auto* tracked = (clusterId >= 0 && clusterId < kMaxTrackedClusters)
+        ? &trackedClusters[static_cast<size_t>(clusterId)]
+        : nullptr;
+
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float slider = currentControlValues[static_cast<size_t>(s)];
+        const float sliderSigned = (slider - 0.5f) * 2.0f;
+        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
+        const float separation = std::abs(curved) * sourceContributions[static_cast<size_t>(s)];
+
+        frame.separationForces[static_cast<size_t>(s)] = separation;
+        frame.contributions[static_cast<size_t>(s)] = sourceContributions[static_cast<size_t>(s)];
+
+        float ownershipBias = 1.0f;
+        if (sliderSigned > 0.0f)
+            ownershipBias = 1.0f + 2.10f * separation;
+        else if (sliderSigned < 0.0f)
+            ownershipBias = std::max(0.54f, 1.0f - 0.46f * separation);
+
+        ownershipBias *= std::sqrt(std::max(0.08f, sourceContributions[static_cast<size_t>(s)]));
+
+        if (s == otherSource)
+            ownershipBias = juce::jlimit(0.08f, 1.35f, ownershipBias);
+        else
+            ownershipBias = juce::jlimit(0.18f, 2.65f, ownershipBias);
+
+        float ownership = smoothedMasks[static_cast<size_t>(s)][static_cast<size_t>(bin)] * ownershipBias;
+
+        if (tracked != nullptr && tracked->active) {
+            ownership *= lerp(0.35f,
+                              1.35f,
+                              clamp01(tracked->sourceProbabilities[static_cast<size_t>(s)]));
+            if (s == tracked->dominantSource) {
+                ownership *= lerp(1.0f,
+                                  1.25f,
+                                  binOwnershipConfidence[static_cast<size_t>(bin)]);
+            }
+        }
+
+        if (mode == RecordingType::live) {
+            const float hz = binToHz(bin);
+            if (s == guitarSource && hz >= 300.0f && hz <= 2400.0f)
+                ownership *= (hz <= 1800.0f ? 1.38f : 1.20f);
+            else if (s == otherSource && hz >= 300.0f && hz <= 2400.0f)
+                ownership *= (hz <= 1800.0f ? 0.52f : 0.70f);
+        }
+        if (s == drumsSource && tracked != nullptr && tracked->active) {
+            const float hz = binToHz(bin);
+            if (hz >= 1400.0f && hz <= 12000.0f)
+                ownership *= lerp(1.0f, 1.22f, clamp01(tracked->onsetStrength));
+        }
+
+        frame.ownership[static_cast<size_t>(s)] = ownership;
+    }
+
+    float best = 0.0f;
+    float second = 0.0f;
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float score = frame.ownership[static_cast<size_t>(s)];
+        if (score > best) {
+            second = best;
+            frame.runnerUp = frame.dominant;
+            best = score;
+            frame.dominant = s;
+        } else if (score > second) {
+            second = score;
+            frame.runnerUp = s;
+        }
+    }
+
+    const float fastConfidence = juce::jlimit(0.0f, 1.0f, (best - second) * 2.5f);
+    float slowConfidence = 0.0f;
+    if (tracked != nullptr && tracked->active) {
+        const float ageFactor = juce::jlimit(0.0f, 1.0f, tracked->ageFrames * 0.08f);
+        slowConfidence = binOwnershipConfidence[static_cast<size_t>(bin)] * ageFactor;
+    }
+
+    frame.confidence = juce::jlimit(0.0f, 1.0f, 0.70f * fastConfidence + 0.30f * slowConfidence);
+    frame.dominantSeparation = frame.separationForces[static_cast<size_t>(frame.dominant)];
+    frame.renderDominant = (allowHardIsolation && activeSourceIndex >= 0 && frame.confidence > 0.5f)
+        ? activeSourceIndex
+        : frame.dominant;
+    return frame;
+}
+
+Dsp::RenderFrame Dsp::buildRenderFrameForBin(
+    const int bin,
+    const OwnershipFrame& ownershipFrame,
+    const int activeSourceIndex) const noexcept
+{
+    RenderFrame frame;
+    frame.renderWeights = ownershipFrame.ownership;
+    for (float value : frame.renderWeights)
+        frame.renderTotal += value;
+    frame.renderTotal = std::max(kEps, frame.renderTotal);
+    for (float& value : frame.renderWeights)
+        value /= frame.renderTotal;
+
+    if (ownershipFrame.allowHardIsolation && ownershipFrame.confidence > 0.5f) {
+        for (int s = 0; s < kSourceCount; ++s)
+            frame.renderWeights[static_cast<size_t>(s)] =
+                s == ownershipFrame.dominant ? 1.0f : frame.renderWeights[static_cast<size_t>(s)] * 0.02f;
+    } else if (ownershipFrame.confidence >= 0.6f) {
+        for (int s = 0; s < kSourceCount; ++s) {
+            if (s == ownershipFrame.dominant) {
+                frame.renderWeights[static_cast<size_t>(s)] *=
+                    (1.0f + 1.35f * ownershipFrame.dominantSeparation);
+            } else if (s == ownershipFrame.runnerUp) {
+                frame.renderWeights[static_cast<size_t>(s)] *=
+                    std::max(0.01f, 1.0f - ownershipFrame.dominantSeparation * 1.10f);
+            } else {
+                frame.renderWeights[static_cast<size_t>(s)] *= 0.01f;
+            }
+        }
+
+        if (ownershipFrame.confidence >= 0.82f) {
+            for (int s = 0; s < kSourceCount; ++s)
+                frame.renderWeights[static_cast<size_t>(s)] = s == ownershipFrame.dominant ? 1.0f : 0.005f;
+        }
+    } else if (ownershipFrame.confidence >= 0.3f) {
+        for (int s = 0; s < kSourceCount; ++s) {
+            if (s == ownershipFrame.dominant) {
+                frame.renderWeights[static_cast<size_t>(s)] *=
+                    (1.0f + 1.05f * ownershipFrame.dominantSeparation);
+            } else if (s == ownershipFrame.runnerUp) {
+                frame.renderWeights[static_cast<size_t>(s)] *=
+                    std::max(0.06f, 1.0f - 0.75f * ownershipFrame.dominantSeparation);
+            } else {
+                frame.renderWeights[static_cast<size_t>(s)] *=
+                    std::max(0.06f, 1.0f - 0.95f * ownershipFrame.dominantSeparation);
+            }
+        }
+    }
+
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float sliderSigned = (currentControlValues[static_cast<size_t>(s)] - 0.5f) * 2.0f;
+        if (s == otherSource) {
+            if (ownershipFrame.confidence > 0.6f)
+                frame.renderWeights[static_cast<size_t>(s)] *= 0.25f;
+            else if (ownershipFrame.confidence < 0.3f)
+                frame.renderWeights[static_cast<size_t>(s)] *= 1.1f;
+        }
+
+        if (sliderSigned < -0.10f && s == ownershipFrame.dominant && ownershipFrame.confidence >= 0.3f) {
+            frame.renderWeights[static_cast<size_t>(s)] *=
+                (1.0f + 0.45f * ownershipFrame.separationForces[static_cast<size_t>(s)]);
+        }
+
+        if (ownershipFrame.allowHardIsolation && activeSourceIndex >= 0 && s != activeSourceIndex)
+            frame.renderWeights[static_cast<size_t>(s)] *= 0.02f;
+    }
+
+    frame.renderTotal = 0.0f;
+    for (float value : frame.renderWeights)
+        frame.renderTotal += value;
+    frame.renderTotal = std::max(kEps, frame.renderTotal);
+
+    float irmGain = 0.0f;
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float renderMask = frame.renderWeights[static_cast<size_t>(s)] / frame.renderTotal;
+        irmGain += renderMask * ownershipFrame.contributions[static_cast<size_t>(s)];
+    }
+
+    frame.dominantMask =
+        frame.renderWeights[static_cast<size_t>(ownershipFrame.renderDominant)] / frame.renderTotal;
+    frame.otherMask =
+        frame.renderWeights[static_cast<size_t>(otherSource)] / frame.renderTotal;
+
+    float residualEnergy = 0.0f;
+    for (int s = 0; s < kSourceCount; ++s) {
+        if (s == ownershipFrame.renderDominant)
+            continue;
+        const float renderMask = frame.renderWeights[static_cast<size_t>(s)] / frame.renderTotal;
+        residualEnergy += renderMask * std::min(ownershipFrame.contributions[static_cast<size_t>(s)], 1.0f);
+    }
+
+    const float residualScale = ownershipFrame.allowHardIsolation
+        ? 0.01f
+        : (ownershipFrame.confidence >= 0.6f ? 0.02f : 0.08f);
+    const float ibmGain =
+        ownershipFrame.contributions[static_cast<size_t>(ownershipFrame.renderDominant)] + residualEnergy * residualScale;
+
+    frame.totalGain = irmGain;
+    if (ownershipFrame.confidence < 0.3f) {
+        frame.totalGain = irmGain;
+    } else if (ownershipFrame.confidence < 0.6f) {
+        const float hybrid = (ownershipFrame.confidence - 0.3f) / 0.3f;
+        frame.totalGain = lerp(irmGain, ibmGain, hybrid);
+    } else {
+        frame.totalGain = ibmGain;
+    }
+
+    const float signalTrust = juce::jlimit(
+        0.18f, 1.0f, 0.18f + 0.82f * targetSeparationConfidence.load(std::memory_order_relaxed));
+    const float renderTrust = clamp01(
+        signalTrust * (0.10f + 0.90f * ownershipFrame.confidence * ownershipFrame.confidence)
+        + 0.08f * ownershipFrame.confidence);
+    frame.totalGain = lerp(1.0f, frame.totalGain, renderTrust);
+    const float dominantSliderSigned =
+        (currentControlValues[static_cast<size_t>(ownershipFrame.renderDominant)] - 0.5f) * 2.0f;
+    const float dominantTargetGain = juce::jlimit(0.0f, 2.0f, 1.0f + dominantSliderSigned);
+    const float confidenceAuthority = clamp01((ownershipFrame.confidence - 0.35f) / 0.65f);
+    const float dominantAuthority = clamp01(
+        std::abs(dominantSliderSigned)
+        * confidenceAuthority
+        * (0.20f + 0.80f * frame.dominantMask));
+    frame.totalGain = lerp(frame.totalGain, dominantTargetGain, dominantAuthority);
+    const float lowTrustBackoff = clamp01((signalTrust - 0.42f) / 0.58f);
+    frame.totalGain = lerp(1.0f, frame.totalGain, lowTrustBackoff);
+    frame.totalGain = juce::jlimit(0.0f, 8.0f, frame.totalGain);
+
+    const float prev = prevCompositeGain[static_cast<size_t>(bin)];
+    frame.totalGain = lerp(prev, frame.totalGain, 0.7f);
+    return frame;
+}
+
+void Dsp::publishDebugFrameForBin(
+    const int bin,
+    const OwnershipFrame& ownershipFrame,
+    const RenderFrame& renderFrame,
+    std::array<int, kDebugBins>& debugDominant,
+    std::array<float, kDebugBins>& debugBestConfidence,
+    std::array<float, kDebugBins>& debugDominantMask,
+    std::array<float, kDebugBins>& debugOtherMask,
+    std::array<float, kSourceCount>& debugCoverage,
+    float& debugConfidenceSum) const noexcept
+{
+    const int debugIndex = juce::jlimit(0, kDebugBins - 1, (bin * kDebugBins) / kBins);
+    if (ownershipFrame.confidence >= debugBestConfidence[static_cast<size_t>(debugIndex)]) {
+        debugBestConfidence[static_cast<size_t>(debugIndex)] = ownershipFrame.confidence;
+        debugDominant[static_cast<size_t>(debugIndex)] = ownershipFrame.renderDominant;
+        debugDominantMask[static_cast<size_t>(debugIndex)] = renderFrame.dominantMask;
+        debugOtherMask[static_cast<size_t>(debugIndex)] = renderFrame.otherMask;
+    }
+
+    debugCoverage[static_cast<size_t>(ownershipFrame.renderDominant)] += ownershipFrame.confidence;
+    debugConfidenceSum += ownershipFrame.confidence;
 }
 
 
 void Dsp::buildForegroundBackgroundRender() noexcept
 {
     const float strength = currentControlValues[static_cast<size_t>(kStrengthIndex)];
-    const auto mode = static_cast<RecordingType>(
-        juce::jlimit(0, static_cast<int>(kModeProfiles.size()) - 1,
-                     targetRecordingType.load(std::memory_order_relaxed)));
+    const float separationConfidence = juce::jlimit(
+        0.0f, 1.0f, targetSeparationConfidence.load(std::memory_order_relaxed));
+    const float signalTrust = juce::jlimit(0.18f, 1.0f, 0.18f + 0.82f * separationConfidence);
     int activeSources = 0;
     int activeSourceIndex = -1;
     int suppressedSources = 0;
@@ -1775,27 +2079,16 @@ void Dsp::buildForegroundBackgroundRender() noexcept
     }
 
     const bool nearIsolation = activeSources <= 1 && suppressedSources >= 3;
+    const bool allowHardIsolation = nearIsolation && signalTrust >= 0.55f;
 
-    // Pre-compute per-source slider-derived values once (constant across all bins).
-    struct SourceFrame {
-        float curved = 0.0f;
-        float separation = 0.0f;
-        float contribution = 0.0f;
-        float ownershipBiasPos = 0.0f;  // bias when slider > 0
-        float ownershipBiasNeg = 0.0f;  // bias when slider < 0
-    };
-    std::array<SourceFrame, kSourceCount> sourceFrames {};
+    std::array<float, kSourceCount> sourceContributions {};
     for (int s = 0; s < kSourceCount; ++s) {
         const float slider = currentControlValues[static_cast<size_t>(s)];
         const float sliderSigned = (slider - 0.5f) * 2.0f;
         const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
-        const float separation = std::abs(curved) * strength;
-        const float contribution = computeSourceContributionMultiplier(s, slider, strength);
-        sourceFrames[static_cast<size_t>(s)].curved = curved;
-        sourceFrames[static_cast<size_t>(s)].separation = separation;
-        sourceFrames[static_cast<size_t>(s)].contribution = contribution;
-        sourceFrames[static_cast<size_t>(s)].ownershipBiasPos = 1.0f + 1.55f * separation;
-        sourceFrames[static_cast<size_t>(s)].ownershipBiasNeg = std::max(0.68f, 1.0f - 0.32f * separation);
+        const float separation = std::abs(curved) * strength * signalTrust;
+        const float contribution = computeSourceContributionMultiplier(s, slider, strength, signalTrust);
+        sourceContributions[static_cast<size_t>(s)] = contribution;
     }
 
     std::array<int, kDebugBins> debugDominant {};
@@ -1809,229 +2102,21 @@ void Dsp::buildForegroundBackgroundRender() noexcept
 
     for (int k = 0; k < kBins; ++k)
     {
-        std::array<float, kSourceCount> separationForces {};
-        std::array<float, kSourceCount> ownership {};
-        std::array<float, kSourceCount> contributions {};
-        const int clusterId = binOwningCluster[static_cast<size_t>(k)];
-        const auto* tracked = (clusterId >= 0 && clusterId < kMaxTrackedClusters)
-            ? &trackedClusters[static_cast<size_t>(clusterId)]
-            : nullptr;
+        const auto ownershipFrame =
+            buildOwnershipFrameForBin(k, sourceContributions, allowHardIsolation, activeSourceIndex);
+        const auto renderFrame = buildRenderFrameForBin(k, ownershipFrame, activeSourceIndex);
+        publishDebugFrameForBin(k,
+                                ownershipFrame,
+                                renderFrame,
+                                debugDominant,
+                                debugBestConfidence,
+                                debugDominantMask,
+                                debugOtherMask,
+                                debugCoverage,
+                                debugConfidenceSum);
 
-        for (int s = 0; s < kSourceCount; ++s) {
-            const auto& sf = sourceFrames[static_cast<size_t>(s)];
-            const float sliderSigned = (currentControlValues[static_cast<size_t>(s)] - 0.5f) * 2.0f;
-
-            separationForces[static_cast<size_t>(s)] = sf.separation;
-            contributions[static_cast<size_t>(s)] = sf.contribution;
-
-            float ownershipBias = 1.0f;
-            if (sliderSigned > 0.0f)
-                ownershipBias = sf.ownershipBiasPos;
-            else if (sliderSigned < 0.0f)
-                ownershipBias = sf.ownershipBiasNeg;
-
-            ownershipBias *= std::sqrt(std::max(0.04f, sf.contribution));
-
-            if (s == otherSource)
-                ownershipBias = juce::jlimit(0.10f, 1.12f, ownershipBias);
-            else
-                ownershipBias = juce::jlimit(0.18f, 2.0f, ownershipBias);
-
-            ownership[static_cast<size_t>(s)] =
-                smoothedMasks[static_cast<size_t>(s)][static_cast<size_t>(k)] * ownershipBias;
-
-            if (tracked != nullptr && tracked->active) {
-                ownership[static_cast<size_t>(s)] *= lerp(
-                    0.35f,
-                    1.35f,
-                    clamp01(tracked->sourceProbabilities[static_cast<size_t>(s)]));
-                if (s == tracked->dominantSource)
-                    ownership[static_cast<size_t>(s)] *=
-                        lerp(1.0f, 1.25f, binOwnershipConfidence[static_cast<size_t>(k)]);
-            }
-
-            if (mode == RecordingType::live) {
-                const float hz = binToHz(k);
-                if (s == guitarSource && hz >= 300.0f && hz <= 2400.0f)
-                    ownership[static_cast<size_t>(s)] *= (hz <= 1800.0f ? 1.38f : 1.20f);
-                else if (s == otherSource && hz >= 300.0f && hz <= 2400.0f)
-                    ownership[static_cast<size_t>(s)] *= (hz <= 1800.0f ? 0.52f : 0.70f);
-            }
-            if (s == drumsSource && tracked != nullptr && tracked->active) {
-                const float hz = binToHz(k);
-                if (hz >= 1400.0f && hz <= 12000.0f)
-                    ownership[static_cast<size_t>(s)] *= lerp(1.0f, 1.22f, clamp01(tracked->onsetStrength));
-            }
-        }
-
-        float best = 0.0f;
-        float second = 0.0f;
-        int dominant = otherSource;
-        int runnerUp = otherSource;
-
-        for (int s = 0; s < kSourceCount; ++s)
-        {
-            const float score = ownership[static_cast<size_t>(s)];
-            if (score > best)
-            {
-                second = best;
-                runnerUp = dominant;
-                best = score;
-                dominant = s;
-            }
-            else if (score > second)
-            {
-                second = score;
-                runnerUp = s;
-            }
-        }
-
-        const float fastConfidence =
-            juce::jlimit(0.0f, 1.0f, (best - second) * 2.5f);
-
-        float slowConfidence = 0.0f;
-        if (tracked != nullptr)
-        {
-            if (tracked->active)
-            {
-                const float ageFactor =
-                    juce::jlimit(0.0f, 1.0f, tracked->ageFrames * 0.08f);
-                slowConfidence =
-                    binOwnershipConfidence[static_cast<size_t>(k)] * ageFactor;
-            }
-        }
-
-        const float confidence = juce::jlimit(0.0f, 1.0f,
-            0.70f * fastConfidence + 0.30f * slowConfidence);
-
-        std::array<float, kSourceCount> renderWeights = ownership;
-        float renderTotal = 0.0f;
-        for (float value : renderWeights)
-            renderTotal += value;
-        renderTotal = std::max(kEps, renderTotal);
-        for (float& value : renderWeights)
-            value /= renderTotal;
-
-        const float dominantSeparation = separationForces[static_cast<size_t>(dominant)];
-        if (nearIsolation && confidence > 0.5f)
-        {
-            for (int s = 0; s < kSourceCount; ++s) {
-                if (s == dominant)
-                    renderWeights[static_cast<size_t>(s)] = 1.0f;
-                else
-                    renderWeights[static_cast<size_t>(s)] *= 0.02f;
-            }
-        }
-        else if (confidence >= 0.6f)
-        {
-            for (int s = 0; s < kSourceCount; ++s) {
-                if (s == dominant)
-                    renderWeights[static_cast<size_t>(s)] *= (1.0f + 1.35f * dominantSeparation);
-                else if (s == runnerUp)
-                    renderWeights[static_cast<size_t>(s)] *=
-                        std::max(0.01f, 1.0f - dominantSeparation * 1.10f);
-                else
-                    renderWeights[static_cast<size_t>(s)] *= 0.01f;
-            }
-
-            if (confidence >= 0.82f) {
-                for (int s = 0; s < kSourceCount; ++s)
-                    renderWeights[static_cast<size_t>(s)] = s == dominant ? 1.0f : 0.005f;
-            }
-        }
-        else if (confidence >= 0.3f)
-        {
-            for (int s = 0; s < kSourceCount; ++s) {
-                if (s == dominant)
-                    renderWeights[static_cast<size_t>(s)] *=
-                        (1.0f + 1.05f * dominantSeparation);
-                else if (s == runnerUp)
-                    renderWeights[static_cast<size_t>(s)] *=
-                        std::max(0.06f, 1.0f - 0.75f * dominantSeparation);
-                else
-                    renderWeights[static_cast<size_t>(s)] *=
-                        std::max(0.06f, 1.0f - 0.95f * dominantSeparation);
-            }
-        }
-
-        for (int s = 0; s < kSourceCount; ++s) {
-            const float sliderSigned =
-                (currentControlValues[static_cast<size_t>(s)] - 0.5f) * 2.0f;
-            if (s == otherSource) {
-                if (confidence > 0.6f)
-                    renderWeights[static_cast<size_t>(s)] *= 0.25f;
-                else if (confidence < 0.3f)
-                    renderWeights[static_cast<size_t>(s)] *= 1.1f;
-            }
-
-            if (sliderSigned < -0.10f && s == dominant && confidence >= 0.3f)
-                renderWeights[static_cast<size_t>(s)] *=
-                    (1.0f + 0.45f * separationForces[static_cast<size_t>(s)]);
-
-            if (nearIsolation && activeSourceIndex >= 0 && s != activeSourceIndex)
-                renderWeights[static_cast<size_t>(s)] *= 0.02f;
-        }
-
-        renderTotal = 0.0f;
-        for (float value : renderWeights)
-            renderTotal += value;
-        renderTotal = std::max(kEps, renderTotal);
-
-        const int renderDominant =
-            (nearIsolation && activeSourceIndex >= 0 && confidence > 0.5f)
-                ? activeSourceIndex
-                : dominant;
-
-        float irmGain = 0.0f;
-        for (int s = 0; s < kSourceCount; ++s) {
-            const float renderMask = renderWeights[static_cast<size_t>(s)] / renderTotal;
-            irmGain += renderMask * contributions[static_cast<size_t>(s)];
-        }
-
-        const float dominantMask =
-            renderWeights[static_cast<size_t>(renderDominant)] / renderTotal;
-        const float otherMask =
-            renderWeights[static_cast<size_t>(otherSource)] / renderTotal;
-        const int debugIndex =
-            juce::jlimit(0, kDebugBins - 1, (k * kDebugBins) / kBins);
-        if (confidence >= debugBestConfidence[static_cast<size_t>(debugIndex)]) {
-            debugBestConfidence[static_cast<size_t>(debugIndex)] = confidence;
-            debugDominant[static_cast<size_t>(debugIndex)] = renderDominant;
-            debugDominantMask[static_cast<size_t>(debugIndex)] = dominantMask;
-            debugOtherMask[static_cast<size_t>(debugIndex)] = otherMask;
-        }
-        debugCoverage[static_cast<size_t>(renderDominant)] += confidence;
-        debugConfidenceSum += confidence;
-
-        float residualEnergy = 0.0f;
-        for (int s = 0; s < kSourceCount; ++s) {
-            if (s == renderDominant)
-                continue;
-
-            const float renderMask = renderWeights[static_cast<size_t>(s)] / renderTotal;
-            residualEnergy += renderMask * std::min(contributions[static_cast<size_t>(s)], 1.0f);
-        }
-
-        const float residualScale = nearIsolation
-            ? 0.01f
-            : (confidence >= 0.6f ? 0.02f : 0.08f);
-        const float ibmGain =
-            contributions[static_cast<size_t>(renderDominant)] + residualEnergy * residualScale;
-
-        float total = irmGain;
-        if (confidence < 0.3f) {
-            total = irmGain;
-        } else if (confidence < 0.6f) {
-            const float hybrid = (confidence - 0.3f) / 0.3f;
-            total = lerp(irmGain, ibmGain, hybrid);
-        } else {
-            total = ibmGain;
-        }
-
-        const float prev = prevCompositeGain[static_cast<size_t>(k)];
-        compositeGain[static_cast<size_t>(k)] =
-            lerp(prev, juce::jlimit(0.0f, 8.0f, total), 0.7f);
-        prevCompositeGain[static_cast<size_t>(k)] = compositeGain[static_cast<size_t>(k)];
+        compositeGain[static_cast<size_t>(k)] = renderFrame.totalGain;
+        prevCompositeGain[static_cast<size_t>(k)] = renderFrame.totalGain;
     }
 
     const float coverageSum = std::max(kEps,

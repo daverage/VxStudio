@@ -185,6 +185,26 @@ private:
         int olaWritePos = 0;
     };
 
+    struct OwnershipFrame {
+        std::array<float, kSourceCount> separationForces {};
+        std::array<float, kSourceCount> ownership {};
+        std::array<float, kSourceCount> contributions {};
+        int dominant = otherSource;
+        int runnerUp = otherSource;
+        int renderDominant = otherSource;
+        float confidence = 0.0f;
+        float dominantSeparation = 0.0f;
+        bool allowHardIsolation = false;
+    };
+
+    struct RenderFrame {
+        std::array<float, kSourceCount> renderWeights {};
+        float renderTotal = 0.0f;
+        float totalGain = 1.0f;
+        float dominantMask = 0.0f;
+        float otherMask = 0.0f;
+    };
+
     void processFrame();
     void computeMasks(const std::array<float, kBins>& analysisMag,
                       const std::array<float, kBins>& centerWeight,
@@ -230,7 +250,26 @@ private:
     void writeObjectOwnershipToBins() noexcept;
     void applyObjectOwnershipToMasks(std::array<std::array<float, kBins>, kSourceCount>& masks) noexcept;
     void buildForegroundBackgroundRender() noexcept;
-    [[nodiscard]] float computeSourceContributionMultiplier(int source, float sliderNormalized, float strength) const noexcept;
+    [[nodiscard]] OwnershipFrame buildOwnershipFrameForBin(int bin,
+                                                           const std::array<float, kSourceCount>& sourceContributions,
+                                                           bool allowHardIsolation,
+                                                           int activeSourceIndex) const noexcept;
+    [[nodiscard]] RenderFrame buildRenderFrameForBin(int bin,
+                                                     const OwnershipFrame& ownershipFrame,
+                                                     int activeSourceIndex) const noexcept;
+    void publishDebugFrameForBin(int bin,
+                                 const OwnershipFrame& ownershipFrame,
+                                 const RenderFrame& renderFrame,
+                                 std::array<int, kDebugBins>& debugDominant,
+                                 std::array<float, kDebugBins>& debugBestConfidence,
+                                 std::array<float, kDebugBins>& debugDominantMask,
+                                 std::array<float, kDebugBins>& debugOtherMask,
+                                 std::array<float, kSourceCount>& debugCoverage,
+                                 float& debugConfidenceSum) const noexcept;
+    [[nodiscard]] float computeSourceContributionMultiplier(int source,
+                                                            float sliderNormalized,
+                                                            float strength,
+                                                            float signalTrust) const noexcept;
 
     double sampleRateHz = 48000.0;
     int preparedChannels = 0;

@@ -2,9 +2,11 @@
 
 #include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioBlockSmoothedControl.h"
+#include "../../framework/VxStudioCorrectiveStage.h"
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioOutputTrimmer.h"
 #include "../../framework/VxStudioProcessorBase.h"
+#include "../../framework/VxStudioTonalAnalysis.h"
 #include "dsp/VxDenoiserDsp.h"
 
 #include <array>
@@ -28,6 +30,8 @@ private:
     vxsuite::denoiser::DenoiserDsp denoiserDspMono;
     vxsuite::denoiser::DenoiserDsp denoiserDspLeft;
     vxsuite::denoiser::DenoiserDsp denoiserDspRight;
+    vxsuite::corrective::CorrectiveStage artifactCleanupStage;
+    vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     vxsuite::OutputTrimmer outputTrimmer;
     juce::AudioBuffer<float> leftScratch;
     juce::AudioBuffer<float> rightScratch;
@@ -36,5 +40,6 @@ private:
     vxsuite::BlockSmoothedControlPair controls;
     float  smoothedMakeupGain  = 1.0f;
     float  smoothedResidualTrim = 1.0f;
+    float  smoothedArtifactCleanupBlend = 0.0f;
     std::array<float, 2> smoothedStereoMakeupGain { 1.0f, 1.0f };
 };

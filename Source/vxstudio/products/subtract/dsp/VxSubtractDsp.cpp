@@ -27,6 +27,10 @@ float SubtractDsp::activeNoise(size_t k) const {
     return std::max(1.0e-10f, noisePowBlind[k]);
 }
 
+float SubtractDsp::learnedSubtractNoise(size_t k) const {
+    return std::max(1.0e-10f, noisePowFrozen[k]);
+}
+
 void SubtractDsp::updateMinStats(size_t k, float p, float presenceHint) {
     noisePowBlind[k] = vxsuite::spectral::updateMinStats(msState[k], p, presenceHint, minStatsL, minStatsD, MS_alpha, Bmin, 1.0e-12f);
 }
@@ -137,6 +141,7 @@ void SubtractDsp::reset() {
     learnedProfileReady = false;
     learnedSensitivity  = 0.0f;
     learnedProfileConfidence = 0.0f;
+    learnedProfileTrust = 1.0f;
     liveLearnConfidence = 0.0f;
     learnQualityAccum = 0.0f;
     learnInputEnergyAccum = 0.0f;
@@ -219,6 +224,7 @@ void SubtractDsp::clearLearnedProfile() {
     learnedProfileReady = false;
     learnedSensitivity = 0.0f;
     learnedProfileConfidence = 0.0f;
+    learnedProfileTrust = 1.0f;
     liveLearnConfidence = 0.0f;
     learnQualityAccum = 0.0f;
     learnInputEnergyAccum = 0.0f;
@@ -245,6 +251,7 @@ void SubtractDsp::restoreLearnedProfile(const std::vector<float>& profile, float
         return;
     noisePowFrozen = profile;
     learnedProfileConfidence = confidence;
+    learnedProfileTrust = 1.0f;
     liveLearnConfidence = 0.0f;
     learnedProfileReady = true;
 }
@@ -298,6 +305,7 @@ void SubtractDsp::resetStreamingState() {
     learningPrev = false;
     learnFrames = 0;
     learnTargetFrames = 0;
+    learnedProfileTrust = 1.0f;
     liveLearnConfidence = 0.0f;
     learnQualityAccum = 0.0f;
     learnInputEnergyAccum = 0.0f;
@@ -360,6 +368,7 @@ bool SubtractDsp::finalizeLearnedProfile() {
         : 0.0f;
     const float finiteQuality = std::isfinite(quality) ? quality : 0.0f;
     learnedProfileConfidence = vxsuite::clamp01(0.55f * progress + 0.45f * finiteQuality);
+    learnedProfileTrust = 1.0f;
     liveLearnConfidence = learnedProfileConfidence;
     learningPrev = learning;
     return true;
@@ -421,7 +430,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     // - amount (wet) controls primary denoise intensity
     // - subtract controls how strongly the learned profile is removed (when learned)
     // - sensitivity controls learned profile variance weighting
-    const float subtract = juce::jlimit(0.0f, 5.0f, options.subtract);
+    const float subtract = juce::jlimit(0.0f, 6.5f, options.subtract);
     const float sensitivity = juce::jlimit(0.0f, 2.0f, options.sensitivity);
     learnedSensitivity = sensitivity;
     const float subMixGlobal = vxsuite::clamp01(subtract / 5.0f);
@@ -527,19 +536,70 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                               : juce::jlimit(0.015f, 0.14f,
                                                    lerp(0.05f, 0.015f, wetCore) * 0.85f);
             const float subtractMix = subtractEnabled ? vxsuite::clamp01(subMixGlobal) : 0.0f;
+            if (subtractEnabled) {
+                float weightedMismatch = 0.0f;
+                float mismatchWeightSum = 0.0f;
+                float floorCoverageSum = 0.0f;
+                float floorCoverageWeightSum = 0.0f;
+                for (size_t k = 1; k + 1 < bins; ++k) {
+                    const float frozen = std::max(kEps, noisePowFrozen[k]);
+                    const float blind = std::max(kEps, noisePowBlind[k]);
+                    const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(fftSize);
+                    const float lowMidFocus = vxsuite::clamp01((2400.0f - hz) / 1800.0f);
+                    const float bandFall = vxsuite::clamp01((9000.0f - hz) / 2600.0f);
+                    const float bandWeight = std::max(0.14f, lowMidFocus * bandFall);
+                    const float quietWeight = 1.0f - 0.80f * vxsuite::clamp01(presenceProb[k]);
+                    const float currentNearFloor = vxsuite::clamp01(blind / std::max(kEps, currPow[k]));
+                    const float weight = bandWeight * quietWeight * currentNearFloor;
+                    floorCoverageSum += bandWeight * currentNearFloor;
+                    floorCoverageWeightSum += bandWeight;
+                    const float mismatch = std::max(0.0f, std::log(blind / frozen));
+                    if (mismatch > 0.0f) {
+                        weightedMismatch += weight * mismatch;
+                        mismatchWeightSum += weight;
+                    }
+                }
+
+            const float confidenceFloor = lerp(0.22f, 0.44f, learnedProfileConfidence);
+                const float floorCoverage = floorCoverageSum / std::max(1.0e-4f, floorCoverageWeightSum);
+                if (mismatchWeightSum > 0.08f) {
+                    const float mismatchAverage = weightedMismatch / mismatchWeightSum;
+                    const float mismatchPenalty = vxsuite::clamp01((mismatchAverage - 0.16f) / 0.70f);
+                    const float trustTarget = lerp(1.0f, confidenceFloor, mismatchPenalty);
+                    const float trustCoeff = (trustTarget < learnedProfileTrust) ? 0.82f : 0.95f;
+                    const float trustCandidate = trustCoeff * learnedProfileTrust
+                                               + (1.0f - trustCoeff) * trustTarget;
+                    learnedProfileTrust = std::isfinite(trustCandidate)
+                        ? juce::jlimit(confidenceFloor, 1.0f, trustCandidate)
+                        : confidenceFloor;
+                } else {
+                    const float speechDominance = std::isfinite(signalPresenceAvg) ? vxsuite::clamp01(signalPresenceAvg) : 0.5f;
+                    const float evidenceTarget = juce::jlimit(0.0f,
+                                                              1.0f,
+                                                              floorCoverage * (1.0f - 0.32f * speechDominance)
+                                                                  + 0.16f * (1.0f - speechDominance));
+                    const float trustTarget = lerp(confidenceFloor, 1.0f, evidenceTarget);
+                    const float trustCandidate = 0.90f * learnedProfileTrust + 0.10f * trustTarget;
+                    learnedProfileTrust = std::isfinite(trustCandidate)
+                        ? juce::jlimit(confidenceFloor, 1.0f, trustCandidate)
+                        : trustTarget;
+                }
+            } else {
+                learnedProfileTrust = 1.0f;
+            }
             const float profileAuthority = subtractEnabled
-                                             ? juce::jlimit(voiceMode ? 0.58f : 0.70f,
+                                             ? juce::jlimit(voiceMode ? 0.52f : 0.64f,
                                                             1.0f,
-                                                            (voiceMode ? 0.58f : 0.70f)
-                                                                + (voiceMode ? 0.42f : 0.30f)
+                                                            (voiceMode ? 0.52f : 0.64f)
+                                                                + (voiceMode ? 0.48f : 0.36f)
                                                                       * learnedProfileConfidence)
                                              : 0.0f;
-            const float alphaMin = voiceMode ? 2.4f : 2.9f;
-            const float alphaMax = voiceMode ? 3.9f : 4.9f;
+            const float alphaMin = voiceMode ? 3.0f : 3.4f;
+            const float alphaMax = voiceMode ? 4.8f : 6.0f;
             const float subtractAlpha = lerp(0.0f, lerp(alphaMin, alphaMax, profileAuthority), subtractMix);
-            const float floorStart = voiceMode ? 0.08f : 0.045f;
-            const float floorMin = voiceMode ? 0.010f : 0.0035f;
-            const float floorBest = voiceMode ? 2.0e-4f : 8.0e-5f;
+            const float floorStart = voiceMode ? 0.06f : 0.03f;
+            const float floorMin = voiceMode ? 0.006f : 0.0018f;
+            const float floorBest = voiceMode ? 1.5e-4f : 5.0e-5f;
             const float subtractFloor = lerp(floorStart,
                                              lerp(floorMin, floorBest, profileAuthority),
                                              subtractMix);
@@ -616,7 +676,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
                 if (subtractEnabled) {
                     const float mag = std::sqrt(std::max(kEps, p));
-                    const float noiseMag = std::sqrt(std::max(kEps, noisePowFrozen[k]));
+                    const float noiseMag = std::sqrt(std::max(kEps, learnedSubtractNoise(k)));
                     const float hz = static_cast<float>(k) * static_cast<float>(sr) / static_cast<float>(fftSize);
                     const float speechBandRise = vxsuite::clamp01((hz - 120.0f) / 320.0f);
                     const float speechBandFall = vxsuite::clamp01((4600.0f - hz) / 1400.0f);
@@ -645,7 +705,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                                   - (voiceMode ? 0.48f : 0.32f) * protectMask
                                                   - (voiceMode ? 0.34f : 0.0f) * speechProtect);
                     const float speechFloor = voiceMode
-                        ? lerp(0.02f, 0.22f, speechProtect)
+                        ? lerp(0.01f, 0.14f, speechProtect)
                         : 1.0e-4f;
                     const float effectiveFloor = juce::jlimit(1.0e-4f, 0.12f,
                                                               std::max(lerp(1.0e-4f, subtractFloor, protectMask),
@@ -654,7 +714,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                               (mag - effectiveAlpha * noiseMag)
                                               / std::max(kEps, mag));
                     if (voiceMode) {
-                        const float speechRescue = juce::jlimit(0.0f, 0.35f, 0.30f * speechProtect);
+                        const float speechRescue = juce::jlimit(0.0f, 0.24f, 0.20f * speechProtect);
                         gSub = lerp(gSub, 1.0f, speechRescue);
                     }
                     g = std::max(g * gSub, effectiveFloor);

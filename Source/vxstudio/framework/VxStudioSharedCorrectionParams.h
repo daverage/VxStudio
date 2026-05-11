@@ -9,6 +9,7 @@ struct SharedParams {
     float plosive = 0.0f;
     float compress = 0.0f;
     float troubleSmooth = 0.0f;
+    float troubleConfidence = 0.0f;
     float limit = 0.0f;
     float recovery = 0.0f;
     float smartGain = 0.5f;

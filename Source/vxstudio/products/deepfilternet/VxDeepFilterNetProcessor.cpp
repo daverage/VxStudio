@@ -167,6 +167,7 @@ void VXDeepFilterNetAudioProcessor::setNonRealtime(const bool shouldProcessOffli
 void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
+    analysisScratch.setSize(std::max(1, getTotalNumOutputChannels()), currentBlockSize, false, false, true);
     resetSuite();
     prepareEngineIfNeeded();
 }
@@ -176,7 +177,55 @@ void VXDeepFilterNetAudioProcessor::resetSuite() {
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
     startupWetRamp = 0.0f;
+    lastArtifactRisk = 0.0f;
     controlsPrimed = false;
+}
+
+void VXDeepFilterNetAudioProcessor::ensureAnalysisScratch(const int channels, const int samples) {
+    if (analysisScratch.getNumChannels() < channels || analysisScratch.getNumSamples() < samples)
+        analysisScratch.setSize(channels, samples, false, false, true);
+}
+
+float VXDeepFilterNetAudioProcessor::estimateArtifactRisk(const juce::AudioBuffer<float>& dry,
+                                                          const juce::AudioBuffer<float>& wet,
+                                                          const int channels,
+                                                          const int samples) const noexcept {
+    double drySquares = 0.0;
+    double wetSquares = 0.0;
+    double deltaSquares = 0.0;
+    double brightDeltaSquares = 0.0;
+    int count = 0;
+
+    for (int ch = 0; ch < channels; ++ch) {
+        const float* dryData = dry.getReadPointer(ch);
+        const float* wetData = wet.getReadPointer(ch);
+        float previousDelta = 0.0f;
+        for (int i = 0; i < samples; ++i) {
+            const double drySample = static_cast<double>(dryData[i]);
+            const double wetSample = static_cast<double>(wetData[i]);
+            const float delta = wetData[i] - dryData[i];
+            drySquares += drySample * drySample;
+            wetSquares += wetSample * wetSample;
+            deltaSquares += static_cast<double>(delta) * static_cast<double>(delta);
+            const float brightDelta = delta - previousDelta;
+            brightDeltaSquares += static_cast<double>(brightDelta) * static_cast<double>(brightDelta);
+            previousDelta = delta;
+        }
+        count += samples;
+    }
+
+    if (count <= 0)
+        return 0.0f;
+
+    const float dryRms = std::sqrt(static_cast<float>(drySquares / static_cast<double>(count)));
+    const float wetRms = std::sqrt(static_cast<float>(wetSquares / static_cast<double>(count)));
+    const float deltaRms = std::sqrt(static_cast<float>(deltaSquares / static_cast<double>(count)));
+    const float brightDeltaRms = std::sqrt(static_cast<float>(brightDeltaSquares / static_cast<double>(count)));
+
+    const float suppression = vxsuite::clamp01((dryRms - wetRms) / std::max(dryRms, 1.0e-6f));
+    const float deltaDominance = vxsuite::clamp01(deltaRms / std::max(wetRms + 0.35f * dryRms, 1.0e-6f));
+    const float brightBias = vxsuite::clamp01(brightDeltaRms / std::max(deltaRms * 2.4f, 1.0e-6f));
+    return vxsuite::clamp01(0.34f * suppression + 0.36f * deltaDominance + 0.30f * brightBias);
 }
 
 VXDeepFilterNetAudioProcessor::ModelVariant VXDeepFilterNetAudioProcessor::selectedModelVariant() const noexcept {
@@ -211,6 +260,8 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
 
     const float cleanTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
+    ensureAnalysisScratch(numChannels, numSamples);
+    analysisScratch.makeCopyOf(buffer, true);
 
     if (!controlsPrimed) {
         smoothedClean = cleanTarget;
@@ -223,20 +274,30 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
 
     const auto variant = selectedModelVariant();
     const float wetMix = vxsuite::clamp01(smoothedClean);
+    const float adaptiveGuard = vxsuite::clamp01(smoothedGuard * (0.55f + 0.90f * lastArtifactRisk));
     float effectiveClean = wetMix;
     if (variant == ModelVariant::dfn2) {
         // DFN2 reacts badly to post dry/wet recombination, so Guard should
         // mainly back off the model drive rather than reintroduce dry signal.
-        effectiveClean = vxsuite::clamp01(effectiveClean * (1.0f - 0.42f * smoothedGuard));
+        effectiveClean = vxsuite::clamp01(effectiveClean * (1.0f - 0.30f * smoothedGuard - 0.30f * adaptiveGuard));
     }
     const bool processed = engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
 
     if (processed) {
+        lastArtifactRisk = estimateArtifactRisk(analysisScratch, buffer, numChannels, numSamples);
+        const float confidenceGuard = vxsuite::clamp01(smoothedGuard * (0.25f + 0.90f * lastArtifactRisk));
+        if (variant != ModelVariant::dfn2)
+            effectiveClean = vxsuite::clamp01(effectiveClean * (1.0f - 0.34f * confidenceGuard));
+
         startupWetRamp = vxsuite::smoothBlockValue(startupWetRamp, 1.0f, currentSampleRateHz, numSamples, 0.040f);
         ensureLatencyAlignedListenDry(numSamples);
-        blendProcessedWithDry(buffer, effectiveClean * startupWetRamp);
+        const float restoreWet = variant == ModelVariant::dfn2
+            ? vxsuite::clamp01(effectiveClean * (1.0f - 0.10f * confidenceGuard))
+            : vxsuite::clamp01(effectiveClean * (1.0f - 0.32f * confidenceGuard));
+        blendProcessedWithDry(buffer, restoreWet * startupWetRamp);
     } else {
         startupWetRamp = 0.0f;
+        lastArtifactRisk = 0.0f;
     }
 }
 

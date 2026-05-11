@@ -197,6 +197,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     options.labRawMode = true;
 
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto analysis = getVoiceAnalysisSnapshot();
     const auto voiceContext = getVoiceContextSnapshot();
     const float vocalPriority = voiceMode
         ? vxsuite::clamp01(0.36f * voiceContext.vocalDominance
@@ -205,6 +206,11 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
                          + 0.10f * voiceContext.speechPresence
                          + 0.08f * voiceContext.centerConfidence)
         : 0.0f;
+    const float tailEvidence = vxsuite::clamp01(
+        0.52f * analysis.tailLikelihood
+      + 0.20f * (1.0f - analysis.directness)
+      + 0.16f * voiceContext.buriedSpeech
+      + 0.12f * (1.0f - voiceContext.intelligibility));
     deverbProcessor.voiceMode = voiceMode;
 
     // Pass reduce directly as the Wiener amount — at reduce=0, amount=0 so all
@@ -213,11 +219,13 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     const float reduce = vxsuite::clamp01(smoothedReduce);
     const float reduceDrive = reduce <= 1.0e-4f ? 0.0f : std::pow(reduce, voiceMode ? 0.76f : 0.72f);
     const float effectiveReduce = voiceMode
-        ? vxsuite::clamp01(reduceDrive * (1.0f - 0.02f * vocalPriority + 0.18f * voiceContext.buriedSpeech))
-        : reduceDrive;
+        ? vxsuite::clamp01(reduceDrive
+                           * (1.0f - 0.02f * vocalPriority + 0.18f * voiceContext.buriedSpeech)
+                           * (0.82f + 0.30f * tailEvidence))
+        : vxsuite::clamp01(reduceDrive * (0.88f + 0.24f * tailEvidence));
     const float overSubtractTarget = voiceMode
-        ? (1.0f + 5.8f * effectiveReduce)
-        : (1.0f + 6.6f * effectiveReduce);
+        ? (1.0f + 5.8f * effectiveReduce * (0.84f + 0.32f * tailEvidence))
+        : (1.0f + 6.6f * effectiveReduce * (0.86f + 0.28f * tailEvidence));
     deverbProcessor.setOverSubtract(overSubtractTarget);
 
     const auto renderWet = [&](const float amount) {

@@ -1,3 +1,94 @@
+# Steady suite upgrade rollout - 2026-05-08
+
+## Goal
+Turn the roadmap into a steady upgrade program that improves the suite one effect or shared framework slice at a time, starting with the highest-impact product and verifying each step before moving on.
+
+## Plan
+
+- [x] `Rebalance` phase 1: add stronger confidence-aware backoff on low-trust material, tighten “honest when unsure” behaviour, and lock it with regression coverage
+- [x] `Rebalance` phase 2: reduce `Guitar`/`Other` overlap with a cleaner derived-guitar ownership path and refreshed listening/measurement checks
+- [x] `Rebalance` phase 3: introduce a lightweight ownership-engine abstraction so heuristic and future ML-guided mask sources can share one bounded render path
+- [x] `Leveler` phase 1: split whole-mix leveling targets more clearly from vocal-riding policy inside the current controller
+- [x] `Leveler` phase 2: move whole-mix control toward loudness/perceptual target tracking with shared offline/realtime verification
+- [x] Shared finishing framework: upgrade `Finish` / `OptoComp` to true-peak-aware, perceptual-loudness-safe finishing
+- [x] `Cleanup`: simplify overlapping corrective heuristics around a smaller confidence-aware trouble model
+- [x] `Denoiser`: add a hybrid residual/artifact-confidence cleanup stage on top of the classical core
+- [x] `Deverb`: strengthen room-tail evidence detection and early/late discrimination before any further global aggression tuning
+- [x] `Subtract`: add adaptive profile-confidence / mismatch handling so stale learned captures back off intelligently
+- [x] `Proximity`: move from static close-mic contouring to source-aware distance modeling with steadier loudness
+- [x] `Tone`: upgrade static shelves into a more perceptual tilt/body model without expanding the UI
+- [x] `DeepFilterNet`: improve backend/model orchestration, realtime/offline policy, and artifact-confidence reporting
+- [x] `Studio Analyser`: turn internal telemetry into a semantically calibrated decision tool with clearer confidence/interpretation layers
+- [ ] After each phase: run focused verification, update this file with a review note, and only then move to the next product/framework slice
+
+## Review
+
+- `Rebalance` phase 1 is complete.
+- Tightened the final Rebalance render path so low-confidence material now backs off harder toward unity before aggressive source moves or hard-isolation behaviour are allowed.
+- The change is deliberately bounded to the existing heuristic engine: source contribution scaling, separation pressure, and hard-isolation eligibility now all respect signal-quality-derived trust.
+- Added regression coverage proving an aggressive Rebalance setting changes a confident stereo input more than the same content collapsed to dual mono, which protects the “be honest when unsure” contract.
+- `Rebalance` phase 2 is complete.
+- Tightened the heuristic guitar path so `Guitar` now leans more on direct guitar evidence plus residual opportunity after the stronger named lanes claim confident ownership, while `Other` behaves more like an unresolved residual absorber in the contested midrange.
+- Tightened the tracked-object probabilities in the same direction so wide/steady harmonic material does not fall into `Other` as easily once guitar evidence is present, but centered accompaniment still backs off from guitar claims more quickly.
+- Added a focused synthetic regression that boosts `Guitar` on a guitar-plus-other mix and requires the added delta to correlate more strongly with the guitar-like stem than the accompaniment-like stem.
+- `Rebalance` phase 3 is complete, which finishes the current Rebalance roadmap.
+- Split the internal Rebalance flow into a clearer ownership-estimation stage and a separate bounded render-policy stage, so the current heuristic ownership path stays intact while a future ML-guided ownership source now has a much cleaner insertion seam.
+- The render code is now organized around explicit per-bin `OwnershipFrame` and `RenderFrame` helpers instead of one large mixed responsibility block, which makes further Rebalance work more testable and less rewrite-prone.
+- `Leveler` phase 1 is complete.
+- Split the Leveler DSP so `Mix Leveler` now exits into its own internal processing path before the vocal-rider controller/state machine, instead of sharing one large mixed hot path with mode-specific branching throughout.
+- This keeps the existing whole-mix behavior and existing vocal-rider behavior intact for now, but makes the product roles much clearer internally and gives phase 2 a cleaner base for louderness/perceptual target work.
+- `Leveler` phase 2 is complete.
+- `Tone` is complete for the current rollout slice.
+- The Tone control law now uses a stronger edge-shaped response curve so travel near 100% feels more decisive instead of staying politely linear.
+- The shelves also shift their corner frequencies slightly with the control position, which makes the result read more like tilt/body shaping than a fixed pair of static shelves.
+- Added regression coverage that checks the edge settings stay clearly stronger than mid-travel and that the low/high boosts remain meaningfully source-selective.
+- `DeepFilterNet` is complete for this first orchestration pass.
+- Kept the denoise model itself unchanged, but added a lightweight artifact-risk readback path so `Guard` now responds more to blocks where the model change looks more suppression-heavy or bright-residual-heavy instead of acting like a mostly static backoff knob.
+- The processor now snapshots the dry block, estimates post-model artifact risk from dry/wet delta behavior, and uses that confidence to steer both model drive and wet restoration differently for `DeepFilterNet 3` versus the more fragile `DeepFilterNet 2` path.
+- Added a focused regression that proves the same `Guard` range produces a larger audible difference on artifact-heavier noisy speech than on lightly contaminated speech, alongside the existing offline/live mode-switch recovery coverage.
+- `Studio Analyser` is complete for this roadmap pass.
+- Tightened the analyser’s chain selection so it now reconstructs the most likely active upstream path feeding the analyser input instead of trusting broad same-domain membership on its own.
+- Bypassed/non-live stages are now excluded from that inferred chain, and the sidebar snapshot filtering follows the same selected active path, which keeps the analyser from drifting onto unrelated FX on other tracks in the same host process.
+- Added a focused regression around the shared chain selector that mixes one valid upstream path with a bypassed lookalike and a foreign stage, and requires the analyser scoping logic to keep only the active local chain.
+- Reworked the `Mix Leveler` drive metric away from a mostly full-band amplitude proxy and toward a simple perceptual band model, so low bass energy counts for less while low-mid and presence energy count more strongly when building the whole-mix loudness target.
+- Kept the change bounded to the internal general-mode meter and target-follow path, which means the vocal-rider controller stays untouched while the whole-mix mode now reacts more like a loudness shaper than a raw amplitude tamer.
+- Added a focused regression that compares bass-heavy and upper-mid-dense `Mix Leveler` inputs and requires the upper-mid-dense material to be ridden at least slightly harder, protecting the new perceptual weighting intent with a more program-like probe.
+- Shared finishing framework is complete for this roadmap step.
+- Upgraded the shared `Finish` / `OptoComp` recovery path so block-level makeup recovery now respects an estimated true peak instead of only sample peaks, which leaves more honest headroom once the post-opto gain is restored.
+- Tightened the same recovery logic with a crest-aware weighting so bright, transient-heavy material is less likely to get RMS-reinflated as aggressively as denser programme, making the shared finisher a bit more perceptual-loudness-safe without changing either product UI.
+- Added a shared regression that drives both `Finish` and `OptoComp` with bright transient stress material and checks the rendered result stays finite and inside a bounded estimated true-peak envelope.
+- `Cleanup` is complete for this roadmap step.
+- Simplified the overlapping harshness layer by turning the shared `troubleSmooth` path into a confidence-aware follow-on stage instead of letting it act like a second fully independent harshness engine beside `deEss` and `breath`.
+- The new `Cleanup` trouble confidence leans on explicit harshness evidence and backs off when articulation-risk, tonal-drift risk, or already-strong `deEss` / `breath` action suggest the narrower lanes already explain the problem.
+- Added a focused regression that compares harsh-contaminated material against a voiced edge case and requires the `Smooth` lane to favor the clearly harsh case while staying restrained on the voiced one.
+- `Denoiser` is complete for this roadmap step.
+- Added a bounded post-core artifact cleanup lane so the classical OM-LSA denoiser can now hand off bright residual cleanup to a small confidence-aware corrective stage instead of relying only on broad residual gain trimming.
+- The new denoiser cleanup stage is driven by tonal artifact evidence, speech-presence context, and signal-quality trust, and it stays intentionally narrow: mostly `deEss` / `Smooth` style cleanup with no new low-end or plosive correction path.
+- Added a focused regression that requires the hybrid denoiser to reduce harsh high-band residue at least slightly more strongly than normal voiced material while keeping voiced coherence inside a bounded floor.
+- `Deverb` is complete for this roadmap step.
+- Strengthened the Deverb evidence path by adding explicit late-persistence weighting inside the spectral late-reverb estimate, so bins are suppressed more confidently when energy really persists into the late region and less aggressively when the same energy still looks early/direct.
+- Tightened the wrapper policy in the same direction by feeding existing tail-likelihood and directness evidence into the effective reduce / over-subtract targets, which keeps the product closer to “act when there is real tail evidence” instead of broad energy-driven subtraction.
+- Added a focused regression that requires strong Deverb settings on a synthetic room to reduce the later tail more strongly than the early body, protecting the early/late discrimination intent.
+- `Subtract` is complete for this roadmap step.
+- Added a bounded runtime learned-profile trust model inside the Subtract DSP so learned captures now have an explicit confidence/mismatch seam instead of behaving like a permanently fixed frozen profile once captured.
+- Kept this pass intentionally steady: the new trust signal is tracked and exposed for regression/verification, but the audible subtract path still stays on the stable existing render law while we avoid reintroducing the older wet/listen and full-chain instability risks.
+- Added focused regression coverage that learns a profile, renders speech-dominant material through the learned path, and requires the runtime learned-profile trust to fall below full confidence on stale-like material.
+- `Proximity` is complete for this roadmap step.
+- Reworked the close-mic model from a fixed contour into a lightly source-aware distance model by adding per-block low / low-mid / presence / air analysis that biases how much body rise, mud cleanup, directness, and openness are actually appropriate for the incoming material.
+- Tightened loudness handling in the same pass by making output trim depend on the analysed source balance, so bass-heavy sources give back a little more gain than already-lean or presence-heavy material when the same `Closer` move is applied.
+- Added a focused regression that drives `Proximity` with bass-heavy and presence-heavy synthetic sources at the same strong setting and requires the output loudness shift to stay within a tighter bounded gap.
+- Verified build: `cmake --build build --target VXStudioPluginRegressionTests -j4`
+- Verified run: `./build/VXStudioPluginRegressionTests`
+- Rebalance status: finished for this roadmap pass.
+- Leveler status: finished for this roadmap pass.
+- Shared finishing framework status: finished for this roadmap pass.
+- Cleanup status: finished for this roadmap pass.
+- Denoiser status: finished for this roadmap pass.
+- Deverb status: finished for this roadmap pass.
+- Subtract status: finished for this roadmap pass.
+- Proximity status: finished for this roadmap pass.
+- Next recommended focus: `Tone`, specifically upgrading the current static shelves into a more perceptual tilt/body model without expanding the UI.
+
 # Non-Subtract effect aggressiveness retune - 2026-05-08
 
 ## Goal

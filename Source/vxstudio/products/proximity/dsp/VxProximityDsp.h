@@ -58,6 +58,23 @@ private:
         BiquadState mudBell;
         BiquadState presenceBell;
         BiquadState highShelf;
+        float analysisLow = 0.f;
+        float analysisLowMid = 0.f;
+        float analysisPresence = 0.f;
+        float analysisAir = 0.f;
+    };
+
+    struct SmoothedModelState {
+        float lowFcHz = 0.f;
+        float lowGainDb = 0.f;
+        float mudCutCenterHz = 0.f;
+        float mudCutDb = 0.f;
+        float presenceCenterHz = 0.f;
+        float presenceDb = 0.f;
+        float highFcHz = 0.f;
+        float highGainDb = 0.f;
+        float outputTrimDb = 0.f;
+        bool primed = false;
     };
 
     static BiquadCoeffs makeLowShelf (double sr, float fcHz, float gainDb) noexcept;
@@ -67,6 +84,7 @@ private:
 
     std::vector<ChannelState> chans;
     double sr = 48000.0;
+    SmoothedModelState smoothedModel;
 };
 
 } // namespace vxsuite::proximity

@@ -114,15 +114,14 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                          + 0.10f * voiceContext.speechPresence
                          + 0.08f * voiceContext.centerConfidence)
         : 0.0f;
-    const float outputGainLinear = juce::jmap(smoothedGain, 0.0f, 1.0f, 0.5f, 1.5f);
-    const float outputGainDb = juce::Decibels::gainToDecibels(outputGainLinear, -120.0f);
+    const float outputGainDb = juce::jmap(smoothedGain, 0.0f, 1.0f, -9.0f, 9.0f);
 
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
     dspParams.peakReduction = vxsuite::clamp01(smoothedPeakReduction
                             * (voiceMode
-                                ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
-                                : 1.0f));
+                                ? (1.05f - 0.08f * vocalPriority + 0.04f * voiceContext.buriedSpeech)
+                                : 1.08f));
     dspParams.outputGainDb = outputGainDb;
     dspParams.body = smoothedBody;
 

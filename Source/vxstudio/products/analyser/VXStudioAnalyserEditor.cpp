@@ -927,6 +927,39 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         externalStages.push_back(std::move(entry));
     }
 
+    const bool hasAnalyserSignal = analyserStage.has_value()
+        && analyserStage->view.telemetry.inputSummary.rms > 1.0e-6f;
+    if (hasAnalyserSignal) {
+        std::vector<vxsuite::analysis::StageView> candidateViews;
+        candidateViews.reserve(externalStages.size());
+        for (const auto& stage : externalStages)
+            candidateViews.push_back(stage.view);
+
+        const auto selectedViews =
+            vxsuite::analysis::selectLikelyUpstreamStages(std::move(candidateViews),
+                                                          analyserStage->view.telemetry.inputSummary);
+
+        externalStages.erase(std::remove_if(externalStages.begin(),
+                                            externalStages.end(),
+                                            [&](const StageEntry& stage) {
+                                                return std::none_of(selectedViews.begin(),
+                                                                    selectedViews.end(),
+                                                                    [&](const vxsuite::analysis::StageView& selected) {
+                                                                        return selected.telemetry.identity.instanceId
+                                                                            == stage.view.telemetry.identity.instanceId;
+                                                                    });
+                                            }),
+                             externalStages.end());
+    } else {
+        externalStages.erase(std::remove_if(externalStages.begin(),
+                                            externalStages.end(),
+                                            [](const StageEntry& stage) {
+                                                return stage.view.telemetry.state.isBypassed
+                                                    || !stage.view.telemetry.state.isLive;
+                                            }),
+                             externalStages.end());
+    }
+
     for (int slotIndex = 0; slotIndex < vxsuite::spectrum::SnapshotRegistry::instance().maxSlots(); ++slotIndex) {
         vxsuite::spectrum::SnapshotView snapshot;
         if (!vxsuite::spectrum::SnapshotRegistry::instance().readSlot(slotIndex, snapshot))
@@ -1000,9 +1033,6 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
     });
 
-    const bool hasAnalyserSignal = analyserStage.has_value()
-        && analyserStage->view.telemetry.inputSummary.rms > 1.0e-6f;
-
     // Build canonical key set from domain stages so we can filter the sidebar.
     std::vector<juce::String> chainStageKeys;
     chainStageKeys.reserve(externalStages.size() * 2);
@@ -1037,6 +1067,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     }
 
     int selectedIndexValue = selectedStageIndex.load();
+    const std::uint64_t selectedInstanceId = selectedStageInstanceId.load();
     bool fullChain = fullChainSelected.load();
     const int maxSelectableRows = !sidebarSnapshotCache.empty()
         ? static_cast<int>(sidebarSnapshotCache.size())
@@ -1065,6 +1096,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     if (!sidebarSnapshotCache.empty() || !externalStages.empty()) {
         model.chainRows.reserve(sidebarSnapshotCache.size() + externalStages.size());
         model.chainRowStageIndices.reserve(sidebarSnapshotCache.size() + externalStages.size());
+        model.chainRowStageInstanceIds.reserve(sidebarSnapshotCache.size() + externalStages.size());
         std::vector<bool> matchedExternalStages(static_cast<std::size_t>(externalStages.size()), false);
         for (const auto& snapshot : sidebarSnapshotCache) {
             int matchedStageIndex = -1;
@@ -1082,15 +1114,18 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 ++matchedTelemetryRows;
                 matchedExternalStages[static_cast<std::size_t>(matchedStageIndex)] = true;
                 const auto& stage = externalStages[static_cast<std::size_t>(matchedStageIndex)];
+                const bool isSelectedStage =
+                    !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
                 model.chainRows.push_back({
                     snapshot.displayName,
                     stage.stateText,
                     stage.impactText,
                     stage.typeLabel,
                     stage.freqHint,
-                    !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
+                    isSelectedStage
                 });
                 model.chainRowStageIndices.push_back(matchedStageIndex);
+                model.chainRowStageInstanceIds.push_back(stage.view.telemetry.identity.instanceId);
             } else {
                 model.chainRows.push_back({
                     snapshot.displayName,
@@ -1103,6 +1138,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                     !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
                 });
                 model.chainRowStageIndices.push_back(-1);
+                model.chainRowStageInstanceIds.push_back(0);
             }
         }
 
@@ -1112,15 +1148,35 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 continue;
             }
             const auto& stage = externalStages[static_cast<std::size_t>(index)];
+            const bool isSelectedStage =
+                !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
             model.chainRows.push_back({
                 displayStageName(stage.stageName),
                 stage.stateText,
                 stage.impactText,
                 stage.typeLabel,
                 stage.freqHint,
-                !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
+                isSelectedStage
             });
             model.chainRowStageIndices.push_back(index);
+            model.chainRowStageInstanceIds.push_back(stage.view.telemetry.identity.instanceId);
+        }
+    }
+
+    if (!fullChain && selectedInstanceId != 0) {
+        int resolvedRowIndex = -1;
+        for (int rowIndex = 0; rowIndex < static_cast<int>(model.chainRowStageIndices.size()); ++rowIndex) {
+            const int stageIndex = model.chainRowStageIndices[static_cast<std::size_t>(rowIndex)];
+            if (stageIndex < 0 || stageIndex >= static_cast<int>(externalStages.size()))
+                continue;
+            if (externalStages[static_cast<std::size_t>(stageIndex)].view.telemetry.identity.instanceId == selectedInstanceId) {
+                resolvedRowIndex = rowIndex;
+                break;
+            }
+        }
+        if (resolvedRowIndex >= 0) {
+            selectedIndexValue = resolvedRowIndex;
+            selectedStageIndex.store(resolvedRowIndex);
         }
     }
 
@@ -1184,12 +1240,12 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 before = stage.view.telemetry.inputSummary;
                 after = stage.view.telemetry.outputSummary;
                 scopeLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName;
-                selectionKey = "stage:" + stage.stageId + ":" + juce::String(selectedIndexValue);
+                selectionKey = "stage:" + juce::String(static_cast<juce::int64>(stage.view.telemetry.identity.instanceId));
             } else if (analyserStage.has_value()) {
                 before = analyserStage->view.telemetry.inputSummary;
                 after = analyserStage->view.telemetry.outputSummary;
                 scopeLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName + " (Waiting)";
-                selectionKey = "waiting:" + juce::String(selectedIndexValue);
+                selectionKey = "waiting:" + juce::String(static_cast<juce::int64>(selectedInstanceId));
             }
         }
         model.valid = !selectionKey.isEmpty() && selectionKey != "empty";
@@ -1492,12 +1548,15 @@ void VXStudioAnalyserEditor::selectStage(const int index) {
         return;
     selectedStageIndex.store(index);
     fullChainSelected.store(false);
+    if (index < static_cast<int>(currentRenderModel.chainRowStageInstanceIds.size()))
+        selectedStageInstanceId.store(currentRenderModel.chainRowStageInstanceIds[static_cast<std::size_t>(index)]);
     refreshRenderModel();
     applyPendingRenderModel();
 }
 
 void VXStudioAnalyserEditor::selectFullChain() {
     selectedStageIndex.store(-1);
+    selectedStageInstanceId.store(0);
     fullChainSelected.store(true);
     refreshRenderModel();
     applyPendingRenderModel();

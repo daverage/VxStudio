@@ -186,7 +186,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     const auto voiceContext = getVoiceContextSnapshot();
     const auto signalQuality = getSignalQualitySnapshot();
     const float cleanup = vxsuite::clamp01(smoothedCleanup);
-    const float cleanupDrive = vxsuite::clamp01(std::sqrt(cleanup));
+    const float cleanupDrive = vxsuite::clamp01(std::pow(cleanup, 0.68f));
     const float cleanupStrength = cleanupDrive;
     const float body = vxsuite::clamp01(smoothedBody);
     const float focus = vxsuite::clamp01(smoothedFocus);
@@ -439,6 +439,10 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         cleanupDrive * qualityTrust * breathWeight * (voiceMode ? 0.90f : 0.56f) * voicedBreathGuard,
         cleanupDrive * qualityTrust * plosiveWeight * (voiceMode ? 1.08f : 0.86f) * (1.0f - 0.15f * preserveBody) * plosiveFocusGuard * plosiveVoicedGuard,
         cleanupDrive * qualityTrust * harshWeight * (0.56f + 0.94f * highBias) * (voiceMode ? 1.22f : 1.10f) * voicedHighBandGuard);
+    const float voicedHighSafety = juce::jlimit(0.82f, 1.0f,
+        1.0f - 0.16f * voiceContext.intelligibility
+              - 0.10f * evidence.speechConfidence
+              - 0.08f * voiceContext.speechPresence);
 
     const bool hpfOn = vxsuite::readBool(parameters, kHpfOnParam, false);
     const bool hiShelfOn = vxsuite::readBool(parameters, kHiShelfOnParam, false);
@@ -457,6 +461,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                            * (voiceMode ? 1.26f : 1.14f)
                            * voicedHighBandGuard
                            * highBandSpeechGuard
+                           * voicedHighSafety
                            * juce::jlimit(0.52f, 1.0f, 1.0f - 0.62f * readabilityGuard.articulationRisk - 0.18f * readabilityGuard.tonalDriftRisk));
     params.breath = vxsuite::clamp01(cleanupDrive * cleanupIntensity * qualityTrust * breathWeight
                             * (voiceMode ? 0.90f : 0.56f)
@@ -469,12 +474,29 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                              * plosiveVoicedGuard
                              * juce::jlimit(0.44f, 1.0f, 1.0f - 0.28f * readabilityGuard.bodyLossRisk - 0.18f * readabilityGuard.cumulativeRisk));
     params.compress = 0.0f;
-    params.troubleSmooth = vxsuite::clamp01(cleanupDrive * cleanupIntensity * qualityTrust * harshWeight
+    const float rawTroubleSmooth = vxsuite::clamp01(cleanupDrive * cleanupIntensity * qualityTrust * harshWeight
                                    * (0.56f + 0.94f * highBias)
                                    * (voiceMode ? 1.22f : 1.10f)
                                    * voicedHighBandGuard
                                    * highBandSpeechGuard
+                                   * voicedHighSafety
                                    * juce::jlimit(0.46f, 1.0f, 1.0f - 0.48f * readabilityGuard.cumulativeRisk - 0.26f * readabilityGuard.tonalDriftRisk - 0.14f * readabilityGuard.articulationRisk));
+    const float troubleEvidence = vxsuite::clamp01(
+        0.34f * harshWeight
+      + 0.18f * evidence.artifactRisk
+      + 0.14f * readabilityGuard.shortDensity
+      + 0.14f * readabilityGuard.selfMaskHigh
+      + 0.10f * (1.0f - voiceContext.intelligibility)
+      + 0.10f * (1.0f - signalQuality.compressionScore));
+    const float troubleOverlap = vxsuite::clamp01(
+        0.42f * params.deEss
+      + 0.22f * params.breath
+      + 0.16f * readabilityGuard.articulationRisk
+      + 0.12f * readabilityGuard.tonalDriftRisk
+      + 0.08f * readabilityGuard.cumulativeRisk);
+    params.troubleConfidence = vxsuite::clamp01(
+        0.18f + 0.82f * vxsuite::clamp01(troubleEvidence * (1.0f - 0.58f * troubleOverlap)));
+    params.troubleSmooth = vxsuite::clamp01(rawTroubleSmooth * params.troubleConfidence);
     params.limit = 0.0f;
     params.recovery = 0.0f;
     params.smartGain = 0.0f;
@@ -503,13 +525,22 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         0.75f * evidence.speechConfidence + 0.25f * voiceContext.intelligibility);
     params.noiseFloorDb = evidence.noiseFloorDb;
     params.hpfOn = hpfOn;
-    params.hiShelfOn = hiShelfOn;
+    const float voicedShelfRisk = juce::jlimit(0.0f, 1.0f,
+        0.42f * voiceContext.intelligibility
+      + 0.24f * voiceContext.speechPresence
+      + 0.22f * evidence.speechConfidence
+      + 0.12f * (1.0f - evidence.artifactRisk));
+    const bool preserveVoicedHighs = voicedShelfRisk > 0.48f
+        && evidence.artifactRisk < 0.32f
+        && focus > 0.60f;
+    params.hiShelfOn = hiShelfOn && !preserveVoicedHighs;
 
     params.deMud = vxsuite::clamp01(params.deMud);
     params.deEss = vxsuite::clamp01(params.deEss);
     params.breath = vxsuite::clamp01(params.breath);
     params.plosive = vxsuite::clamp01(params.plosive);
     params.troubleSmooth = vxsuite::clamp01(params.troubleSmooth);
+    params.troubleConfidence = vxsuite::clamp01(params.troubleConfidence);
     params.voicePreserve = vxsuite::clamp01(params.voicePreserve);
     params.denoiseAmount = vxsuite::clamp01(params.denoiseAmount);
     params.artifactRisk = vxsuite::clamp01(params.artifactRisk);
@@ -527,20 +558,22 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     params.speechPresence = vxsuite::clamp01(params.speechPresence);
 
     const float strongCleanupFloor = juce::jlimit(0.0f, 1.0f,
-        (cleanupDrive - 0.36f) / 0.64f) * cleanupRamp * (0.72f + 0.28f * densityPressure) * voicedMaterialGuard;
+        (cleanupDrive - 0.24f) / 0.76f) * cleanupRamp * (0.80f + 0.20f * densityPressure) * voicedMaterialGuard;
     if (strongCleanupFloor > 0.0f) {
         params.deMud = std::max(params.deMud,
-            0.205f * strongCleanupFloor * (0.74f + 0.26f * lowBias)
+            0.320f * strongCleanupFloor * (0.76f + 0.24f * lowBias)
             * (1.0f - 0.24f * readabilityGuard.bodyLossRisk));
         params.deEss = std::max(params.deEss,
-            0.135f * strongCleanupFloor * (0.68f + 0.32f * highBias) * highBandSpeechGuard
+            0.200f * strongCleanupFloor * (0.70f + 0.30f * highBias) * highBandSpeechGuard
             * (1.0f - 0.26f * readabilityGuard.articulationRisk));
         params.breath = std::max(params.breath,
-            0.090f * strongCleanupFloor * (0.62f + 0.38f * highBias) * highBandSpeechGuard
+            0.130f * strongCleanupFloor * (0.66f + 0.34f * highBias) * highBandSpeechGuard
             * (1.0f - 0.24f * readabilityGuard.articulationRisk));
         params.troubleSmooth = std::max(params.troubleSmooth,
-            0.115f * strongCleanupFloor * (0.58f + 0.42f * highBias) * highBandSpeechGuard
+            0.180f * strongCleanupFloor * (0.62f + 0.38f * highBias) * highBandSpeechGuard
             * (1.0f - 0.24f * readabilityGuard.cumulativeRisk));
+        params.troubleSmooth = std::min(params.troubleSmooth,
+            rawTroubleSmooth * juce::jlimit(0.54f, 1.0f, 0.54f + 0.46f * params.troubleConfidence));
     }
 
     correctiveChain.setParams(params);
@@ -555,10 +588,10 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         const float presenceCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * 2900.0f
             / static_cast<float>(currentSampleRateHz));
         const float mudKeep = juce::jlimit(0.80f, 1.0f,
-            1.0f - strongCleanupFloor * (0.12f + 0.08f * lowBias)
+            1.0f - strongCleanupFloor * (0.16f + 0.09f * lowBias)
                   * (1.0f - 0.14f * readabilityGuard.bodyLossRisk));
         const float glareKeep = juce::jlimit(0.88f, 1.0f,
-            1.0f - strongCleanupFloor * (0.07f + 0.05f * highBias) * highBandSpeechGuard
+            1.0f - strongCleanupFloor * (0.045f + 0.034f * highBias) * highBandSpeechGuard
                   * (1.0f - 0.12f * readabilityGuard.articulationRisk));
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
             float low = ch < static_cast<int>(assertiveLowState.size()) ? assertiveLowState[static_cast<size_t>(ch)] : 0.0f;
@@ -592,9 +625,9 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
 
     float makeupTarget = 1.0f;
     if (dryRms > 1.0e-5f && wetRms > 1.0e-5f)
-        makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(8.0f),
+        makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(2.0f),
             (dryRms / std::max(wetRms, 1.0e-6f))
-          * juce::jlimit(0.86f, 1.0f, 1.0f - 0.08f * cleanupStrength - 0.06f * densityPressure));
+          * juce::jlimit(0.48f, 1.0f, 1.0f - 0.26f * cleanupStrength - 0.14f * densityPressure));
     smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, makeupTarget, currentSampleRateHz, numSamples, 0.120f);
 
     // Safety: never push above the original dry peak.
