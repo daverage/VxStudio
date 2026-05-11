@@ -367,7 +367,7 @@ Typical distribution sizes:
 ## Contact & Support
 
 For issues with the website:
-- GitHub: https://github.com/marczewski/VxStudio/issues
+- GitHub: https://github.com/daverage/VxStudio/issues
 - Website: https://vxstudio.marczewski.me.uk/support/
 - Email: support@marczewski.me.uk
 

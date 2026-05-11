@@ -357,7 +357,7 @@ In navigation, add:
 ## Resources
 
 - [vxstudio.marczewski.me.uk](https://vxstudio.marczewski.me.uk) - Live site
-- [GitHub Repository](https://github.com/marczewski/VxStudio) - Source code
+- [GitHub Repository](https://github.com/daverage/VxStudio) - Source code
 - [HTML Reference](https://developer.mozilla.org/en-US/docs/Web/HTML)
 - [CSS Reference](https://developer.mozilla.org/en-US/docs/Web/CSS)
 
