@@ -7,19 +7,33 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
         const target = document.querySelector(this.getAttribute('href'));
+
         if (target) {
-            target.scrollIntoView({ behavior: 'smooth' });
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        if (navMenu && navMenu.classList.contains('open')) {
+            navMenu.classList.remove('open');
+            menuToggle?.setAttribute('aria-expanded', 'false');
         }
     });
 });
 
-// Mobile menu toggle (if needed in future)
+// Mobile menu toggle
 const menuToggle = document.querySelector('.menu-toggle');
-const navMenu = document.querySelector('.nav-menu');
+const navMenu = document.querySelector('.nav-panel');
 
-if (menuToggle) {
+if (menuToggle && navMenu) {
     menuToggle.addEventListener('click', () => {
-        navMenu.classList.toggle('active');
+        const isOpen = navMenu.classList.toggle('open');
+        menuToggle.setAttribute('aria-expanded', String(isOpen));
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            navMenu.classList.remove('open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+        }
     });
 }
 
@@ -38,7 +52,7 @@ const observer = new IntersectionObserver((entries) => {
     });
 }, observerOptions);
 
-document.querySelectorAll('.product-card, .feature, .doc-link').forEach(el => {
+document.querySelectorAll('.product-card, .detail-card, .feature, .tech-item, .doc-link, .notice-box').forEach(el => {
     observer.observe(el);
 });
 

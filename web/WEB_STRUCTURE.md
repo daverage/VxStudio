@@ -51,7 +51,7 @@ The website's `downloads/` folder structure should contain the built plugin bina
 
 ```
 web/downloads/
-├── vxsuite-1.0.0-macos-universal.zip       # Main distribution for macOS
+├── vxstudio-complete.zip                    # Main distribution for macOS
 ├── vxsuite-1.0.0-windows-x64.zip           # Main distribution for Windows (future)
 ├── older-versions/                         # Archive of previous releases
 │   └── vxsuite-0.9.0-beta-macos.zip
@@ -62,8 +62,8 @@ web/downloads/
 
 **macOS:**
 ```
-vxsuite-{VERSION}-macos-universal.zip
-Example: vxsuite-1.0.0-macos-universal.zip
+vxstudio-complete.zip
+Example: vxstudio-complete.zip
 Contains: 12 .vst3 bundles + 12 .component (Audio Units)
 ```
 
@@ -78,7 +78,7 @@ Contains: VST3 installer + 12 .vst3 plugin files
 
 **macOS ZIP structure:**
 ```
-vxsuite-1.0.0-macos-universal/
+vxstudio-complete/
 ├── VST3/
 │   ├── VXTone.vst3/
 │   ├── VXCleanup.vst3/
@@ -124,14 +124,14 @@ cd build
 ./scripts/package-macos.sh
 
 # This creates:
-# - vxsuite-1.0.0-macos-universal.zip
+# - vxstudio-complete.zip
 ```
 
 ### Step 3: Copy to Web Downloads Folder
 
 ```bash
-cp vxsuite-1.0.0-macos-universal.zip web/downloads/
-cp vxsuite-1.0.0-macos-universal.zip.sha256 web/downloads/checksums.txt
+cp vxstudio-complete.zip web/downloads/
+cp vxstudio-complete.zip.sha256 web/downloads/checksums.txt
 ```
 
 ### Step 4: Update HTML
@@ -149,7 +149,7 @@ Edit `web/downloads/index.html`:
 rsync -avz --delete web/ user@vxstudio.marczewski.me.uk:/var/www/vxstudio/
 
 # Or using sftp/scp for individual files
-scp web/downloads/vxsuite-1.0.0-macos-universal.zip \
+scp web/downloads/vxstudio-complete.zip \
     user@vxstudio.marczewski.me.uk:/var/www/vxstudio/downloads/
 ```
 

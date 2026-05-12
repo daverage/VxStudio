@@ -70,14 +70,14 @@ The `downloads/` folder should contain:
 
 ```
 web/downloads/
-├── vxsuite-1.0.0-macos-universal.zip     # Main download for macOS
+├── vxstudio-complete.zip                  # Main download for macOS
 └── checksums.txt                          # SHA256 verification
 ```
 
 ### File Naming Convention
 
-**macOS:** `vxsuite-{VERSION}-macos-universal.zip`
-Example: `vxsuite-1.0.0-macos-universal.zip`
+**macOS:** `vxstudio-complete.zip`
+Example: `vxstudio-complete.zip`
 
 **Windows (Future):** `vxsuite-{VERSION}-windows-x64.zip`
 Example: `vxsuite-1.0.0-windows-x64.zip`
@@ -162,24 +162,24 @@ cmake --build build -j$(nproc)
 
 ```bash
 # Create macOS universal distribution
-mkdir -p distribution/vxsuite-1.0.0-macos-universal/{VST3,AudioUnits}
+mkdir -p distribution/vxstudio-complete/{VST3,AudioUnits}
 
 # Copy VST3 bundles
-cp -r build/*/VST3/*.vst3 distribution/vxsuite-1.0.0-macos-universal/VST3/
+cp -r build/*/VST3/*.vst3 distribution/vxstudio-complete/VST3/
 
 # Copy Audio Unit components
-cp -r build/*/AU/*.component distribution/vxsuite-1.0.0-macos-universal/AudioUnits/
+cp -r build/*/AU/*.component distribution/vxstudio-complete/AudioUnits/
 
 # Create ZIP
 cd distribution
-zip -r vxsuite-1.0.0-macos-universal.zip vxsuite-1.0.0-macos-universal/
-sha256sum vxsuite-1.0.0-macos-universal.zip > checksums.txt
+zip -r vxstudio-complete.zip vxstudio-complete/
+sha256sum vxstudio-complete.zip > checksums.txt
 ```
 
 ### Step 3: Copy to Web Downloads
 
 ```bash
-cp distribution/vxsuite-1.0.0-macos-universal.zip web/downloads/
+cp distribution/vxstudio-complete.zip web/downloads/
 cp distribution/checksums.txt web/downloads/
 ```
 
@@ -315,7 +315,7 @@ Edit the file:
 Edit `web/downloads/index.html`:
 ```html
 <!-- Change this -->
-<a href="vxsuite-1.0.0-macos-universal.zip" download class="btn btn-primary">
+<a href="vxstudio-complete.zip" download class="btn btn-primary">
     Download for macOS
 </a>
 

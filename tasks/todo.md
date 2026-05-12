@@ -1,3 +1,28 @@
+# VX Studio website professionalism and mobile pass - 2026-05-11
+
+## Goal
+Make the marketing homepage feel more professional and substantially more mobile-friendly, based on the current desktop/mobile screenshots.
+
+## Plan
+
+- [x] Review the current homepage layout and identify the main polish and responsiveness issues
+- [x] Refine `web/index.html` structure for clearer hierarchy and usable mobile navigation
+- [x] Rework `web/assets/css/style.css` so the homepage feels more deliberate, premium, and compact across breakpoints
+- [x] Update `web/assets/js/script.js` to support the mobile navigation and smoother section interactions
+- [x] Sanity-check the resulting layout/code and record the review here
+
+## Review
+
+- Tightened the homepage visual direction away from a generic template look by switching to a stronger editorial/product-marketing type pairing, denser card rhythm, cleaner badges, and more deliberate section framing.
+- Reworked the hero into a more premium two-part composition with clearer proof points and a more informative right-hand visual panel instead of a mostly empty gradient block.
+- Added a real mobile navigation pattern with a hamburger toggle, collapsible menu panel, and menu-closing behavior on in-page navigation.
+- Fixed the biggest mobile issues by making the hero, proof pills, buttons, stats, product cards, detail cards, platform notices, docs, and footer all collapse cleanly into single-column layouts with tighter spacing.
+- Styled the previously unformatted plugin detail section as an actual responsive card grid, which should materially reduce the “long plain text wall” feel from the mobile screenshot.
+- Also fixed two broken inline gradient declarations on product icons and escaped the raw ampersands in the HTML where needed.
+- Verification:
+- `xmllint --html --noout web/index.html` completed after the ampersand fixes with only expected HTML5 tag warnings from the older parser.
+- I was able to start a local preview server, but I could not fetch it back from this sandboxed session for a rendered browser check, so an in-browser visual pass is still recommended before publishing.
+
 # Steady suite upgrade rollout - 2026-05-08
 
 ## Goal
