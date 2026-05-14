@@ -1,4 +1,5 @@
 #include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
+#include "../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h"
 #include "../Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.h"
 #include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
 #include "../Source/vxstudio/products/denoiser/VxDenoiserProcessor.h"
@@ -23,6 +24,11 @@ using namespace vxsuite::test;
 
 std::atomic<bool> gAllocationTrackingEnabled { false };
 std::atomic<int> gTrackedAllocations { 0 };
+
+template <std::size_t Size>
+juce::String fixedLabelToString(const std::array<char, Size>& value) {
+    return juce::String(value.data());
+}
 
 struct AllocationScope {
     AllocationScope() {
@@ -952,6 +958,35 @@ bool testRebalanceSeparatesGuitarFromOtherMoreClearly() {
     if (!(guitarToGuitar > guitarToOther + 0.06f)) {
         std::cerr << "[VXSuitePluginRegression] Rebalance guitar lane still overlaps 'Other' too much: guitarCorr="
                   << guitarToGuitar << " otherCorr=" << guitarToOther << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testRebalancePhoneModeStillActsOnRoughMaterial() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    const auto roughInput = makeDualMonoBuffer(makeRebalanceStereoConfidenceInput(sr, 1.4f));
+
+    VXRebalanceAudioProcessor processor;
+    processor.prepareToPlay(sr, blockSize);
+    setParamNormalized(processor, "recordingType", 1.0f);
+    setParamNormalized(processor, "vocals", 1.0f);
+    setParamNormalized(processor, "drums", 0.0f);
+    setParamNormalized(processor, "bass", 0.0f);
+    setParamNormalized(processor, "guitar", 0.10f);
+    setParamNormalized(processor, "other", 0.0f);
+    setParamNormalized(processor, "strength", 1.0f);
+
+    const auto out = render(processor, roughInput, blockSize);
+    const float residual = bestGainResidualRatioSkip(roughInput, out, 4096);
+    const float diff = maxAbsDiffSkip(roughInput, out, 4096);
+
+    if (residual < 0.035f || diff < 0.004f) {
+        std::cerr << "[VXSuitePluginRegression] Rebalance phone/rough mode became too close to unity on rough low-confidence material: residual="
+                  << residual << " diff=" << diff << "\n";
         return false;
     }
 
@@ -2446,6 +2481,64 @@ bool testAnalyserChainSelectionStaysTrackLocalAndIgnoresBypassedStages() {
     return true;
 }
 
+bool testAnalyserDomainBindingSurvivesMultipleDomains() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 4096;
+    const auto input = addBuffers(makeSpeechLike(sr, 0.20f), makeNoise(sr, 0.20f, 0.03f));
+
+    bool cleanupFoundInNewestAnalyserDomain = false;
+    juce::String seenCleanupStages;
+    std::uint64_t expectedDomainId = 0;
+    {
+        VXStudioAnalyserAudioProcessor analyserA;
+        analyserA.prepareToPlay(sr, blockSize);
+
+        VXStudioAnalyserAudioProcessor analyserB;
+        analyserB.prepareToPlay(sr, blockSize);
+        expectedDomainId = analyserB.analysisDomainId();
+
+        VXCleanupAudioProcessor cleanup;
+        cleanup.prepareToPlay(sr, blockSize);
+        setParamNormalized(cleanup, "cleanup", 0.62f);
+        setParamNormalized(cleanup, "body", 0.42f);
+        setParamNormalized(cleanup, "focus", 0.58f);
+
+        render(analyserA, input, blockSize);
+        render(analyserB, input, blockSize);
+        render(cleanup, input, blockSize);
+
+        for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
+            vxsuite::analysis::StageView stage;
+            if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
+                continue;
+            if (!stage.active)
+                continue;
+            const auto stageName = fixedLabelToString(stage.telemetry.identity.stageName);
+            if (stageName == "Cleanup") {
+                seenCleanupStages << "domain=" << juce::String(static_cast<juce::int64>(stage.analysisDomainId))
+                                  << " stageId=" << fixedLabelToString(stage.telemetry.identity.stageId)
+                                  << " instance=" << juce::String(static_cast<juce::int64>(stage.telemetry.identity.instanceId))
+                                  << "; ";
+            }
+            if (stage.analysisDomainId != expectedDomainId)
+                continue;
+            if (stageName == "Cleanup") {
+                cleanupFoundInNewestAnalyserDomain = true;
+                break;
+            }
+        }
+    }
+
+    if (!cleanupFoundInNewestAnalyserDomain) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup stage telemetry did not bind to the active analyser domain when multiple domains existed in the host process\n";
+        std::cerr << "  expected domain=" << expectedDomainId
+                  << " seen cleanup stages: " << seenCleanupStages << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testSubtractZeroKeepsPdcAlignedIdentity() {
     constexpr double sr = 48000.0;
     auto input = addBuffers(makeSpeechLike(sr, 0.8f), makeNoise(sr, 0.8f, 0.04f));
@@ -3076,6 +3169,7 @@ int main() {
     run("testRebalanceInstancesStayTrackLocal", testRebalanceInstancesStayTrackLocal);
     run("testRebalanceBacksOffOnLowConfidenceMaterial", testRebalanceBacksOffOnLowConfidenceMaterial);
     run("testRebalanceSeparatesGuitarFromOtherMoreClearly", testRebalanceSeparatesGuitarFromOtherMoreClearly);
+    run("testRebalancePhoneModeStillActsOnRoughMaterial", testRebalancePhoneModeStillActsOnRoughMaterial);
     run("testSubtractStereoLearnTreatsChannelsIndependently", testSubtractStereoLearnTreatsChannelsIndependently);
     run("testDeverbExtremeBlendStaysStable", testDeverbExtremeBlendStaysStable);
     run("testDeverbStrongSettingActuallyReducesSyntheticRoomTail", testDeverbStrongSettingActuallyReducesSyntheticRoomTail);
@@ -3116,6 +3210,7 @@ int main() {
     run("testDeepFilterOfflineRenderModeSwitchRecoversCleanly", testDeepFilterOfflineRenderModeSwitchRecoversCleanly);
     run("testDeepFilterGuardRespondsMoreOnArtifactHeavyInput", testDeepFilterGuardRespondsMoreOnArtifactHeavyInput);
     run("testAnalyserChainSelectionStaysTrackLocalAndIgnoresBypassedStages", testAnalyserChainSelectionStaysTrackLocalAndIgnoresBypassedStages);
+    run("testAnalyserDomainBindingSurvivesMultipleDomains", testAnalyserDomainBindingSurvivesMultipleDomains);
     run("testSubtractZeroKeepsPdcAlignedIdentity", testSubtractZeroKeepsPdcAlignedIdentity);
     run("testCleanupBlockSizeInvariance", testCleanupBlockSizeInvariance);
     run("testFullChainBlockSizeInvariance", testFullChainBlockSizeInvariance);

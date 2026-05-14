@@ -90,21 +90,18 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
     if (hiShelfConfigChanged) {
         if (newParams.hiShelfOn) {
             const bool voiceMode = newParams.contentMode == 0;
-            const bool bypassVoiceShelf = voiceMode;
-            if (bypassVoiceShelf) {
-                hiShelfCoeffs = {};
-            } else {
+            {
             const float fc = voiceMode ? 6200.0f : 7200.0f;
             const float q = 0.66f;
-            const float shelfProtect = juce::jlimit(0.50f, 1.0f,
+            const float shelfProtect = juce::jlimit(0.28f, 1.0f,
                 1.0f - 0.75f * juce::jlimit(0.0f, 1.0f, newParams.voicePreserve)
                     * juce::jlimit(0.0f, 1.0f, newParams.speechPresence));
-            const float driftGuard = juce::jlimit(0.42f, 1.0f,
+            const float driftGuard = juce::jlimit(0.22f, 1.0f,
                 1.0f - 0.52f * juce::jlimit(0.0f, 1.0f, newParams.tonalDriftRisk)
                     - 0.14f * juce::jlimit(0.0f, 1.0f, newParams.articulationRisk));
-            const float baseGainDb = voiceMode ? 0.25f : 0.90f;
-            const float deEssScale = voiceMode ? 0.80f : 2.4f;
-            const float troubleScale = voiceMode ? 0.50f : 1.6f;
+            const float baseGainDb = voiceMode ? 0.35f : 0.90f;
+            const float deEssScale = voiceMode ? 1.40f : 2.4f;
+            const float troubleScale = voiceMode ? 0.90f : 1.6f;
             const float gainDb = (-baseGainDb
                 - deEssScale * juce::jlimit(0.0f, 1.0f, newParams.deEss)
                 - troubleScale * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth)) * shelfProtect * driftGuard;

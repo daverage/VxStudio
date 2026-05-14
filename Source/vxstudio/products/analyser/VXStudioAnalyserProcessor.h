@@ -46,6 +46,7 @@ public:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
+    void ensureAnalysisDomain() noexcept;
     void publishSignalQualitySnapshot() noexcept;
 
     vxsuite::ProductIdentity identity;

@@ -154,6 +154,15 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     const float recoveryGain = juce::Decibels::decibelsToGain(smoothedRecoveryDb);
     if (std::abs(recoveryGain - 1.0f) > 1.0e-4f)
         buffer.applyGain(recoveryGain);
+
+    // Clip to -0.5 dBFS so that true-peak estimation (Catmull-Rom overshoot ~0.5%)
+    // stays safely inside 0 dBFS even after recovery gain on bright transient material.
+    constexpr float kFinalCeiling = 0.944f;
+    for (int ch = 0; ch < numChannels; ++ch) {
+        float* data = buffer.getWritePointer(ch);
+        for (int i = 0; i < numSamples; ++i)
+            data[i] = juce::jlimit(-kFinalCeiling, kFinalCeiling, data[i]);
+    }
 }
 
 void Dsp::updateOptoParams(const float outputGainDb) {

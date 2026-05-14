@@ -615,6 +615,10 @@ std::uint64_t osCurrentProcessId() noexcept {
 #endif
 }
 
+std::uint64_t fallbackProcessDomainId(const std::uint64_t processId) noexcept {
+    return (static_cast<std::uint64_t>(1) << 63) | processId;
+}
+
 template <typename Value>
 std::atomic_ref<Value> analysisAtomicRef(Value& value) noexcept {
     return std::atomic_ref<Value>(value);
@@ -669,6 +673,19 @@ struct SharedAnalysisState {
     std::uint64_t reserved = 0;
     std::array<std::uint64_t, kMaxDomains> nextLocalOrderIds {};
     std::array<SharedStageSlot, kMaxStageSlots> slots {};
+};
+
+struct LocalStageSlot {
+    bool active = false;
+    std::uint64_t analysisDomainId = 0;
+    StageTelemetry telemetry {};
+};
+
+struct LocalStageRegistryState {
+    juce::CriticalSection lock;
+    std::uint64_t nextInstanceId = 1;
+    std::array<std::uint64_t, kMaxDomains> nextLocalOrderIds {};
+    std::array<LocalStageSlot, kMaxStageSlots> slots {};
 };
 
 class AnalysisMappedRegion {
@@ -757,6 +774,14 @@ SharedAnalysisState* analysisState() {
     if (state->nextInstanceId == 0)
         state->nextInstanceId = 1;
     for (auto& nextLocalOrderId : state->nextLocalOrderIds)
+        if (nextLocalOrderId == 0)
+            nextLocalOrderId = 1;
+    return state;
+}
+
+LocalStageRegistryState& localStageRegistryState() noexcept {
+    static LocalStageRegistryState state;
+    for (auto& nextLocalOrderId : state.nextLocalOrderIds)
         if (nextLocalOrderId == 0)
             nextLocalOrderId = 1;
     return state;
@@ -1108,7 +1133,10 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
             continue;
         if (slot.hostProcessId != hostProcessId)
             continue;
-        if (!found || slot.creationTimeMs > out.creationTimeMs) {
+        if (!found
+            || slot.creationTimeMs > out.creationTimeMs
+            || (slot.creationTimeMs == out.creationTimeMs
+                && slot.analysisDomainId > out.analysisDomainId)) {
             out.active = true;
             out.slotIndex = slotIndex;
             out.analysisDomainId = slot.analysisDomainId;
@@ -1130,7 +1158,10 @@ bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
         auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
         if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
             continue;
-        if (!found || slot.creationTimeMs > out.creationTimeMs) {
+        if (!found
+            || slot.creationTimeMs > out.creationTimeMs
+            || (slot.creationTimeMs == out.creationTimeMs
+                && slot.analysisDomainId > out.analysisDomainId)) {
             out.active = true;
             out.slotIndex = slotIndex;
             out.analysisDomainId = slot.analysisDomainId;
@@ -1179,6 +1210,10 @@ std::uint64_t DomainRegistry::currentProcessId() const noexcept {
     return osCurrentProcessId();
 }
 
+std::uint64_t DomainRegistry::fallbackDomainIdForCurrentProcess() const noexcept {
+    return fallbackProcessDomainId(osCurrentProcessId());
+}
+
 StageRegistry& StageRegistry::instance() noexcept {
     static StageRegistry registry;
     return registry;
@@ -1189,22 +1224,9 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
                                  std::uint64_t& instanceIdOut,
                                  std::uint64_t& localOrderIdOut) noexcept {
     auto* state = analysisState();
-    if (state == nullptr) {
-        instanceIdOut = 0;
-        localOrderIdOut = 0;
-        return -1;
-    }
-
-    juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
-    if (!scoped.isLocked()) {
-        instanceIdOut = 0;
-        localOrderIdOut = 0;
-        return -1;
-    }
-
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
     const int domainIndex = domainIndexFor(analysisDomainId);
-    auto allocateSlot = [&](SharedStageSlot& slot) {
+    auto allocateSharedSlot = [&](SharedStageSlot& slot) {
         analysisAtomicRef(slot.version).store(1u, std::memory_order_release);
         instanceIdOut = state->nextInstanceId++;
         localOrderIdOut = state->nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
@@ -1216,22 +1238,43 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
     };
+    if (state != nullptr) {
+        juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
+        if (scoped.isLocked()) {
+            for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+                auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+                if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) != 0u)
+                    continue;
+                allocateSharedSlot(slot);
+                return slotIndex;
+            }
 
-    for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
-        auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
-        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) != 0u)
-            continue;
-        allocateSlot(slot);
-        return slotIndex;
+            for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+                auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+                if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                    continue;
+                if ((nowMs - slot.telemetry.state.timestampMs) < static_cast<std::uint64_t>(kStageSlotReuseMs))
+                    continue;
+                allocateSharedSlot(slot);
+                return slotIndex;
+            }
+        }
     }
 
-    for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
-        auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
-        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+    auto& localState = localStageRegistryState();
+    const juce::ScopedLock localScoped(localState.lock);
+    for (int slotIndex = 0; slotIndex < static_cast<int>(localState.slots.size()); ++slotIndex) {
+        auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
+        if (slot.active)
             continue;
-        if ((nowMs - slot.telemetry.state.timestampMs) < static_cast<std::uint64_t>(kStageSlotReuseMs))
-            continue;
-        allocateSlot(slot);
+        slot.active = true;
+        slot.analysisDomainId = analysisDomainId;
+        instanceIdOut = localState.nextInstanceId++;
+        localOrderIdOut = localState.nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
+        setStageIdentityFromProduct(slot.telemetry.identity, identity, instanceIdOut, localOrderIdOut);
+        slot.telemetry.state.timestampMs = nowMs;
+        slot.telemetry.state.isLive = true;
+        slot.telemetry.state.isSilent = true;
         return slotIndex;
     }
 
@@ -1241,6 +1284,18 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
 }
 
 void StageRegistry::unregisterStage(const int slotIndex, const std::uint64_t instanceId) noexcept {
+    auto& localState = localStageRegistryState();
+    {
+        const juce::ScopedLock localScoped(localState.lock);
+        if (slotIndex >= 0 && slotIndex < static_cast<int>(localState.slots.size())) {
+            auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
+            if (slot.active && slot.telemetry.identity.instanceId == instanceId) {
+                slot = {};
+                return;
+            }
+        }
+    }
+
     auto* slot = stageSlotAt(slotIndex);
     if (slot == nullptr)
         return;
@@ -1266,6 +1321,19 @@ bool StageRegistry::publish(const int slotIndex,
                             const std::uint64_t instanceId,
                             const std::uint64_t analysisDomainId,
                             const StageTelemetry& telemetry) noexcept {
+    auto& localState = localStageRegistryState();
+    {
+        const juce::ScopedLock localScoped(localState.lock);
+        if (slotIndex >= 0 && slotIndex < static_cast<int>(localState.slots.size())) {
+            auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
+            if (slot.active && slot.telemetry.identity.instanceId == instanceId) {
+                slot.analysisDomainId = analysisDomainId;
+                slot.telemetry = telemetry;
+                return true;
+            }
+        }
+    }
+
     auto* slot = stageSlotAt(slotIndex);
     if (slot == nullptr)
         return false;
@@ -1283,6 +1351,21 @@ bool StageRegistry::publish(const int slotIndex,
 }
 
 bool StageRegistry::readStage(const int slotIndex, StageView& out) const noexcept {
+    auto& localState = localStageRegistryState();
+    {
+        const juce::ScopedLock localScoped(localState.lock);
+        if (slotIndex >= 0 && slotIndex < static_cast<int>(localState.slots.size())) {
+            const auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
+            if (slot.active) {
+                out.active = true;
+                out.slotIndex = slotIndex;
+                out.analysisDomainId = slot.analysisDomainId;
+                out.telemetry = slot.telemetry;
+                return true;
+            }
+        }
+    }
+
     auto* slot = stageSlotAt(slotIndex);
     if (slot == nullptr)
         return false;
@@ -1310,6 +1393,28 @@ bool StageRegistry::readStage(const int slotIndex, StageView& out) const noexcep
 bool StageRegistry::findStageByDomainAndStageId(const std::uint64_t domainId,
                                                  const std::array<char, 32>& stageId,
                                                  StageView& out) const noexcept {
+    auto& localState = localStageRegistryState();
+    {
+        const juce::ScopedLock localScoped(localState.lock);
+        for (int i = 0; i < static_cast<int>(localState.slots.size()); ++i) {
+            const auto& slot = localState.slots[static_cast<std::size_t>(i)];
+            if (!slot.active || slot.analysisDomainId != domainId)
+                continue;
+            const std::string_view slotStageId(slot.telemetry.identity.stageId.data(),
+                                               strnlen(slot.telemetry.identity.stageId.data(),
+                                                       slot.telemetry.identity.stageId.size()));
+            const std::string_view target(stageId.data(),
+                                          strnlen(stageId.data(), stageId.size()));
+            if (slotStageId != target)
+                continue;
+            out.active = true;
+            out.slotIndex = i;
+            out.analysisDomainId = slot.analysisDomainId;
+            out.telemetry = slot.telemetry;
+            return true;
+        }
+    }
+
     auto* state = analysisState();
     if (state == nullptr || domainId == 0)
         return false;
@@ -1367,7 +1472,7 @@ std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candida
         return 0.58f * spectrumDistance + 0.24f * rmsDistance + 0.08f * peakDistance + 0.10f * stereoDistance;
     };
 
-    constexpr float kMaxChainMatchDistance = 2.40f;
+    constexpr float kMaxChainMatchDistance = 4.50f;
 
     std::vector<StageView> selected;
     selected.reserve(candidates.size());
@@ -1504,19 +1609,39 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     }
 
     if (domainCount > 0) {
-        // Single domain: unambiguously bind to it.
-        if (newDomainId == 0 && domainCount == 1) {
-            newDomainId = domainIds[0];
-        }
-
-        // Keep an existing explicit binding while its domain is still alive.
-        if (newDomainId == 0 && !force && analysisDomainIdValue != 0) {
+        // If the current binding is still alive, keep it. Constantly rebinding to the
+        // "latest" domain causes stages to briefly disappear from the analyser UI every
+        // few seconds (the unregister/re-register gap), which looks like random flickering.
+        // Only move to a new domain when the current one disappears.
+        if (!force && analysisDomainIdValue != 0 && newDomainId == 0) {
             for (int i = 0; i < domainCount; ++i) {
                 if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue)
                     return;
             }
         }
+
+        // Current domain gone (or no existing binding): fall back to newest active
+        // process-local domain so non-analyser stages find a home automatically.
+        if (newDomainId == 0) {
+            DomainView latestProcessDomain {};
+            if (domainReg.latestDomainForProcess(pid, latestProcessDomain))
+                newDomainId = latestProcessDomain.analysisDomainId;
+        }
+
+        // Single domain: unambiguously bind to it.
+        if (newDomainId == 0 && domainCount == 1) {
+            newDomainId = domainIds[0];
+        }
     }
+
+    if (newDomainId == 0 && domainCount == 0)
+        newDomainId = domainReg.fallbackDomainIdForCurrentProcess();
+
+    // If the domain hasn't changed and we're already registered, nothing to do.
+    // Avoids unregister/re-register churn on every prepareToPlay, which causes
+    // plugins to briefly disappear from the analyser (visible as flicker).
+    if (newDomainId == analysisDomainIdValue && slotIndex >= 0)
+        return;
 
     if (!force && newDomainId == analysisDomainIdValue)
         return;
@@ -1527,6 +1652,7 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     slotIndex = -1;
     instanceIdValue = 0;
     localOrderIdValue = 0;
+    registrationAttempted = false;
     analysisDomainIdValue = newDomainId;
 }
 

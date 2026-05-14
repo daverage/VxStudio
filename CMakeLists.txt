@@ -52,6 +52,7 @@ include(VxStudioPlugin)
 include(VxStudioValidation)
 
 set(VXSTUDIO_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxstudio/vst")
+set(VXSTUDIO_VST3_INSTALL_DIR "/Library/Audio/Plug-Ins/VST3/VxStudio")
 
 function(vxstudio_stage_vst3_bundle target_name bundle_name)
   set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
@@ -61,7 +62,11 @@ function(vxstudio_stage_vst3_bundle target_name bundle_name)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${bundle_source_dir}"
             "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
-    COMMENT "Staging ${bundle_name}.vst3 into Source/vxstudio/vst")
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_INSTALL_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
+            "${VXSTUDIO_VST3_INSTALL_DIR}/${bundle_name}.vst3"
+    COMMENT "Staging ${bundle_name}.vst3 into Source/vxstudio/vst and installing to system VST3")
 
   add_custom_target(${bundle_name}Stage
     COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_STAGE_DIR}"
@@ -69,8 +74,12 @@ function(vxstudio_stage_vst3_bundle target_name bundle_name)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${bundle_source_dir}"
             "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_INSTALL_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
+            "${VXSTUDIO_VST3_INSTALL_DIR}/${bundle_name}.vst3"
     DEPENDS ${target_name}
-    COMMENT "Refreshing staged ${bundle_name}.vst3 in Source/vxstudio/vst")
+    COMMENT "Refreshing staged ${bundle_name}.vst3 in Source/vxstudio/vst and system VST3")
 endfunction()
 
 function(vxstudio_copy_vst3_resources target_name bundle_name)
@@ -726,6 +735,8 @@ vxstudio_add_executable_test(VxStudioVoiceAnalysisTests)
 
 add_executable(VXStudioPluginRegressionTests
   tests/VXStudioPluginRegressionTests.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
   Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp

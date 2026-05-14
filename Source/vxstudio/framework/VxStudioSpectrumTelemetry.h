@@ -257,6 +257,7 @@ public:
     [[nodiscard]] bool ownerStageIdForDomain(std::uint64_t domainId,
                                              std::array<char, 32>& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
+    [[nodiscard]] std::uint64_t fallbackDomainIdForCurrentProcess() const noexcept;
 };
 
 class StageRegistry {

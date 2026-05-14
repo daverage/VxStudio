@@ -52,33 +52,32 @@ vxsuite::ProductIdentity VXSubtractAudioProcessor::makeIdentity() {
 
 juce::String VXSubtractAudioProcessor::getStatusText() const {
     if (isListenEnabled())
-        return "Listen - removed profile only";
-
-    const auto confidenceSummary = [&](const int confidencePct) -> juce::String {
-        if (confidencePct < 40)
-            return juce::String(confidencePct) + "% profile confidence - low, try a cleaner noise-only capture";
-        if (confidencePct < 75)
-            return juce::String(confidencePct) + "% profile confidence - usable capture quality";
-        return juce::String(confidencePct) + "% profile confidence - strong clean capture";
-    };
+        return "Listen: hearing what was removed — lower Subtract or disable Listen to return to normal";
 
     if (isLearnActive()) {
-        const int progressPct = juce::roundToInt(100.0f * getLearnProgress());
-        const int confidencePct = juce::roundToInt(100.0f * getLearnConfidence());
-        return "Learning noise only - press Learn again to stop and lock this profile ("
-             + juce::String(progressPct) + "%, "
-             + confidenceSummary(confidencePct) + ")";
+        const int coveragePct   = juce::roundToInt(100.0f * getLearnProgress());
+        const int qualityPct    = juce::roundToInt(100.0f * getLearnConfidence());
+        const juce::String qual = qualityPct < 40 ? "low quality — play noise with no signal"
+                                : qualityPct < 70 ? "moderate quality"
+                                                  : "good quality";
+        return "Capturing: play noise only, no signal. Coverage "
+             + juce::String(coveragePct) + "% | Quality " + juce::String(qualityPct) + "% ("
+             + qual + ") — press Learn again to lock";
     }
 
     if (isLearnReady()) {
         const int confidencePct = juce::roundToInt(100.0f * getLearnConfidence());
-        return "Profile learned - turn Subtract to remove it ("
-             + confidenceSummary(confidencePct) + ")";
+        const juce::String conf = confidencePct < 40 ? "low — recapture for better results"
+                                : confidencePct < 70 ? "usable"
+                                                     : "strong";
+        return "Profile ready (" + juce::String(confidencePct) + "% confidence, " + conf
+             + ") — raise Subtract to remove the captured noise";
     }
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
-    return isVoice ? "Vocal - learn room noise, then remove it while protecting speech"
-                   : "General - learn a profile, then remove it more aggressively";
+    return isVoice
+        ? "Vocal: press Learn and play only the room noise, then press Learn again to subtract it"
+        : "General: press Learn and play only the noise, then press Learn again to subtract it";
 }
 
 float VXSubtractAudioProcessor::getProfileTrust() const noexcept {
@@ -127,12 +126,8 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
 }
 
 void VXSubtractAudioProcessor::resetSuite() {
-    subtractDspMono.resetStreamingState();
-    subtractDspLeft.resetStreamingState();
-    subtractDspRight.resetStreamingState();
     controls.reset(vxsuite::readNormalized(parameters, productIdentity.primaryParamId, productIdentity.primaryDefaultValue),
                    vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, productIdentity.secondaryDefaultValue));
-    smoothedMakeupGain = 1.0f;
     activeTailSamplesRemaining = 0;
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     controlsNeedRelatchAfterLearn = false;
@@ -190,13 +185,11 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         if (!learnStopEdge)
             return;
 
-        // Finalizing a learned profile should start the next processing pass from
-        // a clean latency/STFT state while keeping the frozen profile itself.
-        subtractDspMono.resetStreamingState();
-        subtractDspLeft.resetStreamingState();
-        subtractDspRight.resetStreamingState();
+        // Keep STFT pipeline state intact so the transition from learn to process
+        // is seamless. The DSP has been running unity-gain STFT during learning, so
+        // the delay lines and OLA state are valid and the first processed block will
+        // smoothly onset suppression without a silence gap or reconstruction click.
         resetProcessCoordinator();
-        smoothedMakeupGain = 1.0f;
         activeTailSamplesRemaining = 0;
         controls.reset(subtractTarget, protectTarget);
         controlsNeedRelatchAfterLearn = true;
@@ -246,7 +239,6 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                                 : (learnedReady ? 0.0f
                                                                 : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
                                                                           * subtractStrength));
-
     if (learningActiveNow) {
         const auto channelHasLearnSignal = [&](const int channel) {
             if (channel < 0 || channel >= buffer.getNumChannels())
@@ -278,7 +270,6 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
             buffer.copyFrom(0, 0, leftScratch, 0, 0, numSamples);
         }
         publishLearnStateAndLatch();
-        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
         return;
     }
 
@@ -309,7 +300,6 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         activeTailSamplesRemaining = std::max(activeTailSamplesRemaining, getLatencySamples() + numSamples);
     else if (!learnStopEdge && activeTailSamplesRemaining <= 0) {
         buffer.clear();
-        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
         finalizeLearnStopTransition();
         publishLearnStateAndLatch();
         return;
@@ -348,60 +338,6 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         const float monoProcessAmount = learningActiveNow ? 0.0f
             : (learnedReady ? subtractStrength : blindAmount);
         subtractDspMono.processInPlace(buffer, monoProcessAmount, options);
-    }
-
-    // RMS makeup: restore level lost to spectral subtraction.
-    if (!learningActiveNow && subtractStrength > 1.0e-4f) {
-        const auto& dryRef = getLatencyAlignedListenDryBuffer();
-        double dryRmsSq = 0.0, wetRmsSq = 0.0;
-        const int chCount = std::min(buffer.getNumChannels(), dryRef.getNumChannels());
-        for (int ch = 0; ch < chCount; ++ch) {
-            const auto* d = dryRef.getReadPointer(ch);
-            const auto* w = buffer.getReadPointer(ch);
-            for (int i = 0; i < numSamples; ++i) {
-                dryRmsSq += static_cast<double>(d[i]) * d[i];
-                wetRmsSq += static_cast<double>(w[i]) * w[i];
-            }
-        }
-        const int n = chCount * numSamples;
-        const float dryRms = n > 0 ? static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(n))) : 0.0f;
-        float wetRms = n > 0 ? static_cast<float>(std::sqrt(wetRmsSq / static_cast<double>(n))) : 0.0f;
-        const bool allowRescue = subtractStrength > 0.95f || protectStrength < 0.25f;
-        if (allowRescue && liveInputRms > 1.0e-5f && dryRms > 1.0e-5f && wetRms < liveInputRms * 0.16f) {
-            const float rescue = juce::jlimit(0.0f, 0.22f * subtractStrength,
-                (liveInputRms * 0.16f - wetRms) / std::max(liveInputRms * 0.16f, 1.0e-6f));
-            if (rescue > 1.0e-4f) {
-                const float wetKeep = 1.0f - rescue;
-                for (int ch = 0; ch < chCount; ++ch) {
-                    buffer.applyGain(ch, 0, numSamples, wetKeep);
-                    buffer.addFrom(ch, 0, dryRef, ch, 0, numSamples, rescue);
-                }
-                wetRms = std::max(wetRms, liveInputRms * rescue);
-            }
-        }
-        float makeupTarget = 1.0f;
-        if (dryRms > 1.0e-5f && wetRms > 1.0e-5f)
-            makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(8.0f), dryRms / std::max(wetRms, 1.0e-6f));
-        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, makeupTarget, currentSampleRateHz, numSamples, 0.120f);
-        if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f)
-            buffer.applyGain(smoothedMakeupGain);
-
-        const bool preserveBlendEligible = !stereo || (leftReady && rightReady);
-        const float preserveBlend = (isVoice && preserveBlendEligible)
-            ? juce::jlimit(0.0f, 0.48f,
-                subtractStrength
-              * juce::jlimit(0.0f, 1.0f, (protectStrength - 0.455f) / 0.025f)
-              * (0.18f + 0.34f * protectStrength + 0.16f * vocalPriority))
-            : 0.0f;
-        if (preserveBlend > 1.0e-4f && liveInputRms > 1.0e-5f) {
-            const float wetKeep = 1.0f - preserveBlend;
-            for (int ch = 0; ch < chCount; ++ch) {
-                buffer.applyGain(ch, 0, numSamples, wetKeep);
-                buffer.addFrom(ch, 0, dryRef, ch, 0, numSamples, preserveBlend);
-            }
-        }
-    } else {
-        smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, 1.0f, currentSampleRateHz, numSamples, 0.120f);
     }
 
     if (liveInputRms <= 1.0e-5f)

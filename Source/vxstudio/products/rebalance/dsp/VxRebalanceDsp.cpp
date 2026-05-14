@@ -1797,10 +1797,10 @@ float Dsp::computeSourceContributionMultiplier(
 {
     const float sliderSigned = (sliderNormalized - 0.5f) * 2.0f;
     const float curved =
-        std::copysign(std::pow(std::abs(sliderSigned), 0.78f), sliderSigned);
-    const float trustedStrength = strength * juce::jlimit(0.35f, 1.0f, 0.35f + 0.65f * signalTrust);
-    const float targetGain = juce::jlimit(0.0f, 2.0f, 1.0f + curved);
-    const float maxContribution = source == otherSource ? 2.30f : 4.80f;
+        std::copysign(std::pow(std::abs(sliderSigned), 0.50f), sliderSigned);
+    const float trustedStrength = strength * juce::jlimit(0.25f, 1.0f, 0.25f + 0.75f * signalTrust);
+    const float targetGain = juce::jlimit(0.0f, 10.0f, 1.0f + curved * 9.0f);
+    const float maxContribution = source == otherSource ? 5.0f : 10.0f;
     return juce::jlimit(0.0f, maxContribution, lerp(1.0f, targetGain, trustedStrength));
 }
 
@@ -2014,9 +2014,12 @@ Dsp::RenderFrame Dsp::buildRenderFrameForBin(
     const float renderTrust = clamp01(
         signalTrust * (0.10f + 0.90f * ownershipFrame.confidence * ownershipFrame.confidence)
         + 0.08f * ownershipFrame.confidence);
-    frame.totalGain = lerp(1.0f, frame.totalGain, renderTrust);
     const float dominantSliderSigned =
         (currentControlValues[static_cast<size_t>(ownershipFrame.renderDominant)] - 0.5f) * 2.0f;
+    const float strongUserIntent =
+        clamp01(std::abs(dominantSliderSigned) * currentControlValues[static_cast<size_t>(kStrengthIndex)]);
+    const float renderAuthorityFloor = lerp(0.18f, 0.34f, strongUserIntent);
+    frame.totalGain = lerp(1.0f, frame.totalGain, juce::jlimit(renderAuthorityFloor, 1.0f, renderTrust));
     const float dominantTargetGain = juce::jlimit(0.0f, 2.0f, 1.0f + dominantSliderSigned);
     const float confidenceAuthority = clamp01((ownershipFrame.confidence - 0.35f) / 0.65f);
     const float dominantAuthority = clamp01(
@@ -2025,7 +2028,8 @@ Dsp::RenderFrame Dsp::buildRenderFrameForBin(
         * (0.20f + 0.80f * frame.dominantMask));
     frame.totalGain = lerp(frame.totalGain, dominantTargetGain, dominantAuthority);
     const float lowTrustBackoff = clamp01((signalTrust - 0.42f) / 0.58f);
-    frame.totalGain = lerp(1.0f, frame.totalGain, lowTrustBackoff);
+    const float lowTrustAuthorityFloor = lerp(0.22f, 0.42f, strongUserIntent);
+    frame.totalGain = lerp(1.0f, frame.totalGain, juce::jlimit(lowTrustAuthorityFloor, 1.0f, lowTrustBackoff));
     frame.totalGain = juce::jlimit(0.0f, 8.0f, frame.totalGain);
 
     const float prev = prevCompositeGain[static_cast<size_t>(bin)];

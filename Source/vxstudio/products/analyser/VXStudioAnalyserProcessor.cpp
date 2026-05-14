@@ -17,7 +17,9 @@ VXStudioAnalyserAudioProcessor::VXStudioAnalyserAudioProcessor()
                                             .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       identity(makeIdentity()),
       analysisDomainIdValue(vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId)),
-      stagePublisher(identity) {}
+      stagePublisher(identity) {
+    ensureAnalysisDomain();
+}
 
 VXStudioAnalyserAudioProcessor::~VXStudioAnalyserAudioProcessor() {
     vxsuite::analysis::DomainRegistry::instance().unregisterAnalyserDomain(analysisDomainIdValue);
@@ -58,7 +60,16 @@ void VXStudioAnalyserAudioProcessor::publishSignalQualitySnapshot() noexcept {
     separationConfidence.store(snapshot.separationConfidence, std::memory_order_relaxed);
 }
 
+void VXStudioAnalyserAudioProcessor::ensureAnalysisDomain() noexcept {
+    if (analysisDomainIdValue != 0)
+        return;
+    analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId);
+    if (analysisDomainIdValue == 0)
+        analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
+}
+
 void VXStudioAnalyserAudioProcessor::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
+    ensureAnalysisDomain();
     stagePublisher.prepare(sampleRate, samplesPerBlock);
     signalQualityState.prepare(sampleRate, samplesPerBlock);
     publishSignalQualitySnapshot();

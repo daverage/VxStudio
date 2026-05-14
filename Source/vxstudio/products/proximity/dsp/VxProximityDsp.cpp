@@ -182,10 +182,10 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float mudRisk = juce::jlimit(0.0f, 1.0f, (lowMidShare - 0.38f * lowShare) / 0.24f);
     const float directnessOpportunity = juce::jlimit(0.0f, 1.0f, (presenceShare + 0.35f * airShare) / 0.34f);
 
-    // 1) Proximity low shelf: keep this in the genuine body/proximity region.
-    const float lowFcMin = isVoice ?  85.f : 95.f;
-    const float lowFcMax = isVoice ? 135.f : 180.f;
-    const float lowGainMax = isVoice ? 10.0f : 8.6f;
+    // 1) Proximity low shelf: cover the audible body/warmth region, not just sub rumble.
+    const float lowFcMin = isVoice ? 120.f : 140.f;
+    const float lowFcMax = isVoice ? 200.f : 260.f;
+    const float lowGainMax = isVoice ? 7.5f : 6.5f;
     const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * modelDepth;
     const float lowGain  = lowGainMax * modelDepth
         * juce::jlimit(0.72f, 1.12f, 0.78f + 0.34f * bodyOpportunity - 0.12f * mudRisk);
@@ -197,7 +197,7 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         : 300.0f;
     const float mudCutQ = isVoice ? 0.82f : 0.75f;
     const float mudCutDb = -modelDepth
-        * (isVoice ? (4.8f + 1.4f * (1.0f - focus)) : 3.8f)
+        * (isVoice ? (3.2f + 0.8f * (1.0f - focus)) : 2.6f)
         * juce::jlimit(0.72f, 1.30f, 0.82f + 0.42f * mudRisk);
 
     // 3) Presence contour: closer placement also reads as more direct and more
