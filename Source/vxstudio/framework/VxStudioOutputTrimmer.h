@@ -41,7 +41,7 @@ public:
 
         const float previousGain = currentGain;
         if (targetGain < currentGain) {
-            currentGain = targetGain; // instantaneous gain reduction
+            currentGain = targetGain; // attack reduction
         } else {
             const float alpha = blockBlendAlpha(sampleRate, numSamples, releaseSeconds);
             currentGain += alpha * (targetGain - currentGain);
@@ -51,9 +51,8 @@ public:
             -juce::Decibels::gainToDecibels(std::max(currentGain, 1.0e-6f), -120.0f));
         maxObservedReductionDb = std::max(maxObservedReductionDb, currentReductionDb);
 
-        if (targetGain < previousGain) {
-            buffer.applyGain(currentGain);
-        } else if (std::abs(previousGain - 1.0f) > 1.0e-5f || std::abs(currentGain - 1.0f) > 1.0e-5f) {
+        // Always ramp to avoid clicks/pops from sudden gain changes
+        if (std::abs(previousGain - 1.0f) > 1.0e-5f || std::abs(currentGain - 1.0f) > 1.0e-5f) {
             for (int ch = 0; ch < numChannels; ++ch)
                 buffer.applyGainRamp(ch, 0, numSamples, previousGain, currentGain);
         }
