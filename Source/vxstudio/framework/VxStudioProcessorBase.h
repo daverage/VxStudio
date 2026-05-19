@@ -50,6 +50,10 @@ public:
     virtual juce::String getModelDownloadPromptBody() const { return {}; }
     virtual void requestModelDownload() {}
     virtual void declineModelDownloadPrompt() {}
+    float getOutputSafetyTrimReductionDb() const noexcept { return outputSafetyTrimmer.getCurrentReductionDb(); }
+    float getOutputSafetyTrimMaxReductionDb() const noexcept { return outputSafetyTrimmer.getMaxObservedReductionDb(); }
+    float getOutputSafetyTrimActivity() const noexcept { return outputSafetyTrimmer.getCurrentActivity01(); }
+    float getOutputSafetyTrimMaxActivity() const noexcept { return outputSafetyTrimmer.getMaxObservedActivity01(); }
     VoiceAnalysisSnapshot getVoiceAnalysisSnapshot() const noexcept { return voiceAnalysis.snapshot(); }
     VoiceContextSnapshot getVoiceContextSnapshot() const noexcept { return voiceContext.snapshot(); }
     SignalQualitySnapshot getSignalQualitySnapshot() const noexcept { return signalQuality.snapshot(); }

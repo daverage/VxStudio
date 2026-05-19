@@ -1033,24 +1033,11 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
     });
 
-    // Build canonical key set from domain stages so we can filter the sidebar.
-    std::vector<juce::String> chainStageKeys;
-    chainStageKeys.reserve(externalStages.size() * 2);
-    for (const auto& stage : externalStages) {
-        chainStageKeys.push_back(canonicalStageKey(stage.stageName));
-        chainStageKeys.push_back(canonicalStageKey(stage.stageId));
-    }
-
-    // When we have a live signal, strip the sidebar of snapshots that don't belong
-    // to our domain (i.e. plugins from other tracks).
-    if (hasAnalyserSignal && !chainStageKeys.empty()) {
-        sidebarSnapshotCache.erase(
-            std::remove_if(sidebarSnapshotCache.begin(), sidebarSnapshotCache.end(),
-                [&](const SidebarSnapshotCacheEntry& cached) {
-                    return std::none_of(chainStageKeys.begin(), chainStageKeys.end(),
-                        [&](const juce::String& key) { return key == cached.canonicalKey; });
-                }),
-            sidebarSnapshotCache.end());
+    // Cap sidebar cache to prevent unbounded growth and UI memory bloat.
+    constexpr size_t kMaxSidebarCacheSize = 100;
+    if (sidebarSnapshotCache.size() > kMaxSidebarCacheSize) {
+        sidebarSnapshotCache.erase(sidebarSnapshotCache.begin() + kMaxSidebarCacheSize,
+                                   sidebarSnapshotCache.end());
     }
 
     struct StageMatchKey {

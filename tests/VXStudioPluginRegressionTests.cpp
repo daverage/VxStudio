@@ -173,6 +173,29 @@ juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double 
     return render(finish, afterProximity, blockSize);
 }
 
+juce::AudioBuffer<float> renderProximityToneFinishChain(const double sr,
+                                                        const int blockSize,
+                                                        const juce::AudioBuffer<float>& input) {
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, blockSize);
+    setParamNormalized(proximity, "closer", 0.82f);
+    setParamNormalized(proximity, "air", 0.72f);
+    auto afterProximity = render(proximity, input, blockSize);
+
+    VXToneAudioProcessor tone;
+    tone.prepareToPlay(sr, blockSize);
+    setParamNormalized(tone, "bass", 0.84f);
+    setParamNormalized(tone, "treble", 0.76f);
+    auto afterTone = render(tone, afterProximity, blockSize);
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, blockSize);
+    setParamNormalized(finish, "finish", 0.36f);
+    setParamNormalized(finish, "body", 0.42f);
+    setParamNormalized(finish, "gain", 0.50f);
+    return render(finish, afterTone, blockSize);
+}
+
 juce::AudioBuffer<float> makeMonoBuffer(const juce::AudioBuffer<float>& stereo) {
     juce::AudioBuffer<float> mono(1, stereo.getNumSamples());
     for (int i = 0; i < stereo.getNumSamples(); ++i) {
@@ -993,6 +1016,52 @@ bool testRebalancePhoneModeStillActsOnRoughMaterial() {
     return true;
 }
 
+bool testRebalanceStrongSettingsStayHeadroomSafeAcrossRecordingTypes() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    auto input = makeRebalanceStereoConfidenceInput(sr, 1.4f);
+    input = addBuffers(input, makeNoise(sr, 1.4f, 0.02f));
+    const float inputPeak = peakAbs(input);
+    if (inputPeak > 1.0e-6f)
+        input.applyGain(0.95f / inputPeak);
+
+    const auto runCase = [&](const float recordingType) {
+        VXRebalanceAudioProcessor processor;
+        processor.prepareToPlay(sr, blockSize);
+        setParamNormalized(processor, "recordingType", recordingType);
+        setParamNormalized(processor, "vocals", 1.0f);
+        setParamNormalized(processor, "drums", 0.0f);
+        setParamNormalized(processor, "bass", 1.0f);
+        setParamNormalized(processor, "guitar", 0.0f);
+        setParamNormalized(processor, "other", 0.0f);
+        setParamNormalized(processor, "strength", 1.0f);
+        return render(processor, input, blockSize);
+    };
+
+    const auto studioOut = runCase(0.0f);
+    const auto roughOut = runCase(1.0f);
+
+    for (const auto* candidate : { &studioOut, &roughOut }) {
+        if (!allFinite(*candidate) || peakAbs(*candidate) > 0.995f) {
+            std::cerr << "[VXSuitePluginRegression] Rebalance strong setting exceeded safe output headroom: peak="
+                      << peakAbs(*candidate) << "\n";
+            return false;
+        }
+    }
+
+    if (maxAbsDiffSkip(input, studioOut, 4096) < 0.008f) {
+        std::cerr << "[VXSuitePluginRegression] Rebalance studio strong setting became too subtle under headroom protection\n";
+        return false;
+    }
+    if (maxAbsDiffSkip(input, roughOut, 4096) < 0.006f) {
+        std::cerr << "[VXSuitePluginRegression] Rebalance rough strong setting became too subtle under headroom protection\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testSubtractStereoLearnTreatsChannelsIndependently() {
     constexpr double sr = 48000.0;
     VXSubtractAudioProcessor processor;
@@ -1753,6 +1822,207 @@ bool testToneCenterIsIdentityAndExtremesStayBounded() {
         std::cerr << "[VXSuitePluginRegression] Tone extreme boost was too subtle\n";
         return false;
     }
+    return true;
+}
+
+bool testStackedProximityToneFinishChainKeepsHeadroom() {
+    constexpr double sr = 48000.0;
+    auto input = addBuffers(makeSpeechLike(sr, 1.0f),
+                            makeSine(sr, 1.0f, 120.0f, 0.11f));
+    input = addBuffers(input, makeSine(sr, 1.0f, 3400.0f, 0.05f));
+    input = addBuffers(input, makeNoise(sr, 1.0f, 0.015f));
+
+    const float inputPeak = peakAbs(input);
+    if (inputPeak > 1.0e-6f)
+        input.applyGain(0.94f / inputPeak);
+
+    const auto out = renderProximityToneFinishChain(sr, 256, input);
+    if (!allFinite(out) || peakAbs(out) > 0.995f) {
+        std::cerr << "[VXSuitePluginRegression] Stacked proximity/tone/finish chain exceeded safe output headroom: peak="
+                  << peakAbs(out) << "\n";
+        return false;
+    }
+    if (maxAbsDiffSkip(input, out, 256) < 0.015f) {
+        std::cerr << "[VXSuitePluginRegression] Stacked proximity/tone/finish chain became too subtle\n";
+        return false;
+    }
+    return true;
+}
+
+bool testFrameworkOutputTrimmerStaysMostlyIdleOnNominalStrongSettings() {
+    constexpr double sr = 48000.0;
+
+    auto shapedInput = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.015f));
+    const float shapedPeak = peakAbs(shapedInput);
+    if (shapedPeak > 1.0e-6f)
+        shapedInput.applyGain(0.92f / shapedPeak);
+
+    VXToneAudioProcessor tone;
+    tone.prepareToPlay(sr, 256);
+    setParamNormalized(tone, "bass", 0.78f);
+    setParamNormalized(tone, "treble", 0.70f);
+    const auto toneOut = render(tone, shapedInput, 256);
+    juce::ignoreUnused(toneOut);
+    if (tone.getOutputSafetyTrimMaxReductionDb() > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] Tone leaned too hard on framework output trimming: reductionDb="
+                  << tone.getOutputSafetyTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    setParamNormalized(proximity, "closer", 0.76f);
+    setParamNormalized(proximity, "air", 0.66f);
+    const auto proximityOut = render(proximity, shapedInput, 256);
+    juce::ignoreUnused(proximityOut);
+    if (proximity.getOutputSafetyTrimMaxReductionDb() > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity leaned too hard on framework output trimming: reductionDb="
+                  << proximity.getOutputSafetyTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    auto bright = addBuffers(makeSine(sr, 1.0f, 4200.0f, 0.16f),
+                             makeSine(sr, 1.0f, 9800.0f, 0.14f));
+    bright = addBuffers(bright, makeNoise(sr, 1.0f, 0.02f));
+    const float brightPeak = peakAbs(bright);
+    if (brightPeak > 1.0e-6f)
+        bright.applyGain(0.90f / brightPeak);
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    setParamNormalized(finish, "finish", 0.82f);
+    setParamNormalized(finish, "body", 0.68f);
+    setParamNormalized(finish, "gain", 0.62f);
+    const auto finishOut = render(finish, bright, 256);
+    juce::ignoreUnused(finishOut);
+    if (finish.getOutputSafetyTrimMaxReductionDb() > 0.30f) {
+        std::cerr << "[VXSuitePluginRegression] Finish relied on framework output trimming instead of its own gain staging: reductionDb="
+                  << finish.getOutputSafetyTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    auto rebalanceInput = makeRebalanceStereoConfidenceInput(sr, 1.4f);
+    rebalanceInput = addBuffers(rebalanceInput, makeNoise(sr, 1.4f, 0.02f));
+    const float rebalancePeak = peakAbs(rebalanceInput);
+    if (rebalancePeak > 1.0e-6f)
+        rebalanceInput.applyGain(0.95f / rebalancePeak);
+
+    VXRebalanceAudioProcessor rebalance;
+    rebalance.prepareToPlay(sr, 256);
+    setParamNormalized(rebalance, "recordingType", 0.0f);
+    setParamNormalized(rebalance, "vocals", 0.90f);
+    setParamNormalized(rebalance, "drums", 0.0f);
+    setParamNormalized(rebalance, "bass", 0.72f);
+    setParamNormalized(rebalance, "guitar", 0.0f);
+    setParamNormalized(rebalance, "other", 0.0f);
+    setParamNormalized(rebalance, "strength", 0.85f);
+    const auto rebalanceOut = render(rebalance, rebalanceInput, 256);
+    juce::ignoreUnused(rebalanceOut);
+    if (rebalance.getOutputSafetyTrimMaxReductionDb() > 0.60f) {
+        std::cerr << "[VXSuitePluginRegression] Rebalance still leaned too hard on framework output trimming: reductionDb="
+                  << rebalance.getOutputSafetyTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testProductLocalOutputTrimmersStayMostlyIdleOnNominalStrongSettings() {
+    constexpr double sr = 48000.0;
+
+    auto shapedInput = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.015f));
+    const float shapedPeak = peakAbs(shapedInput);
+    if (shapedPeak > 1.0e-6f)
+        shapedInput.applyGain(0.92f / shapedPeak);
+
+    auto bright = addBuffers(makeSine(sr, 1.0f, 4200.0f, 0.16f),
+                             makeSine(sr, 1.0f, 9800.0f, 0.14f));
+    bright = addBuffers(bright, makeNoise(sr, 1.0f, 0.02f));
+    const float brightPeak = peakAbs(bright);
+    if (brightPeak > 1.0e-6f)
+        bright.applyGain(0.90f / brightPeak);
+
+    VXToneAudioProcessor tone;
+    tone.prepareToPlay(sr, 256);
+    setParamNormalized(tone, "bass", 0.78f);
+    setParamNormalized(tone, "treble", 0.70f);
+    const auto toneOut = render(tone, shapedInput, 256);
+    juce::ignoreUnused(toneOut);
+    if (tone.getLocalOutputTrimMaxReductionDb() > 1.35f) {
+        std::cerr << "[VXSuitePluginRegression] Tone local output trimmer engaged too heavily: reductionDb="
+                  << tone.getLocalOutputTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    VXProximityAudioProcessor proximity;
+    proximity.prepareToPlay(sr, 256);
+    setParamNormalized(proximity, "closer", 0.76f);
+    setParamNormalized(proximity, "air", 0.66f);
+    const auto proximityOut = render(proximity, shapedInput, 256);
+    juce::ignoreUnused(proximityOut);
+    if (proximity.getLocalOutputTrimMaxReductionDb() > 1.35f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity local output trimmer engaged too heavily: reductionDb="
+                  << proximity.getLocalOutputTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    VXFinishAudioProcessor finish;
+    finish.prepareToPlay(sr, 256);
+    setParamNormalized(finish, "finish", 0.82f);
+    setParamNormalized(finish, "body", 0.68f);
+    setParamNormalized(finish, "gain", 0.62f);
+    const auto finishOut = render(finish, bright, 256);
+    juce::ignoreUnused(finishOut);
+    if (finish.getLocalOutputTrimMaxReductionDb() > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] Finish local output trimmer engaged too heavily: reductionDb="
+                  << finish.getLocalOutputTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    VXOptoCompAudioProcessor opto;
+    opto.prepareToPlay(sr, 256);
+    setParamNormalized(opto, "peak_reduction", 0.82f);
+    setParamNormalized(opto, "body", 0.60f);
+    setParamNormalized(opto, "gain", 0.62f);
+    const auto optoOut = render(opto, bright, 256);
+    juce::ignoreUnused(optoOut);
+    if (opto.getLocalOutputTrimMaxReductionDb() > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] OptoComp local output trimmer engaged too heavily: reductionDb="
+                  << opto.getLocalOutputTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    VXCleanupAudioProcessor cleanup;
+    cleanup.prepareToPlay(sr, 256);
+    setParamNormalized(cleanup, "cleanup", 0.85f);
+    setParamNormalized(cleanup, "body", 0.35f);
+    setParamNormalized(cleanup, "focus", 0.78f);
+    setParamNormalized(cleanup, "hishelf_on", 1.0f);
+    const auto cleanupOut = render(cleanup, shapedInput, 256);
+    juce::ignoreUnused(cleanupOut);
+    if (cleanup.getLocalOutputTrimMaxReductionDb() > 0.35f) {
+        std::cerr << "[VXSuitePluginRegression] Cleanup local output trimmer engaged too heavily: reductionDb="
+                  << cleanup.getLocalOutputTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
+    auto noisy = addBuffers(shapedInput, makeNoise(sr, 1.0f, 0.05f));
+    const float noisyPeak = peakAbs(noisy);
+    if (noisyPeak > 1.0e-6f)
+        noisy.applyGain(0.92f / noisyPeak);
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, 256);
+    setParamNormalized(denoiser, "clean", 0.90f);
+    setParamNormalized(denoiser, "guard", 0.65f);
+    const auto denoiserOut = render(denoiser, noisy, 256);
+    juce::ignoreUnused(denoiserOut);
+    if (denoiser.getLocalOutputTrimMaxReductionDb() > 0.45f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser local output trimmer engaged too heavily: reductionDb="
+                  << denoiser.getLocalOutputTrimMaxReductionDb() << "\n";
+        return false;
+    }
+
     return true;
 }
 
@@ -3170,6 +3440,7 @@ int main() {
     run("testRebalanceBacksOffOnLowConfidenceMaterial", testRebalanceBacksOffOnLowConfidenceMaterial);
     run("testRebalanceSeparatesGuitarFromOtherMoreClearly", testRebalanceSeparatesGuitarFromOtherMoreClearly);
     run("testRebalancePhoneModeStillActsOnRoughMaterial", testRebalancePhoneModeStillActsOnRoughMaterial);
+    run("testRebalanceStrongSettingsStayHeadroomSafeAcrossRecordingTypes", testRebalanceStrongSettingsStayHeadroomSafeAcrossRecordingTypes);
     run("testSubtractStereoLearnTreatsChannelsIndependently", testSubtractStereoLearnTreatsChannelsIndependently);
     run("testDeverbExtremeBlendStaysStable", testDeverbExtremeBlendStaysStable);
     run("testDeverbStrongSettingActuallyReducesSyntheticRoomTail", testDeverbStrongSettingActuallyReducesSyntheticRoomTail);
@@ -3191,6 +3462,9 @@ int main() {
     run("testOptoCompZeroAmountIsIdleAndTransparent", testOptoCompZeroAmountIsIdleAndTransparent);
     run("testFinishAndOptoCompBrightStressStayTruePeakSafe", testFinishAndOptoCompBrightStressStayTruePeakSafe);
     run("testToneCenterIsIdentityAndExtremesStayBounded", testToneCenterIsIdentityAndExtremesStayBounded);
+    run("testStackedProximityToneFinishChainKeepsHeadroom", testStackedProximityToneFinishChainKeepsHeadroom);
+    run("testFrameworkOutputTrimmerStaysMostlyIdleOnNominalStrongSettings", testFrameworkOutputTrimmerStaysMostlyIdleOnNominalStrongSettings);
+    run("testProductLocalOutputTrimmersStayMostlyIdleOnNominalStrongSettings", testProductLocalOutputTrimmersStayMostlyIdleOnNominalStrongSettings);
     run("testLevelerZeroIsTransparentAndIdle", testLevelerZeroIsTransparentAndIdle);
     run("testLevelerImprovesLevelConsistencyOnHotInstrumentMix", testLevelerImprovesLevelConsistencyOnHotInstrumentMix);
     run("testLevelerGeneralTracksPresenceMoreThanBassAtEqualDrive", testLevelerGeneralTracksPresenceMoreThanBassAtEqualDrive);

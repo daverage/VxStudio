@@ -138,6 +138,13 @@ Instantaneous peak-limiting safety net: if any sample exceeds the ceiling the ga
 - Simple EQ or gain staging (framework final trimmer is sufficient)
 - You're not sure if you need it (always profile first)
 
+`OutputTrimmer` also exposes lightweight telemetry so tests can verify that emergency trimming stays rare:
+
+- `getCurrentReductionDb()`
+- `getMaxObservedReductionDb()`
+- `getCurrentActivity01()`
+- `getMaxObservedActivity01()`
+
 ```cpp
 vxstudio::OutputTrimmer localTrimmer;
 // in prepareSuite: localTrimmer.setReleaseSeconds(0.18f);  // optional
@@ -145,6 +152,15 @@ vxstudio::OutputTrimmer localTrimmer;
 // in processProduct (early, before other stages):
 localTrimmer.process(buffer, currentSampleRateHz);
 ```
+
+Framework processors expose the final safety-trimmer telemetry through `ProcessorBase`:
+
+```cpp
+float currentDb = processor.getOutputSafetyTrimReductionDb();
+float maxDb = processor.getOutputSafetyTrimMaxReductionDb();
+```
+
+If a product owns a product-local `OutputTrimmer`, expose that trimmer's max observed reduction through the processor and cover it with product tests where a "mostly idle under nominal strong settings" standard is honest for that DSP.
 
 ---
 

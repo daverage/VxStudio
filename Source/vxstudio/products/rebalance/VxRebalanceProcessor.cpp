@@ -2,6 +2,7 @@
 #include "VxRebalanceEditor.h"
 
 #include "../../framework/VxStudioHelpContent.h"
+#include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioParameters.h"
 #include "VxStudioVersions.h"
 
@@ -9,7 +10,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Rebalance";
+constexpr std::string_view kProductName = "VX Studio Rebalance";
 constexpr std::string_view kShortTag = "RBL";
 constexpr std::string_view kVocalsParam = "vocals";
 constexpr std::string_view kDrumsParam = "drums";
@@ -72,6 +73,8 @@ vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
     id.controlBankLabels = kBankLabels;
     id.controlBankHints = kBankHints;
     id.controlBankDefaultValues = kBankDefaults;
+    id.stageId   = "vx.rebalance";
+    id.stageType = vxsuite::StageType::mixed;
     id.dspVersion = vxsuite::versions::plugins::rebalance;
     id.helpTitle = vxsuite::help::rebalance.title;
     id.helpHtml = vxsuite::help::rebalance.html;
@@ -122,6 +125,8 @@ void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int 
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
     dsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
+    outputTrimmer.setCeiling(0.96f);
+    outputTrimmer.setReleaseSeconds(0.16f);
     dryDelayLines.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())),
                          std::vector<float>(static_cast<size_t>(std::max(1, dsp.latencySamples())), 0.0f));
     dryDelayWritePos = 0;
@@ -131,6 +136,9 @@ void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int 
 
 void VXRebalanceAudioProcessor::resetSuite() {
     dsp.reset();
+    outputTrimmer.reset();
+    smoothedOutputTrimDb = 0.0f;
+    outputTrimPrimed = false;
     for (auto& channel : dryDelayLines)
         std::fill(channel.begin(), channel.end(), 0.0f);
     dryDelayWritePos = 0;
@@ -197,6 +205,7 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     if (effectivelyNeutral) {
         wasNeutral = true;
+        outputTrimPrimed = false;
         processNeutralWithLatency(buffer);
         return;
     }
@@ -208,6 +217,34 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     dsp.setControlTargets(targets);
     dsp.process(buffer);
+
+    const float strengthDrive = juce::jlimit(0.0f, 1.0f, strength);
+    float positiveIntentSum = 0.0f;
+    float maxPositiveIntent = 0.0f;
+    for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
+        const float positiveIntent = juce::jlimit(0.0f, 1.0f,
+            (targets[static_cast<size_t>(i)] - 0.5f) * 2.0f);
+        positiveIntentSum += positiveIntent;
+        maxPositiveIntent = std::max(maxPositiveIntent, positiveIntent);
+    }
+    const float stackedPositiveIntent = std::max(0.0f, positiveIntentSum - 1.0f);
+    const float outputTrimTargetDb = -juce::jlimit(0.0f, 12.0f,
+        strengthDrive * (7.0f * stackedPositiveIntent + 4.0f * maxPositiveIntent * stackedPositiveIntent));
+    if (!outputTrimPrimed) {
+        smoothedOutputTrimDb = outputTrimTargetDb;
+        outputTrimPrimed = true;
+    } else {
+        smoothedOutputTrimDb = vxsuite::smoothBlockValue(smoothedOutputTrimDb,
+                                                         outputTrimTargetDb,
+                                                         currentSampleRateHz,
+                                                         numSamples,
+                                                         0.140f);
+    }
+    const float outputTrim = juce::Decibels::decibelsToGain(smoothedOutputTrimDb);
+    if (std::abs(outputTrim - 1.0f) > 1.0e-4f)
+        buffer.applyGain(outputTrim);
+
+    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)

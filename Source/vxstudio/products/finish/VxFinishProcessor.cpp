@@ -4,7 +4,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Finish";
+constexpr std::string_view kProductName = "VX Studio Finish";
 constexpr std::string_view kShortTag = "FIN";
 constexpr std::string_view kFinishParam = "finish";
 constexpr std::string_view kBodyParam = "body";
@@ -85,6 +85,7 @@ void VXFinishAudioProcessor::prepareSuite(const double sampleRate, const int sam
 
 void VXFinishAudioProcessor::resetSuite() {
     finishChain.reset();
+    outputTrimmer.reset();
     controls.reset(0.0f, 0.5f, 0.5f);
 }
 
@@ -126,6 +127,8 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     finishChain.setParams(dspParams);
     finishChain.process(buffer);
+
+    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 void VXFinishAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

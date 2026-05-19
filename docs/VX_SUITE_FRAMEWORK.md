@@ -65,6 +65,12 @@ The framework may also own shared removed-content audition:
 - latency-bearing products must override that helper and subtract from a latency-aligned dry reference instead of using raw input
 - `Listen` is a framework capability, not a mandatory product control
 
+The framework also owns the final emergency output-safety telemetry:
+
+- `OutputTrimmer` should remain a last-resort guard, not the main gain-staging strategy
+- shared tests may read `ProcessorBase::getOutputSafetyTrimReductionDb()` and `getOutputSafetyTrimMaxReductionDb()`
+- if those values are materially active during nominal strong settings, fix the product gain staging before widening the trimmer
+
 The framework should also own shared analysis and protection evidence when multiple products need it:
 
 - shared voice analysis belongs in `Source/vxsuite/framework/`

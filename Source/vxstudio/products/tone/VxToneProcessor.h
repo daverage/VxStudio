@@ -2,6 +2,8 @@
 
 #include "../../framework/VxStudioProcessorBase.h"
 #include "../../framework/VxStudioBlockSmoothedControl.h"
+#include "../../framework/VxStudioBlockSmoothing.h"
+#include "../../framework/VxStudioOutputTrimmer.h"
 
 #include <array>
 #include <vector>
@@ -10,6 +12,7 @@ class VXToneAudioProcessor final : public vxsuite::ProcessorBase {
 public:
     VXToneAudioProcessor();
     juce::String getStatusText() const override;
+    float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -38,4 +41,6 @@ private:
     std::vector<BiquadState> bassState;
     std::vector<BiquadState> trebleState;
     vxsuite::BlockSmoothedControlPair controls;
+    vxsuite::OutputTrimmer outputTrimmer;
+    float smoothedOutputTrimDb = 0.0f;
 };

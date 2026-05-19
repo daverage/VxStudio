@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Deverb";
+constexpr std::string_view kProductName = "VX Studio Deverb";
 constexpr std::string_view kShortTag = "DVD";
 constexpr std::string_view kReduceParam = "reduce";
 constexpr std::string_view kBodyParam = "body";
@@ -28,50 +28,35 @@ float onePoleAlpha(const double sampleRate, const float cutoffHz) {
     return std::exp(-2.0f * juce::MathConstants<float>::pi * cutoffHz / static_cast<float>(sampleRate));
 }
 
-bool bufferIsStable(const juce::AudioBuffer<float>& buffer, const float maxPeak) {
-    float peak = 0.0f;
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
-        const auto* data = buffer.getReadPointer(ch);
-        for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            const float s = data[i];
-            if (!std::isfinite(s))
-                return false;
-            peak = std::max(peak, std::abs(s));
-        }
-    }
-    return peak <= maxPeak;
-}
+struct BufferStats { float rms = 0.0f; float peak = 0.0f; bool stable = true; };
 
-float computeBufferRms(const juce::AudioBuffer<float>& buffer) {
+BufferStats computeBufferStats(const juce::AudioBuffer<float>& buffer, const float maxStablePeak = 1.0e30f) {
     const int channels = buffer.getNumChannels();
     const int samples = buffer.getNumSamples();
     if (channels <= 0 || samples <= 0)
-        return 0.0f;
+        return {};
 
     double sumSquares = 0.0;
-    int sampleCount = 0;
+    float peak = 0.0f;
+    bool stable = true;
     for (int ch = 0; ch < channels; ++ch) {
         const auto* data = buffer.getReadPointer(ch);
         for (int i = 0; i < samples; ++i) {
-            const double sample = data[i];
-            sumSquares += sample * sample;
+            const float s = data[i];
+            if (!std::isfinite(s)) { stable = false; continue; }
+            const float abs = std::abs(s);
+            if (abs > maxStablePeak) stable = false;
+            peak = std::max(peak, abs);
+            sumSquares += static_cast<double>(s) * static_cast<double>(s);
         }
-        sampleCount += samples;
     }
-
-    if (sampleCount <= 0)
-        return 0.0f;
-    return static_cast<float>(std::sqrt(sumSquares / static_cast<double>(sampleCount)));
+    const int count = channels * samples;
+    return { count > 0 ? static_cast<float>(std::sqrt(sumSquares / static_cast<double>(count))) : 0.0f,
+             peak, stable };
 }
 
-float computePeakAbs(const juce::AudioBuffer<float>& buffer) {
-    float peak = 0.0f;
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
-        const auto* data = buffer.getReadPointer(ch);
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            peak = std::max(peak, std::abs(data[i]));
-    }
-    return peak;
+float computeBufferRms(const juce::AudioBuffer<float>& buffer) {
+    return computeBufferStats(buffer).rms;
 }
 
 } // namespace
@@ -236,17 +221,21 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     };
 
     renderWet(effectiveReduce);
-    if (!bufferIsStable(wetScratch, 4.0f)) {
-        deverbProcessor.reset();
-        for (int ch = 0; ch < outputChannels; ++ch)
-            wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    {
+        const auto wetStats = computeBufferStats(wetScratch, 4.0f);
+        if (!wetStats.stable) {
+            deverbProcessor.reset();
+            for (int ch = 0; ch < outputChannels; ++ch)
+                wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+        }
     }
     ensureLatencyAlignedListenDry(numSamples);
 
     for (int ch = 0; ch < outputChannels; ++ch)
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
-    applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock);
+    const auto finalWetStats = computeBufferStats(buffer);
+    applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock, finalWetStats.rms, finalWetStats.peak);
 
     // Body: post-deverb low shelf to restore low-end weight lost to subtraction.
     // 250 Hz shelf, +6 dB max at body=1.0, neutral at body=0.
@@ -296,8 +285,9 @@ void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int
 void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>& wetBuffer,
                                                        const float dryRms,
                                                        const float reduceAmount,
-                                                       const bool isFirstBlock) noexcept {
-    const float wetRms = computeBufferRms(wetBuffer);
+                                                       const bool isFirstBlock,
+                                                       const float wetRms,
+                                                       const float wetPeak) noexcept {
     if (dryRms <= 1.0e-6f || wetRms <= 1.0e-6f || reduceAmount <= 1.0e-4f) {
         smoothedCompensationGain = 1.0f;
         return;
@@ -322,7 +312,6 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
                                                              0.180f);
     }
 
-    const float wetPeak = computePeakAbs(wetBuffer);
     const float peakSafeGain = wetPeak > 1.0e-6f ? std::min(1.0f / wetPeak, 1.55f) : 1.0f;
     const float appliedGain = std::min(smoothedCompensationGain, peakSafeGain);
     wetBuffer.applyGain(appliedGain);

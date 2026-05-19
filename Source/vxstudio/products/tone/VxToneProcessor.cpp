@@ -9,7 +9,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName  = "Tone";
+constexpr std::string_view kProductName = "VX Studio Tone";
 constexpr std::string_view kShortTag     = "TNE";
 constexpr std::string_view kBassParam    = "bass";
 constexpr std::string_view kTrebleParam  = "treble";
@@ -75,12 +75,16 @@ void VXToneAudioProcessor::prepareSuite(const double sampleRate, const int /*sam
     const int ch = std::max(1, getTotalNumOutputChannels());
     bassState.assign(static_cast<size_t>(ch), BiquadState{});
     trebleState.assign(static_cast<size_t>(ch), BiquadState{});
+    outputTrimmer.setCeiling(0.96f);
+    outputTrimmer.setReleaseSeconds(0.16f);
     resetSuite();
 }
 
 void VXToneAudioProcessor::resetSuite() {
     for (auto& s : bassState)   s = BiquadState{};
     for (auto& s : trebleState) s = BiquadState{};
+    outputTrimmer.reset();
+    smoothedOutputTrimDb = 0.0f;
     const float bass   = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
     const float treble = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
     controls.reset(bass, treble);
@@ -125,9 +129,21 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     // Map [0,1] → [-maxGainDb, +maxGainDb] with 0.5 = neutral
     const float bassGainDb   = bassExcursion   * 2.0f * maxGainDb;
     const float trebleGainDb = trebleExcursion * 2.0f * maxGainDb;
+    const float positiveBassDb = std::max(0.0f, bassGainDb);
+    const float positiveTrebleDb = std::max(0.0f, trebleGainDb);
+    const float stackedBoostDb = positiveBassDb + positiveTrebleDb;
+    const float outputTrimTargetDb = -juce::jlimit(0.0f, voiceMode ? 6.0f : 7.0f,
+        0.28f * stackedBoostDb
+      + 0.16f * std::max(positiveBassDb, positiveTrebleDb));
 
     const BiquadCoeffs bassC   = lowShelfCoeffs (currentSampleRateHz, bassGainDb,   bassFreqHz);
     const BiquadCoeffs trebleC = highShelfCoeffs(currentSampleRateHz, trebleGainDb, trebleFreqHz);
+    smoothedOutputTrimDb = vxsuite::smoothBlockValue(smoothedOutputTrimDb,
+                                                     outputTrimTargetDb,
+                                                     currentSampleRateHz,
+                                                     numSamples,
+                                                     0.120f);
+    const float outputTrim = juce::Decibels::decibelsToGain(smoothedOutputTrimDb);
 
     for (int ch = 0; ch < numChannels; ++ch) {
         if (ch >= static_cast<int>(bassState.size()))
@@ -135,7 +151,11 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
         float* data = buffer.getWritePointer(ch);
         applyBiquad(data, numSamples, bassC,   bassState[static_cast<size_t>(ch)]);
         applyBiquad(data, numSamples, trebleC, trebleState[static_cast<size_t>(ch)]);
+        if (std::abs(outputTrim - 1.0f) > 1.0e-4f)
+            juce::FloatVectorOperations::multiply(data, outputTrim, numSamples);
     }
+
+    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 void VXToneAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

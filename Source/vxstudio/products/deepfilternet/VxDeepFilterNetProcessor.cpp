@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "DeepFilterNet";
+constexpr std::string_view kProductName = "VX Studio DeepFilterNet";
 constexpr std::string_view kShortTag = "DF";
 constexpr std::string_view kCleanParam = "clean";
 constexpr std::string_view kGuardParam = "guard";

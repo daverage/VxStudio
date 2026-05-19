@@ -110,6 +110,7 @@ void Dsp::reset() {
 }
 
 void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector) {
+    juce::ScopedNoDenormals noDenormals;
     const int numChannels = std::min<int>({ buffer.getNumChannels(), static_cast<int>(channels.size()), 2 });
     const int numSamples = buffer.getNumSamples();
     if (numChannels <= 0 || numSamples <= 0)

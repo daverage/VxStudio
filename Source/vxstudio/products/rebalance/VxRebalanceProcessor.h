@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../framework/VxStudioOutputTrimmer.h"
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxRebalanceDsp.h"
 
@@ -13,6 +14,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     juce::String getStatusText() const override;
     vxsuite::rebalance::Dsp::DebugSnapshot getDebugSnapshot() const noexcept;
+    float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -25,9 +27,12 @@ private:
     void processNeutralWithLatency(juce::AudioBuffer<float>& buffer);
 
     vxsuite::rebalance::Dsp dsp;
+    vxsuite::OutputTrimmer outputTrimmer;
     double currentSampleRateHz = 48000.0;
     int currentBlockSize = 0;
     std::vector<std::vector<float>> dryDelayLines;
     int dryDelayWritePos = 0;
     bool wasNeutral = false;
+    float smoothedOutputTrimDb = 0.0f;
+    bool outputTrimPrimed = false;
 };

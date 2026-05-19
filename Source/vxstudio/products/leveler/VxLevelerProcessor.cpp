@@ -10,7 +10,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Leveler";
+constexpr std::string_view kProductName = "VX Studio Leveler";
 constexpr std::string_view kShortTag = "LVL";
 constexpr std::string_view kLevelParam = "level";
 constexpr std::string_view kControlParam = "control";
@@ -49,6 +49,7 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     identity.helpHtml = vxsuite::help::leveler.html;
     identity.readmeSection = vxsuite::help::leveler.readmeSection;
     identity.showLevelTrace = true;
+    identity.stageId   = "vx.leveler";
     identity.stageType = vxsuite::StageType::mixed;
     identity.theme.accentRgb = { 0.82f, 0.64f, 0.24f };
     identity.theme.accent2Rgb = { 0.12f, 0.10f, 0.06f };

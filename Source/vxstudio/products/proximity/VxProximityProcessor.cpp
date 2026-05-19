@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName  = "Proximity";
+constexpr std::string_view kProductName = "VX Studio Proximity";
 constexpr std::string_view kShortTag     = "PRX";
 constexpr std::string_view kCloserParam  = "closer";
 constexpr std::string_view kAirParam     = "air";
@@ -31,6 +31,8 @@ vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     identity.secondaryLabel   = "Air";
     identity.primaryHint      = "Simulate moving the mic closer for natural bass body and warmth.";
     identity.secondaryHint    = "Add upper presence and clarity that characterises a close placement.";
+    identity.stageId          = "vx.proximity";
+    identity.stageType        = vxsuite::StageType::mixed;
     identity.dspVersion       = vxsuite::versions::plugins::proximity;
     identity.helpTitle        = vxsuite::help::proximity.title;
     identity.helpHtml         = vxsuite::help::proximity.html;
@@ -60,11 +62,14 @@ void VXProximityAudioProcessor::prepareSuite(const double sampleRate,
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     proximityDsp.setChannelCount(getTotalNumOutputChannels());
     proximityDsp.prepare(currentSampleRateHz, samplesPerBlock);
+    outputTrimmer.setCeiling(0.96f);
+    outputTrimmer.setReleaseSeconds(0.16f);
     resetSuite();
 }
 
 void VXProximityAudioProcessor::resetSuite() {
     proximityDsp.reset();
+    outputTrimmer.reset();
     const float closer = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.0f);
     const float air    = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     controls.reset(closer, air);
@@ -107,6 +112,8 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                 effectiveAir,
                                 isVoice,
                                 vocalPriority);
+
+    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 void VXProximityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

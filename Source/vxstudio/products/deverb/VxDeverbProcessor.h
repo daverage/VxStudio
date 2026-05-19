@@ -37,7 +37,9 @@ private:
     void applyLoudnessCompensation(juce::AudioBuffer<float>& wetBuffer,
                                    float dryRms,
                                    float reduceAmount,
-                                   bool isFirstBlock) noexcept;
+                                   bool isFirstBlock,
+                                   float wetRms,
+                                   float wetPeak) noexcept;
 
     vxsuite::deverb::SpectralProcessor deverbProcessor;
     juce::AudioBuffer<float> wetScratch;

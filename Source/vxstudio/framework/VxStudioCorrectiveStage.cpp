@@ -329,7 +329,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
 
             troubleRefLp = cTroubleRefA * troubleRefLp + (1.0f - cTroubleRefA) * monoLinear;
             troubleRefRms = cRmsA * troubleRefRms + (1.0f - cRmsA) * (troubleRefLp * troubleRefLp);
-            const float refEnv = std::sqrt(troubleRefRms + 1.0e-12f);
+            const float refPow = troubleRefRms + 1.0e-12f;
             float bandCutSum = 0.0f;
             for (size_t b = 0; b < 6; ++b) {
                 const float bs = detail::processBiquadDf2(monoLinear, troubleDetBpfB0[b], 0.0f, -troubleDetBpfB0[b],
@@ -338,8 +338,8 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
                 const float bsq = bs * bs;
                 const float tA = bsq > troubleBandRms[b] ? cTroubleAtk : cTroubleRel;
                 troubleBandRms[b] = tA * troubleBandRms[b] + (1.0f - tA) * bsq;
-                const float bandEnv = std::sqrt(troubleBandRms[b] + 1.0e-12f);
-                const float ratioDb = 20.0f * std::log10(bandEnv / refEnv + 1.0e-12f);
+                const float bandPow = troubleBandRms[b] + 1.0e-12f;
+                const float ratioDb = 10.0f * std::log10(bandPow / refPow);
                 const float excessDb = std::max(0.0f, ratioDb - troubleThresh[b]);
                 const float drive = juce::jlimit(0.0f, 1.0f, excessDb / troubleRange);
                 const float cutDb = -troubleMaxCut[b] * troubleDrive * drive * smoothCtx * troubleProtect * troubleRiskGate;
@@ -380,7 +380,7 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
         const float burst = std::max(0.0f, (plosiveFast - burstGate * plosiveSlow) / (plosiveSlow + 1.0e-6f));
         const float plosiveSpeechGuard = juce::jlimit(0.05f, 1.0f,
             1.0f - (voiceMode ? 0.98f : 0.44f) * voicePreserve * speechPresence
-                * std::pow(juce::jlimit(0.0f, 1.0f, 1.0f - 1.5f * burst), 2.0f));
+                * [burst]{ const float t = juce::jlimit(0.0f, 1.0f, 1.0f - 1.5f * burst); return t * t; }());
         const float plosiveTarget = juce::jlimit(0.0f, 1.0f, burst) * plosiveAmt * plosiveSpeechGuard;
         const float plosiveA = plosiveTarget > plosiveEnv ? cPlosiveAtkA : cPlosiveRelA;
         plosiveEnv = plosiveA * plosiveEnv + (1.0f - plosiveA) * plosiveTarget;

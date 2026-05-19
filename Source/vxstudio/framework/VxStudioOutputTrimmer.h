@@ -14,7 +14,16 @@ public:
     void setCeiling(float linearCeiling) noexcept     { ceiling = linearCeiling; }
     void setReleaseSeconds(float seconds) noexcept    { releaseSeconds = seconds; }
 
-    void reset() noexcept { currentGain = 1.0f; }
+    float getCurrentReductionDb() const noexcept { return currentReductionDb; }
+    float getMaxObservedReductionDb() const noexcept { return maxObservedReductionDb; }
+    float getCurrentActivity01() const noexcept { return juce::jlimit(0.0f, 1.0f, currentReductionDb / 6.0f); }
+    float getMaxObservedActivity01() const noexcept { return juce::jlimit(0.0f, 1.0f, maxObservedReductionDb / 6.0f); }
+
+    void reset() noexcept {
+        currentGain = 1.0f;
+        currentReductionDb = 0.0f;
+        maxObservedReductionDb = 0.0f;
+    }
 
     void process(juce::AudioBuffer<float>& buffer, double sampleRate) noexcept {
         const int numSamples = buffer.getNumSamples();
@@ -38,6 +47,10 @@ public:
             currentGain += alpha * (targetGain - currentGain);
         }
 
+        currentReductionDb = std::max(0.0f,
+            -juce::Decibels::gainToDecibels(std::max(currentGain, 1.0e-6f), -120.0f));
+        maxObservedReductionDb = std::max(maxObservedReductionDb, currentReductionDb);
+
         if (targetGain < previousGain) {
             buffer.applyGain(currentGain);
         } else if (std::abs(previousGain - 1.0f) > 1.0e-5f || std::abs(currentGain - 1.0f) > 1.0e-5f) {
@@ -50,6 +63,8 @@ private:
     float currentGain    = 1.0f;
     float ceiling        = 0.97f;
     float releaseSeconds = 0.18f;
+    float currentReductionDb = 0.0f;
+    float maxObservedReductionDb = 0.0f;
 };
 
 } // namespace vxsuite

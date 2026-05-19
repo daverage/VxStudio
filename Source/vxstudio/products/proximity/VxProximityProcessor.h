@@ -3,6 +3,7 @@
 #include "../../framework/VxStudioBlockSmoothedControl.h"
 #include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioEditorBase.h"
+#include "../../framework/VxStudioOutputTrimmer.h"
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxProximityDsp.h"
 
@@ -12,6 +13,7 @@ public:
     ~VXProximityAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
+    float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -25,5 +27,6 @@ private:
 
     vxsuite::proximity::ProximityDsp proximityDsp;
     vxsuite::BlockSmoothedControlPair controls;
+    vxsuite::OutputTrimmer outputTrimmer;
     double currentSampleRateHz = 48000.0;
 };

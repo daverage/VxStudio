@@ -51,6 +51,7 @@ public:
             auto* delayed = alignedDryScratch.getWritePointer(ch);
             auto& line = dryDelayLines[static_cast<size_t>(ch)];
             const int size = static_cast<int>(line.size());
+            if (size <= 0) continue;
             int writePos = dryDelayWritePos[static_cast<size_t>(ch)];
             for (int i = 0; i < numSamples; ++i) {
                 line[static_cast<size_t>(writePos)] = dry[i];

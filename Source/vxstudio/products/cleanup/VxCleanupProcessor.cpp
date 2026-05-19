@@ -7,7 +7,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Cleanup";
+constexpr std::string_view kProductName = "VX Studio Cleanup";
 constexpr std::string_view kShortTag = "CLN";
 constexpr std::string_view kCleanupParam = "cleanup";
 constexpr std::string_view kBodyParam = "body";

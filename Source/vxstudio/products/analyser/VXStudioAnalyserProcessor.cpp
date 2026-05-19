@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Studio Analyser";
+constexpr std::string_view kProductName = "VX Studio Analyser";
 constexpr std::string_view kShortTag = "VSA";
 constexpr std::string_view kStageId = "vx.studio.analyser";
 

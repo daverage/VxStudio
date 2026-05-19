@@ -220,11 +220,11 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         return BiquadCoeffs { c.b0, c.b1, c.b2, c.a1, c.a2 };
     };
 
-    const float outputTrimDb = -juce::jlimit(0.0f, 2.6f,
-        0.18f * lowGain * (0.70f + 0.70f * lowShare)
-      + 0.14f * std::abs(mudCutDb) * (0.30f + 0.60f * lowMidShare)
-      + 0.13f * presenceDb * (0.45f + 0.75f * presenceShare)
-      + 0.08f * highGain * (0.40f + 0.80f * airShare));
+    const float outputTrimDb = -juce::jlimit(0.0f, 4.4f,
+        0.26f * lowGain * (0.74f + 0.78f * lowShare)
+      + 0.10f * std::abs(mudCutDb) * (0.26f + 0.46f * lowMidShare)
+      + 0.20f * presenceDb * (0.48f + 0.82f * presenceShare)
+      + 0.14f * highGain * (0.42f + 0.92f * airShare));
 
     auto smoothModelValue = [](float& current, const float target, const bool primed) noexcept {
         if (!primed) {

@@ -21,6 +21,7 @@ public:
     ~VXCleanupAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
+    float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
     float getLowShelfActivity() const noexcept override;
     float getHighShelfActivity() const noexcept override;
     int getActivityLightCount() const noexcept override;

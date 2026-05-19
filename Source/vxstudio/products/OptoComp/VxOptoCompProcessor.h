@@ -3,6 +3,7 @@
 #include "../../framework/VxStudioBlockSmoothedControl.h"
 #include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioEditorBase.h"
+#include "../../framework/VxStudioOutputTrimmer.h"
 #include "../../framework/VxStudioProcessorBase.h"
 #include "../../framework/VxStudioFinishDsp.h"
 
@@ -12,6 +13,7 @@ public:
     ~VXOptoCompAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
+    float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
     int getActivityLightCount() const noexcept override;
     float getActivityLight(int index) const noexcept override;
     std::string_view getActivityLightLabel(int index) const noexcept override;
@@ -27,6 +29,7 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::finish::Dsp optoDsp;
+    vxsuite::OutputTrimmer outputTrimmer;
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlTriple controls;
 };

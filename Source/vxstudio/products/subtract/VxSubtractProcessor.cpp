@@ -7,7 +7,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "Subtract";
+constexpr std::string_view kProductName = "VX Studio Subtract";
 constexpr std::string_view kShortTag = "SUB";
 constexpr std::string_view kSubtractParam = "subtract";
 constexpr std::string_view kProtectParam = "protect";
@@ -126,6 +126,9 @@ void VXSubtractAudioProcessor::prepareSuite(const double sampleRate, const int s
 }
 
 void VXSubtractAudioProcessor::resetSuite() {
+    subtractDspMono.resetStreamingState();
+    subtractDspLeft.resetStreamingState();
+    subtractDspRight.resetStreamingState();
     controls.reset(vxsuite::readNormalized(parameters, productIdentity.primaryParamId, productIdentity.primaryDefaultValue),
                    vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, productIdentity.secondaryDefaultValue));
     activeTailSamplesRemaining = 0;
@@ -185,10 +188,18 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         if (!learnStopEdge)
             return;
 
-        // Keep STFT pipeline state intact so the transition from learn to process
-        // is seamless. The DSP has been running unity-gain STFT during learning, so
-        // the delay lines and OLA state are valid and the first processed block will
-        // smoothly onset suppression without a silence gap or reconstruction click.
+        // Finalize explicitly in case processInPlace was bypassed this block
+        // (e.g. subtract knob at 0.0 on the stop block), so learnedProfileReady is set.
+        subtractDspMono.finalizeLearnedProfile();
+        subtractDspLeft.finalizeLearnedProfile();
+        subtractDspRight.finalizeLearnedProfile();
+
+        // Reset streaming state so suppressionRamp starts at 0 (gradual onset),
+        // preserving noisePowFrozen (the learned profile).
+        subtractDspMono.resetStreamingState();
+        subtractDspLeft.resetStreamingState();
+        subtractDspRight.resetStreamingState();
+
         resetProcessCoordinator();
         activeTailSamplesRemaining = 0;
         controls.reset(subtractTarget, protectTarget);
@@ -251,9 +262,9 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         };
 
         if (stereo) {
-            if (leftScratch.getNumSamples() < numSamples)
+            if (leftScratch.getNumSamples() != numSamples || leftScratch.getNumChannels() != 1)
                 leftScratch.setSize(1, numSamples, false, false, true);
-            if (rightScratch.getNumSamples() < numSamples)
+            if (rightScratch.getNumSamples() != numSamples || rightScratch.getNumChannels() != 1)
                 rightScratch.setSize(1, numSamples, false, false, true);
             leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
             rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
@@ -262,7 +273,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
             if (channelHasLearnSignal(1))
                 subtractDspRight.processInPlace(rightScratch, 0.0f, options);
         } else {
-            if (leftScratch.getNumSamples() < numSamples)
+            if (leftScratch.getNumSamples() != numSamples || leftScratch.getNumChannels() != 1)
                 leftScratch.setSize(1, numSamples, false, false, true);
             leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
             if (channelHasLearnSignal(0))
@@ -306,9 +317,9 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     }
 
     if (stereo) {
-        if (leftScratch.getNumSamples() < numSamples)
+        if (leftScratch.getNumSamples() != numSamples || leftScratch.getNumChannels() != 1)
             leftScratch.setSize(1, numSamples, false, false, true);
-        if (rightScratch.getNumSamples() < numSamples)
+        if (rightScratch.getNumSamples() != numSamples || rightScratch.getNumChannels() != 1)
             rightScratch.setSize(1, numSamples, false, false, true);
         leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
         rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);

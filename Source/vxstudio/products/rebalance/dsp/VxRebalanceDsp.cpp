@@ -275,12 +275,13 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
     if (numSamples <= 0 || numChannels <= 0 || channels.empty())
         return;
 
+    for (int i = 0; i < kControlCount; ++i)
+        controlSmoothers[static_cast<size_t>(i)].setTargetValue(
+            targetControlValues[static_cast<size_t>(i)].load(std::memory_order_relaxed));
+
     for (int sample = 0; sample < numSamples; ++sample) {
-        for (int i = 0; i < kControlCount; ++i) {
-            controlSmoothers[static_cast<size_t>(i)].setTargetValue(
-                targetControlValues[static_cast<size_t>(i)].load(std::memory_order_relaxed));
+        for (int i = 0; i < kControlCount; ++i)
             currentControlValues[static_cast<size_t>(i)] = controlSmoothers[static_cast<size_t>(i)].getNextValue();
-        }
 
         for (int ch = 0; ch < numChannels; ++ch) {
             auto& state = channels[static_cast<size_t>(ch)];
@@ -395,29 +396,29 @@ void Dsp::processFrame() {
     }
 }
 
-void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
-                       const std::array<float, kBins>& centerWeight,
-                       const std::array<float, kBins>& sideWeight) {
-    std::array<std::array<float, kBins>, kSourceCount> rawWeights {};
-    const auto& modeProfile = currentModeProfile();
-    const AnalysisContext analysisContext {
+Dsp::MaskFrameContext Dsp::buildMaskFrameContext(const std::array<float, kBins>& analysisMag) {
+    MaskFrameContext context {};
+    context.modeProfile = &currentModeProfile();
+    context.analysisContext = {
         targetVocalDominance.load(std::memory_order_relaxed),
         targetIntelligibility.load(std::memory_order_relaxed),
         targetSpeechPresence.load(std::memory_order_relaxed),
         targetTransientRisk.load(std::memory_order_relaxed)
     };
-    const vxsuite::SignalQualitySnapshot signalQuality {
+    context.signalQuality = {
         targetMonoScore.load(std::memory_order_relaxed),
         targetCompressionScore.load(std::memory_order_relaxed),
         targetTiltScore.load(std::memory_order_relaxed),
         targetSeparationConfidence.load(std::memory_order_relaxed)
     };
-    float meanMag = 0.0f;
-    for (const float mag : analysisMag)
-        meanMag += mag;
-    meanMag /= static_cast<float>(kBins);
+    context.recordingType = static_cast<RecordingType>(juce::jlimit(
+        0, static_cast<int>(kModeProfiles.size()) - 1,
+        targetRecordingType.load(std::memory_order_relaxed)));
 
-    // Build spectral envelope for vocal/guitar arbitration
+    for (const float mag : analysisMag)
+        context.meanMag += mag;
+    context.meanMag /= static_cast<float>(kBins);
+
     buildSpectralEnvelope(analysisMag);
 
     float fluxAccum = 0.0f;
@@ -429,417 +430,516 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
             ++fluxCount;
         }
     }
-    const float highFreqFlux = fluxAccum / std::max(1, fluxCount) / std::max(kEps, meanMag);
-    const float transientThreshold = lerp(0.80f, 0.34f, signalQuality.compressionScore) / std::max(0.45f, modeProfile.transientTrust);
-    const float transientPrior = clamp01(highFreqFlux / transientThreshold) * modeProfile.transientTrust;
-    const bool hardTransient = highFreqFlux > transientThreshold * 1.45f;
-    const float bassThreshold = meanMag * 0.30f;
-    const float monoVocalPenalty = lerp(0.0f, 0.30f, signalQuality.monoScore);
-    const float voiceBias = juce::jlimit(0.45f, 1.75f,
-                                         0.55f
-                                       + 0.65f * analysisContext.vocalDominance
-                                       + 0.32f * analysisContext.intelligibility
-                                       + 0.18f * analysisContext.speechPresence
-                                       - monoVocalPenalty);
-    const float drumBias = juce::jlimit(0.35f, 1.70f,
-                                        0.50f
-                                      + 0.65f * transientPrior * modeProfile.drumTransientEmphasis
-                                      + 0.20f * analysisContext.transientRisk);
-    const float steadyPriorScale = lerp(1.0f, 0.40f, signalQuality.compressionScore) * modeProfile.harmonicTrust;
-    const float vocalCentredCoeff = modeProfile.vocalCenterBias * lerp(1.0f, 0.45f, signalQuality.monoScore * (1.0f - modeProfile.stereoWidthTrust));
-    const float bassContBonus = 1.0f + 0.18f * modeProfile.harmonicContinuityWeight * lerp(1.0f, 0.30f, signalQuality.tiltScore);
-    const float attackAlpha = smoothingAlpha(sampleRateHz, modeProfile.attackMs);
-    const float releaseAlpha = smoothingAlpha(sampleRateHz, modeProfile.releaseMs);
-    const float confidenceRange = std::max(0.05f, 1.0f - modeProfile.confidenceFloor);
-    const float usableConfidence = clamp01((signalQuality.separationConfidence - modeProfile.confidenceFloor) / confidenceRange);
-    const auto recordingType = static_cast<RecordingType>(juce::jlimit(0, static_cast<int>(kModeProfiles.size()) - 1,
-                                                                       targetRecordingType.load(std::memory_order_relaxed)));
 
-    // Detect spectral peaks and build harmonic clusters
+    const float highFreqFlux = fluxAccum / std::max(1, fluxCount) / std::max(kEps, context.meanMag);
+    const float transientThreshold = lerp(0.80f, 0.34f, context.signalQuality.compressionScore)
+        / std::max(0.45f, context.modeProfile->transientTrust);
+    context.transientPrior = clamp01(highFreqFlux / transientThreshold) * context.modeProfile->transientTrust;
+    context.hardTransient = highFreqFlux > transientThreshold * 1.45f;
+    context.bassThreshold = context.meanMag * 0.30f;
+
+    const float monoVocalPenalty = lerp(0.0f, 0.30f, context.signalQuality.monoScore);
+    context.voiceBias = juce::jlimit(0.45f, 1.75f,
+                                     0.55f
+                                   + 0.65f * context.analysisContext.vocalDominance
+                                   + 0.32f * context.analysisContext.intelligibility
+                                   + 0.18f * context.analysisContext.speechPresence
+                                   - monoVocalPenalty);
+    context.drumBias = juce::jlimit(0.35f, 1.70f,
+                                    0.50f
+                                  + 0.65f * context.transientPrior * context.modeProfile->drumTransientEmphasis
+                                  + 0.20f * context.analysisContext.transientRisk);
+    context.steadyPriorScale = lerp(1.0f, 0.40f, context.signalQuality.compressionScore)
+        * context.modeProfile->harmonicTrust;
+    context.vocalCentredCoeff = context.modeProfile->vocalCenterBias
+        * lerp(1.0f, 0.45f, context.signalQuality.monoScore * (1.0f - context.modeProfile->stereoWidthTrust));
+    context.bassContBonus = 1.0f + 0.18f * context.modeProfile->harmonicContinuityWeight
+        * lerp(1.0f, 0.30f, context.signalQuality.tiltScore);
+    context.attackAlpha = smoothingAlpha(sampleRateHz, context.modeProfile->attackMs);
+    context.releaseAlpha = smoothingAlpha(sampleRateHz, context.modeProfile->releaseMs);
+    const float confidenceRange = std::max(0.05f, 1.0f - context.modeProfile->confidenceFloor);
+    context.usableConfidence = clamp01(
+        (context.signalQuality.separationConfidence - context.modeProfile->confidenceFloor) / confidenceRange);
+    context.liveMode = context.recordingType == RecordingType::live;
+    context.phoneMode = context.recordingType == RecordingType::phoneRough;
+    return context;
+}
+
+Dsp::BinMaskContext Dsp::buildBinMaskContext(const int bin,
+                                             const std::array<float, kBins>& analysisMag,
+                                             const std::array<float, kBins>& centerWeight,
+                                             const std::array<float, kBins>& sideWeight,
+                                             const MaskFrameContext& frameContext) const noexcept {
+    BinMaskContext context {};
+    context.bin = bin;
+    context.hz = binToHz(bin);
+    const float prevMag = prevAnalysisMag[static_cast<size_t>(bin)];
+    const float deltaNorm = std::abs(analysisMag[static_cast<size_t>(bin)] - prevMag)
+        / std::max({ kEps, analysisMag[static_cast<size_t>(bin)], prevMag, frameContext.meanMag });
+    context.localTransient = clamp01(deltaNorm * 4.0f);
+    const float rawSteadyPrior = 1.0f - clamp01(deltaNorm * 2.5f);
+    context.steadyPrior = rawSteadyPrior * frameContext.steadyPriorScale;
+    context.centered = lerp(1.0f - 0.5f * sideWeight[static_cast<size_t>(bin)],
+                            centerWeight[static_cast<size_t>(bin)],
+                            frameContext.modeProfile->stereoWidthTrust);
+    context.wide = lerp(0.0f, sideWeight[static_cast<size_t>(bin)], frameContext.modeProfile->stereoWidthTrust);
+    context.kickWindow = std::exp(-0.5f * std::pow((context.hz - 72.0f) / 24.0f, 2.0f));
+    context.bassWindow = modeAwareBandWeight(context.hz, frameContext.modeProfile->bass);
+    context.vocalWindow = modeAwareBandWeight(context.hz, frameContext.modeProfile->vocals);
+    context.drumWindow = modeAwareBandWeight(context.hz, frameContext.modeProfile->drums);
+    context.guitarWindow = modeAwareBandWeight(context.hz, frameContext.modeProfile->guitars);
+    context.guitarBodyWindow = smoothBand(context.hz, 150.0f, 900.0f);
+    context.guitarUpperWindow = smoothBand(context.hz, 900.0f, 2500.0f);
+    context.otherWindow = modeAwareBandWeight(context.hz, frameContext.modeProfile->other);
+    return context;
+}
+
+std::array<float, Dsp::kSourceCount> Dsp::buildRawWeightsForBin(const BinMaskContext& binContext,
+                                                                const MaskFrameContext& frameContext,
+                                                                const float analysisMagnitude) {
+    std::array<float, kSourceCount> rawWeights {};
+    const auto& modeProfile = *frameContext.modeProfile;
+
+    float bass = 0.0f;
+    if (binContext.bassWindow > 0.0f)
+        bass = binContext.bassWindow * (0.08f + 0.82f * binContext.centered
+             + 0.30f * binContext.steadyPrior * modeProfile.harmonicContinuityWeight);
+    if (analysisMagnitude > frameContext.bassThreshold)
+        bassContinuity[static_cast<size_t>(binContext.bin)] = std::min(8.0f, bassContinuity[static_cast<size_t>(binContext.bin)] + 1.0f);
+    else
+        bassContinuity[static_cast<size_t>(binContext.bin)] = std::max(0.0f, bassContinuity[static_cast<size_t>(binContext.bin)] - 1.0f);
+    if (bassContinuity[static_cast<size_t>(binContext.bin)] >= 6.0f)
+        bass *= frameContext.bassContBonus;
+    bass *= lerp(1.0f,
+                 frameContext.phoneMode ? 0.42f : (frameContext.liveMode ? 0.30f : 0.35f),
+                 frameContext.transientPrior * binContext.kickWindow);
+    if (frameContext.phoneMode && binContext.hz < 85.0f)
+        bass *= 0.55f;
+    bass *= lerp(1.0f, 0.55f, binContext.wide);
+    bass *= lerp(1.0f, 0.28f, frameContext.transientPrior * binContext.drumWindow);
+    rawWeights[bassSource] = bass;
+
+    const float drumFloor = lerp(0.010f, 0.06f, modeProfile.residualFallback);
+    float drums = drumFloor + 0.04f * binContext.drumWindow;
+    if (binContext.hz >= 35.0f && binContext.hz <= 120.0f)
+        drums += frameContext.drumBias * binContext.kickWindow * binContext.drumWindow
+            * (0.20f + 0.10f * binContext.centered) * (0.20f + 0.95f * frameContext.transientPrior);
+    if (binContext.hz >= 150.0f && binContext.hz <= 340.0f)
+        drums += frameContext.drumBias * binContext.drumWindow
+            * gaussianPeak(binContext.hz, 210.0f, 85.0f) * (0.16f + 0.18f * frameContext.transientPrior);
+    if (binContext.hz >= 1400.0f && binContext.hz <= 6500.0f)
+        drums += frameContext.drumBias * binContext.drumWindow * gaussianPeak(binContext.hz, 3000.0f, 1300.0f)
+            * (0.10f + 0.55f * frameContext.transientPrior + 0.75f * binContext.localTransient);
+    if (binContext.hz >= 5000.0f) {
+        const float hihatWide = lerp(binContext.wide, 0.0f, frameContext.signalQuality.monoScore);
+        drums += frameContext.drumBias * binContext.drumWindow
+            * (0.06f + 0.16f * hihatWide + 0.42f * frameContext.transientPrior + 0.72f * binContext.localTransient);
+    }
+    rawWeights[drumsSource] = drums;
+
+    float vocals = 0.01f;
+    if (binContext.vocalWindow > 0.0f) {
+        vocals = frameContext.voiceBias * binContext.vocalWindow
+            * (0.10f + frameContext.vocalCentredCoeff * binContext.centered + 0.24f * binContext.steadyPrior);
+        if (frameContext.phoneMode && binContext.hz > 2000.0f)
+            vocals *= 0.55f;
+        if (frameContext.phoneMode && binContext.hz < 200.0f)
+            vocals *= 0.65f;
+        vocals *= lerp(1.0f, 0.62f, frameContext.transientPrior * clamp01((binContext.hz - 1800.0f) / 2200.0f));
+        vocals *= lerp(1.0f, 0.82f, binContext.wide);
+        if (binContext.hz >= 250.0f && binContext.hz <= 600.0f)
+            vocals *= 1.15f;
+    }
+    rawWeights[vocalsSource] = vocals;
+
+    float guitar = 0.028f;
+    if (binContext.guitarWindow > 0.0f) {
+        const float guitarBodyEvidence = clamp01(
+            0.55f * binContext.steadyPrior + 0.20f * binContext.wide
+          + 0.18f * (1.0f - binContext.centered) + 0.35f * binContext.guitarBodyWindow);
+        guitar = binContext.guitarWindow * (0.08f + 0.55f * binContext.steadyPrior * modeProfile.harmonicTrust
+            + 0.22f * binContext.wide + 0.14f * (1.0f - binContext.centered));
+        guitar *= lerp(0.90f, 1.18f, binContext.guitarBodyWindow);
+        if (binContext.guitarUpperWindow > 0.0f)
+            guitar *= lerp(0.68f, 1.0f, guitarBodyEvidence);
+        if (binContext.steadyPrior > 0.45f)
+            guitar *= lerp(1.0f, frameContext.liveMode ? 1.28f : 1.12f, binContext.steadyPrior);
+        guitar *= lerp(1.0f, frameContext.phoneMode ? 0.90f : 0.82f, binContext.centered);
+        guitar *= lerp(1.0f, frameContext.phoneMode ? 0.84f : 0.76f, frameContext.transientPrior);
+        if (binContext.hz > 1800.0f)
+            guitar *= frameContext.liveMode ? 0.82f : 0.74f;
+        if (frameContext.phoneMode && binContext.hz > 2000.0f)
+            guitar *= 0.55f;
+        if (frameContext.phoneMode && binContext.hz < 200.0f)
+            guitar *= 0.65f;
+    }
+    rawWeights[guitarSource] = guitar;
+
+    const float occupied = clamp01(0.48f * bass + 0.62f * drums + 0.78f * vocals + 0.48f * guitar);
+    float other = 0.003f + 0.24f * modeProfile.residualFallbackStrength * (1.0f - occupied) + 0.05f * binContext.wide;
+    other += binContext.otherWindow * (0.03f + 0.42f * modeProfile.residualFallback * (0.35f + 0.65f * binContext.wide));
+    if (frameContext.phoneMode && binContext.hz >= 400.0f && binContext.hz <= 1800.0f)
+        other *= 1.02f;
+    if (binContext.hz < modeProfile.lowEndUnityBlendEndHz)
+        other *= 0.12f;
+    rawWeights[otherSource] = other;
+
+    if (binContext.hz < 120.0f) {
+        rawWeights[guitarSource] *= 0.4f;
+        rawWeights[vocalsSource] *= 0.3f;
+    }
+
+    if (frameContext.phoneMode && binContext.hz >= 400.0f && binContext.hz <= 1800.0f) {
+        rawWeights[vocalsSource] *= 0.92f;
+        rawWeights[guitarSource] *= 0.96f;
+        rawWeights[otherSource] *= 0.88f;
+    } else if (frameContext.liveMode && binContext.hz >= 300.0f && binContext.hz <= 1200.0f) {
+        rawWeights[guitarSource] *= 1.34f;
+        rawWeights[otherSource] *= 0.68f;
+    }
+
+    if (frameContext.liveMode && binContext.hz >= 1200.0f && binContext.hz <= 2400.0f) {
+        rawWeights[guitarSource] *= lerp(1.0f, 1.18f, binContext.steadyPrior);
+        rawWeights[otherSource] *= lerp(1.0f, 0.72f, binContext.steadyPrior);
+    }
+
+    if ((frameContext.transientPrior > 0.45f || binContext.localTransient > 0.20f)
+        && binContext.hz >= 1400.0f && binContext.hz <= 12000.0f) {
+        const float transientDrive = std::max(frameContext.transientPrior, binContext.localTransient);
+        rawWeights[drumsSource] *= lerp(1.0f, 1.85f, transientDrive);
+        rawWeights[guitarSource] *= lerp(1.0f, 0.68f, transientDrive);
+        rawWeights[otherSource] *= lerp(1.0f, 0.42f, transientDrive);
+    }
+
+    return rawWeights;
+}
+
+std::array<float, Dsp::kSourceCount> Dsp::applyHarmonicClusterInfluenceForBin(
+    const int bin,
+    const std::array<float, kSourceCount>& rawWeightsForBin) const noexcept {
+    auto influencedWeights = rawWeightsForBin;
+
+    for (int c = 0; c < harmonicClusterCount; ++c) {
+        const auto& cluster = harmonicClusters[static_cast<size_t>(c)];
+        if (!cluster.active || cluster.confidence < 0.15f)
+            continue;
+
+        float maxFalloff = 0.0f;
+        for (int m = 0; m < cluster.memberCount; ++m) {
+            const int distance = std::abs(cluster.memberBins[static_cast<size_t>(m)] - bin);
+            if (distance <= 2) {
+                const float falloff = 1.0f - (distance / 2.0f);
+                maxFalloff = std::max(maxFalloff, falloff);
+            }
+        }
+
+        if (maxFalloff <= 0.0f)
+            continue;
+
+        const float conf = cluster.confidence * maxFalloff;
+        float sourceScoreSum = 0.0f;
+        for (int source = 0; source < kSourceCount; ++source)
+            sourceScoreSum += cluster.sourceScores[static_cast<size_t>(source)];
+
+        for (int source = 0; source < kSourceCount; ++source) {
+            const float scoreNorm =
+                cluster.sourceScores[static_cast<size_t>(source)] / (sourceScoreSum + kEps);
+            influencedWeights[static_cast<size_t>(source)] *=
+                lerp(1.0f, 0.5f + scoreNorm * 1.5f, conf);
+        }
+
+        influencedWeights[static_cast<size_t>(cluster.dominantSource)] *= lerp(1.0f, 1.3f, conf);
+    }
+
+    return influencedWeights;
+}
+
+std::array<float, Dsp::kSourceCount> Dsp::applyMidrangeArbitrationForBin(
+    const std::array<float, kSourceCount>& rawWeightsForBin,
+    const BinMaskContext& binContext,
+    const MaskFrameContext& frameContext) const noexcept {
+    auto adjustedWeights = rawWeightsForBin;
+    const float hz = binContext.hz;
+    if (hz < 280.0f || hz > 3200.0f)
+        return adjustedWeights;
+
+    const float centered = binContext.centered;
+    const float wide = binContext.wide;
+    const float steadyPrior = binContext.steadyPrior;
+    const float vocalScore =
+        binContext.vocalWindow * (0.6f + 0.4f * centered + 0.3f * frameContext.analysisContext.speechPresence);
+    const float guitarScore =
+        binContext.guitarWindow * (0.6f + 0.3f * steadyPrior + 0.3f * wide);
+    const float totalScore = vocalScore + guitarScore + kEps;
+    const float vocalDominance = vocalScore / totalScore;
+    const float guitarDominance = guitarScore / totalScore;
+
+    adjustedWeights[vocalsSource] *= (0.7f + 0.6f * vocalDominance);
+    adjustedWeights[guitarSource] *= (0.7f + 0.6f * guitarDominance);
+    adjustedWeights[otherSource] *= 0.6f;
+
+    if (frameContext.liveMode && hz >= 350.0f && hz <= 2200.0f) {
+        adjustedWeights[guitarSource] *= (1.14f + 0.88f * guitarDominance);
+        adjustedWeights[vocalsSource] *= lerp(1.0f, 0.90f, guitarDominance);
+        adjustedWeights[otherSource] *= 0.40f;
+    } else if (frameContext.phoneMode && hz >= 350.0f && hz <= 1800.0f) {
+        adjustedWeights[guitarSource] *= (1.00f + 0.42f * guitarDominance);
+        adjustedWeights[otherSource] *= 0.58f;
+    }
+
+    return adjustedWeights;
+}
+
+Dsp::SemanticMaskContext Dsp::buildSemanticMaskContextForBin(const BinMaskContext& binContext,
+                                                             const MaskFrameContext& frameContext,
+                                                             const float analysisMagnitude) const noexcept {
+    SemanticMaskContext context {};
+    const float hz = binContext.hz;
+    const float centered = binContext.centered;
+    const float wide = binContext.wide;
+    const float steadyPrior = binContext.steadyPrior;
+    const float transientPrior = frameContext.transientPrior;
+    const float localTransient = binContext.localTransient;
+
+    const float envelopeMag = std::exp(spectralEnvelope[static_cast<size_t>(binContext.bin)]);
+    const float vocalEnv = vocalFormantSupport(hz, analysisMagnitude, envelopeMag);
+    const float guitarEnv = guitarTonalSupport(hz, analysisMagnitude, envelopeMag, centered, wide, steadyPrior);
+
+    context.semanticSupport[vocalsSource] =
+        clamp01(0.02f + 0.98f * binContext.vocalWindow + 0.16f * centered - 0.10f * wide);
+    context.semanticSupport[drumsSource] =
+        clamp01(0.03f + 0.94f * binContext.drumWindow + 0.16f * transientPrior + 0.10f * wide);
+    context.semanticSupport[bassSource] =
+        clamp01(0.01f + 1.04f * binContext.bassWindow + 0.10f * centered + 0.10f * steadyPrior);
+    context.semanticSupport[guitarSource] =
+        clamp01(0.02f + 0.98f * binContext.guitarWindow + 0.16f * wide + 0.10f * (1.0f - centered)
+                + 0.12f * steadyPrior);
+    context.semanticSupport[otherSource] =
+        clamp01(0.05f + 0.72f * binContext.otherWindow + 0.18f * wide + 0.10f * (1.0f - centered));
+
+    const float midrangeWeight = (hz >= 300.0f && hz <= 3000.0f) ? 0.45f : 0.2f;
+    context.semanticSupport[vocalsSource] = lerp(
+        context.semanticSupport[vocalsSource],
+        clamp01(context.semanticSupport[vocalsSource] + 0.5f * vocalEnv),
+        midrangeWeight);
+    context.semanticSupport[guitarSource] = lerp(
+        context.semanticSupport[guitarSource],
+        clamp01(context.semanticSupport[guitarSource] + 0.5f * guitarEnv),
+        midrangeWeight);
+
+    if (hz < 140.0f)
+        context.semanticSupport[vocalsSource] *= 0.04f;
+    if (hz > 9000.0f)
+        context.semanticSupport[vocalsSource] *= 0.18f;
+
+    if (hz < 110.0f) {
+        context.semanticSupport[guitarSource] *= 0.5f;
+        context.semanticSupport[otherSource] *= 0.5f;
+    }
+
+    if (hz >= 60.0f && hz <= 120.0f)
+        context.semanticSupport[drumsSource] *= 0.85f;
+
+    if ((transientPrior > 0.45f || localTransient > 0.20f) && hz >= 1400.0f && hz <= 12000.0f) {
+        const float transientDrive = std::max(transientPrior, localTransient);
+        context.semanticSupport[drumsSource] *= lerp(1.0f, 1.42f, transientDrive);
+        context.semanticSupport[guitarSource] *= lerp(1.0f, 0.82f, transientDrive);
+        context.semanticSupport[otherSource] *= lerp(1.0f, 0.70f, transientDrive);
+    }
+
+    if (hz >= 40.0f && hz <= 150.0f)
+        context.semanticSupport[bassSource] *= 1.15f;
+    if (hz > 380.0f)
+        context.semanticSupport[bassSource] *= 0.18f;
+    if (hz > 700.0f)
+        context.semanticSupport[bassSource] *= 0.08f;
+
+    if (hz < 110.0f)
+        context.semanticSupport[guitarSource] *= 0.18f;
+    if (hz > 6500.0f)
+        context.semanticSupport[guitarSource] *= 0.12f;
+
+    if (hz < 110.0f)
+        context.semanticSupport[otherSource] *= 0.10f;
+
+    context.confidentCore =
+        clamp01(0.42f * context.semanticSupport[vocalsSource]
+                + 0.26f * context.semanticSupport[drumsSource]
+                + 0.32f * context.semanticSupport[bassSource]);
+    context.directGuitarEvidence =
+        clamp01(0.58f * context.semanticSupport[guitarSource]
+                + 0.22f * guitarEnv
+                + 0.10f * steadyPrior
+                + 0.08f * wide
+                + 0.06f * (1.0f - centered)
+                - 0.14f * context.semanticSupport[vocalsSource]
+                - 0.16f * centered);
+    const float guitarResidualOpportunity =
+        clamp01((1.0f - context.confidentCore)
+                * (0.42f + 0.24f * steadyPrior + 0.34f * wide));
+    context.guitarClaim =
+        clamp01(0.78f * context.directGuitarEvidence + 0.22f * guitarResidualOpportunity);
+    context.otherResidualNeed =
+        clamp01(1.0f - (0.26f * context.semanticSupport[vocalsSource]
+                      + 0.22f * context.semanticSupport[drumsSource]
+                      + 0.22f * context.semanticSupport[bassSource]
+                      + 0.30f * context.guitarClaim));
+    return context;
+}
+
+std::array<float, Dsp::kSourceCount> Dsp::buildConditionedMasksForBin(
+    const std::array<float, kSourceCount>& rawWeightsForBin,
+    const float totalRawWeight,
+    const BinMaskContext& binContext,
+    const MaskFrameContext& frameContext,
+    const SemanticMaskContext& semanticContext) const noexcept {
+    std::array<float, kSourceCount> conditionedMasks {};
+    const float hz = binContext.hz;
+    const float centered = binContext.centered;
+    const float wide = binContext.wide;
+    const float steadyPrior = binContext.steadyPrior;
+    const float localTransient = binContext.localTransient;
+    const float transientPrior = frameContext.transientPrior;
+    const bool liveMode = frameContext.liveMode;
+    const bool phoneMode = frameContext.phoneMode;
+
+    for (int source = 0; source < kSourceCount; ++source) {
+        const float baseMask = rawWeightsForBin[static_cast<size_t>(source)] / totalRawWeight;
+        const float sourceSupport =
+            0.035f + (1.0f - 0.035f) * semanticContext.semanticSupport[static_cast<size_t>(source)];
+        conditionedMasks[static_cast<size_t>(source)] =
+            std::pow(clamp01(baseMask), 1.08f) * sourceSupport;
+    }
+
+    if (phoneMode && hz >= 400.0f && hz <= 1800.0f) {
+        conditionedMasks[vocalsSource] *= 0.92f;
+        conditionedMasks[guitarSource] *= 0.98f;
+        conditionedMasks[otherSource] *= 0.82f;
+    } else if (liveMode && hz >= 300.0f && hz <= 1600.0f) {
+        conditionedMasks[guitarSource] *= 1.48f;
+        conditionedMasks[otherSource] *= 0.50f;
+    }
+
+    if (liveMode && hz >= 1600.0f && hz <= 2400.0f) {
+        conditionedMasks[guitarSource] *= 1.18f;
+        conditionedMasks[otherSource] *= 0.72f;
+    }
+
+    if ((transientPrior > 0.45f || localTransient > 0.20f) && hz >= 1400.0f && hz <= 12000.0f) {
+        const float transientDrive = std::max(transientPrior, localTransient);
+        conditionedMasks[drumsSource] *= lerp(1.0f, 1.38f, transientDrive);
+        conditionedMasks[guitarSource] *= lerp(1.0f, 0.90f, transientDrive);
+        conditionedMasks[otherSource] *= lerp(1.0f, 0.72f, transientDrive);
+    }
+
+    if ((phoneMode || liveMode) && hz >= 250.0f && hz <= 2200.0f) {
+        conditionedMasks[guitarSource] *=
+            lerp(1.0f, phoneMode ? 1.14f : 1.20f, semanticContext.guitarClaim);
+        conditionedMasks[otherSource] *=
+            lerp(1.0f, phoneMode ? 0.72f : 0.62f, semanticContext.guitarClaim);
+    }
+
+    if (hz >= 220.0f && hz <= 3200.0f) {
+        conditionedMasks[guitarSource] *= lerp(0.74f, 1.52f, semanticContext.guitarClaim);
+        conditionedMasks[otherSource] *= lerp(0.52f, 1.22f, semanticContext.otherResidualNeed);
+
+        if (semanticContext.directGuitarEvidence < 0.32f && semanticContext.confidentCore > 0.48f)
+            conditionedMasks[guitarSource] *= 0.74f;
+
+        if (semanticContext.guitarClaim > 0.42f && semanticContext.directGuitarEvidence > 0.28f)
+            conditionedMasks[otherSource] *= 0.58f;
+
+        if (wide > 0.18f && centered < 0.74f && steadyPrior > 0.35f) {
+            conditionedMasks[guitarSource] *= 1.12f;
+            conditionedMasks[otherSource] *= 0.78f;
+        }
+
+        if (centered > 0.78f && wide < 0.14f) {
+            conditionedMasks[guitarSource] *= 0.56f;
+            conditionedMasks[otherSource] *= 1.16f;
+        }
+    }
+
+    float sortedScores[kSourceCount] {};
+    for (int source = 0; source < kSourceCount; ++source)
+        sortedScores[source] = conditionedMasks[static_cast<size_t>(source)];
+    std::sort(sortedScores, sortedScores + kSourceCount, std::greater<float>());
+    if ((sortedScores[0] + sortedScores[1]) > 0.72f && binContext.otherWindow < 0.35f)
+        conditionedMasks[otherSource] *= 0.65f;
+
+    return conditionedMasks;
+}
+
+void Dsp::writeSmoothedMasksForBin(const int bin,
+                                   const std::array<float, kSourceCount>& conditionedMasks,
+                                   const MaskFrameContext& frameContext) noexcept {
+    float conditionedTotal = 0.0f;
+    for (int source = 0; source < kSourceCount; ++source)
+        conditionedTotal += conditionedMasks[static_cast<size_t>(source)];
+    conditionedTotal = std::max(kEps, conditionedTotal);
+
+    for (int source = 0; source < kSourceCount; ++source) {
+        const float nextMask = conditionedMasks[static_cast<size_t>(source)] / conditionedTotal;
+        if (!masksPrimed) {
+            smoothedMasks[source][static_cast<size_t>(bin)] = nextMask;
+        } else {
+            const float previous = smoothedMasks[source][static_cast<size_t>(bin)];
+            const float alpha =
+                nextMask > previous ? frameContext.attackAlpha : frameContext.releaseAlpha;
+            smoothedMasks[source][static_cast<size_t>(bin)] =
+                alpha * previous + (1.0f - alpha) * nextMask;
+        }
+    }
+}
+
+void Dsp::refreshObjectAnalysis(const std::array<float, kBins>& analysisMag,
+                                const std::array<float, kBins>& centerWeight,
+                                const std::array<float, kBins>& sideWeight,
+                                const float transientPrior,
+                                const float steadyPriorScale) {
     detectSpectralPeaks(analysisMag);
     buildHarmonicClusters(analysisMag);
     analyseClusterSources(analysisMag, centerWeight, sideWeight, transientPrior, steadyPriorScale);
 
-    // Phase 2: Object-based tracking
     ++currentFrameCount;
     updateTrackedClusters(analysisMag, centerWeight, sideWeight);
     detectTransientEvents(analysisMag, centerWeight, sideWeight, transientPrior);
     updateTransientEvents();
     updateObjectSourceProbabilities(analysisMag, centerWeight, sideWeight, transientPrior, steadyPriorScale);
     writeObjectOwnershipToBins();
+}
+
+void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
+                       const std::array<float, kBins>& centerWeight,
+                       const std::array<float, kBins>& sideWeight) {
+    const auto frameContext = buildMaskFrameContext(analysisMag);
+    refreshObjectAnalysis(analysisMag, centerWeight, sideWeight, frameContext.transientPrior,
+                          frameContext.steadyPriorScale);
 
     for (int k = 0; k < kBins; ++k) {
-        const float hz = binToHz(k);
-        const float prevMag = prevAnalysisMag[static_cast<size_t>(k)];
-        const float deltaNorm = std::abs(analysisMag[static_cast<size_t>(k)] - prevMag)
-            / std::max({ kEps, analysisMag[static_cast<size_t>(k)], prevMag, meanMag });
-        const float localTransient = clamp01(deltaNorm * 4.0f);
-        const float rawSteadyPrior = 1.0f - clamp01(deltaNorm * 2.5f);
-        const float steadyPrior = rawSteadyPrior * steadyPriorScale;
-        const float centered = lerp(1.0f - 0.5f * sideWeight[static_cast<size_t>(k)],
-                                    centerWeight[static_cast<size_t>(k)],
-                                    modeProfile.stereoWidthTrust);
-        const float wide = lerp(0.0f, sideWeight[static_cast<size_t>(k)], modeProfile.stereoWidthTrust);
-        const float kickWindow = std::exp(-0.5f * std::pow((hz - 72.0f) / 24.0f, 2.0f));
-        const float bassWindow = modeAwareBandWeight(hz, modeProfile.bass);
-        const float vocalWindow = modeAwareBandWeight(hz, modeProfile.vocals);
-        const float drumWindow = modeAwareBandWeight(hz, modeProfile.drums);
-        const float guitarWindow = modeAwareBandWeight(hz, modeProfile.guitars);
-        const float guitarBodyWindow = smoothBand(hz, 150.0f, 900.0f);
-        const float guitarUpperWindow = smoothBand(hz, 900.0f, 2500.0f);
-        const float otherWindow = modeAwareBandWeight(hz, modeProfile.other);
-        const bool phoneMode = recordingType == RecordingType::phoneRough;
-        const bool liveMode = recordingType == RecordingType::live;
+        const auto binContext = buildBinMaskContext(k, analysisMag, centerWeight, sideWeight, frameContext);
+        const auto rawWeightsForBin = applyMidrangeArbitrationForBin(
+            applyHarmonicClusterInfluenceForBin(
+                k,
+                buildRawWeightsForBin(binContext, frameContext, analysisMag[static_cast<size_t>(k)])),
+            binContext,
+            frameContext);
 
-        float bass = 0.0f;
-        if (bassWindow > 0.0f)
-            bass = bassWindow * (0.08f + 0.82f * centered + 0.30f * steadyPrior * modeProfile.harmonicContinuityWeight);
-        if (analysisMag[static_cast<size_t>(k)] > bassThreshold)
-            bassContinuity[static_cast<size_t>(k)] = std::min(8.0f, bassContinuity[static_cast<size_t>(k)] + 1.0f);
-        else
-            bassContinuity[static_cast<size_t>(k)] = std::max(0.0f, bassContinuity[static_cast<size_t>(k)] - 1.0f);
-        if (bassContinuity[static_cast<size_t>(k)] >= 6.0f)
-            bass *= bassContBonus;
-        bass *= lerp(1.0f, phoneMode ? 0.42f : (liveMode ? 0.30f : 0.35f), transientPrior * kickWindow);
-        if (phoneMode && hz < 85.0f)
-            bass *= 0.55f;
-        bass *= lerp(1.0f, 0.55f, wide);
-        bass *= lerp(1.0f, 0.28f, transientPrior * drumWindow);
-        rawWeights[bassSource][static_cast<size_t>(k)] = bass;
-
-        const float drumFloor = lerp(0.010f, 0.06f, modeProfile.residualFallback);
-        float drums = drumFloor + 0.04f * drumWindow;
-        if (hz >= 35.0f && hz <= 120.0f)
-            drums += drumBias * kickWindow * drumWindow * (0.20f + 0.10f * centered) * (0.20f + 0.95f * transientPrior);
-        if (hz >= 150.0f && hz <= 340.0f)
-            drums += drumBias * drumWindow * gaussianPeak(hz, 210.0f, 85.0f) * (0.16f + 0.18f * transientPrior);
-        if (hz >= 1400.0f && hz <= 6500.0f)
-            drums += drumBias * drumWindow * gaussianPeak(hz, 3000.0f, 1300.0f)
-                * (0.10f + 0.55f * transientPrior + 0.75f * localTransient);
-        if (hz >= 5000.0f) {
-            const float hihatWide = lerp(wide, 0.0f, signalQuality.monoScore);
-            drums += drumBias * drumWindow * (0.06f + 0.16f * hihatWide + 0.42f * transientPrior + 0.72f * localTransient);
-        }
-        rawWeights[drumsSource][static_cast<size_t>(k)] = drums;
-
-        float vocals = 0.01f;
-        if (vocalWindow > 0.0f) {
-            vocals = voiceBias * vocalWindow * (0.10f + vocalCentredCoeff * centered + 0.24f * steadyPrior);
-            if (phoneMode && hz > 2000.0f)
-                vocals *= 0.55f;
-            if (phoneMode && hz < 200.0f)
-                vocals *= 0.65f;
-            vocals *= lerp(1.0f, 0.62f, transientPrior * clamp01((hz - 1800.0f) / 2200.0f));
-            vocals *= lerp(1.0f, 0.82f, wide);
-            if (hz >= 250.0f && hz <= 600.0f)
-                vocals *= 1.15f;
-        }
-        rawWeights[vocalsSource][static_cast<size_t>(k)] = vocals;
-
-        float guitar = 0.028f;
-        if (guitarWindow > 0.0f) {
-            const float guitarBodyEvidence = clamp01(
-                0.55f * steadyPrior + 0.20f * wide + 0.18f * (1.0f - centered) + 0.35f * guitarBodyWindow);
-            guitar = guitarWindow * (0.08f + 0.55f * steadyPrior * modeProfile.harmonicTrust
-                + 0.22f * wide + 0.14f * (1.0f - centered));
-            guitar *= lerp(0.90f, 1.18f, guitarBodyWindow);
-            if (guitarUpperWindow > 0.0f)
-                guitar *= lerp(0.68f, 1.0f, guitarBodyEvidence);
-            if (steadyPrior > 0.45f)
-                guitar *= lerp(1.0f, liveMode ? 1.28f : 1.12f, steadyPrior);
-            guitar *= lerp(1.0f, phoneMode ? 0.90f : 0.82f, centered);
-            guitar *= lerp(1.0f, phoneMode ? 0.84f : 0.76f, transientPrior);
-            if (hz > 1800.0f)
-                guitar *= liveMode ? 0.82f : 0.74f;
-            if (phoneMode && hz > 2000.0f)
-                guitar *= 0.55f;
-            if (phoneMode && hz < 200.0f)
-                guitar *= 0.65f;
-        }
-        rawWeights[guitarSource][static_cast<size_t>(k)] = guitar;
-
-        const float occupied = clamp01(0.48f * bass + 0.62f * drums + 0.78f * vocals + 0.48f * guitar);
-        float other = 0.003f + 0.24f * modeProfile.residualFallbackStrength * (1.0f - occupied) + 0.05f * wide;
-        other += otherWindow * (0.03f + 0.42f * modeProfile.residualFallback * (0.35f + 0.65f * wide));
-        if (phoneMode && hz >= 400.0f && hz <= 1800.0f)
-            other *= 1.02f;
-        if (hz < modeProfile.lowEndUnityBlendEndHz)
-            other *= 0.12f;
-        rawWeights[otherSource][static_cast<size_t>(k)] = other;
-
-        if (hz < 120.0f) {
-            rawWeights[guitarSource][static_cast<size_t>(k)] *= 0.4f;
-            rawWeights[vocalsSource][static_cast<size_t>(k)] *= 0.3f;
-        }
-
-        if (phoneMode && hz >= 400.0f && hz <= 1800.0f) {
-            rawWeights[vocalsSource][static_cast<size_t>(k)] *= 0.92f;
-            rawWeights[guitarSource][static_cast<size_t>(k)] *= 0.96f;
-            rawWeights[otherSource][static_cast<size_t>(k)] *= 0.88f;
-        } else if (liveMode && hz >= 300.0f && hz <= 1200.0f) {
-            rawWeights[guitarSource][static_cast<size_t>(k)] *= 1.34f;
-            rawWeights[otherSource][static_cast<size_t>(k)] *= 0.68f;
-        }
-
-        if (liveMode && hz >= 1200.0f && hz <= 2400.0f) {
-            rawWeights[guitarSource][static_cast<size_t>(k)] *= lerp(1.0f, 1.18f, steadyPrior);
-            rawWeights[otherSource][static_cast<size_t>(k)] *= lerp(1.0f, 0.72f, steadyPrior);
-        }
-
-        if ((transientPrior > 0.45f || localTransient > 0.20f) && hz >= 1400.0f && hz <= 12000.0f) {
-            const float transientDrive = std::max(transientPrior, localTransient);
-            rawWeights[drumsSource][static_cast<size_t>(k)] *= lerp(1.0f, 1.85f, transientDrive);
-            rawWeights[guitarSource][static_cast<size_t>(k)] *= lerp(1.0f, 0.68f, transientDrive);
-            rawWeights[otherSource][static_cast<size_t>(k)] *= lerp(1.0f, 0.42f, transientDrive);
-        }
-
-        // Apply harmonic cluster influence to raw weights
-        for (int c = 0; c < harmonicClusterCount; ++c) {
-            const auto& cluster = harmonicClusters[static_cast<size_t>(c)];
-            if (!cluster.active || cluster.confidence < 0.15f)
-                continue;
-            
-            // Check if bin k is within range of any cluster member
-            float maxFalloff = 0.0f;
-            for (int m = 0; m < cluster.memberCount; ++m) {
-                const int distance = std::abs(cluster.memberBins[static_cast<size_t>(m)] - k);
-                if (distance <= 2) {
-                    const float falloff = 1.0f - (distance / 2.0f);
-                    maxFalloff = std::max(maxFalloff, falloff);
-                }
-            }
-            
-            if (maxFalloff > 0.0f) {
-                const float conf = cluster.confidence * maxFalloff;
-                
-                // Normalize source scores as proper probability
-                float sourceScoreSum = 0.0f;
-                for (int i = 0; i < kSourceCount; ++i)
-                    sourceScoreSum += cluster.sourceScores[static_cast<size_t>(i)];
-                
-                for (int s = 0; s < kSourceCount; ++s) {
-                    const float scoreNorm =
-                        cluster.sourceScores[static_cast<size_t>(s)] / (sourceScoreSum + kEps);
-                    rawWeights[static_cast<size_t>(s)][static_cast<size_t>(k)] *=
-                        lerp(1.0f, 0.5f + scoreNorm * 1.5f, conf);
-                }
-                // Extra boost to dominant source
-                rawWeights[static_cast<size_t>(cluster.dominantSource)][static_cast<size_t>(k)] *=
-                    lerp(1.0f, 1.3f, conf);
-            }
-        }
-
-        float total = 0.0f;
+        float totalRawWeight = 0.0f;
         for (int source = 0; source < kSourceCount; ++source)
-            total += rawWeights[source][static_cast<size_t>(k)];
-        total = std::max(kEps, total);
+            totalRawWeight += rawWeightsForBin[static_cast<size_t>(source)];
+        totalRawWeight = std::max(kEps, totalRawWeight);
 
-        float semanticSupport[kSourceCount] {};
-        if (hz < 220.0f) { // Low end support
-            const float bassVsDrums = clamp01(0.48f
-                + 0.34f * steadyPrior
-                + 0.12f * centered
-                - 0.42f * transientPrior);
-            semanticSupport[bassSource] *= lerp(0.92f, 1.60f, bassVsDrums);
-            semanticSupport[drumsSource] *= lerp(1.18f, 0.74f, bassVsDrums);
-            semanticSupport[otherSource] *= 0.42f;
-        }
-
-        if (hz >= 280.0f && hz <= 3200.0f) { // Midrange vocal vs guitar arbitration
-            const float vocalScore =
-                vocalWindow * (0.6f + 0.4f * centered + 0.3f * analysisContext.speechPresence);
-            const float guitarScore =
-                guitarWindow * (0.6f + 0.3f * steadyPrior + 0.3f * wide);
-
-            const float totalScore = vocalScore + guitarScore + kEps;
-
-            const float vocalDominance = vocalScore / totalScore;
-            const float guitarDominance = guitarScore / totalScore;
-
-            rawWeights[vocalsSource][static_cast<size_t>(k)] *= (0.7f + 0.6f * vocalDominance);
-            rawWeights[guitarSource][static_cast<size_t>(k)] *= (0.7f + 0.6f * guitarDominance);
-
-            // Kill ambiguity
-            rawWeights[otherSource][static_cast<size_t>(k)] *= 0.6f;
-
-            if (liveMode && hz >= 350.0f && hz <= 2200.0f) {
-                rawWeights[guitarSource][static_cast<size_t>(k)] *= (1.14f + 0.88f * guitarDominance);
-                rawWeights[vocalsSource][static_cast<size_t>(k)] *= lerp(1.0f, 0.90f, guitarDominance);
-                rawWeights[otherSource][static_cast<size_t>(k)] *= 0.40f;
-            } else if (phoneMode && hz >= 350.0f && hz <= 1800.0f) {
-                rawWeights[guitarSource][static_cast<size_t>(k)] *= (1.00f + 0.42f * guitarDominance);
-                rawWeights[otherSource][static_cast<size_t>(k)] *= 0.58f;
-            }
-        }
-
-        // Heuristic semantic support (DSP-only, no ML)
-        // Add envelope-aware support for vocals and guitar
-        const float envelopeMag = std::exp(spectralEnvelope[static_cast<size_t>(k)]);
-        const float vocalEnv = vocalFormantSupport(hz, analysisMag[static_cast<size_t>(k)], envelopeMag);
-        const float guitarEnv = guitarTonalSupport(hz, analysisMag[static_cast<size_t>(k)], envelopeMag, centered, wide, steadyPrior);
-
-        semanticSupport[vocalsSource] = clamp01(0.02f + 0.98f * vocalWindow + 0.16f * centered - 0.10f * wide);
-        semanticSupport[drumsSource]  = clamp01(0.03f + 0.94f * drumWindow + 0.16f * transientPrior + 0.10f * wide);
-        semanticSupport[bassSource]   = clamp01(0.01f + 1.04f * bassWindow + 0.10f * centered + 0.10f * steadyPrior);
-        semanticSupport[guitarSource] = clamp01(0.02f + 0.98f * guitarWindow + 0.16f * wide + 0.10f * (1.0f - centered) + 0.12f * steadyPrior);
-        semanticSupport[otherSource]  = clamp01(0.05f + 0.72f * otherWindow + 0.18f * wide + 0.10f * (1.0f - centered));
-
-        // Blend in envelope-aware support
-        // Stronger influence in critical midrange (300-3000Hz)
-        const float midrangeWeight = (hz >= 300.0f && hz <= 3000.0f) ? 0.45f : 0.2f;
-        semanticSupport[vocalsSource] = lerp(semanticSupport[vocalsSource], 
-                                             clamp01(semanticSupport[vocalsSource] + 0.5f * vocalEnv), 
-                                             midrangeWeight);
-        semanticSupport[guitarSource] = lerp(semanticSupport[guitarSource], 
-                                             clamp01(semanticSupport[guitarSource] + 0.5f * guitarEnv), 
-                                             midrangeWeight);
-
-        if (hz < 140.0f)
-            semanticSupport[vocalsSource] *= 0.04f;
-        if (hz > 9000.0f)
-            semanticSupport[vocalsSource] *= 0.18f;
-
-        // Tighten low-end protection by source type
-        if (hz < 110.0f) {
-            semanticSupport[guitarSource] *= 0.5f;
-            semanticSupport[otherSource] *= 0.5f;
-        }
-        // Drums retain moderate influence in kick region (60-120 Hz)
-        if (hz >= 60.0f && hz <= 120.0f)
-            semanticSupport[drumsSource] *= 0.85f;
-        if ((transientPrior > 0.45f || localTransient > 0.20f) && hz >= 1400.0f && hz <= 12000.0f) {
-            const float transientDrive = std::max(transientPrior, localTransient);
-            semanticSupport[drumsSource] *= lerp(1.0f, 1.42f, transientDrive);
-            semanticSupport[guitarSource] *= lerp(1.0f, 0.82f, transientDrive);
-            semanticSupport[otherSource] *= lerp(1.0f, 0.70f, transientDrive);
-        }
-        // Bass has strong influence in bass region
-        if (hz >= 40.0f && hz <= 150.0f)
-            semanticSupport[bassSource] *= 1.15f;
-
-        if (hz > 380.0f)
-            semanticSupport[bassSource] *= 0.18f;
-        if (hz > 700.0f)
-            semanticSupport[bassSource] *= 0.08f;
-
-        if (hz < 110.0f)
-            semanticSupport[guitarSource] *= 0.18f;
-        if (hz > 6500.0f)
-            semanticSupport[guitarSource] *= 0.12f;
-
-        if (hz < 110.0f)
-            semanticSupport[otherSource] *= 0.10f;
-
-        const float confidentCore =
-            clamp01(0.42f * semanticSupport[vocalsSource]
-                    + 0.26f * semanticSupport[drumsSource]
-                    + 0.32f * semanticSupport[bassSource]);
-        const float directGuitarEvidence =
-            clamp01(0.58f * semanticSupport[guitarSource]
-                    + 0.22f * guitarEnv
-                    + 0.10f * steadyPrior
-                    + 0.08f * wide
-                    + 0.06f * (1.0f - centered)
-                    - 0.14f * semanticSupport[vocalsSource]
-                    - 0.16f * centered);
-        const float guitarResidualOpportunity =
-            clamp01((1.0f - confidentCore)
-                    * (0.42f + 0.24f * steadyPrior + 0.34f * wide));
-        const float guitarClaim =
-            clamp01(0.78f * directGuitarEvidence + 0.22f * guitarResidualOpportunity);
-        const float otherResidualNeed =
-            clamp01(1.0f - (0.26f * semanticSupport[vocalsSource]
-                          + 0.22f * semanticSupport[drumsSource]
-                          + 0.22f * semanticSupport[bassSource]
-                          + 0.30f * guitarClaim));
-
-        float conditionedMasks[kSourceCount] {};
-        float conditionedTotal = 0.0f;
-
-        for (int source = 0; source < kSourceCount; ++source) {
-            const float baseMask = rawWeights[source][static_cast<size_t>(k)] / total;
-            const float sourceSupport = 0.035f + (1.0f - 0.035f) * semanticSupport[static_cast<size_t>(source)];
-            conditionedMasks[source] = std::pow(clamp01(baseMask), 1.08f) * sourceSupport;
-        }
-
-        if (phoneMode && hz >= 400.0f && hz <= 1800.0f) {
-            conditionedMasks[vocalsSource] *= 0.92f;
-            conditionedMasks[guitarSource] *= 0.98f;
-            conditionedMasks[otherSource] *= 0.82f;
-        } else if (liveMode && hz >= 300.0f && hz <= 1600.0f) {
-            conditionedMasks[guitarSource] *= 1.48f;
-            conditionedMasks[otherSource] *= 0.50f;
-        }
-
-        if (liveMode && hz >= 1600.0f && hz <= 2400.0f) {
-            conditionedMasks[guitarSource] *= 1.18f;
-            conditionedMasks[otherSource] *= 0.72f;
-        }
-
-        if ((transientPrior > 0.45f || localTransient > 0.20f) && hz >= 1400.0f && hz <= 12000.0f) {
-            const float transientDrive = std::max(transientPrior, localTransient);
-            conditionedMasks[drumsSource] *= lerp(1.0f, 1.38f, transientDrive);
-            conditionedMasks[guitarSource] *= lerp(1.0f, 0.90f, transientDrive);
-            conditionedMasks[otherSource] *= lerp(1.0f, 0.72f, transientDrive);
-        }
-
-        if ((phoneMode || liveMode) && hz >= 250.0f && hz <= 2200.0f) {
-            conditionedMasks[guitarSource] *= lerp(1.0f, phoneMode ? 1.14f : 1.20f, guitarClaim);
-            conditionedMasks[otherSource] *= lerp(1.0f, phoneMode ? 0.72f : 0.62f, guitarClaim);
-        }
-
-        if (hz >= 220.0f && hz <= 3200.0f) {
-            conditionedMasks[guitarSource] *= lerp(0.74f, 1.52f, guitarClaim);
-            conditionedMasks[otherSource] *= lerp(0.52f, 1.22f, otherResidualNeed);
-
-            if (directGuitarEvidence < 0.32f && confidentCore > 0.48f)
-                conditionedMasks[guitarSource] *= 0.74f;
-
-            if (guitarClaim > 0.42f && directGuitarEvidence > 0.28f)
-                conditionedMasks[otherSource] *= 0.58f;
-
-            if (wide > 0.18f && centered < 0.74f && steadyPrior > 0.35f) {
-                conditionedMasks[guitarSource] *= 1.12f;
-                conditionedMasks[otherSource] *= 0.78f;
-            }
-
-            if (centered > 0.78f && wide < 0.14f) {
-                conditionedMasks[guitarSource] *= 0.56f;
-                conditionedMasks[otherSource] *= 1.16f;
-            }
-        }
-
-        // Reduce 'other' as fallback sink when top two named sources dominate
-        float sortedScores[kSourceCount] {};
-        for (int s = 0; s < kSourceCount; ++s)
-            sortedScores[s] = conditionedMasks[static_cast<size_t>(s)];
-        std::sort(sortedScores, sortedScores + kSourceCount, std::greater<float>());
-        const float top1 = sortedScores[0];
-        const float top2 = sortedScores[1];
-        if ((top1 + top2) > 0.72f && otherWindow < 0.35f) {
-            conditionedMasks[static_cast<size_t>(otherSource)] *= 0.65f;
-        }
-
-        conditionedTotal = 0.0f;
-        for (int source = 0; source < kSourceCount; ++source)
-            conditionedTotal += conditionedMasks[source];
-        conditionedTotal = std::max(kEps, conditionedTotal);
-
-        for (int source = 0; source < kSourceCount; ++source) {
-            const float nextMask = conditionedMasks[source] / conditionedTotal;
-            if (!masksPrimed) {
-                smoothedMasks[source][static_cast<size_t>(k)] = nextMask;
-            } else {
-                const float previous = smoothedMasks[source][static_cast<size_t>(k)];
-                const float alpha = nextMask > previous ? attackAlpha : releaseAlpha;
-                smoothedMasks[source][static_cast<size_t>(k)] =
-                    alpha * previous + (1.0f - alpha) * nextMask;
-            }
-        }
+        const auto semanticContext =
+            buildSemanticMaskContextForBin(binContext, frameContext, analysisMag[static_cast<size_t>(k)]);
+        writeSmoothedMasksForBin(
+            k,
+            buildConditionedMasksForBin(rawWeightsForBin, totalRawWeight, binContext, frameContext, semanticContext),
+            frameContext);
     }
 
     // Apply source persistence after mask smoothing
-    applySourcePersistence(smoothedMasks, transientPrior);
+    applySourcePersistence(smoothedMasks, frameContext.transientPrior);
 
     // Phase 2: Object ownership override - make objects authoritative
     applyObjectOwnershipToMasks(smoothedMasks);

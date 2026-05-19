@@ -863,6 +863,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
             suppressionRamp = std::min(1.0f, suppressionRamp
                 + static_cast<float>(hop) / std::max(1000.0f, static_cast<float>(sr)) / 0.70f);
 
+
             applyGainAndOLA();
 
             // Learn quality accumulation

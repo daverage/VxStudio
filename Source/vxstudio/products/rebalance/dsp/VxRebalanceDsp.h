@@ -205,10 +205,89 @@ private:
         float otherMask = 0.0f;
     };
 
+    struct MaskFrameContext {
+        const RebalanceModeProfile* modeProfile = nullptr;
+        AnalysisContext analysisContext {};
+        vxsuite::SignalQualitySnapshot signalQuality {};
+        RecordingType recordingType = RecordingType::studio;
+        float meanMag = 0.0f;
+        float transientPrior = 0.0f;
+        float steadyPriorScale = 1.0f;
+        float bassThreshold = 0.0f;
+        float voiceBias = 1.0f;
+        float drumBias = 1.0f;
+        float vocalCentredCoeff = 0.0f;
+        float bassContBonus = 1.0f;
+        float attackAlpha = 0.0f;
+        float releaseAlpha = 0.0f;
+        float usableConfidence = 0.0f;
+        bool hardTransient = false;
+        bool liveMode = false;
+        bool phoneMode = false;
+    };
+
+    struct BinMaskContext {
+        int bin = 0;
+        float hz = 0.0f;
+        float localTransient = 0.0f;
+        float steadyPrior = 0.0f;
+        float centered = 0.0f;
+        float wide = 0.0f;
+        float kickWindow = 0.0f;
+        float bassWindow = 0.0f;
+        float vocalWindow = 0.0f;
+        float drumWindow = 0.0f;
+        float guitarWindow = 0.0f;
+        float guitarBodyWindow = 0.0f;
+        float guitarUpperWindow = 0.0f;
+        float otherWindow = 0.0f;
+    };
+
+    struct SemanticMaskContext {
+        std::array<float, kSourceCount> semanticSupport {};
+        float confidentCore = 0.0f;
+        float directGuitarEvidence = 0.0f;
+        float guitarClaim = 0.0f;
+        float otherResidualNeed = 0.0f;
+    };
+
     void processFrame();
     void computeMasks(const std::array<float, kBins>& analysisMag,
                       const std::array<float, kBins>& centerWeight,
                       const std::array<float, kBins>& sideWeight);
+    [[nodiscard]] MaskFrameContext buildMaskFrameContext(const std::array<float, kBins>& analysisMag);
+    [[nodiscard]] BinMaskContext buildBinMaskContext(int bin,
+                                                     const std::array<float, kBins>& analysisMag,
+                                                     const std::array<float, kBins>& centerWeight,
+                                                     const std::array<float, kBins>& sideWeight,
+                                                     const MaskFrameContext& frameContext) const noexcept;
+    [[nodiscard]] std::array<float, kSourceCount> buildRawWeightsForBin(const BinMaskContext& binContext,
+                                                                        const MaskFrameContext& frameContext,
+                                                                        float analysisMagnitude);
+    [[nodiscard]] std::array<float, kSourceCount> applyHarmonicClusterInfluenceForBin(
+        int bin,
+        const std::array<float, kSourceCount>& rawWeightsForBin) const noexcept;
+    [[nodiscard]] std::array<float, kSourceCount> applyMidrangeArbitrationForBin(
+        const std::array<float, kSourceCount>& rawWeightsForBin,
+        const BinMaskContext& binContext,
+        const MaskFrameContext& frameContext) const noexcept;
+    [[nodiscard]] SemanticMaskContext buildSemanticMaskContextForBin(const BinMaskContext& binContext,
+                                                                     const MaskFrameContext& frameContext,
+                                                                     float analysisMagnitude) const noexcept;
+    [[nodiscard]] std::array<float, kSourceCount> buildConditionedMasksForBin(
+        const std::array<float, kSourceCount>& rawWeightsForBin,
+        float totalRawWeight,
+        const BinMaskContext& binContext,
+        const MaskFrameContext& frameContext,
+        const SemanticMaskContext& semanticContext) const noexcept;
+    void writeSmoothedMasksForBin(int bin,
+                                  const std::array<float, kSourceCount>& conditionedMasks,
+                                  const MaskFrameContext& frameContext) noexcept;
+    void refreshObjectAnalysis(const std::array<float, kBins>& analysisMag,
+                               const std::array<float, kBins>& centerWeight,
+                               const std::array<float, kBins>& sideWeight,
+                               float transientPrior,
+                               float steadyPriorScale);
     [[nodiscard]] const RebalanceModeProfile& currentModeProfile() const noexcept;
     [[nodiscard]] float modeAwareBandWeight(float hz, const SourceBandProfile& profile) const noexcept;
     [[nodiscard]] float smoothBand(float hz, float lo, float hi) const noexcept;

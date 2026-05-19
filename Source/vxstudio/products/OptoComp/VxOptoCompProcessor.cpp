@@ -4,7 +4,7 @@
 
 namespace {
 
-constexpr std::string_view kProductName = "OptoComp";
+constexpr std::string_view kProductName = "VX Studio OptoComp";
 constexpr std::string_view kShortTag = "OPC";
 constexpr std::string_view kPeakReductionParam = "peak_reduction";
 constexpr std::string_view kBodyParam = "body";
@@ -36,6 +36,8 @@ vxsuite::ProductIdentity VXOptoCompAudioProcessor::makeIdentity() {
     identity.primaryHint = "Drive the LA-2A style gain reduction. Higher values level harder.";
     identity.secondaryHint = "Light post-compressor body shaping only. Middle stays neutral.";
     identity.tertiaryHint = "Final output gain. Middle is neutral, left reduces, right increases.";
+    identity.stageId   = "vx.optocomp";
+    identity.stageType = vxsuite::StageType::mixed;
     identity.dspVersion = vxsuite::versions::plugins::optocomp;
     identity.helpTitle = vxsuite::help::optoComp.title;
     identity.helpHtml = vxsuite::help::optoComp.html;
@@ -85,6 +87,7 @@ void VXOptoCompAudioProcessor::prepareSuite(const double sampleRate, const int s
 
 void VXOptoCompAudioProcessor::resetSuite() {
     optoDsp.reset();
+    outputTrimmer.reset();
     controls.reset(0.0f, 0.5f, 0.5f);
 }
 
@@ -127,6 +130,8 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     optoDsp.setParams(dspParams);
     optoDsp.process(buffer);
+
+    outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
 void VXOptoCompAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
