@@ -878,19 +878,31 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     std::optional<StageEntry> analyserStage;
     externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
 
+    // Diagnostics: count filtering results
+    int diagnosticTotalSlots = 0;
+    int diagnosticActiveSlots = 0;
+    int diagnosticVxSuiteSlots = 0;
+    int diagnosticNonStaleSlots = 0;
+    int diagnosticDomainMatchSlots = 0;
+
     for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
         vxsuite::analysis::StageView stage;
         if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
             continue;
+        ++diagnosticTotalSlots;
         if (!stage.active)
             continue;
+        ++diagnosticActiveSlots;
         if (labelFromChars(stage.telemetry.identity.pluginFamily) != "VXSuite")
             continue;
+        ++diagnosticVxSuiteSlots;
         const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
         if (stageAgeMs > kStaleThresholdMs)
             continue;
+        ++diagnosticNonStaleSlots;
         if (stage.analysisDomainId != processor.analysisDomainId())
             continue;
+        ++diagnosticDomainMatchSlots;
 
         StageEntry entry;
         entry.view = stage;
@@ -1268,6 +1280,12 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         model.diagnosticsText =
             "Domain: " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
             + "\nLive stages: " + juce::String(static_cast<int>(externalStages.size()))
+            + "\n[Discovery Debug]"
+            + "\n  Total slots: " + juce::String(diagnosticTotalSlots)
+            + "\n  Active: " + juce::String(diagnosticActiveSlots)
+            + "\n  VXSuite: " + juce::String(diagnosticVxSuiteSlots)
+            + "\n  Non-stale: " + juce::String(diagnosticNonStaleSlots)
+            + "\n  Domain match: " + juce::String(diagnosticDomainMatchSlots)
             + "\nStage source: Current domain + localOrderId"
             + "\nCapabilities: Dry/Wet Spectrum Tier 1"
             + "\nSpectrum render: Overlay mode"
