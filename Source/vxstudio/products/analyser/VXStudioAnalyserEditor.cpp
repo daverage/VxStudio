@@ -34,16 +34,6 @@ juce::String labelFromChars(const auto& chars) {
     return juce::String(chars.data());
 }
 
-juce::String canonicalStageKey(juce::String text) {
-    auto normalized = text.trim().toLowerCase();
-    normalized = normalized.removeCharacters(" _-()[]{}");
-    normalized = normalized.replace("vxsuite", "");
-    normalized = normalized.replace("vxstudio", "");
-    if (normalized.startsWith("vx") && normalized.length() > 2)
-        normalized = normalized.substring(2);
-    return normalized;
-}
-
 juce::String displayStageName(const juce::String& rawName) {
     auto name = rawName.trim();
     if (name.startsWithIgnoreCase("VX Studio "))
