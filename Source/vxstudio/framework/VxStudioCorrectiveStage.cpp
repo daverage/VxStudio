@@ -94,12 +94,12 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
             {
             const float fc = voiceMode ? 6200.0f : 7200.0f;
             const float q = 0.66f;
-            const float shelfProtect = juce::jlimit(0.28f, 1.0f,
-                1.0f - 0.75f * juce::jlimit(0.0f, 1.0f, newParams.voicePreserve)
+            const float shelfProtect = juce::jlimit(0.60f, 1.0f,
+                1.0f - 0.35f * juce::jlimit(0.0f, 1.0f, newParams.voicePreserve)
                     * juce::jlimit(0.0f, 1.0f, newParams.speechPresence));
-            const float driftGuard = juce::jlimit(0.22f, 1.0f,
-                1.0f - 0.52f * juce::jlimit(0.0f, 1.0f, newParams.tonalDriftRisk)
-                    - 0.14f * juce::jlimit(0.0f, 1.0f, newParams.articulationRisk));
+            const float driftGuard = juce::jlimit(0.65f, 1.0f,
+                1.0f - 0.32f * juce::jlimit(0.0f, 1.0f, newParams.tonalDriftRisk)
+                    - 0.07f * juce::jlimit(0.0f, 1.0f, newParams.articulationRisk));
             const float baseGainDb = voiceMode ? 1.2f : 2.8f;
             const float deEssScale = voiceMode ? 4.2f : 6.8f;
             const float troubleScale = voiceMode ? 2.8f : 4.2f;
