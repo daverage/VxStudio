@@ -55,7 +55,7 @@ set(VXSTUDIO_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxstudio/vst")
 set(VXSTUDIO_VST3_INSTALL_DIR "/Library/Audio/Plug-Ins/VST3/VxStudio")
 
 function(vxstudio_stage_vst3_bundle target_name bundle_name)
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
   add_custom_command(TARGET ${target_name} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_STAGE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
