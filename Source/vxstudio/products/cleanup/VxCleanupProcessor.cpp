@@ -467,12 +467,16 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                                    - 0.18f * readabilityGuard.articulationRisk
                                    - 0.14f * readabilityGuard.cumulativeRisk
                                    + 0.10f * readabilityGuard.densityPersistence));
-    params.deEss = vxsuite::clamp01(cleanupDrive * cleanupIntensity * qualityTrust * sibilanceWeight
+    // Blend algorithm-detected sibilance with direct character control
+    const float characterHighControl = cleanupDrive * character * (voiceMode ? 0.92f : 0.78f);
+    params.deEss = vxsuite::clamp01(
+        0.50f * (cleanupDrive * cleanupIntensity * qualityTrust * sibilanceWeight
                            * (voiceMode ? 1.26f : 1.14f)
                            * voicedHighBandGuard
                            * highBandSpeechGuard
                            * voicedHighSafety
-                           * juce::jlimit(0.52f, 1.0f, 1.0f - 0.62f * readabilityGuard.articulationRisk - 0.18f * readabilityGuard.tonalDriftRisk));
+                           * juce::jlimit(0.52f, 1.0f, 1.0f - 0.62f * readabilityGuard.articulationRisk - 0.18f * readabilityGuard.tonalDriftRisk))
+      + 0.50f * characterHighControl);
     params.breath = vxsuite::clamp01(cleanupDrive * cleanupIntensity * qualityTrust * breathWeight
                             * (voiceMode ? 0.90f : 0.56f)
                             * voicedBreathGuard
