@@ -22,6 +22,7 @@ struct Params {
     float bodyRecovery = 0.65f;
     float guardStrictness = 0.80f;
     float sourceProtect = 0.85f;
+    float sidechainNoiseFloorDb = -80.0f;
 };
 
 class ClarityDsp {

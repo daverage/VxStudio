@@ -61,6 +61,7 @@ void CorrectiveStage::prepare(double sampleRate, int numChannels) {
     }
     plosiveLpCh.assign(static_cast<size_t>(channels), 0.0f);
     plosiveGainCh.assign(static_cast<size_t>(channels), 1.0f);
+    plosivePrevSampleCh.assign(static_cast<size_t>(channels), 0.0f);
     reset();
 }
 
@@ -376,12 +377,40 @@ void CorrectiveStage::process(juce::AudioBuffer<float>& buffer) {
         const float lowAbs = std::abs(plosiveMonoLp);
         plosiveFast = cPlosiveFastA * plosiveFast + (1.0f - cPlosiveFastA) * lowAbs;
         plosiveSlow = cPlosiveSlowA * plosiveSlow + (1.0f - cPlosiveSlowA) * lowAbs;
+
+        // Enhanced plosive detection: zero-crossing rate and harmonic coherence
+        int zeroCrossings = 0;
+        float harmonicPower = 0.0f;
+        float totalPower = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch) {
+            const auto* data = buffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                const float s = data[i];
+                totalPower += s * s;
+                // Zero-crossing detection (simple sign change)
+                if (ch < static_cast<int>(plosivePrevSampleCh.size())) {
+                    const float prev = plosivePrevSampleCh[static_cast<size_t>(ch)];
+                    if ((prev < 0.0f && s >= 0.0f) || (prev >= 0.0f && s < 0.0f))
+                        zeroCrossings++;
+                    plosivePrevSampleCh[static_cast<size_t>(ch)] = s;
+                }
+            }
+        }
+        const float avgZeroCrossingRate = (numChannels > 0 && numSamples > 0)
+            ? static_cast<float>(zeroCrossings) / (static_cast<float>(numChannels) * static_cast<float>(numSamples))
+            : 0.0f;
+        // High zero-crossing rate + low harmonicity = characteristic of plosives/noise
+        plosiveZeroCrossingRate = 0.7f * plosiveZeroCrossingRate + 0.3f * (avgZeroCrossingRate * 100.0f);
+
         const float burstGate = 1.12f + 0.22f * loudNorm - 0.12f * proxCtx;
         const float burst = std::max(0.0f, (plosiveFast - burstGate * plosiveSlow) / (plosiveSlow + 1.0e-6f));
+        // Plosive confidence: high ZCR + burst = stronger plosive likelihood
+        const float plosiveConfidence = juce::jlimit(0.0f, 1.0f,
+            0.6f * burst + 0.4f * juce::jlimit(0.0f, 1.0f, (plosiveZeroCrossingRate - 0.8f) / 0.6f));
         const float plosiveSpeechGuard = juce::jlimit(0.05f, 1.0f,
             1.0f - (voiceMode ? 0.98f : 0.44f) * voicePreserve * speechPresence
-                * [burst]{ const float t = juce::jlimit(0.0f, 1.0f, 1.0f - 1.5f * burst); return t * t; }());
-        const float plosiveTarget = juce::jlimit(0.0f, 1.0f, burst) * plosiveAmt * plosiveSpeechGuard;
+                * [confidence = plosiveConfidence]{ const float t = juce::jlimit(0.0f, 1.0f, 1.0f - 1.5f * confidence); return t * t; }());
+        const float plosiveTarget = juce::jlimit(0.0f, 1.0f, plosiveConfidence) * plosiveAmt * plosiveSpeechGuard;
         const float plosiveA = plosiveTarget > plosiveEnv ? cPlosiveAtkA : cPlosiveRelA;
         plosiveEnv = plosiveA * plosiveEnv + (1.0f - plosiveA) * plosiveTarget;
         const float plosiveGain = juce::Decibels::decibelsToGain(-plosiveMaxCutDb * plosiveEnv);

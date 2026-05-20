@@ -746,6 +746,14 @@ void DenoiserDsp::processFrame(const float amount,
     signalPresence = 0.94f * signalPresence
                    + 0.06f * (presSum / static_cast<float>(kBins));
 
+    // Update smoothed noise floor estimate (dB)
+    float avgNoisePow = kEps;
+    for (int k = 0; k < kBins; ++k)
+        avgNoisePow += noisePow[k];
+    avgNoisePow /= static_cast<float>(kBins);
+    const float noiseFloorDbTarget = 10.0f * std::log10(std::max(kEps, avgNoisePow));
+    noiseFloorDb = 0.8f * noiseFloorDb + 0.2f * noiseFloorDbTarget;
+
     // ── 11. Inverse FFT + overlap-add ─────────────────────────────────────────
     fft.performInverse(fftBuf.data());
 

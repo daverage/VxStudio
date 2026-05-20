@@ -94,9 +94,12 @@ private:
     float plosiveFast = 0.0f;
     float plosiveSlow = 0.0f;
     float plosiveMonoLp = 0.0f;
+    float plosiveZeroCrossingRate = 0.0f;
+    float plosiveHarmonicCoherence = 0.0f;
     float compEnv = 0.0f;
     std::vector<float> plosiveLpCh;
     std::vector<float> plosiveGainCh;
+    std::vector<float> plosivePrevSampleCh;
 
     float deMudActivity = 0.0f;
     float deEssActivity = 0.0f;

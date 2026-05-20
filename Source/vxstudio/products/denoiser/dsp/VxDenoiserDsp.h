@@ -54,6 +54,7 @@ public:
                         const ProcessOptions&    options) override;
 
     float getSignalPresence() const noexcept { return signalPresence; }
+    float getNoiseFloorDb() const noexcept { return noiseFloorDb; }
 
 private:
     [[nodiscard]] bool hasValidProcessingState(int numChannels, int numSamples) const noexcept;
@@ -155,6 +156,7 @@ private:
     float attackCoeff     = 0.80f;
     float releaseCoeff    = 0.97f;
     float signalPresence  = 0.5f;
+    float noiseFloorDb    = -80.0f;
 
     // ── Scratch (per-block, no audio-thread allocation) ───────────────────────
     std::vector<float> monoOut;
