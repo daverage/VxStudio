@@ -545,10 +545,9 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
       + 0.24f * voiceContext.speechPresence
       + 0.22f * evidence.speechConfidence
       + 0.12f * (1.0f - evidence.artifactRisk));
-    const bool preserveVoicedHighs = voicedShelfRisk > 0.48f
-        && evidence.artifactRisk < 0.32f
-        && focus > 0.60f;
-    params.hiShelfOn = hiShelfOn && !preserveVoicedHighs;
+    // Always enable high-shelf filter when user turns up character dial
+    // The protective factors are applied within CorrectiveStage
+    params.hiShelfOn = hiShelfOn;
 
     params.deMud = vxsuite::clamp01(params.deMud);
     params.deEss = vxsuite::clamp01(params.deEss);
