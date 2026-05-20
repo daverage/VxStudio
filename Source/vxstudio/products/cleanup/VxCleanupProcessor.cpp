@@ -506,7 +506,12 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
       + 0.08f * readabilityGuard.cumulativeRisk);
     params.troubleConfidence = vxsuite::clamp01(
         0.18f + 0.82f * vxsuite::clamp01(troubleEvidence * (1.0f - 0.58f * troubleOverlap)));
-    params.troubleSmooth = vxsuite::clamp01(rawTroubleSmooth * params.troubleConfidence);
+    // Blend algorithm-detected trouble with character-dial direct control
+    // This ensures the high-shelf works even on test signals like pink noise
+    const float characterControl = cleanupDrive * character * (voiceMode ? 0.85f : 0.72f);
+    params.troubleSmooth = vxsuite::clamp01(
+        0.60f * (rawTroubleSmooth * params.troubleConfidence)  // Algorithm detection
+      + 0.40f * characterControl);  // Direct character control
     params.limit = 0.0f;
     params.recovery = 0.0f;
     params.smartGain = 0.0f;
