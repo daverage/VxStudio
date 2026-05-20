@@ -2686,71 +2686,6 @@ bool testDeepFilterGuardRespondsMoreOnArtifactHeavyInput() {
     return true;
 }
 
-bool testAnalyserChainSelectionStaysTrackLocalAndIgnoresBypassedStages() {
-    using namespace vxsuite::analysis;
-
-    auto makeSummary = [](const float low, const float mid, const float high,
-                          const float rms, const float peak,
-                          const float width, const float corr) {
-        AnalysisSummary summary;
-        summary.rms = rms;
-        summary.peak = peak;
-        summary.stereoWidth = width;
-        summary.correlation = corr;
-        for (int i = 0; i < kSummarySpectrumBins; ++i) {
-            const float hz = 20.0f * std::pow(20000.0f / 20.0f,
-                                              (static_cast<float>(i) + 0.5f) / static_cast<float>(kSummarySpectrumBins));
-            const float value = hz < 180.0f ? low : (hz < 2500.0f ? mid : high);
-            summary.spectrum[static_cast<std::size_t>(i)] = value;
-        }
-        return summary;
-    };
-
-    StageView upstreamA;
-    upstreamA.active = true;
-    upstreamA.telemetry.identity.instanceId = 101;
-    upstreamA.telemetry.state.isLive = true;
-    upstreamA.telemetry.state.isBypassed = false;
-    upstreamA.telemetry.inputSummary = makeSummary(0.12f, 0.26f, 0.08f, 0.21f, 0.39f, 0.14f, 0.92f);
-    upstreamA.telemetry.outputSummary = makeSummary(0.10f, 0.23f, 0.07f, 0.18f, 0.35f, 0.13f, 0.93f);
-
-    StageView upstreamB;
-    upstreamB.active = true;
-    upstreamB.telemetry.identity.instanceId = 202;
-    upstreamB.telemetry.state.isLive = true;
-    upstreamB.telemetry.state.isBypassed = false;
-    upstreamB.telemetry.inputSummary = upstreamA.telemetry.outputSummary;
-    upstreamB.telemetry.outputSummary = makeSummary(0.09f, 0.20f, 0.05f, 0.15f, 0.29f, 0.12f, 0.95f);
-
-    StageView bypassedLookalike = upstreamB;
-    bypassedLookalike.telemetry.identity.instanceId = 303;
-    bypassedLookalike.telemetry.state.isBypassed = true;
-
-    StageView foreignTrack;
-    foreignTrack.active = true;
-    foreignTrack.telemetry.identity.instanceId = 404;
-    foreignTrack.telemetry.state.isLive = true;
-    foreignTrack.telemetry.state.isBypassed = false;
-    foreignTrack.telemetry.inputSummary = makeSummary(0.03f, 0.05f, 0.16f, 0.08f, 0.14f, 0.40f, 0.10f);
-    foreignTrack.telemetry.outputSummary = makeSummary(0.02f, 0.04f, 0.18f, 0.07f, 0.12f, 0.44f, 0.04f);
-
-    std::vector<StageView> candidates;
-    candidates.push_back(foreignTrack);
-    candidates.push_back(bypassedLookalike);
-    candidates.push_back(upstreamB);
-    candidates.push_back(upstreamA);
-
-    const auto selected = selectLikelyUpstreamStages(std::move(candidates), upstreamB.telemetry.outputSummary);
-    if (selected.size() != 2
-        || selected[0].telemetry.identity.instanceId != upstreamA.telemetry.identity.instanceId
-        || selected[1].telemetry.identity.instanceId != upstreamB.telemetry.identity.instanceId) {
-        std::cerr << "[VXSuitePluginRegression] Analyser chain selection no longer stays on the active local upstream path\n";
-        return false;
-    }
-
-    return true;
-}
-
 bool testAnalyserDomainBindingSurvivesMultipleDomains() {
     constexpr double sr = 48000.0;
     constexpr int blockSize = 4096;
@@ -3483,7 +3418,6 @@ int main() {
     run("testDenoiserOversizedHostBlocksStayConsistent", testDenoiserOversizedHostBlocksStayConsistent);
     run("testDeepFilterOfflineRenderModeSwitchRecoversCleanly", testDeepFilterOfflineRenderModeSwitchRecoversCleanly);
     run("testDeepFilterGuardRespondsMoreOnArtifactHeavyInput", testDeepFilterGuardRespondsMoreOnArtifactHeavyInput);
-    run("testAnalyserChainSelectionStaysTrackLocalAndIgnoresBypassedStages", testAnalyserChainSelectionStaysTrackLocalAndIgnoresBypassedStages);
     run("testAnalyserDomainBindingSurvivesMultipleDomains", testAnalyserDomainBindingSurvivesMultipleDomains);
     run("testSubtractZeroKeepsPdcAlignedIdentity", testSubtractZeroKeepsPdcAlignedIdentity);
     run("testCleanupBlockSizeInvariance", testCleanupBlockSizeInvariance);

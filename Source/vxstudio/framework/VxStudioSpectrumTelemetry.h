@@ -280,9 +280,6 @@ public:
     [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
 };
 
-[[nodiscard]] std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candidates,
-                                                                const AnalysisSummary& analyserInput) noexcept;
-
 class StagePublisher {
 public:
     explicit StagePublisher(const ProductIdentity& identity);
