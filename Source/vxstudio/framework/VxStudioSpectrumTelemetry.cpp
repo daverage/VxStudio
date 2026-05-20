@@ -1472,7 +1472,7 @@ std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candida
         return 0.58f * spectrumDistance + 0.24f * rmsDistance + 0.08f * peakDistance + 0.10f * stereoDistance;
     };
 
-    constexpr float kMaxChainMatchDistance = 12.0f;
+    constexpr float kMaxChainMatchDistance = 20.0f;
 
     std::vector<StageView> selected;
     selected.reserve(candidates.size());
@@ -1510,7 +1510,7 @@ std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candida
             }));
     const int totalLive = static_cast<int>(selected.size()) + liveCount;
 
-    if (totalLive > 0 && static_cast<int>(selected.size()) < totalLive * 3 / 5) {
+    if (totalLive > 0 && static_cast<int>(selected.size()) < totalLive / 2) {
         // Spectral matching failed to cover chain — fall back to all stages by localOrderId
         for (auto& c : candidates) {
             if (c.telemetry.state.isLive && !c.telemetry.state.isBypassed)
