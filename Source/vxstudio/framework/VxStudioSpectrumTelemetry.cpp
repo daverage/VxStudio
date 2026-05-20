@@ -1478,7 +1478,14 @@ void StagePublisher::reset() noexcept {
 void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
                              const juce::AudioBuffer<float>& outputBuffer,
                              const bool bypassed) noexcept {
-    refreshDomainBinding();
+    // If we're in a fallback domain and an Analyser domain has appeared, rebind immediately.
+    // This ensures products added before the Analyser discover it as soon as audio starts.
+    const bool inFallbackDomain = (analysisDomainIdValue & (static_cast<std::uint64_t>(1) << 63)) != 0;
+    if (inFallbackDomain) {
+        refreshDomainBinding(true);  // Force rebind if we detect an Analyser domain
+    } else {
+        refreshDomainBinding();
+    }
     ensureRegistered();
     if (slotIndex < 0 || inputAccumulator == nullptr || outputAccumulator == nullptr)
         return;
