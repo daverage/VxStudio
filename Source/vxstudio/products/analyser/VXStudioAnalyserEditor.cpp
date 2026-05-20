@@ -469,7 +469,11 @@ VXStudioAnalyserEditor::VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor& o
     addAndMakeVisible(chainToggleButton);
 
     updateTabButtons();
-    juce::Timer::startTimerHz(kUiRefreshHz);
+    // Force aggressive refresh during startup to catch stages already in chain.
+    // Run at 4x normal frequency for first 500ms to ensure all stages are discovered,
+    // even if they haven't processed audio with the Analyser yet.
+    juce::Timer::startTimerHz(kUiRefreshHz * 4);
+    startupRefreshTimeoutMs = 500;
     refreshRenderModel();
     applyPendingRenderModel();
 }
@@ -856,6 +860,14 @@ void VXStudioAnalyserEditor::mouseWheelMove(const juce::MouseEvent& event, const
 }
 
 void VXStudioAnalyserEditor::timerCallback() {
+    // Reduce timer frequency after initial aggressive discovery phase (500ms at 4x freq)
+    if (startupRefreshTimeoutMs > 0) {
+        startupRefreshTimeoutMs -= 42;  // ~42ms per tick at 96 Hz (kUiRefreshHz * 4)
+        if (startupRefreshTimeoutMs <= 0) {
+            juce::Timer::startTimerHz(kUiRefreshHz);  // Back to normal 24 Hz
+        }
+    }
+
     refreshRenderModel();
     applyPendingRenderModel();
 }
