@@ -9,8 +9,6 @@
 namespace {
 
 constexpr std::uint64_t kStaleThresholdMs = 1500;
-constexpr std::uint64_t kFallbackStageThresholdMs = 5000;
-constexpr std::uint64_t kSidebarSnapshotHoldMs = 3500;
 constexpr int kUiRefreshHz = 24;
 constexpr float kSpectrumMinDb = -78.0f;
 constexpr float kSpectrumMaxDb = -18.0f;
@@ -853,22 +851,10 @@ void VXStudioAnalyserEditor::timerCallback() {
 }
 
 void VXStudioAnalyserEditor::refreshRenderModel() {
-    struct SnapshotEntry {
-        int order = 0;
-        juce::String productName;
-        juce::String displayName;
-        juce::String canonicalKey;
-        juce::String shortTag;
-        bool silent = true;
-        std::int64_t lastPublishMs = 0;
-    };
-
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
     std::vector<StageEntry> externalStages;
-    std::vector<SnapshotEntry> snapshotStages;
     std::optional<StageEntry> analyserStage;
     externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
-    snapshotStages.reserve(vxsuite::spectrum::SnapshotRegistry::instance().maxSlots());
 
     for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
         vxsuite::analysis::StageView stage;
@@ -960,105 +946,14 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                              externalStages.end());
     }
 
-    for (int slotIndex = 0; slotIndex < vxsuite::spectrum::SnapshotRegistry::instance().maxSlots(); ++slotIndex) {
-        vxsuite::spectrum::SnapshotView snapshot;
-        if (!vxsuite::spectrum::SnapshotRegistry::instance().readSlot(slotIndex, snapshot))
-            continue;
-
-        const auto shortTag = labelFromChars(snapshot.shortTag);
-        if (shortTag == "VSA")
-            continue;
-
-        if ((nowMs - static_cast<std::uint64_t>(std::max<std::int64_t>(0, snapshot.lastPublishMs))) > kFallbackStageThresholdMs)
-            continue;
-
-        snapshotStages.push_back({
-            snapshot.order,
-            labelFromChars(snapshot.productName),
-            displayStageName(labelFromChars(snapshot.productName)),
-            canonicalStageKey(labelFromChars(snapshot.productName)),
-            shortTag,
-            snapshot.silent,
-            snapshot.lastPublishMs
-        });
-    }
-
-    std::sort(snapshotStages.begin(), snapshotStages.end(), [](const auto& a, const auto& b) {
-        return a.order < b.order;
-    });
-
-    for (const auto& snapshot : snapshotStages) {
-        const auto existing = std::find_if(sidebarSnapshotCache.begin(),
-                                           sidebarSnapshotCache.end(),
-                                           [&](const SidebarSnapshotCacheEntry& cached) {
-                                               return cached.canonicalKey == snapshot.canonicalKey;
-                                           });
-        if (existing != sidebarSnapshotCache.end()) {
-            existing->order = snapshot.order;
-            existing->productName = snapshot.productName;
-            existing->displayName = snapshot.displayName;
-            existing->canonicalKey = snapshot.canonicalKey;
-            existing->shortTag = snapshot.shortTag;
-            existing->silent = snapshot.silent;
-            existing->lastPublishMs = snapshot.lastPublishMs;
-        } else {
-            sidebarSnapshotCache.push_back({
-                snapshot.order,
-                snapshot.productName,
-                snapshot.displayName,
-                snapshot.canonicalKey,
-                snapshot.shortTag,
-                snapshot.silent,
-                snapshot.lastPublishMs
-            });
-        }
-    }
-
-    sidebarSnapshotCache.erase(std::remove_if(sidebarSnapshotCache.begin(),
-                                              sidebarSnapshotCache.end(),
-                                              [&](const SidebarSnapshotCacheEntry& cached) {
-                                                  return (nowMs - static_cast<std::uint64_t>(
-                                                             std::max<std::int64_t>(0, cached.lastPublishMs)))
-                                                      > kSidebarSnapshotHoldMs;
-                                              }),
-                               sidebarSnapshotCache.end());
-
-    std::sort(sidebarSnapshotCache.begin(), sidebarSnapshotCache.end(), [](const auto& a, const auto& b) {
-        if (a.order != b.order)
-            return a.order < b.order;
-        return a.displayName < b.displayName;
-    });
-
     std::sort(externalStages.begin(), externalStages.end(), [](const auto& a, const auto& b) {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
     });
 
-    // Cap sidebar cache to prevent unbounded growth and UI memory bloat.
-    constexpr size_t kMaxSidebarCacheSize = 100;
-    if (sidebarSnapshotCache.size() > kMaxSidebarCacheSize) {
-        sidebarSnapshotCache.erase(sidebarSnapshotCache.begin() + kMaxSidebarCacheSize,
-                                   sidebarSnapshotCache.end());
-    }
-
-    struct StageMatchKey {
-        juce::String nameKey;
-        juce::String idKey;
-    };
-    std::vector<StageMatchKey> externalStageKeys;
-    externalStageKeys.reserve(externalStages.size());
-    for (const auto& stage : externalStages) {
-        externalStageKeys.push_back({
-            canonicalStageKey(stage.stageName),
-            canonicalStageKey(stage.stageId)
-        });
-    }
-
     int selectedIndexValue = selectedStageIndex.load();
     const std::uint64_t selectedInstanceId = selectedStageInstanceId.load();
     bool fullChain = fullChainSelected.load();
-    const int maxSelectableRows = !sidebarSnapshotCache.empty()
-        ? static_cast<int>(sidebarSnapshotCache.size())
-        : static_cast<int>(externalStages.size());
+    const int maxSelectableRows = static_cast<int>(externalStages.size());
     if (selectedIndexValue >= maxSelectableRows) {
         selectedIndexValue = -1;
         selectedStageIndex.store(-1);
@@ -1077,94 +972,25 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     }
 
     RenderModel model;
-    model.snapshotFallback = externalStages.empty() && !snapshotStages.empty();
-    int matchedTelemetryRows = 0;
 
-    if (!sidebarSnapshotCache.empty() || !externalStages.empty()) {
-        model.chainRows.reserve(sidebarSnapshotCache.size() + externalStages.size());
-        model.chainRowStageIndices.reserve(sidebarSnapshotCache.size() + externalStages.size());
-        model.chainRowStageInstanceIds.reserve(sidebarSnapshotCache.size() + externalStages.size());
-        std::vector<bool> matchedExternalStages(static_cast<std::size_t>(externalStages.size()), false);
-        for (const auto& snapshot : sidebarSnapshotCache) {
-            int matchedStageIndex = -1;
-            for (int index = 0; index < static_cast<int>(externalStages.size()); ++index) {
-                const auto& stageNameKey = externalStageKeys[static_cast<std::size_t>(index)].nameKey;
-                const auto& stageIdKey = externalStageKeys[static_cast<std::size_t>(index)].idKey;
-                if (stageNameKey == snapshot.canonicalKey
-                    || stageIdKey == snapshot.canonicalKey) {
-                    matchedStageIndex = index;
-                    break;
-                }
-            }
+    model.chainRows.reserve(externalStages.size());
+    model.chainRowStageIndices.reserve(externalStages.size());
+    model.chainRowStageInstanceIds.reserve(externalStages.size());
 
-            if (matchedStageIndex >= 0) {
-                ++matchedTelemetryRows;
-                matchedExternalStages[static_cast<std::size_t>(matchedStageIndex)] = true;
-                const auto& stage = externalStages[static_cast<std::size_t>(matchedStageIndex)];
-                const bool isSelectedStage =
-                    !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
-                model.chainRows.push_back({
-                    snapshot.displayName,
-                    stage.stateText,
-                    stage.impactText,
-                    stage.typeLabel,
-                    stage.freqHint,
-                    isSelectedStage
-                });
-                model.chainRowStageIndices.push_back(matchedStageIndex);
-                model.chainRowStageInstanceIds.push_back(stage.view.telemetry.identity.instanceId);
-            } else {
-                model.chainRows.push_back({
-                    snapshot.displayName,
-                    (nowMs - static_cast<std::uint64_t>(std::max<std::int64_t>(0, snapshot.lastPublishMs))) > kStaleThresholdMs
-                        ? "Holding"
-                        : (snapshot.silent ? "Silent" : "Live"),
-                    "",
-                    "Waiting",
-                    "",
-                    !fullChain && static_cast<int>(model.chainRows.size()) == selectedIndexValue
-                });
-                model.chainRowStageIndices.push_back(-1);
-                model.chainRowStageInstanceIds.push_back(0);
-            }
-        }
-
-        for (int index = 0; index < static_cast<int>(externalStages.size()); ++index) {
-            if (index < static_cast<int>(matchedExternalStages.size())
-                && matchedExternalStages[static_cast<std::size_t>(index)]) {
-                continue;
-            }
-            const auto& stage = externalStages[static_cast<std::size_t>(index)];
-            const bool isSelectedStage =
-                !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
-            model.chainRows.push_back({
-                displayStageName(stage.stageName),
-                stage.stateText,
-                stage.impactText,
-                stage.typeLabel,
-                stage.freqHint,
-                isSelectedStage
-            });
-            model.chainRowStageIndices.push_back(index);
-            model.chainRowStageInstanceIds.push_back(stage.view.telemetry.identity.instanceId);
-        }
-    }
-
-    if (!fullChain && selectedInstanceId != 0) {
-        int resolvedRowIndex = -1;
-        for (int rowIndex = 0; rowIndex < static_cast<int>(model.chainRowStageIndices.size()); ++rowIndex) {
-            const int stageIndex = model.chainRowStageIndices[static_cast<std::size_t>(rowIndex)];
-            if (stageIndex < 0 || stageIndex >= static_cast<int>(externalStages.size()))
-                continue;
-            if (externalStages[static_cast<std::size_t>(stageIndex)].view.telemetry.identity.instanceId == selectedInstanceId) {
-                resolvedRowIndex = rowIndex;
-                break;
-            }
-        }
-        if (resolvedRowIndex >= 0) {
-            selectedIndexValue = resolvedRowIndex;
-            selectedStageIndex.store(resolvedRowIndex);
-        }
+    for (int i = 0; i < static_cast<int>(externalStages.size()); ++i) {
+        const auto& stage = externalStages[static_cast<std::size_t>(i)];
+        const bool isSelectedStage =
+            !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
+        model.chainRows.push_back({
+            displayStageName(stage.stageName),
+            stage.stateText,
+            stage.impactText,
+            stage.typeLabel,
+            stage.freqHint,
+            isSelectedStage
+        });
+        model.chainRowStageIndices.push_back(i);
+        model.chainRowStageInstanceIds.push_back(stage.view.telemetry.identity.instanceId);
     }
 
     juce::String selectedLabel = "Full Chain";
@@ -1172,50 +998,25 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         selectedLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName;
     model.statusText =
         "Domain " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
-        + " | live chain: " + juce::String(static_cast<int>(sidebarSnapshotCache.size()))
-        + " | telemetry: " + juce::String(matchedTelemetryRows)
+        + " | live chain: " + juce::String(static_cast<int>(externalStages.size()))
         + " | selection: " + selectedLabel;
-
-    const bool incompleteStageCoverage =
-        !sidebarSnapshotCache.empty() && matchedTelemetryRows < static_cast<int>(sidebarSnapshotCache.size());
 
     vxsuite::analysis::AnalysisSummary before {};
     vxsuite::analysis::AnalysisSummary after {};
     juce::String selectionKey = "empty";
     juce::String scopeLabel;
 
-    if (fullChain && incompleteStageCoverage && analyserStage.has_value()) {
-        before = analyserStage->view.telemetry.inputSummary;
-        after = analyserStage->view.telemetry.outputSummary;
-        scopeLabel = "Chain Syncing";
-        selectionKey = "partial-telemetry";
-        model.valid = true;
-    } else if (!externalStages.empty()) {
+    if (!externalStages.empty()) {
         if (fullChain || selectedIndexValue < 0) {
-            int firstMatchedStageIndex = -1;
-            int lastMatchedStageIndex = -1;
-            for (const int stageIndex : model.chainRowStageIndices) {
-                if (stageIndex < 0 || stageIndex >= static_cast<int>(externalStages.size()))
-                    continue;
-                if (firstMatchedStageIndex < 0)
-                    firstMatchedStageIndex = stageIndex;
-                lastMatchedStageIndex = stageIndex;
-            }
-
-            if (firstMatchedStageIndex >= 0 && lastMatchedStageIndex >= 0) {
-                before = externalStages[static_cast<std::size_t>(firstMatchedStageIndex)].view.telemetry.inputSummary;
-                after = analyserStage.has_value()
-                    ? analyserStage->view.telemetry.inputSummary
-                    : externalStages[static_cast<std::size_t>(lastMatchedStageIndex)].view.telemetry.outputSummary;
-            } else {
-                before = externalStages.front().view.telemetry.inputSummary;
-                after = analyserStage.has_value()
-                    ? analyserStage->view.telemetry.inputSummary
-                    : externalStages.back().view.telemetry.outputSummary;
-            }
+            // Full chain: first stage input → analyser input (or last stage output)
+            before = externalStages.front().view.telemetry.inputSummary;
+            after = analyserStage.has_value()
+                ? analyserStage->view.telemetry.inputSummary
+                : externalStages.back().view.telemetry.outputSummary;
             scopeLabel = "Full Chain";
             selectionKey = "full";
         } else {
+            // Single stage selection
             int matchedStageIndex = -1;
             if (selectedIndexValue >= 0
                 && selectedIndexValue < static_cast<int>(model.chainRowStageIndices.size())) {
@@ -1228,11 +1029,6 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 after = stage.view.telemetry.outputSummary;
                 scopeLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName;
                 selectionKey = "stage:" + juce::String(static_cast<juce::int64>(stage.view.telemetry.identity.instanceId));
-            } else if (analyserStage.has_value()) {
-                before = analyserStage->view.telemetry.inputSummary;
-                after = analyserStage->view.telemetry.outputSummary;
-                scopeLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName + " (Waiting)";
-                selectionKey = "waiting:" + juce::String(static_cast<juce::int64>(selectedInstanceId));
             }
         }
         model.valid = !selectionKey.isEmpty() && selectionKey != "empty";
@@ -1446,19 +1242,11 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                                                      : smoothScalar(backendState.transientDelta, transientDeltaTarget, summarySmoothingSeconds);
 
         model.selectionTitle = "Spectrum  |  " + scopeLabel;
-        if (selectionKey == "partial-telemetry") {
-            model.summaryLines = {
-                "Spectrum -> Chain Syncing",
-                "Visible telemetry " + juce::String(matchedTelemetryRows)
-                    + " / snapshots " + juce::String(static_cast<int>(sidebarSnapshotCache.size())),
-                "Waiting for complete stage telemetry before building full-chain comparison",
-                "Current graph is analyser passthrough only to avoid false spikes"
-            };
-        } else if (selectionKey.startsWith("waiting:")) {
+        if (selectionKey.startsWith("waiting:")) {
             model.summaryLines = {
                 "Spectrum -> Waiting for telemetry",
                 "Live chain row is present, but this stage has not published matched telemetry yet",
-                "Sidebar is driven by the active VX chain, analysis will appear as soon as telemetry arrives",
+                "Analysis will appear as soon as telemetry arrives",
                 "Current graph is analyser passthrough only to avoid false spikes"
             };
         } else {
@@ -1475,32 +1263,17 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                                                   backendState.midToneDeltaDb,
                                                   backendState.highToneDeltaDb);
         }
-        juce::String snapshotList = "hidden";
-        if (diagnosticsExpanded) {
-            juce::StringArray snapshotNames;
-            snapshotNames.ensureStorageAllocated(static_cast<int>(sidebarSnapshotCache.size()));
-            for (const auto& snapshot : sidebarSnapshotCache)
-                snapshotNames.add(snapshot.productName + " (" + snapshot.shortTag + ")");
-            snapshotList = snapshotNames.isEmpty() ? juce::String("none") : snapshotNames.joinIntoString(", ");
-        }
 
         model.diagnosticsText =
             "Domain: " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
-            + "\nStage count: " + juce::String(static_cast<int>(externalStages.size()))
-            + "\nSnapshot count: " + juce::String(static_cast<int>(sidebarSnapshotCache.size()))
-            + "\nMatched rows: " + juce::String(matchedTelemetryRows)
-            + "\nStage source: Current domain"
-            + "\nSidebar source: Live chain snapshots"
-            + "\nCoverage: " + juce::String(incompleteStageCoverage ? "Partial" : "Complete")
-            + "\nFreshness: <= " + juce::String(static_cast<int>(kStaleThresholdMs)) + " ms"
-            + "\nOrder confidence: Deterministic via domain + localOrderId"
+            + "\nLive stages: " + juce::String(static_cast<int>(externalStages.size()))
+            + "\nStage source: Current domain + localOrderId"
             + "\nCapabilities: Dry/Wet Spectrum Tier 1"
             + "\nSpectrum render: Overlay mode"
             + "\nAvg time: " + juce::String(averageSeconds, 2) + " s"
             + "\nSmoothing: " + juce::String(kSmoothingOptions[static_cast<std::size_t>(
                   juce::jlimit(0, static_cast<int>(kSmoothingOptions.size()) - 1, smoothingIndex.load()))])
-            + "\nSnapshots: " + snapshotList
-            + "\nFallback mode: " + juce::String(selectionKey == "dry-only" ? "Analyser passthrough only" : "Normal stage comparison")
+            + "\nMode: " + juce::String(selectionKey == "dry-only" ? "Analyser passthrough only" : "Normal stage comparison")
             + "\nSelection key: " + selectionKey;
     }
 

@@ -1472,7 +1472,7 @@ std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candida
         return 0.58f * spectrumDistance + 0.24f * rmsDistance + 0.08f * peakDistance + 0.10f * stereoDistance;
     };
 
-    constexpr float kMaxChainMatchDistance = 4.50f;
+    constexpr float kMaxChainMatchDistance = 12.0f;
 
     std::vector<StageView> selected;
     selected.reserve(candidates.size());
@@ -1500,6 +1500,26 @@ std::vector<StageView> selectLikelyUpstreamStages(std::vector<StageView> candida
         targetSummary = chosen.telemetry.inputSummary;
         selected.push_back(std::move(chosen));
         candidates.erase(candidates.begin() + bestIndex);
+    }
+
+    // Coverage fallback: if spectral matching failed to cover chain, return all by localOrderId
+    const int liveCount = static_cast<int>(
+        std::count_if(candidates.begin(), candidates.end(),
+            [](const StageView& s) {
+                return s.telemetry.state.isLive && !s.telemetry.state.isBypassed;
+            }));
+    const int totalLive = static_cast<int>(selected.size()) + liveCount;
+
+    if (totalLive > 0 && static_cast<int>(selected.size()) < totalLive * 3 / 5) {
+        // Spectral matching failed to cover chain — fall back to all stages by localOrderId
+        for (auto& c : candidates) {
+            if (c.telemetry.state.isLive && !c.telemetry.state.isBypassed)
+                selected.push_back(std::move(c));
+        }
+        std::sort(selected.begin(), selected.end(), [](const StageView& a, const StageView& b) {
+            return a.telemetry.identity.localOrderId < b.telemetry.identity.localOrderId;
+        });
+        return selected;  // already in forward order
     }
 
     std::reverse(selected.begin(), selected.end());
