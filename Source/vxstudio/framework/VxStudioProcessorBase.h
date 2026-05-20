@@ -50,6 +50,7 @@ public:
     virtual juce::String getModelDownloadPromptBody() const { return {}; }
     virtual void requestModelDownload() {}
     virtual void declineModelDownloadPrompt() {}
+    virtual bool hasSidechainActive() const noexcept { return false; }
     float getOutputSafetyTrimReductionDb() const noexcept { return outputSafetyTrimmer.getCurrentReductionDb(); }
     float getOutputSafetyTrimMaxReductionDb() const noexcept { return outputSafetyTrimmer.getMaxObservedReductionDb(); }
     float getOutputSafetyTrimActivity() const noexcept { return outputSafetyTrimmer.getCurrentActivity01(); }

@@ -27,6 +27,7 @@ public:
     int getActivityLightCount() const noexcept override;
     float getActivityLight(int index) const noexcept override;
     std::string_view getActivityLightLabel(int index) const noexcept override;
+    bool hasSidechainActive() const noexcept override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -38,6 +39,7 @@ private:
 
     vxsuite::cleanup::Dsp correctiveChain;
     vxsuite::clarity::ClarityDsp persistentCleanupStage;
+    std::atomic<bool> sidechainActive{false};
     vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     vxsuite::RealFft spectralFft;
     std::vector<float> spectralFifo;

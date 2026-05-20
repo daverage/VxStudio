@@ -10,9 +10,6 @@ struct SharedParams {
     float compress = 0.0f;
     float troubleSmooth = 0.0f;
     float troubleConfidence = 0.0f;
-    float limit = 0.0f;
-    float recovery = 0.0f;
-    float smartGain = 0.5f;
     float voicePreserve = 0.75f;
     float denoiseAmount = 0.0f;
     float artifactRisk = 0.0f;

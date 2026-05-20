@@ -94,8 +94,10 @@ private:
     juce::Rectangle<int> traceViewBounds;
     juce::Rectangle<int> lowShelfIconBounds;
     juce::Rectangle<int> highShelfIconBounds;
+    juce::Rectangle<int> sidechainBadgeBounds;
     bool lastLowShelfOn  = false;
     bool lastHighShelfOn = false;
+    bool lastSidechainActive = false;
     int traceMissTicks = 0;
     juce::String transientStatusText;
     int transientStatusTicks = 0;

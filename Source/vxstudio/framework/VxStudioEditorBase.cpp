@@ -309,6 +309,26 @@ void EditorBase::paint(juce::Graphics& g) {
         if (id.showHighShelfIcon) drawShelfIcon(highShelfIconBounds, false, highOn);
     }
 
+    if (lastSidechainActive && !sidechainBadgeBounds.isEmpty()) {
+        const auto accent = lookAndFeel.findColour(juce::Label::textColourId);
+        const auto r = sidechainBadgeBounds.toFloat();
+
+        // Glow halo when sidechain is active
+        g.setColour(accent.withAlpha(0.08f));
+        g.fillRoundedRectangle(r.expanded(2.0f), 5.0f);
+
+        // Badge fill and stroke
+        g.setColour(accent.withAlpha(0.18f));
+        g.fillRoundedRectangle(r, 4.0f);
+        g.setColour(accent.withAlpha(0.60f));
+        g.drawRoundedRectangle(r.reduced(0.5f), 4.0f, 1.2f);
+
+        // SC text
+        g.setColour(accent.withAlpha(0.85f));
+        g.setFont(juce::FontOptions().withHeight(11.0f).withStyle("Bold").withKerningFactor(0.15f));
+        g.drawText("SC", sidechainBadgeBounds, juce::Justification::centred, false);
+    }
+
     g.setColour(lookAndFeel.findColour(juce::Label::textColourId).withAlpha(0.10f));
     g.drawLine(body.getX() + static_cast<float>(scaled(24)),
                body.getY() + static_cast<float>(scaled(72)),
@@ -373,6 +393,8 @@ void EditorBase::resized() {
         helpButton.setBounds(modeRow.removeFromRight(scaled(92)).reduced(0, scaled(2)));
         modeRow.removeFromRight(scaled(12));
     }
+
+    sidechainBadgeBounds = modeRow.removeFromRight(scaled(48)).reduced(scaled(6), scaled(4));
 
     const bool hasTertiary = processor.getProductIdentity().supportsTertiaryControl();
     const bool hasQuaternary = processor.getProductIdentity().supportsQuaternaryControl();
@@ -732,6 +754,13 @@ void EditorBase::timerCallback() {
         lastLowShelfOn  = lowOn;
         lastHighShelfOn = highOn;
         repaint();
+    }
+
+    const bool sidechainNow = processor.hasSidechainActive();
+    if (sidechainNow != lastSidechainActive) {
+        lastSidechainActive = sidechainNow;
+        if (!sidechainBadgeBounds.isEmpty())
+            repaint(sidechainBadgeBounds);
     }
 }
 

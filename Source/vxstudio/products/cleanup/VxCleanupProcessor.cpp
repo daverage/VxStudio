@@ -115,6 +115,10 @@ std::string_view VXCleanupAudioProcessor::getActivityLightLabel(int index) const
     }
 }
 
+bool VXCleanupAudioProcessor::hasSidechainActive() const noexcept {
+    return sidechainActive.load(std::memory_order_relaxed);
+}
+
 void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     spectralOrder = chooseSpectralOrder(currentSampleRateHz);
@@ -350,7 +354,8 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
           * voicedMaterialGuard);
         persistentParams.focus = focus;
         persistentParams.voiceMode = voiceMode;
-        persistentParams.sidechainPresent = false;
+        persistentParams.sidechainPresent = (evidence.noiseFloorDb > -75.0f);
+        sidechainActive.store(persistentParams.sidechainPresent, std::memory_order_relaxed);
         persistentParams.sidechainNoiseFloorDb = evidence.noiseFloorDb;
         persistentParams.monoScore = monoPenalty;
         persistentParams.compressionScore = compressionPenalty;
@@ -516,9 +521,6 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     params.troubleSmooth = vxsuite::clamp01(
         0.60f * (rawTroubleSmooth * params.troubleConfidence)  // Algorithm detection
       + 0.40f * characterControl);  // Direct character control
-    params.limit = 0.0f;
-    params.recovery = 0.0f;
-    params.smartGain = 0.0f;
     params.voicePreserve = juce::jlimit(0.0f, 1.0f,
         0.56f
       + 0.30f * (voiceMode ? modePolicy.sourceProtect : 0.55f * modePolicy.sourceProtect)

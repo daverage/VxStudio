@@ -263,6 +263,24 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         * (1.0f - 0.78f * artifactOverlap));
 
     if (artifactCleanupConfidence > 1.0e-4f) {
+        const auto readabilityGuard = vxsuite::corrective::deriveReadabilityGuard(
+            evidence,
+            analysis,
+            voiceContext,
+            0.5f,      // focus (neutral for artifact cleanup)
+            isVoice,
+            0.12f,     // persistentLowMidDensity
+            0.08f,     // shortLowMidDensity
+            0.18f,     // persistentPresenceDensity
+            0.10f,     // shortPresenceDensity
+            effectiveClean,  // cleanup drive
+            0.50f,     // body (moderate for artifact cleanup)
+            0.0f,      // deMud (disabled in artifact cleanup)
+            0.0f,      // deEss (disabled in artifact cleanup)
+            0.0f,      // breath (disabled in artifact cleanup)
+            0.0f,      // plosive (disabled in artifact cleanup)
+            0.30f);    // troubleSmooth (gentle smoothing)
+
         vxsuite::corrective::SharedParams cleanupParams {};
         cleanupParams.contentMode = isVoice ? 0 : 1;
         cleanupParams.voicePreserve = juce::jlimit(0.0f, 1.0f,
@@ -274,12 +292,20 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         cleanupParams.proximityContext = evidence.proximityContext;
         cleanupParams.speechPresence = evidence.speechConfidence;
         cleanupParams.noiseFloorDb = evidence.noiseFloorDb;
+        cleanupParams.persistentDensity = readabilityGuard.persistentDensity;
+        cleanupParams.shortDensity = readabilityGuard.shortDensity;
+        cleanupParams.densityPersistence = readabilityGuard.densityPersistence;
+        cleanupParams.selfMaskLowMid = readabilityGuard.selfMaskLowMid;
+        cleanupParams.selfMaskHigh = readabilityGuard.selfMaskHigh;
+        cleanupParams.articulationRisk = readabilityGuard.articulationRisk;
+        cleanupParams.bodyLossRisk = readabilityGuard.bodyLossRisk;
+        cleanupParams.cumulativeRisk = readabilityGuard.cumulativeRisk;
+        cleanupParams.tonalDriftRisk = readabilityGuard.tonalDriftRisk;
         cleanupParams.deMud = 0.0f;
         cleanupParams.plosive = 0.0f;
         cleanupParams.compress = 0.0f;
-        cleanupParams.limit = 0.0f;
-        cleanupParams.recovery = 0.0f;
-        cleanupParams.smartGain = 0.0f;
+        cleanupParams.compSidechainBoostDb = juce::jlimit(0.0f, 12.0f,
+            6.0f * vxsuite::clamp01(1.0f + evidence.noiseFloorDb / 60.0f));
         cleanupParams.denoiseAmount = effectiveClean;
         cleanupParams.deEss = vxsuite::clamp01(
             artifactCleanupConfidence * (isVoice ? 0.30f : 0.56f)
@@ -294,8 +320,8 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
             artifactCleanupConfidence * (isVoice ? 0.22f : 0.48f)
           * (0.55f + 0.45f * evidence.highTrouble)
           * cleanupParams.troubleConfidence);
-        cleanupParams.hpfOn = false;
-        cleanupParams.hiShelfOn = false;
+        cleanupParams.hpfOn = false;      // Intentionally disabled: HPF during artifact cleanup could create unnatural artifacts
+        cleanupParams.hiShelfOn = false;  // Intentionally disabled: HiShelf during artifact cleanup could create unnatural artifacts
         artifactCleanupStage.setParams(cleanupParams);
         artifactCleanupStage.process(buffer);
     }
