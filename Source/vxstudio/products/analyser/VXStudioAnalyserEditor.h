@@ -23,6 +23,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void mouseUp(const juce::MouseEvent& event) override;
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
 private:
     enum class Tab {
@@ -161,4 +162,7 @@ private:
     juce::Rectangle<int> plotBounds;
     juce::Rectangle<int> diagnosticsBounds;
     std::vector<juce::Rectangle<int>> stageRowBounds;
+
+    int chainScrollOffset = 0;
+    int maxChainScroll = 0;
 };

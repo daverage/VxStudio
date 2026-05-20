@@ -756,17 +756,26 @@ void VXStudioAnalyserEditor::resized() {
         fullChainButton.setBounds(chainArea.removeFromTop(34));
         chainArea.removeFromTop(14);
         stageRowBounds.clear();
+
         constexpr int kStageRowHeight = 58;
+        constexpr int kRowSpacing = 10;
+        const int totalRowsHeight = static_cast<int>(currentRenderModel.chainRows.size()) * (kStageRowHeight + kRowSpacing);
+        maxChainScroll = std::max(0, totalRowsHeight - chainArea.getHeight());
+        chainScrollOffset = std::min(chainScrollOffset, maxChainScroll);
+
+        auto scrollableArea = chainArea.translated(0, -chainScrollOffset);
         for (std::size_t i = 0; i < currentRenderModel.chainRows.size(); ++i) {
-            if (chainArea.getHeight() < 40)
-                break;
-            const auto rowBounds = chainArea.removeFromTop(kStageRowHeight);
-            stageRowBounds.push_back(rowBounds);
-            chainArea.removeFromTop(10);
+            const auto rowBounds = scrollableArea.removeFromTop(kStageRowHeight);
+            if (rowBounds.intersects(chainArea)) {
+                stageRowBounds.push_back(rowBounds.translated(0, chainScrollOffset));
+            }
+            scrollableArea.removeFromTop(kRowSpacing);
         }
     } else {
         fullChainButton.setBounds({});
         stageRowBounds.clear();
+        chainScrollOffset = 0;
+        maxChainScroll = 0;
     }
 
     auto contentArea = contentBounds.reduced(22, 18);
@@ -833,6 +842,17 @@ void VXStudioAnalyserEditor::mouseUp(const juce::MouseEvent& event) {
             return;
         }
     }
+}
+
+void VXStudioAnalyserEditor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) {
+    const auto localPosition = event.getEventRelativeTo(this).position.toInt();
+    if (!chainBounds.contains(localPosition))
+        return;
+
+    constexpr int kScrollStep = 30;
+    int scrollDelta = wheel.deltaY > 0 ? -kScrollStep : kScrollStep;
+    chainScrollOffset = juce::jlimit(0, maxChainScroll, chainScrollOffset + scrollDelta);
+    refreshRenderModel();
 }
 
 void VXStudioAnalyserEditor::timerCallback() {
