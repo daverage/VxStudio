@@ -455,7 +455,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
               - 0.08f * voiceContext.speechPresence);
 
     const bool hpfOn = vxsuite::readBool(parameters, kHpfOnParam, false);
-    const bool hiShelfOn = vxsuite::readBool(parameters, kHiShelfOnParam, false);
+    const bool hiShelfOn = vxsuite::readBool(parameters, kHiShelfOnParam, true);
 
     vxsuite::cleanup::Dsp::Params params {};
     params.contentMode = voiceMode ? 0 : 1;
