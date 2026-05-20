@@ -201,8 +201,16 @@ void ProcessorBase::resetOutputSafetyTrimmer() noexcept {
 
 void ProcessorBase::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                        const juce::AudioBuffer<float>& inputBuffer) {
-    juce::ignoreUnused(inputBuffer);
-    processCoordinator.renderRemovedDelta(outputBuffer);
+    // Listen mode: output pure delta (input - processed)
+    // without latency-based delay line complexity
+    const int channels = std::min(outputBuffer.getNumChannels(), inputBuffer.getNumChannels());
+    const int samples = std::min(outputBuffer.getNumSamples(), inputBuffer.getNumSamples());
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* out = outputBuffer.getWritePointer(ch);
+        const auto* in = inputBuffer.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i)
+            out[i] = in[i] - out[i];  // delta = dry - wet
+    }
 }
 
 void ProcessorBase::renderAddedDeltaOutput(juce::AudioBuffer<float>& outputBuffer,
