@@ -915,36 +915,15 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
     const bool hasAnalyserSignal = analyserStage.has_value()
         && analyserStage->view.telemetry.inputSummary.rms > 1.0e-6f;
-    if (hasAnalyserSignal) {
-        std::vector<vxsuite::analysis::StageView> candidateViews;
-        candidateViews.reserve(externalStages.size());
-        for (const auto& stage : externalStages)
-            candidateViews.push_back(stage.view);
-
-        const auto selectedViews =
-            vxsuite::analysis::selectLikelyUpstreamStages(std::move(candidateViews),
-                                                          analyserStage->view.telemetry.inputSummary);
-
-        externalStages.erase(std::remove_if(externalStages.begin(),
-                                            externalStages.end(),
-                                            [&](const StageEntry& stage) {
-                                                return std::none_of(selectedViews.begin(),
-                                                                    selectedViews.end(),
-                                                                    [&](const vxsuite::analysis::StageView& selected) {
-                                                                        return selected.telemetry.identity.instanceId
-                                                                            == stage.view.telemetry.identity.instanceId;
-                                                                    });
-                                            }),
-                             externalStages.end());
-    } else {
-        externalStages.erase(std::remove_if(externalStages.begin(),
-                                            externalStages.end(),
-                                            [](const StageEntry& stage) {
-                                                return stage.view.telemetry.state.isBypassed
-                                                    || !stage.view.telemetry.state.isLive;
-                                            }),
-                             externalStages.end());
-    }
+    // Framework automatically registers all stages in the analysis domain.
+    // Display all of them, sorted by localOrderId — no filtering needed.
+    externalStages.erase(std::remove_if(externalStages.begin(),
+                                        externalStages.end(),
+                                        [](const StageEntry& stage) {
+                                            return stage.view.telemetry.state.isBypassed
+                                                || !stage.view.telemetry.state.isLive;
+                                        }),
+                         externalStages.end());
 
     std::sort(externalStages.begin(), externalStages.end(), [](const auto& a, const auto& b) {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
