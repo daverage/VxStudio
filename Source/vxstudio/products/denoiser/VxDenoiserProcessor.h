@@ -23,6 +23,12 @@ protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
     void processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                           const juce::AudioBuffer<float>& inputBuffer) override {
+        juce::ignoreUnused(inputBuffer);
+        // Listen mode outputs the wet signal (denoised audio) for preview
+        // outputBuffer already contains the processed signal, so just keep it
+    }
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
