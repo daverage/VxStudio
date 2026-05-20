@@ -67,7 +67,7 @@ void CorrectiveStage::prepare(double sampleRate, int numChannels) {
 
 void CorrectiveStage::setParams(const SharedParams& newParams) {
     if (newParams.hpfOn != params.hpfOn || newParams.contentMode != params.contentMode) {
-        const float fc = (newParams.contentMode == 0) ? 80.0f : 40.0f;
+        const float fc = (newParams.contentMode == 0) ? 60.0f : 35.0f;
         const float K = std::tan(juce::MathConstants<float>::pi * fc / static_cast<float>(sr));
         const float K2 = K * K;
         const float norm = 1.0f / (1.0f + juce::MathConstants<float>::sqrt2 * K + K2);
@@ -100,9 +100,9 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
             const float driftGuard = juce::jlimit(0.22f, 1.0f,
                 1.0f - 0.52f * juce::jlimit(0.0f, 1.0f, newParams.tonalDriftRisk)
                     - 0.14f * juce::jlimit(0.0f, 1.0f, newParams.articulationRisk));
-            const float baseGainDb = voiceMode ? 0.35f : 0.90f;
-            const float deEssScale = voiceMode ? 1.40f : 2.4f;
-            const float troubleScale = voiceMode ? 0.90f : 1.6f;
+            const float baseGainDb = voiceMode ? 1.2f : 2.8f;
+            const float deEssScale = voiceMode ? 4.2f : 6.8f;
+            const float troubleScale = voiceMode ? 2.8f : 4.2f;
             const float gainDb = (-baseGainDb
                 - deEssScale * juce::jlimit(0.0f, 1.0f, newParams.deEss)
                 - troubleScale * juce::jlimit(0.0f, 1.0f, newParams.troubleSmooth)) * shelfProtect * driftGuard;
