@@ -768,6 +768,12 @@ void DenoiserDsp::processFrame(const float amount,
         }
     }
 
+    // General mode: enforce minimum per-bin gain floor to prevent level collapse
+    if (!options.isVoiceMode) {
+        for (int k = 0; k < kBins; ++k)
+            gainSmooth[k] = std::max(gainSmooth[k], 0.40f);
+    }
+
     // ── 10. Gain application + phase-vocoder synthesis ────────────────────────
     float presSum = 0.0f;
     for (int k = 0; k < kBins; ++k) {
