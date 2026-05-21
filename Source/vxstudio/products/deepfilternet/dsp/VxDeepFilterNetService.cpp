@@ -276,6 +276,12 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     channel.outputFifo.reset(kFifoCapacity48k);
 
     const int frameLength = runtimeFrameLength(bundle.runtimeApi, channel.runtime);
+    // Validate model frame length matches expected pinned version
+    const int expectedFrameLength = (bundle.runtimeApi == RuntimeApi::dfn2) ? DF2_EXPECTED_FRAME_LENGTH : DF_EXPECTED_FRAME_LENGTH;
+    if (frameLength != expectedFrameLength) {
+        // Model version mismatch: frame length doesn't match expected size
+        return false;
+    }
     const int safeFrameLength = std::max(1, frameLength);
     channel.frameIn.assign(static_cast<size_t>(safeFrameLength), 0.0f);
     channel.frameOut.assign(static_cast<size_t>(safeFrameLength), 0.0f);

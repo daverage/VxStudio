@@ -166,6 +166,30 @@ void DenoiserDsp::reset() {
     signalPresence  = 0.5f;
 }
 
+void DenoiserDsp::resetFifoState() {
+    // Lightweight phrase-boundary reset: clear STFT state without disrupting noise floor tracking.
+    // Preserves msState, noisePow, noiseFloorDb to maintain noise floor continuity.
+    std::fill(inFifo     .begin(), inFifo     .end(), 0.0f);
+    std::fill(frameBuffer.begin(), frameBuffer.end(), 0.0f);
+    std::fill(olaAcc     .begin(), olaAcc     .end(), 0.0f);
+    std::fill(fftBuf     .begin(), fftBuf     .end(), 0.0f);
+
+    std::fill(prevPhaseIn   .begin(), prevPhaseIn   .end(), 0.0f);
+    std::fill(prevPhaseOut  .begin(), prevPhaseOut  .end(), 0.0f);
+    std::fill(gainTarget    .begin(), gainTarget    .end(), 1.0f);
+    std::fill(gainSmooth    .begin(), gainSmooth    .end(), 1.0f);
+    std::fill(gainFreqSmooth.begin(), gainFreqSmooth.end(), 1.0f);
+
+    inFifoWritePos = 0;
+    hopFillCount   = 0;
+    olaWritePos    = 0;
+    olaReadPos     = 0;
+
+    phaseReady      = false;
+    fifoLive        = false;
+    firstFrame      = true;
+}
+
 // ── updateMinStats ────────────────────────────────────────────────────────────
 
 void DenoiserDsp::updateMinStats(const int k, const float p,
@@ -714,6 +738,23 @@ void DenoiserDsp::processFrame(const float amount,
             coeff = std::max(coeff, 0.93f + 0.062f * lf);
         gainSmooth[k] = coeff * gainSmooth[k]
                       + (1.0f - coeff) * gainFreqSmooth[k];
+    }
+
+    // ── 9b. High-frequency preservation at high denoise amounts ────────────────
+    // When clean amount is high (> 0.7), preserve air and brightness above 8 kHz
+    // to prevent the characteristic "muffled" sound from heavy denoising.
+    if (amount > 0.70f) {
+        const float hfBoostAmount = juce::jlimit(0.0f, 1.0f, (amount - 0.70f) / 0.30f);
+        const float hfBoostGain = 0.12f * hfBoostAmount;  // up to 12% gain in HF
+        const float hfCutoffHz = 8000.0f;
+        const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
+        const int hfStartBin = std::max(0, static_cast<int>(hfCutoffHz / binHz));
+
+        for (int k = hfStartBin; k < kBins; ++k) {
+            const float rolloff = juce::jlimit(0.0f, 1.0f, (static_cast<float>(k - hfStartBin)) / 128.0f);
+            const float boost = hfBoostGain * rolloff;  // gradual rolloff above 8 kHz
+            gainSmooth[k] = juce::jlimit(gainSmooth[k], 1.0f, gainSmooth[k] + boost);
+        }
     }
 
     // ── 10. Gain application + phase-vocoder synthesis ────────────────────────

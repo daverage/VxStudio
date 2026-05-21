@@ -14,14 +14,15 @@ public:
     ~VXDeverbAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
-    void setDebugRt60PresetSeconds(float rt60Seconds);
-    void clearDebugRt60Preset();
-    void setDebugDeterministicReset(bool shouldUseDefaultRt60);
-    float getDebugTrackedRt60Seconds(int channel) const noexcept;
-    void setDebugOverSubtract(float overSubtract);
-    float getDebugOverSubtract() const noexcept;
-    void setDebugNoCepstral(bool shouldBypass);
-    bool isDebugNoCepstral() const noexcept;
+    // Test/analysis control API — used by regression tests and development tools
+    void setTestRt60PresetSeconds(float rt60Seconds);
+    void clearTestRt60Preset();
+    void setTestDeterministicReset(bool shouldUseDefaultRt60);
+    float getTestTrackedRt60Seconds(int channel) const noexcept;
+    void setTestOverSubtract(float overSubtract);
+    float getTestOverSubtract() const noexcept;
+    void setTestNoCepstral(bool shouldBypass);
+    bool isTestNoCepstral() const noexcept;
     void setVoiceMode(bool enabled) noexcept;
     bool isVoiceMode() const noexcept;
 

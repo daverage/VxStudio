@@ -26,11 +26,8 @@ protected:
 
 private:
     static vxsuite::ProductIdentity makeIdentity();
-    float aggregatedSignalPresence(int numChannels) const noexcept;
 
-    vxsuite::denoiser::DenoiserDsp denoiserDspMono;
-    vxsuite::denoiser::DenoiserDsp denoiserDspLeft;
-    vxsuite::denoiser::DenoiserDsp denoiserDspRight;
+    vxsuite::denoiser::DenoiserDsp denoiserDsp;  // Single instance handles mono or stereo M/S internally
     vxsuite::corrective::CorrectiveStage artifactCleanupStage;
     vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     vxsuite::OutputTrimmer outputTrimmer;
@@ -43,4 +40,5 @@ private:
     float  smoothedResidualTrim = 1.0f;
     float  smoothedArtifactCleanupBlend = 0.0f;
     std::array<float, 2> smoothedStereoMakeupGain { 1.0f, 1.0f };
+    bool prevPhraseActive = true;  // Track phrase boundaries to sync STFT state
 };

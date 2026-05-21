@@ -48,6 +48,9 @@ Dsp::DebugSnapshot Dsp::getDebugSnapshot() const noexcept {
 
 void Dsp::prepare(const double sampleRate, const int maxBlockSize, const int numChannels) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    // Invalidate offline analysis if sample rate has changed (block timing would be wrong)
+    if (offlineAnalysis.isValid() && std::abs(offlineAnalysis.sampleRate - sr) > 1.0)
+        clearOfflineAnalysis();
     preparedBlockSize = std::max(1, maxBlockSize);
     channels.assign(static_cast<size_t>(std::max(1, numChannels)), ChannelState{});
     delaySamples = std::max(1, juce::roundToInt(static_cast<float>(sr) * 0.010f));

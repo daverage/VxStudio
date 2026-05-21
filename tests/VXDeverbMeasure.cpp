@@ -160,7 +160,7 @@ juce::AudioBuffer<float> renderWithTelemetry(VXDeverbAudioProcessor& processor,
         if (snapshots != nullptr && (blockIndex == 0 || (blockIndex % 50) == 0)) {
             Rt60Snapshot snapshot;
             snapshot.blockIndex = blockIndex;
-            snapshot.trackedRt60 = processor.getDebugTrackedRt60Seconds(0);
+            snapshot.trackedRt60 = processor.getTestTrackedRt60Seconds(0);
             if (start + num > latency) {
                 juce::AudioBuffer<float> rolling(rendered.getNumChannels(), start + num - latency);
                 for (int ch = 0; ch < rolling.getNumChannels(); ++ch)
@@ -305,13 +305,13 @@ int main(int argc, char** argv) {
         : addRoomTail(dry, sampleRate);
 
     VXDeverbAudioProcessor processor;
-    processor.setDebugDeterministicReset(rt60Preset <= 0.0f);
+    processor.setTestDeterministicReset(rt60Preset <= 0.0f);
     processor.prepareToPlay(sampleRate, 256);
-    processor.setDebugOverSubtract(overSubtract);
-    processor.setDebugNoCepstral(noCepstral);
+    processor.setTestOverSubtract(overSubtract);
+    processor.setTestNoCepstral(noCepstral);
     processor.setVoiceMode(voiceMode);
     if (rt60Preset > 0.0f)
-        processor.setDebugRt60PresetSeconds(rt60Preset);
+        processor.setTestRt60PresetSeconds(rt60Preset);
     std::vector<Rt60Snapshot> snapshots;
     auto out = renderWithTelemetry(processor, room, reduce, body, printRt60, &snapshots);
     auto delayedDry = delayBuffer(dry, processor.getLatencySamples());
@@ -344,8 +344,8 @@ int main(int argc, char** argv) {
     std::cout << "tail_in_rms=" << tailIn << "\n";
     std::cout << "tail_out_rms=" << tailOut << "\n";
     std::cout << "tail_ratio=" << (tailOut / std::max(1.0e-12, tailIn)) << "\n";
-    std::cout << "tracked_rt60_final=" << processor.getDebugTrackedRt60Seconds(0) << "\n";
-    std::cout << "over_subtract_effective=" << processor.getDebugOverSubtract() << "\n";
+    std::cout << "tracked_rt60_final=" << processor.getTestTrackedRt60Seconds(0) << "\n";
+    std::cout << "over_subtract_effective=" << processor.getTestOverSubtract() << "\n";
 
     if (printRt60) {
         std::cout << "rt60_trace_begin\n";

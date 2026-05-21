@@ -81,10 +81,13 @@ juce::String VXSubtractAudioProcessor::getStatusText() const {
 }
 
 float VXSubtractAudioProcessor::getProfileTrust() const noexcept {
+    // Use conservative static threshold (original 0.12f) for profile trust reporting
+    // Since this is a const method, we can't access current signal quality snapshot
+    const float staticThreshold = kMinimumStereoProfileConfidence;
     const bool leftReady = subtractDspLeft.hasLearnedProfile()
-        && subtractDspLeft.getLearnConfidence() >= kMinimumStereoProfileConfidence;
+        && subtractDspLeft.getLearnConfidence() >= staticThreshold;
     const bool rightReady = subtractDspRight.hasLearnedProfile()
-        && subtractDspRight.getLearnConfidence() >= kMinimumStereoProfileConfidence;
+        && subtractDspRight.getLearnConfidence() >= staticThreshold;
     if (leftReady || rightReady) {
         const float leftTrust = leftReady ? subtractDspLeft.getLearnedProfileTrust() : 0.0f;
         const float rightTrust = rightReady ? subtractDspRight.getLearnedProfileTrust() : 0.0f;
@@ -140,6 +143,8 @@ void VXSubtractAudioProcessor::resetSuite() {
     learnActive.store(learnToggleLatched, std::memory_order_relaxed);
     // learnReady / learnProgress / learnConfidence / learnObservedSeconds are
     // intentionally preserved — the learned noise profile survives playback stops.
+    // Note: learned profile is static; in long sessions with changing noise floors (e.g., HVAC cycling),
+    // users should re-learn to adapt. This is a known limitation; continuous re-learning is future work.
 }
 
 void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -216,10 +221,16 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     };
 
     const bool stereo = numChannels >= 2;
+    // Adaptive stereo confidence threshold based on mono/stereo content
+    // Near-mono (monoScore > 0.80) → stricter threshold; stereo-imaged (monoScore < 0.40) → permissive
+    const auto signalQuality = getSignalQualitySnapshot();
+    const float adaptiveStereoThreshold = juce::jmap(signalQuality.monoScore,
+                                                     0.40f, 0.80f,
+                                                     0.08f, 0.25f);
     const bool leftReady = subtractDspLeft.hasLearnedProfile()
-        && subtractDspLeft.getLearnConfidence() >= kMinimumStereoProfileConfidence;
+        && subtractDspLeft.getLearnConfidence() >= adaptiveStereoThreshold;
     const bool rightReady = subtractDspRight.hasLearnedProfile()
-        && subtractDspRight.getLearnConfidence() >= kMinimumStereoProfileConfidence;
+        && subtractDspRight.getLearnConfidence() >= adaptiveStereoThreshold;
     const bool monoReady = subtractDspMono.hasLearnedProfile();
     const bool learnedReady = stereo ? (leftReady || rightReady) : monoReady;
     const bool learningActiveNow = stereo ? subtractDspLeft.isLearning() : subtractDspMono.isLearning();

@@ -48,6 +48,7 @@ public:
 
     void prepare(double sampleRate, int maxBlockSize) override;
     void reset() override;
+    void resetFifoState();  // Lightweight reset: clears STFT state without resetting noise floor (phrase boundary sync)
     int  getLatencySamples() const override { return latencySamples; }
     bool processInPlace(juce::AudioBuffer<float>& buffer,
                         float                    amount,

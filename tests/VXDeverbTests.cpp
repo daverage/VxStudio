@@ -256,7 +256,7 @@ bool testReduceZeroIsIdentity() {
     auto dry = makeSpeechLike(sr, 0.9f);
 
     VXDeverbAudioProcessor processor;
-    processor.setDebugDeterministicReset(true);
+    processor.setTestDeterministicReset(true);
     processor.prepareToPlay(sr, 256);
     auto out = render(processor, dry, 0.0f, 0.0f);
 
@@ -273,9 +273,9 @@ bool testFullyWetStaysCoherentWithDelayedDry() {
     auto dry = makeSpeechLike(sr, 1.0f);
 
     VXDeverbAudioProcessor processor;
-    processor.setDebugDeterministicReset(true);
-    processor.setDebugRt60PresetSeconds(0.5f);
-    processor.setDebugOverSubtract(1.0f);
+    processor.setTestDeterministicReset(true);
+    processor.setTestRt60PresetSeconds(0.5f);
+    processor.setTestOverSubtract(1.0f);
     processor.prepareToPlay(sr, 256);
     auto out = render(processor, dry, 1.0f, 0.0f);
     auto delayedDry = delayBuffer(dry, processor.getLatencySamples());
@@ -296,7 +296,7 @@ bool testBodyRestoreIsIntentional() {
     auto room = addRoomTail(dry, sr);
 
     VXDeverbAudioProcessor processor;
-    processor.setDebugDeterministicReset(true);
+    processor.setTestDeterministicReset(true);
     processor.prepareToPlay(sr, room.getNumSamples());
     auto bodyOff = render(processor, room, 0.76f, 0.0f);
     processor.reset();
@@ -324,7 +324,7 @@ bool testReduceKeepsUsableOutputLevel() {
     auto room = addRoomTail(dry, sr);
 
     VXDeverbAudioProcessor processor;
-    processor.setDebugDeterministicReset(true);
+    processor.setTestDeterministicReset(true);
     processor.prepareToPlay(sr, room.getNumSamples());
     auto out = render(processor, room, 0.82f, 0.0f);
 
@@ -425,8 +425,8 @@ bool testWpeVoiceMode() {
 
     const auto runProcessor = [&](bool vm) -> double {
         VXDeverbAudioProcessor processor;
-        processor.setDebugDeterministicReset(true);
-        processor.setDebugRt60PresetSeconds(synthRt60);
+        processor.setTestDeterministicReset(true);
+        processor.setTestRt60PresetSeconds(synthRt60);
         processor.setVoiceMode(vm);
         processor.prepareToPlay(sr, fftBlockSize);
 
@@ -493,7 +493,7 @@ bool testResetAndSilenceRecovery() {
     silence.clear();
 
     VXDeverbAudioProcessor processor;
-    processor.setDebugDeterministicReset(true);
+    processor.setTestDeterministicReset(true);
     processor.prepareToPlay(sr, room.getNumSamples());
     auto first = render(processor, room, 0.78f, 0.0f);
     render(processor, silence, 0.78f, 0.0f);

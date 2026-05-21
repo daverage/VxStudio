@@ -4,6 +4,8 @@
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioModelAssets.h"
 #include "../../framework/VxStudioProcessorBase.h"
+#include "../../framework/VxStudioReadabilityGuard.h"
+#include "../../framework/VxStudioTonalAnalysis.h"
 #include "dsp/VxDeepFilterNetService.h"
 
 #include <mutex>
@@ -58,5 +60,6 @@ private:
     float lastArtifactRisk = 0.0f;
     bool controlsPrimed = false;
     juce::AudioBuffer<float> analysisScratch;
+    vxsuite::corrective::TonalAnalysisState tonalAnalysis;  // For ReadabilityGuard post-pass
     std::mutex enginePrepareMutex;
 };

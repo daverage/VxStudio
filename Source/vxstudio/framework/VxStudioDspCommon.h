@@ -108,4 +108,40 @@ inline float processBiquadDf2(const float x, const float b0, const float b1, con
     return y;
 }
 
+// Buffer statistics: RMS and peak with stability checking
+struct BufferStats {
+    float rms = 0.0f;
+    float peak = 0.0f;
+    bool stable = true;
+};
+
+inline BufferStats computeBufferStats(const juce::AudioBuffer<float>& buffer, const float maxStablePeak = 1.0e30f) {
+    const int channels = buffer.getNumChannels();
+    const int samples = buffer.getNumSamples();
+    if (channels <= 0 || samples <= 0)
+        return {};
+
+    double sumSquares = 0.0;
+    float peak = 0.0f;
+    bool stable = true;
+    for (int ch = 0; ch < channels; ++ch) {
+        const auto* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i) {
+            const float s = data[i];
+            if (!std::isfinite(s)) { stable = false; continue; }
+            const float abs = std::abs(s);
+            if (abs > maxStablePeak) stable = false;
+            peak = std::max(peak, abs);
+            sumSquares += static_cast<double>(s) * static_cast<double>(s);
+        }
+    }
+    const int count = channels * samples;
+    return { count > 0 ? static_cast<float>(std::sqrt(sumSquares / static_cast<double>(count))) : 0.0f,
+             peak, stable };
+}
+
+inline float computeBufferRms(const juce::AudioBuffer<float>& buffer) {
+    return computeBufferStats(buffer).rms;
+}
+
 } // namespace vxsuite::corrective::detail

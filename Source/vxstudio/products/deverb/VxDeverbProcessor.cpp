@@ -1,4 +1,5 @@
 #include "VxDeverbProcessor.h"
+#include "../../framework/VxStudioDspCommon.h"
 #include "../../framework/VxStudioHelpContent.h"
 #include "VxStudioVersions.h"
 
@@ -12,7 +13,7 @@ constexpr std::string_view kReduceParam = "reduce";
 constexpr std::string_view kBodyParam = "body";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
-constexpr int kMinPreparedBlockSize = 8192;
+constexpr int kMinPreparedBlockSize = 2048;
 
 float safeValue(const float value) {
     if (!std::isfinite(value))
@@ -87,7 +88,7 @@ vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     identity.theme.panelRgb = { 0.09f, 0.09f, 0.12f };
     identity.theme.textRgb = { 0.86f, 0.91f, 1.00f };
     identity.primaryDefaultValue = 0.5f;
-    identity.secondaryDefaultValue = 0.0f;
+    identity.secondaryDefaultValue = 0.25f;  // Restore ~2.5 dB bass by default instead of 0 dB
     return identity;
 }
 
@@ -118,35 +119,35 @@ void VXDeverbAudioProcessor::resetSuite() {
     firstBlockProcessed = false;
 }
 
-void VXDeverbAudioProcessor::setDebugRt60PresetSeconds(const float rt60Seconds) {
+void VXDeverbAudioProcessor::setTestRt60PresetSeconds(const float rt60Seconds) {
     deverbProcessor.setRt60PresetSeconds(rt60Seconds);
 }
 
-void VXDeverbAudioProcessor::clearDebugRt60Preset() {
+void VXDeverbAudioProcessor::clearTestRt60Preset() {
     deverbProcessor.clearRt60Preset();
 }
 
-void VXDeverbAudioProcessor::setDebugDeterministicReset(const bool shouldUseDefaultRt60) {
+void VXDeverbAudioProcessor::setTestDeterministicReset(const bool shouldUseDefaultRt60) {
     deverbProcessor.setDeterministicReset(shouldUseDefaultRt60);
 }
 
-float VXDeverbAudioProcessor::getDebugTrackedRt60Seconds(const int channel) const noexcept {
+float VXDeverbAudioProcessor::getTestTrackedRt60Seconds(const int channel) const noexcept {
     return deverbProcessor.getTrackedRt60Seconds(channel);
 }
 
-void VXDeverbAudioProcessor::setDebugOverSubtract(const float newOverSubtract) {
+void VXDeverbAudioProcessor::setTestOverSubtract(const float newOverSubtract) {
     deverbProcessor.setOverSubtract(newOverSubtract);
 }
 
-float VXDeverbAudioProcessor::getDebugOverSubtract() const noexcept {
+float VXDeverbAudioProcessor::getTestOverSubtract() const noexcept {
     return deverbProcessor.getOverSubtract();
 }
 
-void VXDeverbAudioProcessor::setDebugNoCepstral(const bool shouldBypass) {
+void VXDeverbAudioProcessor::setTestNoCepstral(const bool shouldBypass) {
     deverbProcessor.setDebugNoCepstral(shouldBypass);
 }
 
-bool VXDeverbAudioProcessor::isDebugNoCepstral() const noexcept {
+bool VXDeverbAudioProcessor::isTestNoCepstral() const noexcept {
     return deverbProcessor.isDebugNoCepstral();
 }
 

@@ -8,6 +8,9 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
+// Model version pinning: DFN3 expects 480-sample frames @ 16kHz
+#define DF_EXPECTED_FRAME_LENGTH 480
+
 typedef struct DFState DFState;
 
 DFState* df_create(
