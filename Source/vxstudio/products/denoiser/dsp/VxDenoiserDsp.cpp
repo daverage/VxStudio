@@ -698,8 +698,13 @@ void DenoiserDsp::processFrame(const float amount,
     // create chirpy/robotic artefacts on pitched sources.
     if (voiceMode) {
         std::fill(harmonicFloor.begin(), harmonicFloor.end(), 0.0f);
+        const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
+        const int minVoiceBin = std::max(1, static_cast<int>(80.0f / binHz));
+        const int maxVoiceBin = std::max(minVoiceBin, static_cast<int>(300.0f / binHz));
         const int maxF0Bin = std::max(8, kBins / 5);
         for (int k = 8; k < maxF0Bin; ++k) {
+            if (k < minVoiceBin || k > maxVoiceBin)
+                continue;
             if (currPow[k] / noisePow[k] < 4.0f || tonalness[k] < 0.62f)
                 continue;
             if (!(gainFreqSmooth[k] > gainFreqSmooth[k - 1]
@@ -738,6 +743,12 @@ void DenoiserDsp::processFrame(const float amount,
             coeff = std::max(coeff, 0.93f + 0.062f * lf);
         gainSmooth[k] = coeff * gainSmooth[k]
                       + (1.0f - coeff) * gainFreqSmooth[k];
+    }
+
+    // General-mode minimum gain floor: prevent severe level collapse
+    if (!voiceMode) {
+        for (int k = 0; k < kBins; ++k)
+            gainSmooth[k] = std::max(gainSmooth[k], 0.20f);
     }
 
     // ── 9b. High-frequency preservation at high denoise amounts ────────────────

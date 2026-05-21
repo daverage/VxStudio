@@ -1550,14 +1550,26 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     }
 
     if (domainCount > 0) {
-        // If the current binding is still alive, keep it. Constantly rebinding to the
-        // "latest" domain causes stages to briefly disappear from the analyser UI every
-        // few seconds (the unregister/re-register gap), which looks like random flickering.
-        // Only move to a new domain when the current one disappears.
+        // If the current binding is still alive AND is the latest domain, keep it.
+        // Constantly rebinding to the "latest" domain causes stages to briefly disappear
+        // from the analyser UI every few seconds (the unregister/re-register gap),
+        // which looks like random flickering. Only move to a new domain when the
+        // current one disappears or is no longer the newest.
         if (!force && analysisDomainIdValue != 0 && newDomainId == 0) {
+            // First check if the current domain still exists
+            bool currentDomainExists = false;
             for (int i = 0; i < domainCount; ++i) {
-                if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue)
-                    return;
+                if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue) {
+                    currentDomainExists = true;
+                    break;
+                }
+            }
+            // If it exists AND is the latest, keep it
+            if (currentDomainExists) {
+                DomainView latest {};
+                if (domainReg.latestDomainForProcess(pid, latest)
+                    && latest.analysisDomainId == analysisDomainIdValue)
+                    return;  // Already on the newest domain
             }
         }
 

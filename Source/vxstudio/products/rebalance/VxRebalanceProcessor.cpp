@@ -125,7 +125,7 @@ void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int 
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
     dsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
-    outputTrimmer.setCeiling(0.96f);
+    outputTrimmer.setCeiling(0.90f);  // Lowered from 0.96f to catch overload earlier
     outputTrimmer.setReleaseSeconds(0.16f);
     dryDelayLines.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())),
                          std::vector<float>(static_cast<size_t>(std::max(1, dsp.latencySamples())), 0.0f));
