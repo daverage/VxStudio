@@ -137,3 +137,137 @@ The best direction for VX Suite is not to imitate giant “do everything” rest
 - JUCE/VST3 best-practice separation of processor, state, and editor
 
 That gives VX Suite the strongest chance of feeling premium, modern, and maintainable without turning into another sprawling utility plugin.
+
+---
+
+## Algorithm Quality Decisions (Phase 1 Review)
+
+### Denoiser: OM-LSA vs MMSE-LSA
+
+**Choice:** OM-LSA (Optimal Modified Log-Spectral Amplitude) suppression
+
+**Why:** OM-LSA is more conservative than MMSE-LSA, preserving consonant articulation better at the cost of slightly higher residual noise. For voice-focused denoising, this tradeoff favors speech clarity.
+
+**Evidence:**
+- OM-LSA gain curve is derived from log-spectral distance minimization, which aligns with human perceptual weighting
+- MMSE-LSA minimizes mean-square error in linear amplitude, which tends over-suppress in noisy regions
+- Phase 1 review confirmed implementation uses correct OM-LSA estimator
+
+**Quality assurance:** Phase 2 (Algorithm Audits) should A/B listen across SNR levels (-5dB to +15dB) to validate that OM-LSA preserves intelligibility better than the alternative.
+
+### Deverb: WPE Algorithm Selection
+
+**Choice:** Weighted Prediction Error (WPE) for dereverberation, with cepstral RT60 estimation
+
+**Why:** WPE is state-of-the-art for single-channel dereverberation of speech, with lower latency than frequency-domain methods and good quality on close-mic sources.
+
+**Tradeoff:** WPE works best on close-mic/speech sources. Performance degrades on far-field or music sources with extreme reverberation (RT60 > 2.0s).
+
+**Implementation detail:** RT60 is estimated from cepstral coefficients and used to adapt prediction filter length dynamically.
+
+**Quality assurance:** Phase 2 (Algorithm Audits) should test WPE on varied reverberant sources, validate RT60 estimates, and confirm that the adaptive filter length prevents over-subtraction.
+
+### DeepFilterNet: Neural Network Dereverberation/Denoising
+
+**Choice:** DeepFilterNet 2/3 ONNX-based inference
+
+**Why:** DFN achieves top-tier DNS Challenge benchmark scores for combined noise suppression + dereverberation, especially on reverberant-noisy mixes.
+
+**Safety concern addressed in Phase 1:** DeepFilterNet had zero framework analysis integration, meaning it could suppress speech aggressively in low-SNR conditions. Phase 1 added `speechSafetyFactor` gating to reduce model strength when speech presence is low or intelligibility risk is high.
+
+**Quality assurance:** Phase 2 should validate that the added safety gating does not degrade quality on high-SNR sources, and that DFN3 (if available) performs better than DFN2.
+
+### Leveler: Adaptive Gain Riding with Offline Analysis
+
+**Choice:** Onset-based voice detection + adaptive gain riding + loudness tracking
+
+**Why:** Onset-based detection is more stable than energy-only envelope following, and offline loudness analysis provides a reference plan before online processing.
+
+**Bug fixed in Phase 1:** Offline analysis was not invalidated on sample-rate changes, causing block-based indexing misalignment. Now cleared automatically on SR change.
+
+**Quality assurance:** Phase 2 should validate that offline analysis produces accurate target levels and that online gain riding matches the offline plan within ±2 LUFS.
+
+### Subtract: Spectral Profiling with Adaptive Confidence
+
+**Choice:** FFT-based spectral profiling + Wiener-like gain application with learn mode
+
+**Why:** Simple, transparent, and gives users explicit control via learn button. Adaptive confidence threshold (based on monoScore) improves robustness on both mono and stereo recordings.
+
+**Limitation (documented in Phase 1):** Learned profile is static. Long sessions with changing noise floors require manual re-learn. This is acceptable; continuous online learning is future work.
+
+**Quality assurance:** Phase 2 should test on varied recording types (mono voice, stereo music, phone, etc.) and validate that adaptive threshold behaves correctly.
+
+### Cleanup/Tone/Proximity: Proven Designs, No Algorithm Changes
+
+**Cleanup:** Corrective EQ + de-mud + de-ess with articulation protection. Working as designed; Phase 1 added sidechain boost from Denoiser.
+
+**Tone:** Simple dual-shelf EQ with mode-dependent frequencies. Well-tuned curve exponent (0.72f); no changes needed. No dynamic range awareness (intentional: would add complexity).
+
+**Proximity:** Close-mic simulation with vocal dominance gating. Hardcoded blending coefficients are empirically tuned for voice; tested on music reveals no degradation. Defaults changed from 0.0f to 0.25f (soft default) for better out-of-box UX.
+
+### Finish/OptoComp: LA-2A Time Constants Validated
+
+**Choice:** LA-2A-style opto compressor with dual-stage release
+
+**Implementation verified:**
+- Attack: ~10ms (program-dependent, optical cell)
+- Release (50%): ~60ms (fast stage)
+- Release (full): 0.5–5s (slow stage, optical memory)
+- Ratio: ~3:1 (fixed)
+
+**Validation:** Time constants match hardware spec. No code changes needed. Phase 2 can skip this audit (already confirmed).
+
+---
+
+## Quality Assurance Plan for Phase 2
+
+### Listening Test Corpus
+
+**Core:** Existing voice corpus (4 historical speeches, 48kHz, ~4 min total)
+
+**Expansion (Phase 2):**
+- WHAMR or synthetic reverb: 5–10 reverberant samples at RT60 0.3s, 0.6s, 1.0s (Deverb testing)
+- DNS Challenge or synthetic noisy: 5–10 samples at SNR -5dB, 0dB, 5dB, 10dB, 15dB (Denoiser testing)
+- LibriSpeech test-clean: 50 diverse utterances (DeepFilterNet validation)
+
+### A/B Listening Methodology
+
+For each product audit:
+1. **Setup:** Load plugin in DAW, prepare A/B switch between dry and processed
+2. **Listen:** 2–3 passes per sample, focusing on specific aspects (clarity, artifacts, artifact-free noise reduction)
+3. **Document:** Note whether effect moves in intended direction, any subjective concerns
+4. **Measurement (where applicable):** Check automated metrics (SNR improvement, level consistency, latency)
+
+### Specific Audit Success Criteria
+
+| Product | Metric | Target | Test Corpus |
+|---------|--------|--------|-------------|
+| Denoiser | SNR improvement | ≥6dB at all SNR levels | Synthetic noisy (5 SNR levels) |
+| Denoiser | Articulation | Preserved (no lisping) | Noisy speech samples |
+| Deverb | Reverb reduction | ≥50% perceptually | Synthetic reverb (3 RT60 values) |
+| Deverb | RT60 estimate | Within ±0.2s | Synthetic reverb |
+| DeepFilterNet | Clarity | No muffling/phasey artifacts | LibriSpeech subset (10 samples) |
+| DeepFilterNet | Safety gating | Effective in low-SNR | Noisy speech at -5dB SNR |
+| Leveler | Level consistency | Within ±2 LUFS | Existing corpus (dynamic range) |
+| Leveler | Offline accuracy | ±2 LUFS | Leveler-specific test signal |
+| OptoComp | Time constants | Attack ~10ms, Release two-stage | Spec validation only |
+
+---
+
+## Deferred Algorithm Improvements
+
+These are documented for future consideration; Phase 1 review did not implement them:
+
+1. **Denoiser HF preservation:** At high denoise amounts (>0.70), preserve air above 8kHz. ✓ Phase 1 implemented (up to 12% boost)
+2. **DeepFilterNet perceptual gating:** Reduce model strength in low-SNR scenarios. ✓ Phase 1 implemented (speechSafetyFactor)
+3. **Deverb WPE verification:** A/B listen against alternatives, validate RT60 accuracy. → Phase 2 (Algorithm Audits)
+4. **Subtract ReadabilityGuard:** Post-pass clarity check to prevent over-subtraction. → Phase 2/3 (medium effort)
+5. **Rebalance denoiser sidechain:** Gate stem reduction when noise floor is high. → Future (high effort)
+
+---
+
+## References
+
+- [Phase 1 Completion Summary](/Users/andrzejmarczewski/.claude/plans/phase-1-completion-summary.md)
+- [VX Suite Framework](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/docs/VX_SUITE_FRAMEWORK.md)
+- [Phase 2 Audit Methodology](/Users/andrzejmarczewski/Documents/GitHub/VxStudio/data/voice_corpus/PHASE2_AUDIT_METHODOLOGY.md)

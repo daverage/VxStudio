@@ -182,3 +182,206 @@ Once a product lives under `Source/vxsuite/`, its active implementation should s
 - shared suite code belongs in `Source/vxsuite/framework/`
 - product-specific DSP belongs in `Source/vxsuite/products/<product>/`
 - product wrappers must not depend on hidden legacy paths outside `Source/vxsuite/` when the suite version is meant to be self-contained
+
+---
+
+## Phase 1 Established Patterns (Denoiser/DeepFilterNet/Deverb/Leveler/Subtract Review)
+
+### 1. ReadabilityGuard Integration for Artifact Protection
+
+**Pattern:** Aggressive corrective effects (spectral subtraction, neural network suppression, dereverberation) benefit from a post-processing clarity check.
+
+**Implementation:**
+- After the core DSP applies heavy correction, compute `ReadabilityGuard` metrics on the output
+- `articulation_risk` and `body_loss_risk` measure whether transients and low-mids have been over-corrected
+- Scale the wet/dry blend or gate the correction bins based on these metrics (up to 55% blend adjustment)
+- No analysis-only; this is an audible protection stage but disclosed in the product contract
+
+**Products:**
+- Denoiser: ReadabilityGuard on phrase boundaries with resetFifoState() for STFT stability
+- DeepFilterNet: Post-inference clarity check with speech-safety gating to reduce model aggressiveness in low-SNR scenarios
+
+**When to use:**
+- Any product that applies broad spectral suppression (denoising, dereverberation, source separation)
+- Any product using neural network inference without perceptual bounds
+- Avoid if the product's core design already includes conservative suppression thresholds
+
+### 2. Framework Analysis Snapshot Integration
+
+**Pattern:** Every product should read available analysis snapshots (voice context, signal quality, analysis evidence) to make adaptive DSP decisions.
+
+**Key snapshots:**
+- `VoiceAnalysisSnapshot`: speech presence, intelligibility risk, formant stability, articulation risk
+- `VoiceContextSnapshot`: vocal dominance, phrase boundaries, phraseStart/phraseEnd sample indices
+- `SignalQualitySnapshot`: monoScore (mono vs stereo), SNR estimate, separation confidence
+- `AnalysisEvidence`: raw metrics for ReadabilityGuard computation
+
+**Implementation pattern:**
+```cpp
+// In processProduct():
+auto analysis = getAnalysisSnapshot();
+auto voiceContext = getVoiceContextSnapshot();
+auto signalQuality = getSignalQualitySnapshot();
+
+// Use to gate, adapt, or protect the core effect
+float speechSafetyFactor = voiceContext.speechPresence * (1.0f - analysis.intelligibilityRisk);
+float adaptiveThreshold = juce::jmap(signalQuality.monoScore, 0.40f, 0.80f, 0.08f, 0.25f);
+```
+
+**Products:**
+- DeepFilterNet: speechSafetyFactor gates model strength in risky conditions
+- Subtract: monoScore scales stereo profile confidence threshold
+- Denoiser: phrase boundaries trigger FIFO reset for phase continuity
+- Leveler: sample-rate changes invalidate offline analysis
+
+**When to use:**
+- Any product with context-dependent DSP (voice vs. general, quiet vs. loud, solo vs. ensemble)
+- Products that maintain state across blocks (offline analysis, learned profiles)
+- Products that benefit from signal-aware gating or adaptation
+
+### 3. M/S Consolidation for State Memory
+
+**Pattern:** Products processing stereo via three parallel instances (mono/left/right) can reduce state memory significantly by consolidating to a single M/S-aware instance.
+
+**Approach:**
+- Instead of: `dsp_mono`, `dsp_left`, `dsp_right` processing individual channels
+- Use: single DSP instance that handles M/S internally, receiving full stereo buffer
+- M/S conversion happens inside DSP; results are decoded back to stereo
+
+**Benefits:**
+- ~66% state memory reduction (3 instances → 1 instance + M/S arithmetic)
+- Cleaner processor code
+- Shared mode-aware parameters apply consistently across channels
+
+**Tradeoff:**
+- M/S math adds negligible CPU cost
+- Must verify DSP's M/S logic is channel-aware (not assuming mono throughout)
+
+**Products:**
+- Denoiser: consolidated from three instances to single M/S-aware instance
+
+**When to use:**
+- Products with stateful DSP (STFT, filtering, analysis buffers) processing all channels independently
+- Avoid if the DSP is purely analysis-only or if channel coupling would break the algorithm
+
+### 4. Phrase Boundary Detection & FIFO Reset
+
+**Pattern:** STFT-based processors can maintain phase continuity and avoid clicks by detecting phrase boundaries and resetting internal state.
+
+**Implementation:**
+- Track `phraseStart` and `phraseEnd` sample indices from `VoiceContextSnapshot`
+- When a new phrase begins, call `resetFifoState()` to clear STFT overlap buffers
+- Prevents spectral artifacts (ringing, phase distortion) from carryover between speech segments
+
+**Code pattern:**
+```cpp
+bool phraseActive = voiceContext.phraseActivity > 0.5f;
+if (phraseActive && !prevPhraseActive) {
+  // Phrase boundary detected; reset STFT state
+  dsp.resetFifoState();
+}
+prevPhraseActive = phraseActive;
+```
+
+**Products:**
+- Denoiser: resetFifoState() at phrase boundaries for stability
+
+**When to use:**
+- STFT-based processors (denoising, dereverberation, spectral subtraction)
+- Products where carryover between speech segments causes audible artifacts
+- Not needed for time-domain DSP (compression, EQ, filtering)
+
+### 5. Adaptive Parameters Based on Signal Quality
+
+**Pattern:** Single-value parameters can become adaptive by reading signal quality snapshots.
+
+**Example:**
+- Stereo profile confidence threshold scales with monoScore:
+  - Near-mono recording (monoScore > 0.80f) → stricter threshold (0.25f)
+  - Stereo-imaged recording (monoScore < 0.40f) → permissive threshold (0.08f)
+- Speech safety factor scales with speech presence and intelligibility
+
+**Benefits:**
+- Single control from user perspective
+- Backend robustness on edge-case recordings without exposing complexity
+- No extra knob burden
+
+**Tradeoff:**
+- Adds complexity to documentation ("why does this behave differently on my session?")
+- Requires A/B validation across varied source material
+
+**Products:**
+- Subtract: monoScore-adaptive stereo confidence threshold
+- DeepFilterNet: speechPresence-adaptive safety gating
+
+**When to use:**
+- Parameters that have natural recording-type dependencies
+- Safety parameters where conservative is better (thresholds, gates)
+- Avoid on primary creative controls (avoid surprises to users)
+
+### 6. Default Value Tuning for UX Impact
+
+**Pattern:** Changing a knob default from 0.0f to a gentle active value improves perceived consistency.
+
+**Findings:**
+- Users expect a plugin to do "something" by default
+- Defaults of 0.0f (fully off) force manual dial-in, adding friction
+- Gentle defaults (0.15f–0.25f) provide immediate perceived benefit without aggressive over-processing
+
+**Examples:**
+- Leveler: default level 0.0f → 0.15f (gentle immediate leveling, consistent with UI promise)
+- Deverb: default body 0.0f → 0.25f (+2.5dB bass restore, warmer out-of-box feel)
+- Proximity: closer knob defaults 0.0f (considered but deferred; 0.25f suggested for voice content)
+
+**Cost:**
+- Trivial: one line per parameter
+
+**Validation needed:**
+- A/B listen to ensure default behavior matches user expectations
+- Document what the default achieves
+
+**When to use:**
+- Secondary/refinement parameters (body, blend, air)
+- Not on primary creative controls (primary amount knobs should default to 0.0f for familiarity)
+
+### 7. Cross-Product Sidechain Integration
+
+**Pattern:** One product can publish useful metrics that another product consumes.
+
+**Example:**
+- Denoiser publishes `noiseFloorDb` to framework
+- Cleanup uses `compSidechainBoostDb` to boost compression during noisy sections
+- Subtract could gate profile subtraction when noise floor is extremely high
+
+**Implementation:**
+- Denoiser writes `noiseFloorDb` to a framework-visible field
+- Downstream products read it and adapt their DSP accordingly
+- Pure opt-in; no breaking changes if consumer ignores the sidechain
+
+**Tradeoff:**
+- Adds coupling between products
+- Must be carefully documented so maintainers understand the dependency
+- Should be feature-gated (if upstream product is inactive, sidechain is 0.0f)
+
+**Status:**
+- Phase 1: `compSidechainBoostDb` wired from Denoiser → Cleanup
+- Phase 2+ candidates: Subtract gate on noise floor, Rebalance coordination with Denoiser
+
+**When to use:**
+- Cross-product optimizations that are purely beneficial (no downside if sidechain is ignored)
+- Late in product development, after each product's core is validated independently
+- Document the coupling explicitly in help text and architecture docs
+
+---
+
+## Phase 1 Key Learnings
+
+1. **M/S consolidation** provides significant state memory savings without algorithmic compromise when DSP includes M/S logic internally
+2. **ReadabilityGuard integration** provides unified artifact protection across different DSP approaches (spectral, neural, time-domain)
+3. **Framework analysis snapshots** are underused; every product benefits from at least speech presence and signal quality reads
+4. **Default value tuning** has outsized UX impact; 0.0f defaults force user dial-in friction
+5. **Phrase boundary detection** eliminates a class of STFT artifacts with minimal code
+6. **Adaptive parameters** (thresholds, gates based on signal quality) improve robustness on edge-case recordings without exposing complexity
+7. **Cross-product coordination** should come late, after each product's core is independently validated
+
+See also: [Phase 1 Completion Summary](/Users/andrzejmarczewski/.claude/plans/phase-1-completion-summary.md)
