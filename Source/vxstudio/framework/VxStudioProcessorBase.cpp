@@ -201,15 +201,21 @@ void ProcessorBase::resetOutputSafetyTrimmer() noexcept {
 
 void ProcessorBase::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                        const juce::AudioBuffer<float>& inputBuffer) {
-    // Listen mode: output pure delta (processed - input)
-    // without latency-based delay line complexity
-    const int channels = std::min(outputBuffer.getNumChannels(), inputBuffer.getNumChannels());
-    const int samples = std::min(outputBuffer.getNumSamples(), inputBuffer.getNumSamples());
+    // Listen mode: output removed delta (input_aligned_by_latency - output)
+    // Uses latency-aligned dry buffer so that output + listen_delta reconstructs input
+    ensureLatencyAlignedListenDry(outputBuffer.getNumSamples());
+    const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+    const int channels = std::min({outputBuffer.getNumChannels(),
+                                   alignedDry.getNumChannels(),
+                                   inputBuffer.getNumChannels()});
+    const int samples = std::min({outputBuffer.getNumSamples(),
+                                  alignedDry.getNumSamples(),
+                                  inputBuffer.getNumSamples()});
     for (int ch = 0; ch < channels; ++ch) {
         auto* out = outputBuffer.getWritePointer(ch);
-        const auto* in = inputBuffer.getReadPointer(ch);
+        const auto* dry = alignedDry.getReadPointer(ch);
         for (int i = 0; i < samples; ++i)
-            out[i] = out[i] - in[i];  // delta = wet - dry
+            out[i] = dry[i] - out[i];  // delta = alignedDry - wet (removed content)
     }
 }
 
