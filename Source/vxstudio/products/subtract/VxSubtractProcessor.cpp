@@ -522,6 +522,20 @@ void VXSubtractAudioProcessor::applySavedProfiles() {
     updateLearnTelemetry(getTotalNumOutputChannels());
 }
 
+void VXSubtractAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                                                   const juce::AudioBuffer<float>& inputBuffer) {
+    ensureLatencyAlignedListenDry(outputBuffer.getNumSamples());
+    const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+    const int channels = std::min(outputBuffer.getNumChannels(), alignedDry.getNumChannels());
+    const int samples = std::min(outputBuffer.getNumSamples(), alignedDry.getNumSamples());
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* out = outputBuffer.getWritePointer(ch);
+        const auto* dry = alignedDry.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i)
+            out[i] = dry[i] - out[i];  // delta = alignedDry - wet (removed content)
+    }
+}
+
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXSubtractAudioProcessor();

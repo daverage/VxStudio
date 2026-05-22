@@ -1,0 +1,392 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "clean",
+  "dataset_name": "librispeech_asr",
+  "dataset_size": 31262572721,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/test/0000.parquet": {
+      "num_bytes": 350452636,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0000.parquet": {
+      "num_bytes": 469629285,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0001.parquet": {
+      "num_bytes": 481204796,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0002.parquet": {
+      "num_bytes": 462830007,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0003.parquet": {
+      "num_bytes": 464400585,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0004.parquet": {
+      "num_bytes": 486747029,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0005.parquet": {
+      "num_bytes": 453059318,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0006.parquet": {
+      "num_bytes": 460852251,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0007.parquet": {
+      "num_bytes": 451701540,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0008.parquet": {
+      "num_bytes": 464545879,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0009.parquet": {
+      "num_bytes": 445148714,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0010.parquet": {
+      "num_bytes": 454357890,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0011.parquet": {
+      "num_bytes": 432464858,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0012.parquet": {
+      "num_bytes": 456996471,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.100/0013.parquet": {
+      "num_bytes": 449987968,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0000.parquet": {
+      "num_bytes": 474769063,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0001.parquet": {
+      "num_bytes": 486692347,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0002.parquet": {
+      "num_bytes": 508568925,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0003.parquet": {
+      "num_bytes": 480317707,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0004.parquet": {
+      "num_bytes": 463813718,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0005.parquet": {
+      "num_bytes": 495566497,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0006.parquet": {
+      "num_bytes": 485833227,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0007.parquet": {
+      "num_bytes": 477032721,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0008.parquet": {
+      "num_bytes": 464751927,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0009.parquet": {
+      "num_bytes": 480684725,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0010.parquet": {
+      "num_bytes": 471534295,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0011.parquet": {
+      "num_bytes": 484645057,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0012.parquet": {
+      "num_bytes": 456291349,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0013.parquet": {
+      "num_bytes": 496768945,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0014.parquet": {
+      "num_bytes": 469083833,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0015.parquet": {
+      "num_bytes": 464775655,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0016.parquet": {
+      "num_bytes": 481071421,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0017.parquet": {
+      "num_bytes": 462790268,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0018.parquet": {
+      "num_bytes": 478718677,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0019.parquet": {
+      "num_bytes": 455641453,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0020.parquet": {
+      "num_bytes": 510873776,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0021.parquet": {
+      "num_bytes": 491434545,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0022.parquet": {
+      "num_bytes": 497020943,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0023.parquet": {
+      "num_bytes": 467190452,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0024.parquet": {
+      "num_bytes": 467750597,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0025.parquet": {
+      "num_bytes": 478651297,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0026.parquet": {
+      "num_bytes": 472789433,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0027.parquet": {
+      "num_bytes": 505038295,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0028.parquet": {
+      "num_bytes": 469111417,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0029.parquet": {
+      "num_bytes": 464940569,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0030.parquet": {
+      "num_bytes": 497546151,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0031.parquet": {
+      "num_bytes": 471299578,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0032.parquet": {
+      "num_bytes": 501467969,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0033.parquet": {
+      "num_bytes": 473474142,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0034.parquet": {
+      "num_bytes": 495420226,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0035.parquet": {
+      "num_bytes": 493156194,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0036.parquet": {
+      "num_bytes": 470614764,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0037.parquet": {
+      "num_bytes": 487687607,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0038.parquet": {
+      "num_bytes": 506155580,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0039.parquet": {
+      "num_bytes": 493798283,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0040.parquet": {
+      "num_bytes": 479902308,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0041.parquet": {
+      "num_bytes": 490084994,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0042.parquet": {
+      "num_bytes": 499754974,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0043.parquet": {
+      "num_bytes": 491511842,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0044.parquet": {
+      "num_bytes": 504065916,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0045.parquet": {
+      "num_bytes": 514299512,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0046.parquet": {
+      "num_bytes": 487460738,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/train.360/0047.parquet": {
+      "num_bytes": 498255901,
+      "checksum": null
+    },
+    "hf://datasets/openslr/librispeech_asr@71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/clean/validation/0000.parquet": {
+      "num_bytes": 341833540,
+      "checksum": null
+    }
+  },
+  "download_size": 30346322580,
+  "features": {
+    "file": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "audio": {
+      "sampling_rate": 16000,
+      "_type": "Audio"
+    },
+    "text": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "speaker_id": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "chapter_id": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "id": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 61608895301,
+  "splits": {
+    "test": {
+      "name": "test",
+      "num_bytes": 368036005,
+      "num_examples": 2620,
+      "dataset_name": "librispeech_asr"
+    },
+    "train.100": {
+      "name": "train.100",
+      "num_bytes": 6623284135,
+      "num_examples": 28539,
+      "shard_lengths": [
+        2139,
+        2139,
+        2139,
+        2139,
+        2139,
+        2239,
+        2239,
+        2238,
+        2138,
+        2338,
+        2238,
+        2238,
+        2176
+      ],
+      "dataset_name": "librispeech_asr"
+    },
+    "train.360": {
+      "name": "train.360",
+      "num_bytes": 23911339288,
+      "num_examples": 104014,
+      "shard_lengths": [
+        2267,
+        2167,
+        2167,
+        2267,
+        2367,
+        2167,
+        2267,
+        2267,
+        2267,
+        2267,
+        2267,
+        2367,
+        2267,
+        2167,
+        2367,
+        2267,
+        2267,
+        2267,
+        2367,
+        2167,
+        2167,
+        2167,
+        2267,
+        2334,
+        2267,
+        2267,
+        2167,
+        2267,
+        2267,
+        2167,
+        2267,
+        2167,
+        2267,
+        2167,
+        2167,
+        2267,
+        2167,
+        2167,
+        2167,
+        2167,
+        2267,
+        2167,
+        2167,
+        2067,
+        2167,
+        2166,
+        1466
+      ],
+      "dataset_name": "librispeech_asr"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 359913293,
+      "num_examples": 2703,
+      "dataset_name": "librispeech_asr"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}
