@@ -100,8 +100,8 @@ void CorrectiveStage::setParams(const SharedParams& newParams) {
             const float driftGuard = juce::jlimit(0.65f, 1.0f,
                 1.0f - 0.32f * juce::jlimit(0.0f, 1.0f, newParams.tonalDriftRisk)
                     - 0.07f * juce::jlimit(0.0f, 1.0f, newParams.articulationRisk));
-            const float baseGainDb = voiceMode ? 2.4f : 4.8f;
-            const float deEssScale = voiceMode ? 6.4f : 9.2f;
+            const float baseGainDb = voiceMode ? 2.12f : 4.8f;
+            const float deEssScale = voiceMode ? 0.2f : 9.2f;
             const float troubleScale = voiceMode ? 4.2f : 5.8f;
             const float gainDb = (-baseGainDb
                 - deEssScale * juce::jlimit(0.0f, 1.0f, newParams.deEss)
