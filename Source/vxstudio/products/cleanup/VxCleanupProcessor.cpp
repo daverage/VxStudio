@@ -132,6 +132,7 @@ void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int sa
     correctiveChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     assertiveLowState.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())), 0.0f);
     assertivePresenceState.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())), 0.0f);
+    setReportedLatencySamples(0);
     resetSuite();
 }
 
