@@ -355,9 +355,9 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
           * voicedMaterialGuard);
         persistentParams.focus = focus;
         persistentParams.voiceMode = voiceMode;
-        persistentParams.sidechainPresent = (evidence.noiseFloorDb > -75.0f);
+        persistentParams.sidechainPresent = false;
         sidechainActive.store(persistentParams.sidechainPresent, std::memory_order_relaxed);
-        persistentParams.sidechainNoiseFloorDb = evidence.noiseFloorDb;
+        persistentParams.sidechainNoiseFloorDb = -80.0f;
         persistentParams.monoScore = monoPenalty;
         persistentParams.compressionScore = compressionPenalty;
         persistentParams.tiltScore = tiltPenalty;
