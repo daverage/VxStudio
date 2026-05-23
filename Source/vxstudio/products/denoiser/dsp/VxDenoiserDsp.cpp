@@ -618,22 +618,14 @@ void DenoiserDsp::processFrame(const float amount,
                                  : 1.0f;
         const float speechWeightedProtect = bandProtectBase * pSm;
         const float speechGuard = 1.0f - (voiceMode ? 0.32f : 0.18f) * speechWeightedProtect;
-        // Reduce tonalness protection for high frequencies (above 3 kHz) to suppress harsh content more aggressively
-        const float hfScale = voiceMode ? std::min(1.0f, std::max(0.0f, (3000.0f - hz) / 1000.0f)) : 1.0f;
-        // Boost suppression strength for HF tones to suppress harsh artifacts
-        const float hfBoost = voiceMode && hz > 2500.0f ? 1.40f : 1.0f;
-        const float strength = std::max(0.20f, ((betaBin * transProtect * speechGuard) - 0.40f * tonalness[k] * hfScale) * hfBoost);
+        const float strength = std::max(0.20f, (betaBin * transProtect * speechGuard) - 0.40f * tonalness[k]);
 
         g = std::pow(std::max(0.0f, g), strength);
         g = 1.0f + (g - 1.0f) * amount;  // wet blend
 
         // Tonal and transient restoration
-        if (tonalness[k] > 0.0f) {
-            // Suppress HF tonal restoration to allow harsh artifact suppression
-            const float tonadRestore = voiceMode ? 0.28f : 0.18f;
-            const float hfSuppressFactor = voiceMode ? std::min(1.0f, std::max(0.0f, (2000.0f - hz) / 800.0f)) : 1.0f;
-            g = g + (1.0f - g) * (tonadRestore * tonalness[k] * hfSuppressFactor);
-        }
+        if (tonalness[k] > 0.0f)
+            g = g + (1.0f - g) * ((voiceMode ? 0.28f : 0.18f) * tonalness[k]);
         if (inTransient)
             g = g + (1.0f - g) * ((voiceMode ? 0.34f : 0.20f) * guardStrict);
 
@@ -731,11 +723,9 @@ void DenoiserDsp::processFrame(const float amount,
             const float clampW    = 0.10f + 0.08f * (1.0f - amount);
             const float floorBoost = juce::jlimit(0.0f, 1.0f, hMean - clampW);
             const float protectW   = 0.10f + 0.15f * guardLevel;
-            const int hfCutoffBin = std::max(0, static_cast<int>(4000.0f / binHz));
             for (int h = 1; h <= 10; ++h) {
                 const int hk = h * k;
                 if (hk >= kBins) break;
-                if (hk > hfCutoffBin) continue;  // Don't protect harmonics above 4 kHz
                 harmonicFloor[hk] = std::max(harmonicFloor[hk],
                                              floorBoost * (1.0f - protectW));
             }
