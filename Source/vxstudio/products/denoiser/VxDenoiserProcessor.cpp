@@ -216,7 +216,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         artifactCleanupDrive * qualityTrust * artifactEvidence * (0.55f + 0.45f * artifactEvidence)
         * (1.0f - 0.78f * artifactOverlap));
 
-    if (artifactCleanupConfidence > 1.0e-4f) {
+    if (artifactCleanupConfidence > 0.15f) {
         const auto readabilityGuard = vxsuite::corrective::deriveReadabilityGuard(
             evidence,
             analysis,
