@@ -545,7 +545,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         0.55f * lowBias + 0.45f * evidence.proximityContext);
     params.speechPresence = juce::jlimit(0.0f, 1.0f,
         0.75f * evidence.speechConfidence + 0.25f * voiceContext.intelligibility);
-    params.noiseFloorDb = evidence.noiseFloorDb;
+    params.noiseFloorDb = -80.0f;
     params.hpfOn = hpfOn;
     const float voicedShelfRisk = juce::jlimit(0.0f, 1.0f,
         0.42f * voiceContext.intelligibility
