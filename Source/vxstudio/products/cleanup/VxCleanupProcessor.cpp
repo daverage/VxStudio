@@ -350,7 +350,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         1.00f + 0.84f * cleanupRamp
       + 1.72f * cleanupRamp * densityPressure * voicedMaterialGuard);
 
-    if (cleanup > 1.0e-4f) {
+    if (cleanup > 0.15f) {
         vxsuite::clarity::Params persistentParams {};
         persistentParams.clean = juce::jlimit(0.0f, 1.0f,
             (cleanupRamp * (0.46f + 0.32f * densityPressure)
