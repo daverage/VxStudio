@@ -116,7 +116,7 @@ std::string_view VXCleanupAudioProcessor::getActivityLightLabel(int index) const
 }
 
 bool VXCleanupAudioProcessor::hasSidechainActive() const noexcept {
-    return sidechainActive.load(std::memory_order_relaxed);
+    return false;  // Sidechain disabled due to CPU/stutter issues
 }
 
 void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
@@ -227,7 +227,11 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     }
 
     SpectralFeatures spectral {};
-    if (spectralFft.isReady() && spectralSize > 0) {
+    const bool shouldComputeSpectral = cleanup > 0.05f &&
+        (cleanup > 0.25f || spectralComputeCounter == 0);
+    spectralComputeCounter = (spectralComputeCounter + 1) % 3;
+
+    if (spectralFft.isReady() && spectralSize > 0 && shouldComputeSpectral) {
         std::fill(spectralFrame.begin(), spectralFrame.end(), 0.0f);
         const int available = std::min(spectralSamplesReady, spectralSize);
         const int pad = spectralSize - available;

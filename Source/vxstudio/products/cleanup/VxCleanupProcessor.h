@@ -49,6 +49,7 @@ private:
     int spectralSize = 0;
     int spectralWritePos = 0;
     int spectralSamplesReady = 0;
+    int spectralComputeCounter = 0;
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlTriple controls;
     float spectralFlatness = 0.0f;
