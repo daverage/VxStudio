@@ -228,7 +228,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     }
 
     SpectralFeatures spectral {};
-    if (spectralFft.isReady() && spectralSize > 0) {
+    if (cleanup > 1.0e-4f && spectralFft.isReady() && spectralSize > 0) {
         std::fill(spectralFrame.begin(), spectralFrame.end(), 0.0f);
         const int available = std::min(spectralSamplesReady, spectralSize);
         const int pad = spectralSize - available;

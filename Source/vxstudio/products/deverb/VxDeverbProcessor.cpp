@@ -203,7 +203,18 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     // Wiener gains collapse to 1.0 (true bypass with no dry blend needed).
     // overSubtract still scales with reduce so depth ramps up with the knob.
     const float reduce = vxsuite::clamp01(smoothedReduce);
-    const float reduceDrive = reduce <= 1.0e-4f ? 0.0f : std::pow(reduce, voiceMode ? 0.76f : 0.72f);
+
+    // Early return when deverb is effectively disabled
+    if (reduce <= 1.0e-4f) {
+        ensureLatencyAlignedListenDry(numSamples);
+        const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        return;
+    }
+
+    const float reduceDrive = std::pow(reduce, voiceMode ? 0.76f : 0.72f);
     const float effectiveReduce = voiceMode
         ? vxsuite::clamp01(reduceDrive
                            * (1.0f - 0.02f * vocalPriority + 0.18f * voiceContext.buriedSpeech)
