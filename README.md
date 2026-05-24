@@ -19,8 +19,8 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXDeepFilterNet | ML-powered voice isolation | `Clean`, `Guard` | Heavy noise, traffic, complex non-steady interference |
 | VXDenoiser | Broadband denoise | `Clean`, `Guard` | Hiss, fan noise, HVAC, room tone |
 | VXSubtract | Profile-guided subtractive denoise | `Subtract`, `Protect`, `Learn` | Learnable noise beds, hum, machines |
-| VXDeverb | Room tail and reverb reduction | `Reduce`, `Blend` | Echoey rooms, distant speech, reverberant dialogue |
-| VXProximity | Close-mic tone shaping | `Closer`, `Air` | Intimacy, warmth, fullness after cleanup |
+| VXDeverb | LRSV dereverberation with RT60 tracking | `Reduce`, `Blend` | Echoey rooms, distant speech, reverberant dialogue |
+| VXProximity | Directional proximity model with adaptive filtering | `Closer`, `Air` | Intimacy, warmth, fullness after cleanup |
 | VXCleanup | Corrective voice cleanup | `Cleanup`, `Body`, `Focus` | Mud, harshness, breaths, plosives, sibilance |
 | VXTone | Bass and treble shaping | `Bass`, `Treble` | Warmth, brightness, tonal balance |
 | VXFinish | Final polish and level control | `Finish`, `Body`, `Gain` | Compression, recovery lift, controlled loudness |
@@ -220,7 +220,13 @@ Practical scenarios:
 
 ### VXDeverb
 
-Room-tail and reverb reduction for speech and general programme material. It reduces smeared ambience while keeping direct sound usable.
+Research-grade dereverberation using LRSV (Late-Reverberant Spectral Variance) with RT60 room-decay estimation and optional WPE (Weighted Prediction Error) enhancement for voice. Reduces reverberant tail and ambience while preserving direct sound clarity.
+
+**Advanced features:**
+- Per-bin RT60-adaptive Wiener filtering (Habets et al. 2009)
+- Frame-online WPE in voice mode for speech-specific enhancement
+- Temporal smoothing to suppress musical artifacts
+- Adaptive body restoration (prevents over-thinning)
 
 How to use it:
 
@@ -242,7 +248,14 @@ Practical scenarios:
 
 ### VXProximity
 
-Close-mic tone shaping that adds a fuller, nearer vocal perspective after cleanup. It is a tone-and-space shaper, not a corrective denoiser.
+Directional microphone proximity model with real-time spectral analysis and adaptive 4-stage cascaded filtering. Simulates the tonal character of moving a microphone closer to a source—adding weight, intimacy, and presence—without altering spatial location or introducing artifacts.
+
+**Advanced features:**
+- Per-band energy tracking with adaptive filter parameter selection
+- Context-aware modulation from voice analysis (transient risk, intelligibility)
+- Physically plausible cascaded biquad approach (models real microphone impedance behavior)
+- Non-linear control curves for natural proximity sensation
+- Zero-latency pure IIR filtering
 
 How to use it:
 
@@ -264,7 +277,13 @@ Practical scenarios:
 
 ### VXCleanup
 
-Corrective voice cleanup for mud, harshness, breaths, plosives, sibilance, and general tonal trouble. It is subtractive repair before enhancement.
+Dual-stage spectral corrective processor with real-time multi-feature detection (8+ acoustic properties per frame). Targets mud, harshness, breaths, plosives, sibilance with problem-specific algorithms rather than one-size-fits-all spectral subtraction. Subtractive repair before enhancement.
+
+**Advanced features:**
+- Real-time spectral feature detection: flatness, harmonicity, high-frequency ratio, breath/sibilance/plosive envelopes
+- Dual correction pipeline: aggressive corrective chain + broader persistent clarity stage
+- Noise-floor integration from framework signal quality (voiceContext, separationConfidence)
+- Voice-mode intelligibility protection with OutputTrimmer safety net
 
 How to use it:
 

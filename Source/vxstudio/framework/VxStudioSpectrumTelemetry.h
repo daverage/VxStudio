@@ -258,6 +258,9 @@ public:
                                              std::array<char, 32>& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
     [[nodiscard]] std::uint64_t fallbackDomainIdForCurrentProcess() const noexcept;
+
+private:
+    mutable juce::CriticalSection registryMutex;
 };
 
 class StageRegistry {
@@ -278,6 +281,9 @@ public:
                                                     const std::array<char, 32>& stageId,
                                                     StageView& out) const noexcept;
     [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
+
+private:
+    mutable juce::CriticalSection registryMutex;
 };
 
 class StagePublisher {

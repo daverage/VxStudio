@@ -1066,6 +1066,7 @@ DomainRegistry& DomainRegistry::instance() noexcept {
 }
 
 std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view ownerStageId) noexcept {
+    const juce::ScopedLock threadScoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
         return 0;
@@ -1096,6 +1097,7 @@ std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view owne
 }
 
 void DomainRegistry::unregisterAnalyserDomain(const std::uint64_t analysisDomainId) noexcept {
+    const juce::ScopedLock threadScoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr || analysisDomainId == 0)
         return;
@@ -1122,6 +1124,7 @@ void DomainRegistry::unregisterAnalyserDomain(const std::uint64_t analysisDomain
 }
 
 bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, DomainView& out) const noexcept {
+    const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
         return false;
@@ -1149,6 +1152,7 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
 }
 
 bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
+    const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
         return false;
@@ -1175,6 +1179,7 @@ bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
 
 int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
                                           std::array<std::uint64_t, kMaxDomains>& out) const noexcept {
+    const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
         return 0;
@@ -1192,6 +1197,7 @@ int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
 
 bool DomainRegistry::ownerStageIdForDomain(const std::uint64_t domainId,
                                             std::array<char, 32>& out) const noexcept {
+    const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr || domainId == 0)
         return false;
@@ -1239,6 +1245,7 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
     };
     if (state != nullptr) {
+        const juce::ScopedLock threadScoped(registryMutex);
         juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
         if (scoped.isLocked()) {
             for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
@@ -1296,6 +1303,7 @@ void StageRegistry::unregisterStage(const int slotIndex, const std::uint64_t ins
         }
     }
 
+    const juce::ScopedLock threadScoped(registryMutex);
     auto* slot = stageSlotAt(slotIndex);
     if (slot == nullptr)
         return;
@@ -1309,12 +1317,9 @@ void StageRegistry::unregisterStage(const int slotIndex, const std::uint64_t ins
         return;
     }
 
-    const auto version = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
-    analysisAtomicRef(slot->version).store(version + 1u, std::memory_order_release);
     analysisAtomicRef(slot->active).store(0u, std::memory_order_release);
     slot->analysisDomainId = 0;
     slot->telemetry = {};
-    analysisAtomicRef(slot->version).store(version + 2u, std::memory_order_release);
 }
 
 bool StageRegistry::publish(const int slotIndex,
@@ -1334,6 +1339,7 @@ bool StageRegistry::publish(const int slotIndex,
         }
     }
 
+    const juce::ScopedLock scoped(registryMutex);
     auto* slot = stageSlotAt(slotIndex);
     if (slot == nullptr)
         return false;
@@ -1342,11 +1348,8 @@ bool StageRegistry::publish(const int slotIndex,
         return false;
     }
 
-    const auto version = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
-    analysisAtomicRef(slot->version).store(version + 1u, std::memory_order_release);
     slot->analysisDomainId = analysisDomainId;
     slot->telemetry = telemetry;
-    analysisAtomicRef(slot->version).store(version + 2u, std::memory_order_release);
     return true;
 }
 
@@ -1366,28 +1369,19 @@ bool StageRegistry::readStage(const int slotIndex, StageView& out) const noexcep
         }
     }
 
+    const juce::ScopedLock scoped(registryMutex);
     auto* slot = stageSlotAt(slotIndex);
     if (slot == nullptr)
         return false;
 
-    for (int attempt = 0; attempt < 4; ++attempt) {
-        const auto versionStart = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
-        if ((versionStart & 1u) != 0u)
-            continue;
-        if (analysisAtomicRef(slot->active).load(std::memory_order_acquire) == 0u)
-            return false;
+    if (analysisAtomicRef(slot->active).load(std::memory_order_acquire) == 0u)
+        return false;
 
-        out.active = true;
-        out.slotIndex = slotIndex;
-        out.analysisDomainId = slot->analysisDomainId;
-        out.telemetry = slot->telemetry;
-
-        const auto versionEnd = analysisAtomicRef(slot->version).load(std::memory_order_acquire);
-        if (versionStart == versionEnd && (versionEnd & 1u) == 0u)
-            return true;
-    }
-
-    return false;
+    out.active = true;
+    out.slotIndex = slotIndex;
+    out.analysisDomainId = slot->analysisDomainId;
+    out.telemetry = slot->telemetry;
+    return true;
 }
 
 bool StageRegistry::findStageByDomainAndStageId(const std::uint64_t domainId,
@@ -1415,27 +1409,30 @@ bool StageRegistry::findStageByDomainAndStageId(const std::uint64_t domainId,
         }
     }
 
-    auto* state = analysisState();
-    if (state == nullptr || domainId == 0)
-        return false;
+    {
+        const juce::ScopedLock scoped(registryMutex);
+        auto* state = analysisState();
+        if (state == nullptr || domainId == 0)
+            return false;
 
-    const std::string_view target(stageId.data(),
-                                  strnlen(stageId.data(), stageId.size()));
+        const std::string_view target(stageId.data(),
+                                      strnlen(stageId.data(), stageId.size()));
 
-    for (int i = 0; i < static_cast<int>(state->slots.size()); ++i) {
-        auto& slot = state->slots[static_cast<std::size_t>(i)];
-        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
-            continue;
-        if (slot.analysisDomainId != domainId)
-            continue;
-        const std::string_view slotStageId(slot.telemetry.identity.stageId.data(),
-                                           strnlen(slot.telemetry.identity.stageId.data(),
-                                                   slot.telemetry.identity.stageId.size()));
-        if (slotStageId != target)
-            continue;
+        for (int i = 0; i < static_cast<int>(state->slots.size()); ++i) {
+            auto& slot = state->slots[static_cast<std::size_t>(i)];
+            if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                continue;
+            if (slot.analysisDomainId != domainId)
+                continue;
+            const std::string_view slotStageId(slot.telemetry.identity.stageId.data(),
+                                               strnlen(slot.telemetry.identity.stageId.data(),
+                                                       slot.telemetry.identity.stageId.size()));
+            if (slotStageId != target)
+                continue;
 
-        if (readStage(i, out))
-            return true;
+            if (readStage(i, out))
+                return true;
+        }
     }
     return false;
 }
