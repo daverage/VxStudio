@@ -776,6 +776,27 @@ target_link_libraries(VXStudioPluginRegressionTests PRIVATE
 target_compile_definitions(VXStudioPluginRegressionTests PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXStudioPluginRegressionTests)
 
+add_executable(VXStudioAnalyserTests
+  tests/VXStudioAnalyserTests.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
+  Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
+  Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
+  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
+  Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
+)
+target_include_directories(VXStudioAnalyserTests PRIVATE Source tests)
+target_link_libraries(VXStudioAnalyserTests PRIVATE
+  VxStudioFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+)
+target_compile_definitions(VXStudioAnalyserTests PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxstudio_add_executable_test(VXStudioAnalyserTests)
+
 add_executable(VXStudioBatchAudioCheck
   tests/VXStudioBatchAudioCheck.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
