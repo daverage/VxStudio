@@ -258,9 +258,11 @@ public:
                                              std::array<char, 32>& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
     [[nodiscard]] std::uint64_t fallbackDomainIdForCurrentProcess() const noexcept;
+    [[nodiscard]] std::uint32_t getDomainGeneration() const noexcept;
 
 private:
     mutable juce::CriticalSection registryMutex;
+    std::atomic<std::uint32_t> domainGeneration { 0 };
 };
 
 class StageRegistry {
@@ -317,6 +319,7 @@ private:
     int publishIntervalSamples = 2400;
     int samplesUntilPublish = 2400;
     int domainRefreshCountdown = 0;
+    std::uint32_t lastSeenDomainGeneration = 0;
     std::unique_ptr<SummaryAccumulator> inputAccumulator;
     std::unique_ptr<SummaryAccumulator> outputAccumulator;
     bool registrationAttempted = false;

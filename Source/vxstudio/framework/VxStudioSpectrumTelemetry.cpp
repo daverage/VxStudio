@@ -1090,6 +1090,7 @@ std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view owne
         std::memcpy(slot.ownerStageId.data(), ownerStageId.data(), copyLen);
         analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
+        domainGeneration.fetch_add(1, std::memory_order_release);
         return slot.analysisDomainId;
     }
 
@@ -1119,6 +1120,7 @@ void DomainRegistry::unregisterAnalyserDomain(const std::uint64_t analysisDomain
         slot.hostProcessId = 0;
         slot.creationTimeMs = 0;
         analysisAtomicRef(slot.version).store(version + 2u, std::memory_order_release);
+        domainGeneration.fetch_add(1, std::memory_order_release);
         return;
     }
 }
@@ -1218,6 +1220,10 @@ std::uint64_t DomainRegistry::currentProcessId() const noexcept {
 
 std::uint64_t DomainRegistry::fallbackDomainIdForCurrentProcess() const noexcept {
     return fallbackProcessDomainId(osCurrentProcessId());
+}
+
+std::uint32_t DomainRegistry::getDomainGeneration() const noexcept {
+    return domainGeneration.load(std::memory_order_acquire);
 }
 
 StageRegistry& StageRegistry::instance() noexcept {
@@ -1518,12 +1524,17 @@ void StagePublisher::ensureRegistered() noexcept {
 }
 
 void StagePublisher::refreshDomainBinding(const bool force) noexcept {
-    if (!force && domainRefreshCountdown > 0)
+    const auto& domainReg = DomainRegistry::instance();
+    const auto currentGeneration = domainReg.getDomainGeneration();
+    const bool generationChanged = (currentGeneration != lastSeenDomainGeneration);
+
+    if (!force && !generationChanged && domainRefreshCountdown > 0)
         return;
+
+    lastSeenDomainGeneration = currentGeneration;
 
     domainRefreshCountdown = kDomainRefreshSamples;
 
-    const auto& domainReg = DomainRegistry::instance();
     const auto pid = domainReg.currentProcessId();
 
     std::array<std::uint64_t, kMaxDomains> domainIds {};
