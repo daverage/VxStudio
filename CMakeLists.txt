@@ -845,3 +845,6 @@ vxstudio_add_pluginval_test(VXStudioAnalyser)
 vxstudio_add_pluginval_test(VXSubtract)
 vxstudio_add_pluginval_test(VXTone)
 vxstudio_add_pluginval_test(VXLeveler)
+
+# Test Host for CPU/Memory Profiling
+add_subdirectory(Source/vxstudio/tools/test_host)
