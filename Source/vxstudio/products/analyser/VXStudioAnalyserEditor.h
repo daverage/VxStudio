@@ -165,5 +165,4 @@ private:
 
     int chainScrollOffset = 0;
     int maxChainScroll = 0;
-    int startupRefreshTimeoutMs = 0;  // Aggressive refresh during first 500ms to discover all stages
 };
