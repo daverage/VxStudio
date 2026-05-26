@@ -745,10 +745,11 @@ void DenoiserDsp::processFrame(const float amount,
                       + (1.0f - coeff) * gainFreqSmooth[k];
     }
 
-    // General-mode minimum gain floor: prevent severe level collapse
+    // General-mode minimum gain floor: prevent severe level collapse with amount-dependent scaling
     if (!voiceMode) {
+        const float adaptiveFloor = amount > 0.85f ? 0.80f : (0.40f + 0.40f * amount);
         for (int k = 0; k < kBins; ++k)
-            gainSmooth[k] = std::max(gainSmooth[k], 0.20f);
+            gainSmooth[k] = std::max(gainSmooth[k], adaptiveFloor);
     }
 
     // ── 9b. High-frequency preservation at high denoise amounts ────────────────
@@ -768,10 +769,12 @@ void DenoiserDsp::processFrame(const float amount,
         }
     }
 
-    // General mode: enforce minimum per-bin gain floor to prevent level collapse
+    // General mode: enforce adaptive minimum gain floor based on denoise amount
+    // At high denoise amounts (> 0.85), increase floor to prevent severe level collapse
     if (!options.isVoiceMode) {
+        const float adaptiveFloor = amount > 0.85f ? 0.80f : (0.40f + 0.40f * amount);
         for (int k = 0; k < kBins; ++k)
-            gainSmooth[k] = std::max(gainSmooth[k], 0.40f);
+            gainSmooth[k] = std::max(gainSmooth[k], adaptiveFloor);
     }
 
     // ── 10. Gain application + phase-vocoder synthesis ────────────────────────
