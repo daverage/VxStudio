@@ -253,14 +253,45 @@ bool DeepFilterService::prepareModelFile(const ModelVariant variant, juce::File&
 
     const auto tempDirectory = juce::File::getSpecialLocation(juce::File::tempDirectory)
                                    .getChildFile("vxsuite_deepfilternet_models");
-    if (!tempDirectory.createDirectory())
+    if (!tempDirectory.createDirectory()) {
+        // Fallback: try user application data directory
+        juce::File fallbackDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                      .getChildFile("VxStudio")
+                                      .getChildFile("deepfilternet_models");
+        if (fallbackDir.createDirectory()) {
+            const auto fallbackModel = fallbackDir.getChildFile(variant == ModelVariant::dfn2
+                ? "DeepFilterNet2_onnx_ll.tar.gz"
+                : "DeepFilterNet3_onnx.tar.gz");
+            if (fallbackModel.existsAsFile()) {
+                modelFileOut = fallbackModel;
+                return true;
+            }
+        }
         return false;
+    }
 
     const auto tempModel = tempDirectory.getChildFile(variant == ModelVariant::dfn2
         ? "DeepFilterNet2_onnx_ll.tar.gz"
         : "DeepFilterNet3_onnx.tar.gz");
-    if (!tempModel.existsAsFile() && !extractEmbeddedModel(variant, tempModel))
-        return false;
+    if (!tempModel.existsAsFile()) {
+        // Try to extract embedded model with timeout protection
+        if (!extractEmbeddedModel(variant, tempModel)) {
+            // If extraction fails, check fallback location
+            juce::File fallbackDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                          .getChildFile("VxStudio")
+                                          .getChildFile("deepfilternet_models");
+            if (fallbackDir.createDirectory()) {
+                const auto fallbackModel = fallbackDir.getChildFile(variant == ModelVariant::dfn2
+                    ? "DeepFilterNet2_onnx_ll.tar.gz"
+                    : "DeepFilterNet3_onnx.tar.gz");
+                if (fallbackModel.existsAsFile()) {
+                    modelFileOut = fallbackModel;
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
 
     modelFileOut = tempModel;
     return modelFileOut.existsAsFile();
