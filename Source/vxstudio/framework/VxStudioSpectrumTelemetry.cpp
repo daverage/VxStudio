@@ -1132,6 +1132,7 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
         return false;
 
     bool found = false;
+    // First pass: try exact process ID match
     for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
         auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
         if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
@@ -1150,6 +1151,27 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
             found = true;
         }
     }
+
+    // Fallback: if exact process ID match returns nothing, check all active domains
+    if (!found) {
+        for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
+            auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
+            if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                continue;
+            if (!found
+                || slot.creationTimeMs > out.creationTimeMs
+                || (slot.creationTimeMs == out.creationTimeMs
+                    && slot.analysisDomainId > out.analysisDomainId)) {
+                out.active = true;
+                out.slotIndex = slotIndex;
+                out.analysisDomainId = slot.analysisDomainId;
+                out.hostProcessId = slot.hostProcessId;
+                out.creationTimeMs = slot.creationTimeMs;
+                found = true;
+            }
+        }
+    }
+
     return found;
 }
 
@@ -1194,6 +1216,18 @@ int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
         if (count < static_cast<int>(out.size()))
             out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
     }
+
+    // Fallback: if exact process ID match returns 0 but there are active domains,
+    // return all active domains. This handles process ID corruption in shared memory.
+    if (count == 0) {
+        for (auto& slot : state->slots) {
+            if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                continue;
+            if (count < static_cast<int>(out.size()))
+                out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
+        }
+    }
+
     return count;
 }
 
@@ -1595,8 +1629,16 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
         }
     }
 
-    if (newDomainId == 0 && domainCount == 0)
-        newDomainId = domainReg.fallbackDomainIdForCurrentProcess();
+    if (newDomainId == 0 && domainCount == 0) {
+        // Process ID filtering failed - use global domain discovery as fallback
+        // Look through all active domains for the latest one (should be analyser domain)
+        DomainView latestGlobal {};
+        if (domainReg.latestActiveDomain(latestGlobal)) {
+            newDomainId = latestGlobal.analysisDomainId;
+        } else {
+            newDomainId = domainReg.fallbackDomainIdForCurrentProcess();
+        }
+    }
 
     // If the domain hasn't changed and we're already registered, nothing to do.
     // Avoids unregister/re-register churn on every prepareToPlay, which causes
