@@ -105,8 +105,12 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         finishTarget, bodyTarget, gainTarget, currentSampleRateHz, numSamples,
         0.080f, 0.100f, 0.080f);
 
+    // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto& policy = currentModePolicy();
     const auto voiceContext = getVoiceContextSnapshot();
+
+    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern)
     const float vocalPriority = voiceMode
         ? vxsuite::clamp01(0.38f * voiceContext.vocalDominance
                          + 0.26f * voiceContext.intelligibility
@@ -116,6 +120,22 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         : 0.0f;
     const float outputGainDb = juce::jmap(smoothedGain, 0.0f, 1.0f, -12.0f, 12.0f);
 
+    // 3. BUILD ProcessOptions (Framework Pattern)
+    vxsuite::ProcessOptions options {};
+    options.isVoiceMode = voiceMode;
+    options.sourceProtect = voiceMode
+        ? vxsuite::clamp01(0.62f + 0.38f * smoothedBody + 0.10f * vocalPriority)
+        : vxsuite::clamp01(0.28f + 0.52f * smoothedBody);
+    options.guardStrictness = voiceMode
+        ? vxsuite::clamp01(0.58f + 0.42f * smoothedBody + 0.12f * vocalPriority)
+        : vxsuite::clamp01(0.33f + 0.52f * smoothedBody);
+    options.speechFocus = voiceMode
+        ? juce::jmax(0.73f, policy.speechFocus + 0.13f * vocalPriority)
+        : juce::jmax(0.18f, policy.speechFocus);
+    options.voiceProtect = voiceMode ? 0.82f : 0.58f;
+    options.lateTailAggression = policy.lateTailAggression;
+
+    // 4. DSP PARAMETERS (Effect-specific)
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
     dspParams.peakReduction = vxsuite::clamp01(smoothedFinish
@@ -125,8 +145,9 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     dspParams.outputGainDb = outputGainDb;
     dspParams.body = smoothedBody;
 
+    // 5. PROCESS (Framework + Effect-specific)
     finishChain.setParams(dspParams);
-    finishChain.process(buffer);
+    finishChain.process(buffer, options);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

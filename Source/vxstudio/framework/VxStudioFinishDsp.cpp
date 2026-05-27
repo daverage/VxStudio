@@ -76,12 +76,12 @@ void Dsp::reset() {
     limiterActivity = 0.0f;
 }
 
-void Dsp::process(juce::AudioBuffer<float>& buffer) {
+void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& options) {
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0)
         return;
 
-    const bool voiceMode = params.contentMode == 0;
+    const bool voiceMode = options.isVoiceMode;
     const float peakReduction = juce::jlimit(0.0f, 1.0f, params.peakReduction);
     const bool finishStageEnabled = peakReduction > 1.0e-4f;
     const int numChannels = std::min(channels, buffer.getNumChannels());

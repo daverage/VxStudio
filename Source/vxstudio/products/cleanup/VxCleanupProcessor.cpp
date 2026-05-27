@@ -191,10 +191,15 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         cleanupTarget, characterTarget, focusTarget, currentSampleRateHz, numSamples,
         0.050f, 0.090f, 0.070f);
 
+    // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto& modePolicy = currentModePolicy();
     const auto analysis = getVoiceAnalysisSnapshot();
     const auto voiceContext = getVoiceContextSnapshot();
+
+    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern)
+    // Note: Cleanup uses direct scaling in params rather than priority formula
+    // This is maintained for backward compatibility with existing Params struct
     const auto signalQuality = getSignalQualitySnapshot();
     const float cleanup = vxsuite::clamp01(smoothedCleanup);
     const float cleanupDrive = vxsuite::clamp01(std::pow(cleanup, 0.68f));
@@ -369,7 +374,18 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
             modePolicy.guardStrictness * (0.84f + 0.16f * qualityTrust));
         persistentParams.sourceProtect = juce::jlimit(0.0f, 1.0f,
             0.55f * modePolicy.sourceProtect + 0.45f * preserveCharacter);
-        persistentCleanupStage.process(buffer, nullptr, persistentParams);
+
+        // 3. BUILD ProcessOptions (Framework Pattern - for framework integration)
+        vxsuite::ProcessOptions options {};
+        options.isVoiceMode = voiceMode;
+        options.sourceProtect = persistentParams.sourceProtect;  // Already computed above
+        options.guardStrictness = persistentParams.guardStrictness;  // Already computed above
+        options.speechFocus = persistentParams.speechFocus;
+        options.voiceProtect = voiceMode ? 0.86f : 0.62f;
+        options.lateTailAggression = modePolicy.lateTailAggression;
+
+        // 4. PROCESS (Effect-specific + Framework)
+        persistentCleanupStage.process(buffer, nullptr, persistentParams, options);
     }
 
     if (!classifiersPrimed) {

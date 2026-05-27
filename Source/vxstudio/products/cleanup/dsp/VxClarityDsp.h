@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../framework/VxStudioModePolicy.h"
+#include "../../../framework/VxStudioProcessOptions.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -34,7 +35,8 @@ public:
     void reset() noexcept;
     void process(juce::AudioBuffer<float>& buffer,
                  const juce::AudioBuffer<float>* sidechainBuffer,
-                 const Params& params) noexcept;
+                 const Params& params,
+                 const ProcessOptions& options = {}) noexcept;
 
 private:
     struct OnePoleLowpass {

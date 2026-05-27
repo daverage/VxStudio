@@ -165,10 +165,41 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         currentSampleRateHz, numSamples,
         0.080f, 0.080f);
 
+    // 1. DETECT MODE (Framework Pattern)
+    const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto& policy = currentModePolicy();
+    const auto voiceContext = getVoiceContextSnapshot();
+
+    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern - Phrase-aware for Leveler)
+    const float vocalPriority = isVoice
+        ? vxsuite::clamp01(0.36f * voiceContext.vocalDominance
+                         + 0.28f * voiceContext.intelligibility
+                         + 0.18f * voiceContext.phraseActivity
+                         + 0.10f * voiceContext.speechPresence
+                         + 0.08f * voiceContext.centerConfidence)
+        : 0.0f;
+
+    // 3. BUILD ProcessOptions (Framework Pattern)
+    vxsuite::ProcessOptions options {};
+    options.isVoiceMode = isVoice;
+    options.sourceProtect = isVoice
+        ? vxsuite::clamp01(0.70f + 0.25f * vocalPriority)
+        : vxsuite::clamp01(0.40f);
+    options.guardStrictness = isVoice
+        ? vxsuite::clamp01(0.65f + 0.28f * vocalPriority)
+        : vxsuite::clamp01(0.40f);
+    options.speechFocus = isVoice
+        ? juce::jmax(0.80f, policy.speechFocus + 0.15f * vocalPriority)
+        : juce::jmax(0.25f, policy.speechFocus);
+    options.voiceProtect = isVoice ? 0.88f : 0.58f;
+    options.lateTailAggression = policy.lateTailAggression;
+    options.stereoWidthProtect = policy.stereoWidthProtect;
+
+    // 4. DSP PARAMETERS (Leveler state machine)
     vxsuite::leveler::Dsp::Params params {};
     params.level = juce::jlimit(0.0f, 1.0f, smoothedLevel);
     params.control = juce::jlimit(0.0f, 1.0f, smoothedControl);
-    params.voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    params.voiceMode = isVoice;
     params.analysisMode = static_cast<vxsuite::leveler::Dsp::MixAnalysisMode>(
         juce::jlimit(0, 2, vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1)));
     const auto signalQuality = getSignalQualitySnapshot();
@@ -196,7 +227,7 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                                    getVoiceAnalysisSnapshot(),
                                                    getVoiceContextSnapshot());
     dsp.setParams(params);
-    dsp.process(buffer, detectorSnapshot);
+    dsp.process(buffer, detectorSnapshot, options);
 }
 
 bool VXLevelerAudioProcessor::shouldShowLearnUi() const noexcept {

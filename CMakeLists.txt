@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(VXSUITE_FRAMEWORK_VERSION "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXDEVERB "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXPROXIMITY "0.2.0")
-set(VXSUITE_PLUGIN_VERSION_VXPROXIMITY2 "0.1.0")
+set(VXSUITE_PLUGIN_VERSION_VXProximityClassic "0.1.0")
 set(VXSUITE_PLUGIN_VERSION_VXCLEANUP "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXCLARITY "0.1.0")
 set(VXSUITE_PLUGIN_VERSION_VXFINISH "0.3.0")
@@ -310,12 +310,12 @@ target_link_libraries(VXProximity PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXProximityPlugin ALL DEPENDS VXProximity_VST3)
 vxstudio_stage_vst3_bundle(VXProximity_VST3 "VXProximity")
 
-juce_add_plugin(VXProximity2
-  VERSION ${VXSUITE_PLUGIN_VERSION_VXPROXIMITY2}
-  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXPROXIMITY2}
+juce_add_plugin(VXProximityClassic
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXProximityClassic}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXProximityClassic}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
-  BUNDLE_ID "com.vxstudio.vxproximity2"
+  BUNDLE_ID "com.vxstudio.vxProximityClassic"
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
@@ -323,21 +323,21 @@ juce_add_plugin(VXProximity2
   PLUGIN_MANUFACTURER_CODE "VXS1"
   PLUGIN_CODE "VXP2"
 )
-target_compile_definitions(VXProximity2 PRIVATE
+target_compile_definitions(VXProximityClassic PRIVATE
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
   JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
   JUCE_WEB_BROWSER=0
 )
-juce_generate_juce_header(VXProximity2)
-target_sources(VXProximity2 PRIVATE
-  Source/vxstudio/products/proximity2/VxProximity2Processor.cpp
-  Source/vxstudio/products/proximity2/dsp/VxProximity2Dsp.cpp
+juce_generate_juce_header(VXProximityClassic)
+target_sources(VXProximityClassic PRIVATE
+  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
+  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
 )
-target_include_directories(VXProximity2 PRIVATE Source)
-target_link_libraries(VXProximity2 PRIVATE VxStudioFramework juce::juce_dsp)
-add_custom_target(VXProximity2Plugin ALL DEPENDS VXProximity2_VST3)
-vxstudio_stage_vst3_bundle(VXProximity2_VST3 "VXProximity2")
+target_include_directories(VXProximityClassic PRIVATE Source)
+target_link_libraries(VXProximityClassic PRIVATE VxStudioFramework juce::juce_dsp)
+add_custom_target(VXProximityClassicPlugin ALL DEPENDS VXProximityClassic_VST3)
+vxstudio_stage_vst3_bundle(VXProximityClassic_VST3 "VXProximityClassic")
 
 juce_add_plugin(VXCleanup
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXCLEANUP}
@@ -645,7 +645,7 @@ add_custom_target(VXSuite_VST3
   DEPENDS
     VXDeverb_VST3
     VXProximity_VST3
-    VXProximity2_VST3
+    VXProximityClassic_VST3
     VXCleanup_VST3
     VXFinish_VST3
     VXOptoComp_VST3
@@ -783,8 +783,8 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
-  Source/vxstudio/products/proximity2/VxProximity2Processor.cpp
-  Source/vxstudio/products/proximity2/dsp/VxProximity2Dsp.cpp
+  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
+  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
   Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
   Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
@@ -845,8 +845,8 @@ add_executable(VXStudioBatchAudioCheck
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
-  Source/vxstudio/products/proximity2/VxProximity2Processor.cpp
-  Source/vxstudio/products/proximity2/dsp/VxProximity2Dsp.cpp
+  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
+  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
   Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
   Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
@@ -897,7 +897,7 @@ vxstudio_add_pluginval_test(VXDeverb)
 vxstudio_add_pluginval_test(VXFinish)
 vxstudio_add_pluginval_test(VXOptoComp)
 vxstudio_add_pluginval_test(VXProximity)
-vxstudio_add_pluginval_test(VXProximity2)
+vxstudio_add_pluginval_test(VXProximityClassic)
 vxstudio_add_pluginval_test(VXStudioAnalyser)
 vxstudio_add_pluginval_test(VXSubtract)
 vxstudio_add_pluginval_test(VXTone)

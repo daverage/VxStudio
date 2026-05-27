@@ -117,14 +117,35 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     const auto [smoothedBass, smoothedTreble, smoothedMid] = controls.process(
         bassTarget, trebleTarget, midTarget, currentSampleRateHz, numSamples, 0.060f, 0.060f, 0.060f);
 
+    // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto& policy = currentModePolicy();
     const auto voiceContext = getVoiceContextSnapshot();
+
+    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern - Transient-aware)
     const float vocalPriority = voiceMode
         ? vxsuite::clamp01(0.40f * voiceContext.vocalDominance
                          + 0.30f * voiceContext.intelligibility
                          + 0.20f * voiceContext.transientRisk
                          + 0.10f * voiceContext.speechPresence)
         : 0.0f;
+
+    // 3. BUILD ProcessOptions (Framework Pattern)
+    vxsuite::ProcessOptions options {};
+    options.isVoiceMode = voiceMode;
+    options.sourceProtect = voiceMode
+        ? vxsuite::clamp01(0.70f + 0.25f * vocalPriority)
+        : vxsuite::clamp01(0.40f);
+    options.guardStrictness = voiceMode
+        ? vxsuite::clamp01(0.62f + 0.30f * vocalPriority)
+        : vxsuite::clamp01(0.38f);
+    options.speechFocus = voiceMode
+        ? juce::jmax(0.80f, policy.speechFocus + 0.15f * vocalPriority)
+        : juce::jmax(0.25f, policy.speechFocus);
+    options.voiceProtect = voiceMode ? 0.88f : 0.55f;
+    options.lateTailAggression = policy.lateTailAggression;
+
+    // 4. EFFECT-SPECIFIC PARAMETERS
     const float maxGainDb = voiceMode
         ? kVocalMaxGainDb * (1.0f - 0.05f * vocalPriority)
         : kGeneralMaxGainDb;

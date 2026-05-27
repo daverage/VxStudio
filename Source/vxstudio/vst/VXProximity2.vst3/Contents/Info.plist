@@ -4,15 +4,15 @@
 <plist>
   <dict>
     <key>CFBundleExecutable</key>
-    <string>VXProximity2</string>
+    <string>VXProximityClassic</string>
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.vxstudio.vxproximity2</string>
+    <string>com.vxstudio.vxProximityClassic</string>
     <key>CFBundleName</key>
-    <string>VXProximity2</string>
+    <string>VXProximityClassic</string>
     <key>CFBundleDisplayName</key>
-    <string>VXProximity2</string>
+    <string>VXProximityClassic</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleSignature</key>

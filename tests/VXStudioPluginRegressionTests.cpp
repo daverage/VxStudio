@@ -2230,11 +2230,11 @@ bool testProximityBassBoostGrowthIsNonlinearWithCloser() {
     constexpr double sr = 48000.0;
     auto bassSignal = makeSine(sr, 1.0f, 150.0f, 0.10f);
 
-    VXProximityAudioProcessor proximity25;
-    proximity25.prepareToPlay(sr, 256);
-    setParamNormalized(proximity25, "closer", 0.25f);
-    setParamNormalized(proximity25, "air", 0.0f);
-    const auto out25 = render(proximity25, bassSignal, 256);
+    VXProximityAudioProcessor ProximityClassic5;
+    ProximityClassic5.prepareToPlay(sr, 256);
+    setParamNormalized(ProximityClassic5, "closer", 0.25f);
+    setParamNormalized(ProximityClassic5, "air", 0.0f);
+    const auto out25 = render(ProximityClassic5, bassSignal, 256);
 
     VXProximityAudioProcessor proximity50;
     proximity50.prepareToPlay(sr, 256);

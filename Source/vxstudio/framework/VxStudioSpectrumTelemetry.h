@@ -151,6 +151,7 @@ struct DomainView {
     std::uint64_t analysisDomainId = 0;
     std::uint64_t hostProcessId = 0;
     std::uint64_t creationTimeMs = 0;
+    std::uint64_t contextKeyHash = 0;
 };
 
 struct AnalysisSummary {
@@ -248,12 +249,12 @@ class DomainRegistry {
 public:
     static DomainRegistry& instance() noexcept;
 
-    std::uint64_t registerAnalyserDomain(std::string_view ownerStageId) noexcept;
+    std::uint64_t registerAnalyserDomain(std::string_view ownerStageId, std::uint64_t contextKeyHash = 0) noexcept;
     void unregisterAnalyserDomain(std::uint64_t analysisDomainId) noexcept;
-    [[nodiscard]] bool latestDomainForProcess(std::uint64_t hostProcessId, DomainView& out) const noexcept;
-    [[nodiscard]] bool latestActiveDomain(DomainView& out) const noexcept;
+    [[nodiscard]] bool latestDomainForProcess(std::uint64_t hostProcessId, DomainView& out, std::uint64_t contextKeyHash = 0) const noexcept;
+    [[nodiscard]] bool latestActiveDomain(DomainView& out, std::uint64_t contextKeyHash = 0) const noexcept;
     [[nodiscard]] int allDomainsForProcess(std::uint64_t hostProcessId,
-                                           std::array<std::uint64_t, kMaxDomains>& out) const noexcept;
+                                           std::array<std::uint64_t, kMaxDomains>& out, std::uint64_t contextKeyHash = 0) const noexcept;
     [[nodiscard]] bool ownerStageIdForDomain(std::uint64_t domainId,
                                              std::array<char, 32>& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;

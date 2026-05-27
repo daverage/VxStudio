@@ -2,6 +2,7 @@
 
 #include "VxStudioBlockSmoothing.h"
 #include "VxStudioOptoCompressorLA2A.h"
+#include "VxStudioProcessOptions.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -19,7 +20,7 @@ public:
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void setParams(const Params& p);
     void reset();
-    void process(juce::AudioBuffer<float>& buffer);
+    void process(juce::AudioBuffer<float>& buffer, const ProcessOptions& options = {});
 
     float getCompActivity() const noexcept { return opto.getActivity01(); }
     float getGainReductionDb() const noexcept { return opto.getGainReductionDb(); }

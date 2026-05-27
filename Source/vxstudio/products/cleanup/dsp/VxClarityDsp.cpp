@@ -277,11 +277,15 @@ void ClarityDsp::processChannel(const size_t channelIndex,
 
 void ClarityDsp::process(juce::AudioBuffer<float>& buffer,
                          const juce::AudioBuffer<float>* sidechainBuffer,
-                         const Params& params) noexcept {
+                         const Params& params,
+                         const ProcessOptions& options) noexcept {
     const int numSamples = buffer.getNumSamples();
     const int numChannels = std::min(buffer.getNumChannels(), static_cast<int>(channels.size()));
     if (numSamples <= 0 || numChannels <= 0)
         return;
+
+    // Framework integration: ProcessOptions provides baseline protection scaling
+    static_cast<void>(options);  // Use for future spectral floor scaling if needed
 
     std::array<float, kBandCount> targets {};
     float sidePresence = 0.0f;

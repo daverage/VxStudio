@@ -179,12 +179,13 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     for (int ch = 0; ch < outputChannels; ++ch)
         wetScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
 
-    vxsuite::ProcessOptions options {};
-    options.labRawMode = true;
-
+    // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto& policy = currentModePolicy();
     const auto analysis = getVoiceAnalysisSnapshot();
     const auto voiceContext = getVoiceContextSnapshot();
+
+    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern - Standard 5-factor for Deverb)
     const float vocalPriority = voiceMode
         ? vxsuite::clamp01(0.36f * voiceContext.vocalDominance
                          + 0.28f * voiceContext.intelligibility
@@ -192,6 +193,22 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
                          + 0.10f * voiceContext.speechPresence
                          + 0.08f * voiceContext.centerConfidence)
         : 0.0f;
+
+    // 3. BUILD ProcessOptions (Framework Pattern)
+    vxsuite::ProcessOptions options {};
+    options.isVoiceMode = voiceMode;
+    options.sourceProtect = voiceMode
+        ? vxsuite::clamp01(0.72f + 0.22f * vocalPriority)
+        : vxsuite::clamp01(0.45f);
+    options.guardStrictness = voiceMode
+        ? vxsuite::clamp01(0.68f + 0.25f * vocalPriority)
+        : vxsuite::clamp01(0.42f);
+    options.speechFocus = voiceMode
+        ? juce::jmax(0.82f, policy.speechFocus + 0.14f * vocalPriority)
+        : juce::jmax(0.28f, policy.speechFocus);
+    options.voiceProtect = voiceMode ? 0.90f : 0.60f;
+    options.lateTailAggression = policy.lateTailAggression;
+    options.labRawMode = true;
     const float tailEvidence = vxsuite::clamp01(
         0.52f * analysis.tailLikelihood
       + 0.20f * (1.0f - analysis.directness)

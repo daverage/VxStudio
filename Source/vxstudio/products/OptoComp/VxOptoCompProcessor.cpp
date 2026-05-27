@@ -108,8 +108,12 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         currentSampleRateHz, numSamples,
         0.080f, 0.100f, 0.080f);
 
+    // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+    const auto& policy = currentModePolicy();
     const auto voiceContext = getVoiceContextSnapshot();
+
+    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern)
     const float vocalPriority = voiceMode
         ? vxsuite::clamp01(0.38f * voiceContext.vocalDominance
                          + 0.26f * voiceContext.intelligibility
@@ -119,6 +123,22 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         : 0.0f;
     const float outputGainDb = juce::jmap(smoothedGain, 0.0f, 1.0f, -9.0f, 9.0f);
 
+    // 3. BUILD ProcessOptions (Framework Pattern)
+    vxsuite::ProcessOptions options {};
+    options.isVoiceMode = voiceMode;
+    options.sourceProtect = voiceMode
+        ? vxsuite::clamp01(0.64f + 0.36f * smoothedBody + 0.12f * vocalPriority)
+        : vxsuite::clamp01(0.30f + 0.50f * smoothedBody);
+    options.guardStrictness = voiceMode
+        ? vxsuite::clamp01(0.60f + 0.40f * smoothedBody + 0.15f * vocalPriority)
+        : vxsuite::clamp01(0.35f + 0.50f * smoothedBody);
+    options.speechFocus = voiceMode
+        ? juce::jmax(0.75f, policy.speechFocus + 0.15f * vocalPriority)
+        : juce::jmax(0.20f, policy.speechFocus);
+    options.voiceProtect = voiceMode ? 0.85f : 0.60f;
+    options.lateTailAggression = policy.lateTailAggression;
+
+    // 4. DSP PARAMETERS (Effect-specific)
     vxsuite::finish::Dsp::Params dspParams {};
     dspParams.contentMode = voiceMode ? 0 : 1;
     dspParams.peakReduction = vxsuite::clamp01(smoothedPeakReduction
@@ -128,8 +148,9 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     dspParams.outputGainDb = outputGainDb;
     dspParams.body = smoothedBody;
 
+    // 5. PROCESS (Framework + Effect-specific)
     optoDsp.setParams(dspParams);
-    optoDsp.process(buffer);
+    optoDsp.process(buffer, options);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

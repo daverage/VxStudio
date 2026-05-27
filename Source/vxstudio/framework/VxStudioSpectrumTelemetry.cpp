@@ -632,6 +632,7 @@ struct SharedDomainSlot {
     std::uint64_t hostProcessId = 0;
     std::uint64_t creationTimeMs = 0;
     std::array<char, 32> ownerStageId {};
+    std::uint64_t contextKeyHash = 0;  // Hash of track+project context to isolate per-track analysers
 };
 
 float spectrumCosineSimilarity(
@@ -1061,7 +1062,7 @@ DomainRegistry& DomainRegistry::instance() noexcept {
     return registry;
 }
 
-std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view ownerStageId) noexcept {
+std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view ownerStageId, const std::uint64_t contextKeyHash) noexcept {
     const juce::ScopedLock threadScoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
@@ -1081,6 +1082,7 @@ std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view owne
         slot.analysisDomainId = state->nextDomainId++;
         slot.hostProcessId = pid;
         slot.creationTimeMs = nowMs;
+        slot.contextKeyHash = contextKeyHash;
         slot.ownerStageId.fill('\0');
         const auto copyLen = std::min(ownerStageId.size(), slot.ownerStageId.size() - 1);
         std::memcpy(slot.ownerStageId.data(), ownerStageId.data(), copyLen);
@@ -1121,19 +1123,21 @@ void DomainRegistry::unregisterAnalyserDomain(const std::uint64_t analysisDomain
     }
 }
 
-bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, DomainView& out) const noexcept {
+bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, DomainView& out, const std::uint64_t contextKeyHash) const noexcept {
     const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
         return false;
 
     bool found = false;
-    // First pass: try exact process ID match
+    // First pass: try exact process ID match (with context filtering if specified)
     for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
         auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
         if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
             continue;
         if (slot.hostProcessId != hostProcessId)
+            continue;
+        if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
             continue;
         if (!found
             || slot.creationTimeMs > out.creationTimeMs
@@ -1144,6 +1148,7 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
             out.analysisDomainId = slot.analysisDomainId;
             out.hostProcessId = slot.hostProcessId;
             out.creationTimeMs = slot.creationTimeMs;
+            out.contextKeyHash = slot.contextKeyHash;
             found = true;
         }
     }
@@ -1154,6 +1159,8 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
             auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
             if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
                 continue;
+            if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
+                continue;
             if (!found
                 || slot.creationTimeMs > out.creationTimeMs
                 || (slot.creationTimeMs == out.creationTimeMs
@@ -1163,6 +1170,7 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
                 out.analysisDomainId = slot.analysisDomainId;
                 out.hostProcessId = slot.hostProcessId;
                 out.creationTimeMs = slot.creationTimeMs;
+                out.contextKeyHash = slot.contextKeyHash;
                 found = true;
             }
         }
@@ -1171,7 +1179,7 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
     return found;
 }
 
-bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
+bool DomainRegistry::latestActiveDomain(DomainView& out, const std::uint64_t contextKeyHash) const noexcept {
     const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
@@ -1182,6 +1190,8 @@ bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
         auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
         if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
             continue;
+        if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
+            continue;
         if (!found
             || slot.creationTimeMs > out.creationTimeMs
             || (slot.creationTimeMs == out.creationTimeMs
@@ -1191,6 +1201,7 @@ bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
             out.analysisDomainId = slot.analysisDomainId;
             out.hostProcessId = slot.hostProcessId;
             out.creationTimeMs = slot.creationTimeMs;
+            out.contextKeyHash = slot.contextKeyHash;
             found = true;
         }
     }
@@ -1198,7 +1209,7 @@ bool DomainRegistry::latestActiveDomain(DomainView& out) const noexcept {
 }
 
 int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
-                                          std::array<std::uint64_t, kMaxDomains>& out) const noexcept {
+                                          std::array<std::uint64_t, kMaxDomains>& out, const std::uint64_t contextKeyHash) const noexcept {
     const juce::ScopedLock scoped(registryMutex);
     auto* state = domainState();
     if (state == nullptr)
@@ -1209,15 +1220,19 @@ int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
             continue;
         if (slot.hostProcessId != hostProcessId)
             continue;
+        if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
+            continue;
         if (count < static_cast<int>(out.size()))
             out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
     }
 
     // Fallback: if exact process ID match returns 0 but there are active domains,
-    // return all active domains. This handles process ID corruption in shared memory.
+    // return all active domains (with context filtering if specified). This handles process ID corruption in shared memory.
     if (count == 0) {
         for (auto& slot : state->slots) {
             if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                continue;
+            if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
                 continue;
             if (count < static_cast<int>(out.size()))
                 out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
@@ -1517,10 +1532,16 @@ void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
     // If we're in a fallback domain and an Analyser domain has appeared, rebind immediately.
     // This ensures products added before the Analyser discover it as soon as audio starts.
     const bool inFallbackDomain = (analysisDomainIdValue & (static_cast<std::uint64_t>(1) << 63)) != 0;
+    const int slotIndexBeforeRebind = slotIndex;
     if (inFallbackDomain) {
         refreshDomainBinding(true);  // Force rebind if we detect an Analyser domain
     } else {
         refreshDomainBinding();
+    }
+
+    // If domain rebinding unregistered us, register with the new domain before publishing
+    if (slotIndexBeforeRebind >= 0 && slotIndex < 0) {
+        ensureRegistered();
     }
 
     inputAccumulator->update(inputBuffer);

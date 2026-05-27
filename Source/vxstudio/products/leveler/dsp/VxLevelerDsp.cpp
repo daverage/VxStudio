@@ -112,8 +112,13 @@ void Dsp::reset() {
     tameActivity = 0.0f;
 }
 
-void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector) {
+void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector,
+                  const ProcessOptions& options) {
     juce::ScopedNoDenormals noDenormals;
+
+    // Framework integration: ProcessOptions provides baseline protection context
+    static_cast<void>(options);  // Use for future protection scaling if needed
+
     const int numChannels = std::min<int>({ buffer.getNumChannels(), static_cast<int>(channels.size()), 2 });
     const int numSamples = buffer.getNumSamples();
     if (numChannels <= 0 || numSamples <= 0)

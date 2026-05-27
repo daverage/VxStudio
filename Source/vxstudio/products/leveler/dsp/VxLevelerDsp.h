@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../framework/VxStudioProduct.h"
+#include "../../../framework/VxStudioProcessOptions.h"
 #include "VxLevelerDetector.h"
 #include "VxLevelerGlobalLoudnessTracker.h"
 #include "VxLevelerOfflineAnalyzer.h"
@@ -82,7 +83,8 @@ public:
     void setOfflineAnalysis(OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
     void reset();
-    void process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector);
+    void process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector,
+                 const ProcessOptions& options = {});
     [[nodiscard]] int latencySamples() const noexcept { return delaySamples; }
 
     float getLiftActivity() const noexcept { return liftActivity; }
