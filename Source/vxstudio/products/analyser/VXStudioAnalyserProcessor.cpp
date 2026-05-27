@@ -16,13 +16,11 @@ VXStudioAnalyserAudioProcessor::VXStudioAnalyserAudioProcessor()
     : juce::AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                             .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       identity(makeIdentity()),
-      analysisDomainIdValue(vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId)),
-      stagePublisher(identity) {
+      analysisDomainIdValue(0) {
     ensureAnalysisDomain();
 }
 
 VXStudioAnalyserAudioProcessor::~VXStudioAnalyserAudioProcessor() {
-    vxsuite::analysis::DomainRegistry::instance().unregisterAnalyserDomain(analysisDomainIdValue);
 }
 
 vxsuite::ProductIdentity VXStudioAnalyserAudioProcessor::makeIdentity() {
@@ -63,42 +61,42 @@ void VXStudioAnalyserAudioProcessor::publishSignalQualitySnapshot() noexcept {
 void VXStudioAnalyserAudioProcessor::ensureAnalysisDomain() noexcept {
     if (analysisDomainIdValue != 0)
         return;
+    // Register the analyser domain as the central analysis point for this process
     analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId);
-    if (analysisDomainIdValue == 0)
+    if (analysisDomainIdValue == 0) {
+        // Fallback if domain registration fails
         analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
+    }
 }
 
 void VXStudioAnalyserAudioProcessor::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     ensureAnalysisDomain();
-    stagePublisher.prepare(sampleRate, samplesPerBlock);
     signalQualityState.prepare(sampleRate, samplesPerBlock);
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::releaseResources() {
-    stagePublisher.reset();
     signalQualityState.reset();
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::reset() {
-    stagePublisher.reset();
     signalQualityState.reset();
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
+    // Analyser is a pure passthrough that only analyzes signal quality
+    // It does NOT publish itself as a stage - it reads the registry to discover other stages
     signalQualityState.update(buffer, buffer.getNumSamples());
     publishSignalQualitySnapshot();
-    stagePublisher.publish(buffer, buffer, false);
 }
 
 void VXStudioAnalyserAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
     signalQualityState.update(buffer, buffer.getNumSamples());
     publishSignalQualitySnapshot();
-    stagePublisher.publishBypassed(buffer);
 }
 
 bool VXStudioAnalyserAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {

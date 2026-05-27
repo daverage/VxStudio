@@ -2,7 +2,6 @@
 
 #include "../../framework/VxStudioProduct.h"
 #include "../../framework/VxStudioSignalQuality.h"
-#include "../../framework/VxStudioSpectrumTelemetry.h"
 
 #include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -51,7 +50,6 @@ private:
 
     vxsuite::ProductIdentity identity;
     std::uint64_t analysisDomainIdValue = 0;
-    vxsuite::analysis::StagePublisher stagePublisher;
     vxsuite::SignalQualityState signalQualityState;
     std::atomic<float> monoScore { 0.0f };
     std::atomic<float> compressionScore { 0.0f };
