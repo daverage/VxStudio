@@ -380,12 +380,12 @@ SnapshotPublisher::~SnapshotPublisher() {
 }
 
 void SnapshotPublisher::prepare(const double sampleRate, const int maxBlockSize) noexcept {
-    registrationAttempted = false;
-    ensureRegistered();
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     publishIntervalSamples = std::max(512, std::min(kHistorySamples, static_cast<int>(currentSampleRate / 15.0)));
     levelTraceBucketSizeSamples = publishIntervalSamples;
     samplesUntilPublish = std::max(publishIntervalSamples, std::max(1, maxBlockSize));
+    registrationAttempted = false;
+    ensureRegistered();
     reset();
 }
 
@@ -426,8 +426,6 @@ void SnapshotPublisher::ensureRegistered() noexcept {
 
 void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
                                 const juce::AudioBuffer<float>& wetBuffer) noexcept {
-    if (slotIndex < 0 && !registrationAttempted)
-        ensureRegistered();
     if (slotIndex < 0)
         return;
 
@@ -466,8 +464,6 @@ void SnapshotPublisher::publish(const juce::AudioBuffer<float>& dryBuffer,
 }
 
 void SnapshotPublisher::publishSilence() noexcept {
-    if (slotIndex < 0 && !registrationAttempted)
-        ensureRegistered();
     if (slotIndex < 0)
         return;
 
@@ -1515,6 +1511,9 @@ void StagePublisher::reset() noexcept {
 void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
                              const juce::AudioBuffer<float>& outputBuffer,
                              const bool bypassed) noexcept {
+    if (slotIndex < 0 || inputAccumulator == nullptr || outputAccumulator == nullptr)
+        return;
+
     // If we're in a fallback domain and an Analyser domain has appeared, rebind immediately.
     // This ensures products added before the Analyser discover it as soon as audio starts.
     const bool inFallbackDomain = (analysisDomainIdValue & (static_cast<std::uint64_t>(1) << 63)) != 0;
@@ -1523,9 +1522,6 @@ void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
     } else {
         refreshDomainBinding();
     }
-    ensureRegistered();
-    if (slotIndex < 0 || inputAccumulator == nullptr || outputAccumulator == nullptr)
-        return;
 
     inputAccumulator->update(inputBuffer);
     outputAccumulator->update(outputBuffer);
