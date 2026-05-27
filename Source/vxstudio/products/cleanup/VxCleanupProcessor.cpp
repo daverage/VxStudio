@@ -582,16 +582,16 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         (cleanupDrive - 0.24f) / 0.76f) * cleanupRamp * (0.80f + 0.20f * densityPressure) * voicedMaterialGuard;
     if (strongCleanupFloor > 0.0f) {
         params.deMud = std::max(params.deMud,
-            0.320f * strongCleanupFloor * (0.76f + 0.24f * lowBias)
+            0.60f * strongCleanupFloor * (0.76f + 0.24f * lowBias)
             * (1.0f - 0.24f * readabilityGuard.bodyLossRisk));
         params.deEss = std::max(params.deEss,
-            0.200f * strongCleanupFloor * (0.70f + 0.30f * highBias) * highBandSpeechGuard
+            0.45f * strongCleanupFloor * (0.70f + 0.30f * highBias) * highBandSpeechGuard
             * (1.0f - 0.26f * readabilityGuard.articulationRisk));
         params.breath = std::max(params.breath,
-            0.130f * strongCleanupFloor * (0.66f + 0.34f * highBias) * highBandSpeechGuard
+            0.35f * strongCleanupFloor * (0.66f + 0.34f * highBias) * highBandSpeechGuard
             * (1.0f - 0.24f * readabilityGuard.articulationRisk));
         params.troubleSmooth = std::max(params.troubleSmooth,
-            0.180f * strongCleanupFloor * (0.62f + 0.38f * highBias) * highBandSpeechGuard
+            0.40f * strongCleanupFloor * (0.62f + 0.38f * highBias) * highBandSpeechGuard
             * (1.0f - 0.24f * readabilityGuard.cumulativeRisk));
         params.troubleSmooth = std::min(params.troubleSmooth,
             rawTroubleSmooth * juce::jlimit(0.54f, 1.0f, 0.54f + 0.46f * params.troubleConfidence));
