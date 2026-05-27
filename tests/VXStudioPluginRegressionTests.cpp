@@ -2192,6 +2192,115 @@ bool testProximityCloserKeepsLoudnessSteadierAcrossSources() {
     return true;
 }
 
+bool testProximityPhysicsBasedModelActsMonotonicallyWithCloser() {
+    constexpr double sr = 48000.0;
+    auto input = makeSpeechLike(sr, 1.0f);
+
+    VXProximityAudioProcessor proximityFar;
+    proximityFar.prepareToPlay(sr, 256);
+    setParamNormalized(proximityFar, "closer", 0.0f);
+    setParamNormalized(proximityFar, "air", 0.0f);
+    const auto farOut = render(proximityFar, input, 256);
+
+    VXProximityAudioProcessor proximityMid;
+    proximityMid.prepareToPlay(sr, 256);
+    setParamNormalized(proximityMid, "closer", 0.5f);
+    setParamNormalized(proximityMid, "air", 0.0f);
+    const auto midOut = render(proximityMid, input, 256);
+
+    VXProximityAudioProcessor proximityClose;
+    proximityClose.prepareToPlay(sr, 256);
+    setParamNormalized(proximityClose, "closer", 1.0f);
+    setParamNormalized(proximityClose, "air", 0.0f);
+    const auto closeOut = render(proximityClose, input, 256);
+
+    const float farBassEnergy = rmsSkip(farOut, 256);
+    const float midBassEnergy = rmsSkip(midOut, 256);
+    const float closeBassEnergy = rmsSkip(closeOut, 256);
+
+    if (midBassEnergy <= farBassEnergy || closeBassEnergy <= midBassEnergy) {
+        std::cerr << "[VXSuitePluginRegression] Proximity physics model does not increase bass monotonically with closer: "
+                  << "far=" << farBassEnergy << " mid=" << midBassEnergy << " close=" << closeBassEnergy << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testProximityBassBoostGrowthIsNonlinearWithCloser() {
+    constexpr double sr = 48000.0;
+    auto bassSignal = makeSine(sr, 1.0f, 150.0f, 0.10f);
+
+    VXProximityAudioProcessor proximity25;
+    proximity25.prepareToPlay(sr, 256);
+    setParamNormalized(proximity25, "closer", 0.25f);
+    setParamNormalized(proximity25, "air", 0.0f);
+    const auto out25 = render(proximity25, bassSignal, 256);
+
+    VXProximityAudioProcessor proximity50;
+    proximity50.prepareToPlay(sr, 256);
+    setParamNormalized(proximity50, "closer", 0.50f);
+    setParamNormalized(proximity50, "air", 0.0f);
+    const auto out50 = render(proximity50, bassSignal, 256);
+
+    VXProximityAudioProcessor proximity75;
+    proximity75.prepareToPlay(sr, 256);
+    setParamNormalized(proximity75, "closer", 0.75f);
+    setParamNormalized(proximity75, "air", 0.0f);
+    const auto out75 = render(proximity75, bassSignal, 256);
+
+    const float input_rms = rms(bassSignal);
+    const float step1_gain = rms(out25) / std::max(input_rms, 1.0e-6f);
+    const float step2_gain = rms(out50) / std::max(input_rms, 1.0e-6f);
+    const float step3_gain = rms(out75) / std::max(input_rms, 1.0e-6f);
+
+    const float step1to2_increase = step2_gain / std::max(step1_gain, 1.0e-6f);
+    const float step2to3_increase = step3_gain / std::max(step2_gain, 1.0e-6f);
+
+    if (step1to2_increase < 1.05f || step2to3_increase < 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity bass boost growth too weak for physics model: "
+                  << "0->50% increase=" << step1to2_increase << "x 50->75% increase=" << step2to3_increase << "x\n";
+        return false;
+    }
+    return true;
+}
+
+bool testProximityVoiceVsGeneralPatternFactorIsEvident() {
+    constexpr double sr = 48000.0;
+    auto bassSignal = makeSine(sr, 1.0f, 180.0f, 0.10f);
+
+    VXProximityAudioProcessor proximityVoice;
+    proximityVoice.prepareToPlay(sr, 256);
+    setParamNormalized(proximityVoice, "mode", 0.0f);
+    setParamNormalized(proximityVoice, "closer", 1.0f);
+    setParamNormalized(proximityVoice, "air", 0.0f);
+    const auto voiceOut = render(proximityVoice, bassSignal, 256);
+
+    VXProximityAudioProcessor proximityGeneral;
+    proximityGeneral.prepareToPlay(sr, 256);
+    setParamNormalized(proximityGeneral, "mode", 1.0f);
+    setParamNormalized(proximityGeneral, "closer", 1.0f);
+    setParamNormalized(proximityGeneral, "air", 0.0f);
+    const auto generalOut = render(proximityGeneral, bassSignal, 256);
+
+    const float input_rms = rms(bassSignal);
+    const float voiceGain = rms(voiceOut) / std::max(input_rms, 1.0e-6f);
+    const float generalGain = rms(generalOut) / std::max(input_rms, 1.0e-6f);
+
+    if (voiceGain > generalGain) {
+        std::cerr << "[VXSuitePluginRegression] Proximity general mode should have higher bass gain (0.8x pattern vs 0.5x cardioid): "
+                  << "voice=" << voiceGain << "x general=" << generalGain << "x\n";
+        return false;
+    }
+
+    const float gainRatioDifference = std::abs(voiceGain - generalGain) / std::max(voiceGain, 1.0e-6f);
+    if (gainRatioDifference < 0.08f) {
+        std::cerr << "[VXSuitePluginRegression] Proximity voice/general gain difference too subtle for pattern factor: "
+                  << "voice=" << voiceGain << "x general=" << generalGain << "x (diff=" << gainRatioDifference << ")\n";
+        return false;
+    }
+    return true;
+}
+
 bool testToneAndProximityModesAreClearlyDifferentAtExtremes() {
     constexpr double sr = 48000.0;
     auto input = makeSpeechLike(sr, 1.0f);
@@ -3406,6 +3515,9 @@ int main() {
     run("testProximityExtremeIsBoundedAndAdditive", testProximityExtremeIsBoundedAndAdditive);
     run("testProximityDefaultsAreNearNeutral", testProximityDefaultsAreNearNeutral);
     run("testProximityCloserKeepsLoudnessSteadierAcrossSources", testProximityCloserKeepsLoudnessSteadierAcrossSources);
+    run("testProximityPhysicsBasedModelActsMonotonicallyWithCloser", testProximityPhysicsBasedModelActsMonotonicallyWithCloser);
+    run("testProximityBassBoostGrowthIsNonlinearWithCloser", testProximityBassBoostGrowthIsNonlinearWithCloser);
+    run("testProximityVoiceVsGeneralPatternFactorIsEvident", testProximityVoiceVsGeneralPatternFactorIsEvident);
     run("testToneAndProximityModesAreClearlyDifferentAtExtremes", testToneAndProximityModesAreClearlyDifferentAtExtremes);
     run("testDenoiserStrongSettingStaysCoherentAndBounded", testDenoiserStrongSettingStaysCoherentAndBounded);
     run("testDenoiserStrongSettingRetainsUsefulLevelInBothModes", testDenoiserStrongSettingRetainsUsefulLevelInBothModes);

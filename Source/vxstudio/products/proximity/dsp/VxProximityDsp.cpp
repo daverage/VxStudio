@@ -123,7 +123,7 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
     const float closer = juce::jlimit(0.f, 1.f, closerAmount);
     const float air    = juce::jlimit(0.f, 1.f, airAmount);
-    const float focus  = juce::jlimit(0.0f, 1.0f, vocalFocus);
+    (void)vocalFocus; // Unused in physics model
 
     // Physics constants for distance mapping
     const float d_ref = 0.50f;   // 50 cm reference
@@ -135,12 +135,12 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     // Distance-derived proximity parameters
     const float proximityFcHz = juce::jlimit(80.0f, 3000.0f,
         kSpeedOfSound / (2.0f * juce::MathConstants<float>::pi * distance));
-    const float proximityGainDb = juce::jlimit(0.0f, isVoice ? 18.0f : 20.0f,
+    const float proximityGainDb = juce::jlimit(0.0f, isVoice ? 16.0f : 18.0f,
         20.0f * std::log10(d_ref / distance) * patternFactor);
 
-    // Mud compensation: mild bell cut proportional to proximity gain
-    const float mudCutCenter = proximityFcHz * (isVoice ? 1.8f : 2.0f);
-    const float mudCutDb = -0.35f * proximityGainDb;
+    // Mud compensation: proportional bell cut to prevent excessive mud
+    const float mudCutCenter = proximityFcHz * (isVoice ? 2.0f : 2.2f);
+    const float mudCutDb = -0.45f * proximityGainDb;
 
     // Air shelf: user-controlled brightness at high frequency
     const float highFc = isVoice ? 7600.f : 11000.f;
@@ -190,13 +190,13 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     // Adaptive proximity gain scaling based on content
     const float mudRisk = juce::jlimit(0.0f, 1.0f, midShare / 0.35f);
     const float adaptiveProximityGain = proximityGainDb *
-        juce::jlimit(0.75f, 1.15f, 0.88f + 0.27f * lowShare - 0.15f * mudRisk);
+        juce::jlimit(0.85f, 1.08f, 0.90f + 0.12f * lowShare - 0.10f * mudRisk);
 
     // Output trim for stable loudness
-    const float outputTrimDb = -juce::jlimit(0.0f, 6.0f,
-        0.20f * adaptiveProximityGain * (0.65f + 0.35f * lowShare)
-      + 0.10f * std::abs(mudCutDb) * (0.40f + 0.60f * midShare)
-      + 0.12f * highGain * (0.50f + 0.50f * airEnergy));
+    const float outputTrimDb = -juce::jlimit(0.0f, 4.0f,
+        0.18f * adaptiveProximityGain * (0.68f + 0.32f * lowShare)
+      + 0.08f * std::abs(mudCutDb) * (0.45f + 0.55f * midShare)
+      + 0.10f * highGain * (0.50f + 0.50f * airEnergy));
 
     // Smooth filter parameters frame-to-frame
     auto smoothModelValue = [](float& current, const float target, const bool primed) noexcept {
