@@ -26,7 +26,7 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::proximity::ProximityDsp proximityDsp;
-    vxsuite::BlockSmoothedControlPair controls;
+    vxsuite::BlockSmoothedControlTriple controls;
     vxsuite::OutputTrimmer outputTrimmer;
     double currentSampleRateHz = 48000.0;
 };

@@ -35,13 +35,16 @@ public:
      * @param airAmount     0–1 strength of high-shelf (presence/air).
      * @param isVoice       true = Vocal tuning (lower fc, vocal presence band).
      *                      false = General tuning (wider fc range, upper air).
+     * @param vocalFocus    0–1 content adaptation hint.
+     * @param mudAmount     0–1 boom compensation depth (unused in Proximity2, provided for API compatibility).
      */
     void processInPlace(juce::AudioBuffer<float>& buffer,
                         int numSamples,
                         float closerAmount,
                         float airAmount,
                         bool isVoice,
-                        float vocalFocus = 0.0f) noexcept;
+                        float vocalFocus,
+                        float mudAmount = 0.5f) noexcept;
 
 private:
     struct BiquadCoeffs {

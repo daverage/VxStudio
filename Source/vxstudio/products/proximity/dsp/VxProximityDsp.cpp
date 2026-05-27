@@ -112,7 +112,8 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                    const float closerAmount,
                                    const float airAmount,
                                    const bool isVoice,
-                                   const float vocalFocus) noexcept {
+                                   const float vocalFocus,
+                                   const float mudAmount) noexcept {
     if (numSamples <= 0)
         return;
 
@@ -123,6 +124,7 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
     const float closer = juce::jlimit(0.f, 1.f, closerAmount);
     const float air    = juce::jlimit(0.f, 1.f, airAmount);
+    const float mud    = juce::jlimit(0.f, 1.f, mudAmount);
     (void)vocalFocus; // Unused in physics model
 
     // Physics constants for distance mapping
@@ -138,9 +140,9 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float proximityGainDb = juce::jlimit(0.0f, isVoice ? 16.0f : 18.0f,
         20.0f * std::log10(d_ref / distance) * patternFactor);
 
-    // Mud compensation: proportional bell cut to prevent excessive mud
+    // Mud compensation: user-controlled bell cut scaled by physics gain
     const float mudCutCenter = proximityFcHz * (isVoice ? 2.0f : 2.2f);
-    const float mudCutDb = -0.45f * proximityGainDb;
+    const float mudCutDb = -0.45f * proximityGainDb * mud;
 
     // Air shelf: user-controlled brightness at high frequency
     const float highFc = isVoice ? 7600.f : 11000.f;

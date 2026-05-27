@@ -110,7 +110,9 @@ void Proximity2Dsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                     const float closerAmount,
                                     const float airAmount,
                                     const bool isVoice,
-                                    const float vocalFocus) noexcept {
+                                    const float vocalFocus,
+                                    const float mudAmount) noexcept {
+    (void)mudAmount; // Unused in Proximity2 EQ model
     if (numSamples <= 0)
         return;
 

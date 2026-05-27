@@ -39,13 +39,15 @@ public:
      * @param isVoice       true = Vocal cardioid tuning.
      *                      false = General supercardioid/figure-8 tuning.
      * @param vocalFocus    0–1 content adaptation hint (unused in physics model).
+     * @param mudAmount     0–1 boom compensation depth (0=none, 0.5=default, 1=maximum).
      */
     void processInPlace(juce::AudioBuffer<float>& buffer,
                         int numSamples,
                         float closerAmount,
                         float airAmount,
                         bool isVoice,
-                        float vocalFocus = 0.0f) noexcept;
+                        float vocalFocus,
+                        float mudAmount = 0.5f) noexcept;
 
 private:
     struct BiquadCoeffs {
