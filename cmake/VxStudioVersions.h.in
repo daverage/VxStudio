@@ -9,6 +9,7 @@ inline constexpr std::string_view framework = "@VXSUITE_FRAMEWORK_VERSION@";
 namespace plugins {
 inline constexpr std::string_view deverb = "@VXSUITE_PLUGIN_VERSION_VXDEVERB@";
 inline constexpr std::string_view proximity = "@VXSUITE_PLUGIN_VERSION_VXPROXIMITY@";
+inline constexpr std::string_view proximity2 = "@VXSUITE_PLUGIN_VERSION_VXPROXIMITY2@";
 inline constexpr std::string_view cleanup = "@VXSUITE_PLUGIN_VERSION_VXCLEANUP@";
 inline constexpr std::string_view clarity = "@VXSUITE_PLUGIN_VERSION_VXCLARITY@";
 inline constexpr std::string_view finish = "@VXSUITE_PLUGIN_VERSION_VXFINISH@";
