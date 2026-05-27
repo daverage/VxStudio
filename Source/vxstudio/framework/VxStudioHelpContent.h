@@ -92,7 +92,7 @@ inline constexpr HelpContent deverb {
     "VXDeverb Help",
     R"(
 <h1>VXDeverb</h1>
-<p>Room-tail and reverb reduction for speech and general program material. It reduces smeared ambience while keeping direct sound usable.</p>
+<p>Research-grade dereverberation using LRSV (Late-Reverberant Spectral Variance) with RT60 room-decay estimation and optional WPE (Weighted Prediction Error) enhancement for voice. Reduces reverberant tail and ambience while preserving direct sound clarity.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Increase Reduce until the room tail pulls back without making the source papery.</li>
@@ -118,18 +118,19 @@ inline constexpr HelpContent proximity {
     "VXProximity Help",
     R"(
 <h1>VXProximity</h1>
-<p>Close-mic tone shaping that adds a fuller, nearer vocal perspective after cleanup. It is a tone-and-space shaper, not a corrective denoiser.</p>
+<p>Directional microphone proximity model with real-time spectral analysis and adaptive filtering. Simulates the tonal character of moving a microphone closer to a source—adding weight, intimacy, and presence—without altering spatial location or introducing artifacts.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Raise Closer to add weight and intimacy.</li>
 <li>Use Air to stop the sound becoming overly thick or shut in.</li>
+<li>Use Mud to balance bass depth versus low-mid boom, based on the source character.</li>
 <li>Apply it after noise and room problems are already under control.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
-<li>Thin distant voice: Closer 65%, Air 45%.</li>
-<li>Warm spoken-word polish: Closer 55%, Air 40%.</li>
-<li>Subtle intimacy lift: Closer 45%, Air 50%.</li>
+<li>Thin distant voice: Closer 65%, Air 45%, Mud 50%.</li>
+<li>Warm spoken-word polish: Closer 55%, Air 40%, Mud 55%.</li>
+<li>Subtle intimacy lift: Closer 45%, Air 50%, Mud 48%.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>
@@ -171,23 +172,24 @@ inline constexpr HelpContent tone {
     "VXTone Help",
     R"(
 <h1>VXTone</h1>
-<p>Simple bass and treble shaping with mode-aware shelf placement. It is the fast tonal balance stage after corrective cleanup.</p>
+<p>Bass, midrange, and treble shaping with mode-aware shelf and peak placement. It is the fast tonal balance stage after corrective cleanup.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Start from the centre position and make small moves.</li>
 <li>Use Bass for weight and warmth, Treble for brightness and openness.</li>
+<li>Use Mid to shape the presence region: in Vocal mode at 2 kHz for speech intelligibility; in General mode at 1 kHz for warmth.</li>
 <li>Prefer subtle shaping after cleanup and proximity, not before.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
-<li>Need a little warmth: Bass 58%, Treble 50%.</li>
-<li>Dull voice lift: Bass 50%, Treble 60%.</li>
-<li>Balanced polish: Bass 55%, Treble 56%.</li>
+<li>Need a little warmth: Bass 58%, Treble 50%, Mid 50%.</li>
+<li>Dull voice lift: Bass 50%, Treble 60%, Mid 55%.</li>
+<li>Balanced polish: Bass 55%, Treble 56%, Mid 50%.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>
 <li>Final tonal balance after cleanup.</li>
-<li>Correcting a track that feels thin or dull.</li>
+<li>Correcting a track that feels thin, dull, or lacks presence.</li>
 <li>Subtle pre-finish shaping before VXFinish or VXOptoComp.</li>
 </ul>)",
     "VXTone"

@@ -20,9 +20,9 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXDenoiser | Broadband denoise | `Clean`, `Guard` | Hiss, fan noise, HVAC, room tone |
 | VXSubtract | Profile-guided subtractive denoise | `Subtract`, `Protect`, `Learn` | Learnable noise beds, hum, machines |
 | VXDeverb | LRSV dereverberation with RT60 tracking | `Reduce`, `Blend` | Echoey rooms, distant speech, reverberant dialogue |
-| VXProximity | Directional proximity model with adaptive filtering | `Closer`, `Air` | Intimacy, warmth, fullness after cleanup |
+| VXProximity | Directional proximity model with adaptive filtering | `Closer`, `Air`, `Mud` | Intimacy, warmth, fullness, boom control after cleanup |
 | VXCleanup | Corrective voice cleanup | `Cleanup`, `Body`, `Focus` | Mud, harshness, breaths, plosives, sibilance |
-| VXTone | Bass and treble shaping | `Bass`, `Treble` | Warmth, brightness, tonal balance |
+| VXTone | Bass, mid, and treble shaping | `Bass`, `Treble`, `Mid` | Warmth, presence, brightness, tonal balance |
 | VXFinish | Final polish and level control | `Finish`, `Body`, `Gain` | Compression, recovery lift, controlled loudness |
 | VXOptoComp | LA2A-style opto levelling | `Peak Red.`, `Body`, `Gain` | Smooth riding, gentle limiting, opto character |
 | VXLeveler | Adaptive riding and programme levelling | `Level`, `Control` | Speech riding, long-form consistency |
@@ -256,18 +256,20 @@ Directional microphone proximity model with real-time spectral analysis and adap
 - Physically plausible cascaded biquad approach (models real microphone impedance behavior)
 - Non-linear control curves for natural proximity sensation
 - Zero-latency pure IIR filtering
+- Boom compensation control for different source characters
 
 How to use it:
 
 - Raise `Closer` to add weight and intimacy.
 - Use `Air` to stop the sound becoming overly thick or shut in.
+- Use `Mud` to balance bass depth versus low-mid boom, based on the source character.
 - Apply it after noise and room problems are already under control.
 
 Example settings:
 
-- Thin distant voice: `Closer 65%`, `Air 45%`
-- Warm spoken-word polish: `Closer 55%`, `Air 40%`
-- Subtle intimacy lift: `Closer 45%`, `Air 50%`
+- Thin distant voice: `Closer 65%`, `Air 45%`, `Mud 50%`
+- Warm spoken-word polish: `Closer 55%`, `Air 40%`, `Mud 55%`
+- Subtle intimacy lift: `Closer 45%`, `Air 50%`, `Mud 48%`
 
 Practical scenarios:
 
@@ -305,24 +307,25 @@ Practical scenarios:
 
 ### VXTone
 
-Simple bass and treble shaping with mode-aware shelf placement. It is the fast tonal balance stage after corrective cleanup.
+Bass, midrange, and treble shaping with mode-aware shelf and peak placement. It is the fast tonal balance stage after corrective cleanup.
 
 How to use it:
 
 - Start from the centre position and make small moves.
 - Use `Bass` for weight and warmth, `Treble` for brightness and openness.
+- Use `Mid` to shape the presence region: in Vocal mode at 2 kHz for speech intelligibility; in General mode at 1 kHz for warmth.
 - Prefer subtle shaping after cleanup and proximity, not before.
 
 Example settings:
 
-- Need a little warmth: `Bass 58%`, `Treble 50%`
-- Dull voice lift: `Bass 50%`, `Treble 60%`
-- Balanced polish: `Bass 55%`, `Treble 56%`
+- Need a little warmth: `Bass 58%`, `Treble 50%`, `Mid 50%`
+- Dull voice lift: `Bass 50%`, `Treble 60%`, `Mid 55%`
+- Balanced polish: `Bass 55%`, `Treble 56%`, `Mid 50%`
 
 Practical scenarios:
 
 - Final tonal balance after cleanup
-- Correcting a track that feels thin or dull
+- Correcting a track that feels thin, dull, or lacks presence
 - Subtle pre-finish shaping before `VXFinish` or `VXOptoComp`
 
 ### VXFinish
@@ -503,7 +506,7 @@ Prerequisites:
 
 ```bat
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-ç
+cmake --build build -j4
 ```
 
 ### Install built plugins
