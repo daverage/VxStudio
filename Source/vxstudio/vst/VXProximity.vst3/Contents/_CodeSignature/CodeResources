@@ -3,9 +3,22 @@
 <plist version="1.0">
 <dict>
 	<key>files</key>
-	<dict/>
+	<dict>
+		<key>Resources/moduleinfo.json</key>
+		<data>
+		6UlQlxRxdOIEHBP25MTVRV2ick4=
+		</data>
+	</dict>
 	<key>files2</key>
-	<dict/>
+	<dict>
+		<key>Resources/moduleinfo.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			7gq6QN1E1EsVeDPINKAPaOOCd1Pp9beQG9VxQliQqho=
+			</data>
+		</dict>
+	</dict>
 	<key>rules</key>
 	<dict>
 		<key>^Resources/</key>
