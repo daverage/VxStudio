@@ -988,6 +988,47 @@ float Dsp::gaussianPeak(const float x, const float centre, const float sigma) co
     return std::exp(-0.5f * d * d);
 }
 
+// Solution C: Frequency-dependent control scaling
+// Apply different control strengths at different frequencies within each source
+float Dsp::getFrequencyDependentControlScale(int source, float hz) const noexcept {
+    // Modulate control strength per frequency band for each source
+    // Core regions get full control, upper harmonics get reduced control to preserve character
+
+    if (source == vocalsSource) {
+        if (hz < 250.0f) return 0.35f;        // Sub, too boomy if boosted
+        if (hz < 500.0f) return 0.90f;        // Lower body
+        if (hz < 1800.0f) return 1.00f;       // Core vocal range - full control
+        if (hz < 3500.0f) return 0.75f;       // Presence - reduce to avoid sibilance boost
+        return 0.40f;                         // Air/sibilance - minimal control
+    }
+    else if (source == drumsSource) {
+        if (hz < 60.0f) return 0.40f;         // Sub, reduce to avoid boom
+        if (hz < 180.0f) return 1.00f;        // Kick fundamental - full
+        if (hz < 400.0f) return 0.70f;        // Kick body, snare body - moderate
+        if (hz < 1500.0f) return 0.35f;       // Gap region - minimal
+        if (hz < 6000.0f) return 0.80f;       // Snare/tom presence - good for attack definition
+        return 0.60f;                         // Cymbals/hi-hat - moderate to preserve shimmer
+    }
+    else if (source == bassSource) {
+        if (hz < 50.0f) return 1.00f;         // Sub fundamental - full control
+        if (hz < 120.0f) return 0.95f;        // Low body - nearly full
+        if (hz < 350.0f) return 0.65f;        // Mid body - moderate to avoid bloat
+        if (hz < 1000.0f) return 0.25f;       // Upper region - minimal, preserve character
+        return 0.08f;                         // Way up - almost no control
+    }
+    else if (source == guitarSource) {
+        if (hz < 150.0f) return 0.50f;        // Sub, reduce body boom
+        if (hz < 700.0f) return 1.00f;        // Core body - full control
+        if (hz < 2500.0f) return 0.85f;       // Mid body - mostly full
+        if (hz < 5000.0f) return 0.55f;       // Presence - reduced to avoid harshness
+        return 0.30f;                         // Brilliance/shimmer - minimal
+    }
+    else { // otherSource
+        // Keep residual sources more uniform
+        return 0.70f;
+    }
+}
+
 void Dsp::buildSpectralEnvelope(const std::array<float, kBins>& analysisMag) {
     const int envelopeRadius = 8;
     for (int k = 0; k < kBins; ++k) {
@@ -1898,8 +1939,13 @@ float Dsp::computeSourceContributionMultiplier(
     const float sliderSigned = (sliderNormalized - 0.5f) * 2.0f;
     const float curved =
         std::copysign(std::pow(std::abs(sliderSigned), 0.50f), sliderSigned);
-    const float trustedStrength = strength * juce::jlimit(0.25f, 1.0f, 0.25f + 0.75f * signalTrust);
-    const float targetGain = juce::jlimit(0.0f, 10.0f, 1.0f + curved * 9.0f);
+    // Solution A: Require 70%+ confidence for full control
+    // Below 70%: linearly ramp from 0% (at 60%) to 100% (at 80%)
+    const float trustedStrength = (signalTrust >= 0.70f)
+        ? strength
+        : (signalTrust >= 0.60f ? strength * (signalTrust - 0.60f) / 0.10f : 0.0f);
+    // Solution B: Reduce max gain from ±20dB to ±10dB for more natural control
+    const float targetGain = juce::jlimit(0.0f, 3.16f, 1.0f + curved * 2.16f);
     const float maxContribution = source == otherSource ? 5.0f : 10.0f;
     return juce::jlimit(0.0f, maxContribution, lerp(1.0f, targetGain, trustedStrength));
 }
@@ -1954,6 +2000,16 @@ Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
                                   1.25f,
                                   binOwnershipConfidence[static_cast<size_t>(bin)]);
             }
+        }
+
+        // Solution E: Confidence-gated per-frequency control
+        // Only apply strong control where we're confident about source assignment
+        const float binConfidence = binOwnershipConfidence[static_cast<size_t>(bin)];
+        // Reduce ownership in low-confidence bins to prevent artifacts
+        if (binConfidence < 0.40f) {
+            ownership *= 0.50f;  // Very uncertain - halve the control
+        } else if (binConfidence < 0.60f) {
+            ownership *= lerp(0.50f, 1.0f, (binConfidence - 0.40f) / 0.20f);  // Ramp up
         }
 
         if (mode == RecordingType::live) {
@@ -2130,6 +2186,14 @@ Dsp::RenderFrame Dsp::buildRenderFrameForBin(
     const float lowTrustBackoff = clamp01((signalTrust - 0.42f) / 0.58f);
     const float lowTrustAuthorityFloor = lerp(0.22f, 0.42f, strongUserIntent);
     frame.totalGain = lerp(1.0f, frame.totalGain, juce::jlimit(lowTrustAuthorityFloor, 1.0f, lowTrustBackoff));
+
+    // Solution C: Apply frequency-dependent control scaling
+    // Modulates control strength per frequency to reduce broad tone changes
+    const float hz = binToHz(bin);
+    const int dominant = ownershipFrame.renderDominant;
+    const float freqScale = getFrequencyDependentControlScale(dominant, hz);
+    frame.totalGain = 1.0f + freqScale * (frame.totalGain - 1.0f);
+
     frame.totalGain = juce::jlimit(0.0f, 8.0f, frame.totalGain);
 
     const float prev = prevCompositeGain[static_cast<size_t>(bin)];

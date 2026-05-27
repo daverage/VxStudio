@@ -293,6 +293,7 @@ private:
     [[nodiscard]] float smoothBand(float hz, float lo, float hi) const noexcept;
     [[nodiscard]] float binToHz(int bin) const noexcept;
     [[nodiscard]] float gaussianPeak(float x, float centre, float sigma) const noexcept;
+    [[nodiscard]] float getFrequencyDependentControlScale(int source, float hz) const noexcept;
 
     // Harmonic grouping and source persistence
     void detectSpectralPeaks(const std::array<float, kBins>& analysisMag);
