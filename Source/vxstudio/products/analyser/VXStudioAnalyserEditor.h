@@ -24,6 +24,7 @@ public:
     void resized() override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+    void visibilityChanged() override;
 
 private:
     enum class Tab {
@@ -133,6 +134,9 @@ private:
     bool diagnosticsExpanded = false;
     bool chainCollapsed = false;
     std::size_t prevChainRowCount = 0;
+    std::uint32_t lastEditorGeneration = 0;
+    std::vector<StageEntry> cachedExternalStages;
+    std::optional<StageEntry> cachedAnalyserStage;
 
     RenderModel currentRenderModel;
     BackendState backendState;

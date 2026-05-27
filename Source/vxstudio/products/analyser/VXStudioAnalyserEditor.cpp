@@ -857,6 +857,18 @@ void VXStudioAnalyserEditor::mouseWheelMove(const juce::MouseEvent& event, const
     refreshRenderModel();
 }
 
+void VXStudioAnalyserEditor::visibilityChanged() {
+    if (isVisible()) {
+        // When editor becomes visible: start timer and immediately refresh
+        juce::Timer::startTimerHz(kUiRefreshHz);
+        refreshRenderModel();
+        applyPendingRenderModel();
+    } else {
+        // When editor is hidden: stop timer to avoid wasted 24 Hz scans
+        juce::Timer::stopTimer();
+    }
+}
+
 void VXStudioAnalyserEditor::timerCallback() {
     refreshRenderModel();
     applyPendingRenderModel();
@@ -864,18 +876,34 @@ void VXStudioAnalyserEditor::timerCallback() {
 
 void VXStudioAnalyserEditor::refreshRenderModel() {
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
-    std::vector<StageEntry> externalStages;
-    std::optional<StageEntry> analyserStage;
-    externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
 
-    // Diagnostics: count filtering results
+    // Check if domain/stage topology changed via generation counter
+    const auto currentGeneration = vxsuite::analysis::DomainRegistry::instance().getDomainGeneration();
+    const bool generationChanged = (currentGeneration != lastEditorGeneration);
+    lastEditorGeneration = currentGeneration;
+
+    // If generation didn't change, reuse cached stages. Otherwise scan registry for new/removed stages.
+    std::vector<StageEntry> externalStages = (generationChanged || cachedExternalStages.empty())
+        ? std::vector<StageEntry>()
+        : cachedExternalStages;
+    std::optional<StageEntry> analyserStage = (generationChanged || !cachedAnalyserStage)
+        ? std::optional<StageEntry>()
+        : cachedAnalyserStage;
+
+    // Diagnostics: count filtering results (initialized for all code paths)
     int diagnosticTotalSlots = 0;
     int diagnosticActiveSlots = 0;
     int diagnosticVxSuiteSlots = 0;
     int diagnosticNonStaleSlots = 0;
     int diagnosticDomainMatchSlots = 0;
 
-    for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
+    // Only scan registry if topology changed (generation changed) or caches are empty
+    if (generationChanged || cachedExternalStages.empty()) {
+        externalStages.clear();
+        analyserStage = std::nullopt;
+        externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
+
+        for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
         vxsuite::analysis::StageView stage;
         if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
             continue;
@@ -935,6 +963,11 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         }
 
         externalStages.push_back(std::move(entry));
+        }
+
+        // Cache the discovered stages for reuse on unchanged generation
+        cachedExternalStages = externalStages;
+        cachedAnalyserStage = analyserStage;
     }
 
     const bool hasAnalyserSignal = analyserStage.has_value()
@@ -1072,12 +1105,24 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
             backendState.beforeToneLinearSum[static_cast<std::size_t>(i)] += historyFrame.beforeLinear[static_cast<std::size_t>(i)];
             backendState.afterToneLinearSum[static_cast<std::size_t>(i)] += historyFrame.afterLinear[static_cast<std::size_t>(i)];
         }
-        backendState.spectrumHistory.push_back(historyFrame);
 
         const auto averageWindowMs = static_cast<std::uint64_t>(std::max(100.0f, averageSeconds * 1000.0f));
+
+        // Enforce max history frames before push — never let deque exceed capacity
+        while (static_cast<int>(backendState.spectrumHistory.size()) >= kMaxSpectrumHistoryFrames) {
+            const auto& expired = backendState.spectrumHistory.front();
+            for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
+                backendState.beforeToneLinearSum[static_cast<std::size_t>(i)] -= expired.beforeLinear[static_cast<std::size_t>(i)];
+                backendState.afterToneLinearSum[static_cast<std::size_t>(i)] -= expired.afterLinear[static_cast<std::size_t>(i)];
+            }
+            backendState.spectrumHistory.pop_front();
+        }
+
+        backendState.spectrumHistory.push_back(historyFrame);
+
+        // Evict time-expired frames
         while (backendState.spectrumHistory.size() > 1
-               && ((nowMs - backendState.spectrumHistory.front().timestampMs) > averageWindowMs
-                   || static_cast<int>(backendState.spectrumHistory.size()) > kMaxSpectrumHistoryFrames)) {
+               && (nowMs - backendState.spectrumHistory.front().timestampMs) > averageWindowMs) {
             const auto& expired = backendState.spectrumHistory.front();
             for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
                 backendState.beforeToneLinearSum[static_cast<std::size_t>(i)] -= expired.beforeLinear[static_cast<std::size_t>(i)];
