@@ -81,6 +81,8 @@ struct ProductIdentity {
     StageType stageType = StageType::unknown;
     std::uint32_t semanticFlags = 0;
     std::uint32_t telemetryFlags = 0;
+    bool requiresVoiceAnalysis = true;  // Products like Rebalance don't need this
+    bool requiresSignalQuality = false;  // Only a few products use this
     int controlBankCount = 0;
     bool controlBankVertical = true;
     bool compactControlBankLayout = false;

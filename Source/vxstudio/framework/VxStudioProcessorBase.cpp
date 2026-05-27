@@ -102,9 +102,12 @@ void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce:
 
 void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
-    voiceAnalysis.update(buffer, buffer.getNumSamples());
-    voiceContext.update(buffer, voiceAnalysis.snapshot());
-    signalQuality.update(buffer, buffer.getNumSamples());
+    if (productIdentity.requiresVoiceAnalysis) {
+        voiceAnalysis.update(buffer, buffer.getNumSamples());
+        voiceContext.update(buffer, voiceAnalysis.snapshot());
+    }
+    if (productIdentity.requiresSignalQuality)
+        signalQuality.update(buffer, buffer.getNumSamples());
 
     const bool hasDryScratch = listenInputScratch.getNumChannels() >= buffer.getNumChannels()
         && listenInputScratch.getNumSamples() >= buffer.getNumSamples();
@@ -112,11 +115,14 @@ void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce:
     if (!hasDryScratch)
         return;
 
-    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-        listenInputScratch.copyFrom(channel, 0, buffer, channel, 0, buffer.getNumSamples());
-
     const bool canRenderListen = isListenEnabled();
-    processCoordinator.beginBlock(listenInputScratch, canRenderListen);
+    const bool needsDryBuffer = canRenderListen || spectrumPublisher.isActive() || stagePublisher.isActive();
+    if (needsDryBuffer) {
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            listenInputScratch.copyFrom(channel, 0, buffer, channel, 0, buffer.getNumSamples());
+    }
+
+    processCoordinator.beginBlock(needsDryBuffer ? listenInputScratch : buffer, canRenderListen);
     processProduct(buffer, midi);
     outputSafetyTrimmer.process(buffer, currentSampleRateHz);
     spectrumPublisher.publish(listenInputScratch, buffer);

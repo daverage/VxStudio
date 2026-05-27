@@ -383,7 +383,7 @@ void SnapshotPublisher::prepare(const double sampleRate, const int maxBlockSize)
     registrationAttempted = false;
     ensureRegistered();
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    publishIntervalSamples = std::max(512, std::min(kHistorySamples, static_cast<int>(currentSampleRate / 30.0)));
+    publishIntervalSamples = std::max(512, std::min(kHistorySamples, static_cast<int>(currentSampleRate / 15.0)));
     levelTraceBucketSizeSamples = publishIntervalSamples;
     samplesUntilPublish = std::max(publishIntervalSamples, std::max(1, maxBlockSize));
     reset();

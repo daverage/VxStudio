@@ -303,6 +303,7 @@ public:
     [[nodiscard]] std::uint64_t instanceId() const noexcept { return instanceIdValue; }
     [[nodiscard]] std::uint64_t analysisDomainId() const noexcept { return analysisDomainIdValue; }
     [[nodiscard]] std::uint64_t localOrderId() const noexcept { return localOrderIdValue; }
+    [[nodiscard]] bool isActive() const noexcept { return slotIndex >= 0; }
 
 private:
     void ensureRegistered() noexcept;
