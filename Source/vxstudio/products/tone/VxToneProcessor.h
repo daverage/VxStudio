@@ -34,13 +34,15 @@ private:
 
     static BiquadCoeffs lowShelfCoeffs (double sampleRate, float gainDb, float freqHz) noexcept;
     static BiquadCoeffs highShelfCoeffs(double sampleRate, float gainDb, float freqHz) noexcept;
+    static BiquadCoeffs peakingEqCoeffs (double sampleRate, float gainDb, float freqHz, float q) noexcept;
     static void applyBiquad(float* samples, int numSamples,
                             const BiquadCoeffs& c, BiquadState& s) noexcept;
 
     double currentSampleRateHz = 48000.0;
     std::vector<BiquadState> bassState;
+    std::vector<BiquadState> midState;
     std::vector<BiquadState> trebleState;
-    vxsuite::BlockSmoothedControlPair controls;
+    vxsuite::BlockSmoothedControlTriple controls;
     vxsuite::OutputTrimmer outputTrimmer;
     float smoothedOutputTrimDb = 0.0f;
 };

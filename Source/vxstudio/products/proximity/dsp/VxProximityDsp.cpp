@@ -183,9 +183,9 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float directnessOpportunity = juce::jlimit(0.0f, 1.0f, (presenceShare + 0.35f * airShare) / 0.34f);
 
     // 1) Proximity low shelf: cover the audible body/warmth region, not just sub rumble.
-    const float lowFcMin = isVoice ? 120.f : 140.f;
-    const float lowFcMax = isVoice ? 200.f : 260.f;
-    const float lowGainMax = isVoice ? 7.5f : 6.5f;
+    const float lowFcMin = isVoice ? 70.f : 90.f;
+    const float lowFcMax = isVoice ? 140.f : 180.f;
+    const float lowGainMax = isVoice ? 14.0f : 12.0f;
     const float lowFc    = lowFcMin + (lowFcMax - lowFcMin) * modelDepth;
     const float lowGain  = lowGainMax * modelDepth
         * juce::jlimit(0.72f, 1.12f, 0.78f + 0.34f * bodyOpportunity - 0.12f * mudRisk);
@@ -206,21 +206,21 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         ? juce::jlimit(2800.0f, 4300.0f, 3600.0f + 450.0f * focus)
         : 3200.0f;
     const float presenceQ = isVoice ? 0.78f : 0.70f;
-    const float presenceDb = juce::jlimit(0.0f, isVoice ? 7.2f : 5.8f,
+    const float presenceDb = juce::jlimit(0.0f, isVoice ? 10.5f : 8.0f,
         modelDepth * (isVoice ? (2.7f + 1.8f * focus) : 2.2f)
             * juce::jlimit(0.84f, 1.20f, 0.90f + 0.30f * directnessOpportunity)
       + shapedAir * (isVoice ? 2.0f : 1.4f));
 
     // 4) Capsule/open-top air.
     const float highFc   = isVoice ? 7600.f : 11000.f;
-    const float highGain = (isVoice ? 7.5f : 9.0f) * shapedAir
+    const float highGain = (isVoice ? 10.5f : 12.0f) * shapedAir
         * juce::jlimit(0.82f, 1.12f, 0.88f + 0.24f * directnessOpportunity - 0.10f * mudRisk);
 
     const auto convertCoeffs = [](const dspcommon::BiquadCoeffs& c) noexcept {
         return BiquadCoeffs { c.b0, c.b1, c.b2, c.a1, c.a2 };
     };
 
-    const float outputTrimDb = -juce::jlimit(0.0f, 4.4f,
+    const float outputTrimDb = -juce::jlimit(0.0f, 7.0f,
         0.26f * lowGain * (0.74f + 0.78f * lowShare)
       + 0.10f * std::abs(mudCutDb) * (0.26f + 0.46f * lowMidShare)
       + 0.20f * presenceDb * (0.48f + 0.82f * presenceShare)
