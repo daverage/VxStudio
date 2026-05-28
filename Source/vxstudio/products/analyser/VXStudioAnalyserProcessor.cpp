@@ -65,7 +65,8 @@ void VXStudioAnalyserAudioProcessor::ensureAnalysisDomain() noexcept {
     // Register the analyser domain as the central analysis point for this process
     analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId);
     if (analysisDomainIdValue == 0) {
-        // Fallback if domain registration fails
+        // If registration fails, try to bind to an existing analyser domain
+        // This handles cases where another plugin already registered one
         analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
     }
 }
@@ -89,29 +90,30 @@ void VXStudioAnalyserAudioProcessor::reset() {
 void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
     using namespace vxsuite::analysis;
 
-    if (analysisDomainIdValue == 0)
-        return;
-
     auto& stageRegistry = StageRegistry::instance();
     const int maxSlots = stageRegistry.maxSlots();
 
     StageView firstStage {};
     StageView lastStage {};
     bool foundAnyStage = false;
+    std::uint64_t domainWithStages = 0;
 
-    // Find first and last stages in the domain
+    // Find first and last stages across ALL active stages (any domain)
+    // This handles cases where the analyser and other effects are in different domains
     for (int slotIndex = 0; slotIndex < maxSlots; ++slotIndex) {
         StageView stage {};
         if (!stageRegistry.readStage(slotIndex, stage))
             continue;
-        if (stage.analysisDomainId != analysisDomainIdValue)
-            continue;
+        if (stage.analysisDomainId == analysisDomainIdValue && analysisDomainIdValue != 0)
+            continue; // Skip analyser's own domain (analyser doesn't register itself as a stage)
 
         if (!foundAnyStage) {
             firstStage = stage;
             lastStage = stage;
+            domainWithStages = stage.analysisDomainId;
             foundAnyStage = true;
-        } else if (stage.telemetry.identity.localOrderId > lastStage.telemetry.identity.localOrderId) {
+        } else if (stage.analysisDomainId == domainWithStages &&
+                   stage.telemetry.identity.localOrderId > lastStage.telemetry.identity.localOrderId) {
             lastStage = stage;
         }
     }
