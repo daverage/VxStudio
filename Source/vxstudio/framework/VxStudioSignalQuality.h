@@ -4,6 +4,10 @@
 
 namespace vxsuite {
 
+namespace analysis {
+struct AnalysisSummary;
+}
+
 struct SignalQualitySnapshot {
     float monoScore = 0.0f;              // 0 = healthy stereo, 1 = near mono
     float compressionScore = 0.0f;       // 0 = dynamic, 1 = heavily crushed
@@ -16,10 +20,15 @@ public:
     void prepare(double sampleRate, int maxSamplesPerBlock);
     void reset();
     void update(const juce::AudioBuffer<float>& input, int numSamples);
+    void updateFromPublishedSummaries(const analysis::AnalysisSummary& drySummary,
+                                      const analysis::AnalysisSummary& wetSummary) noexcept;
     [[nodiscard]] SignalQualitySnapshot snapshot() const noexcept { return current; }
 
 private:
     static float timeAlpha(double sampleRate, float seconds) noexcept;
+    static float analyzeMonoFromSummary(const analysis::AnalysisSummary& summary) noexcept;
+    static float analyzeCompressionFromSummary(const analysis::AnalysisSummary& summary) noexcept;
+    static float analyzeTiltFromSummary(const analysis::AnalysisSummary& summary) noexcept;
 
     double sr = 48000.0;
     float low500L = 0.0f;

@@ -2,6 +2,7 @@
 
 #include "VXStudioAnalyserEditor.h"
 #include "../../framework/VxStudioHelpContent.h"
+#include "../../framework/VxStudioSpectrumTelemetry.h"
 #include "VxStudioVersions.h"
 
 namespace {
@@ -85,17 +86,57 @@ void VXStudioAnalyserAudioProcessor::reset() {
     publishSignalQualitySnapshot();
 }
 
+void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
+    using namespace vxsuite::analysis;
+
+    if (analysisDomainIdValue == 0)
+        return;
+
+    auto& stageRegistry = StageRegistry::instance();
+    const int maxSlots = stageRegistry.maxSlots();
+
+    StageView firstStage {};
+    StageView lastStage {};
+    bool foundAnyStage = false;
+
+    // Find first and last stages in the domain
+    for (int slotIndex = 0; slotIndex < maxSlots; ++slotIndex) {
+        StageView stage {};
+        if (!stageRegistry.readStage(slotIndex, stage))
+            continue;
+        if (stage.analysisDomainId != analysisDomainIdValue)
+            continue;
+
+        if (!foundAnyStage) {
+            firstStage = stage;
+            lastStage = stage;
+            foundAnyStage = true;
+        } else if (stage.telemetry.identity.localOrderId > lastStage.telemetry.identity.localOrderId) {
+            lastStage = stage;
+        }
+    }
+
+    if (foundAnyStage) {
+        signalQualityState.updateFromPublishedSummaries(
+            firstStage.telemetry.inputSummary,
+            lastStage.telemetry.outputSummary
+        );
+    }
+}
+
 void VXStudioAnalyserAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
     // Analyser is a pure passthrough that only analyzes signal quality
-    // It does NOT publish itself as a stage - it reads the registry to discover other stages
+    // Analyzes both the real-time audio buffer and published stage data from other effects
     signalQualityState.update(buffer, buffer.getNumSamples());
+    analyzePublishedStages();
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
     signalQualityState.update(buffer, buffer.getNumSamples());
+    analyzePublishedStages();
     publishSignalQualitySnapshot();
 }
 

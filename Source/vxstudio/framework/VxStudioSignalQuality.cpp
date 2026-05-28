@@ -1,4 +1,5 @@
 #include "VxStudioSignalQuality.h"
+#include "VxStudioSpectrumTelemetry.h"
 
 #include <cmath>
 
@@ -101,6 +102,58 @@ void SignalQualityState::update(const juce::AudioBuffer<float>& input, const int
     const float hiMean = hiAccum * invSamples;
     const float tiltRatio = loMean / std::max(1.0e-9f, hiMean);
     const float rawTiltScore = clamp01((tiltRatio - 3.0f) / (8.0f - 3.0f));
+    current.tiltScore = 0.95f * current.tiltScore + 0.05f * rawTiltScore;
+
+    current.separationConfidence = 1.0f - clamp01(0.45f * current.monoScore
+                                                 + 0.35f * current.compressionScore
+                                                 + 0.20f * current.tiltScore);
+}
+
+float SignalQualityState::analyzeMonoFromSummary(const analysis::AnalysisSummary& summary) noexcept {
+    if (summary.stereoWidth < 0.0f || summary.stereoWidth > 1.0f)
+        return 0.0f;
+    return std::max(0.0f, 1.0f - summary.stereoWidth);
+}
+
+float SignalQualityState::analyzeCompressionFromSummary(const analysis::AnalysisSummary& summary) noexcept {
+    constexpr float kMinCrest = 1.5f;
+    constexpr float kMaxCrest = 6.0f;
+    const float crestClamped = juce::jlimit(kMinCrest, kMaxCrest, summary.crestFactor);
+    return 1.0f - clamp01((crestClamped - kMinCrest) / (kMaxCrest - kMinCrest));
+}
+
+float SignalQualityState::analyzeTiltFromSummary(const analysis::AnalysisSummary& summary) noexcept {
+    constexpr int kLowBandStart = 0;
+    constexpr int kLowBandEnd = 85;     // ~200 Hz (logarithmic scale)
+    constexpr int kHighBandStart = 170;  // ~2000 Hz
+    constexpr int kHighBandEnd = 256;
+
+    double lowEnergy = 0.0;
+    double hiEnergy = 0.0;
+
+    for (int i = kLowBandStart; i < kLowBandEnd; ++i)
+        lowEnergy += static_cast<double>(summary.spectrum[i]);
+    for (int i = kHighBandStart; i < kHighBandEnd; ++i)
+        hiEnergy += static_cast<double>(summary.spectrum[i]);
+
+    if (hiEnergy < 1.0e-9)
+        return 0.0f;
+
+    const float tiltRatio = static_cast<float>(lowEnergy / hiEnergy);
+    constexpr float kMinTilt = 3.0f;
+    constexpr float kMaxTilt = 8.0f;
+    return clamp01((tiltRatio - kMinTilt) / (kMaxTilt - kMinTilt));
+}
+
+void SignalQualityState::updateFromPublishedSummaries(const analysis::AnalysisSummary& drySummary,
+                                                       const analysis::AnalysisSummary& wetSummary) noexcept {
+    const float rawMonoScore = analyzeMonoFromSummary(wetSummary);
+    current.monoScore = 0.97f * current.monoScore + 0.03f * rawMonoScore;
+
+    const float rawCompressionScore = analyzeCompressionFromSummary(wetSummary);
+    current.compressionScore = 0.95f * current.compressionScore + 0.05f * rawCompressionScore;
+
+    const float rawTiltScore = analyzeTiltFromSummary(wetSummary);
     current.tiltScore = 0.95f * current.tiltScore + 0.05f * rawTiltScore;
 
     current.separationConfidence = 1.0f - clamp01(0.45f * current.monoScore

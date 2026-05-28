@@ -47,6 +47,7 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
     void ensureAnalysisDomain() noexcept;
     void publishSignalQualitySnapshot() noexcept;
+    void analyzePublishedStages() noexcept;
 
     vxsuite::ProductIdentity identity;
     std::uint64_t analysisDomainIdValue = 0;
