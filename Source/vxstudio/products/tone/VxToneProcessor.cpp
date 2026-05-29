@@ -6,6 +6,7 @@
 #include "VxStudioVersions.h"
 
 #include <cmath>
+#include <memory>
 
 namespace {
 
@@ -39,25 +40,68 @@ float shapeToneControl(const float value) noexcept {
 
 } // namespace
 
+static juce::AudioProcessorValueTreeState::ParameterLayout createToneParameterLayout() {
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    // Bass - centered at 0, -100 to +100
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { "bass", 1 },
+        "Bass",
+        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
+        0.5f,
+        vxsuite::makeCenteredPercentFloatAttributes()));
+
+    // Mid - centered at 0, -100 to +100
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { "mid", 1 },
+        "Mid",
+        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
+        0.5f,
+        vxsuite::makeCenteredPercentFloatAttributes()));
+
+    // Treble - centered at 0, -100 to +100
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { "treble", 1 },
+        "Treble",
+        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
+        0.5f,
+        vxsuite::makeCenteredPercentFloatAttributes()));
+
+    // Mode parameter
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { "mode", 1 },
+        "Mode",
+        juce::StringArray { "Vocal", "General" },
+        0));
+
+    // Listen parameter
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { "listen", 1 },
+        "Listen",
+        false));
+
+    return layout;
+}
+
 VXToneAudioProcessor::VXToneAudioProcessor()
-    : ProcessorBase(makeIdentity()) {}
+    : ProcessorBase(makeIdentity(), createToneParameterLayout()) {}
 
 vxsuite::ProductIdentity VXToneAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity id {};
     id.productName        = kProductName;
     id.shortTag           = kShortTag;
     id.primaryParamId     = kBassParam;
-    id.secondaryParamId   = kTrebleParam;
-    id.tertiaryParamId    = kMidParam;
+    id.secondaryParamId   = kMidParam;
+    id.tertiaryParamId    = kTrebleParam;
     id.modeParamId        = kModeParam;
     id.listenParamId      = kListenParam;
     id.defaultMode        = vxsuite::Mode::vocal;
     id.primaryLabel       = "Bass";
-    id.secondaryLabel     = "Treble";
-    id.tertiaryLabel      = "Mid";
+    id.secondaryLabel     = "Mid";
+    id.tertiaryLabel      = "Treble";
     id.primaryHint        = "Low shelf boost or cut. In Vocal mode the shelf sits at 180 Hz to leave speech fundamentals clear.";
-    id.secondaryHint      = "High shelf boost or cut. In Vocal mode the shelf sits at 5.6 kHz to avoid thinning consonants.";
-    id.tertiaryHint       = "Midrange peak boost or cut. In Vocal mode centered at 2 kHz for speech intelligibility; in General mode at 1 kHz for warmth.";
+    id.secondaryHint      = "Midrange peak boost or cut. In Vocal mode centered at 2 kHz for speech intelligibility; in General mode at 1 kHz for warmth.";
+    id.tertiaryHint       = "High shelf boost or cut. In Vocal mode the shelf sits at 5.6 kHz to avoid thinning consonants.";
     id.dspVersion         = vxsuite::versions::plugins::tone;
     id.helpTitle          = vxsuite::help::tone.title;
     id.helpHtml           = vxsuite::help::tone.html;
@@ -97,9 +141,9 @@ void VXToneAudioProcessor::resetSuite() {
     outputTrimmer.reset();
     smoothedOutputTrimDb = 0.0f;
     const float bass   = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
-    const float mid    = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.5f);
-    const float treble = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
-    controls.reset(bass, treble, mid);
+    const float mid    = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
+    const float treble = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.5f);
+    controls.reset(bass, mid, treble);
 }
 
 void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -111,11 +155,11 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
         return;
 
     const float bassTarget   = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
-    const float trebleTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
-    const float midTarget    = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.5f);
+    const float midTarget    = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
+    const float trebleTarget = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.5f);
 
-    const auto [smoothedBass, smoothedTreble, smoothedMid] = controls.process(
-        bassTarget, trebleTarget, midTarget, currentSampleRateHz, numSamples, 0.060f, 0.060f, 0.060f);
+    const auto [smoothedBass, smoothedMid, smoothedTreble] = controls.process(
+        bassTarget, midTarget, trebleTarget, currentSampleRateHz, numSamples, 0.060f, 0.060f, 0.060f);
 
     // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;

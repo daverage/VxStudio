@@ -1,0 +1,60 @@
+#pragma once
+
+#include "../../framework/VxStudioProcessorBase.h"
+#include "../../framework/VxStudioArtifactDetectors.h"
+
+class VXSpeechClarityAudioProcessor final : public vxsuite::ProcessorBase {
+public:
+    VXSpeechClarityAudioProcessor();
+
+protected:
+    vxsuite::ProductIdentity makeIdentity() override;
+    juce::String getStatusText() const override;
+    int getActivityLightCount() const noexcept override;
+    float getActivityLight(int index) const noexcept override;
+    std::string_view getActivityLightLabel(int index) const noexcept override;
+    void prepareSuite(double sampleRate, int samplesPerBlock) override;
+    void resetSuite() override;
+    void processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override;
+    void renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                          const juce::AudioBuffer<float>& inputBuffer) override;
+
+private:
+    // Detection state
+    struct DetectionState {
+        float sibilanceIntensity = 0.0f;
+        float plosiveIntensity = 0.0f;
+        float breathIntensity = 0.0f;
+    };
+
+    // Pre-analysis metrics for adaptive thresholds
+    struct PreAnalysisMetrics {
+        float sibilanceThreshold = 0.1f;
+        float plosiveThreshold = 0.1f;
+        float breathThreshold = 0.1f;
+        bool isValid = false;
+    };
+
+    void performPreAnalysis(const juce::AudioBuffer<float>& buffer);
+    float detectSibilance(const juce::AudioBuffer<float>& buffer);
+    float detectPlosive(const juce::AudioBuffer<float>& buffer);
+    float detectBreath(const juce::AudioBuffer<float>& buffer);
+
+    // Detection filter states
+    vxsuite::detectors::OnePoleLowpass sibilanceEnvFollower;
+    vxsuite::detectors::OnePoleLowpass plosiveEnvFollower;
+    vxsuite::detectors::OnePoleLowpass breathEnvFollower;
+
+    vxsuite::detectors::BiquadFilter sibilanceBandFilter;
+    vxsuite::detectors::BiquadFilter plosiveBandFilter;
+    vxsuite::detectors::BiquadFilter breathBandFilter;
+
+    vxsuite::detectors::OnsetDetector onsetDetector;
+
+    // State
+    DetectionState detectionState;
+    PreAnalysisMetrics preAnalysisMetrics;
+    bool needsPreAnalysis = true;
+
+    double currentSampleRateHz = 48000.0;
+};

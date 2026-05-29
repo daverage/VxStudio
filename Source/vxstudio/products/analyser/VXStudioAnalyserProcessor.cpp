@@ -5,6 +5,8 @@
 #include "../../framework/VxStudioSpectrumTelemetry.h"
 #include "VxStudioVersions.h"
 
+#include <limits>
+
 namespace {
 
 constexpr std::string_view kProductName = "VX Studio Analyser";
@@ -95,9 +97,13 @@ void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
 
     StageView firstStage {};
     StageView lastStage {};
-    bool foundAnyStage = false;
+    int firstStageSlot = -1;
+    int lastStageSlot = -1;
+    std::uint64_t lowestOrderId = std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t highestOrderId = 0;
+    int stageCount = 0;
 
-    // Search for active stages in any domain and use their published summaries
+    // Scan all slots for active stages
     for (int slotIndex = 0; slotIndex < maxSlots; ++slotIndex) {
         StageView stage {};
         if (!stageRegistry.readStage(slotIndex, stage))
@@ -105,16 +111,36 @@ void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
         if (!stage.active)
             continue;
 
-        if (!foundAnyStage) {
+        stageCount++;
+
+        // Track first and last stages by order ID
+        const auto orderId = stage.telemetry.identity.localOrderId;
+
+        if (stageCount == 1) {
+            // First stage found
             firstStage = stage;
             lastStage = stage;
-            foundAnyStage = true;
-        } else if (stage.telemetry.identity.localOrderId > lastStage.telemetry.identity.localOrderId) {
-            lastStage = stage;
+            firstStageSlot = slotIndex;
+            lastStageSlot = slotIndex;
+            lowestOrderId = orderId;
+            highestOrderId = orderId;
+        } else {
+            // Subsequent stages - track min and max order
+            if (orderId <= lowestOrderId) {
+                firstStage = stage;
+                firstStageSlot = slotIndex;
+                lowestOrderId = orderId;
+            }
+            if (orderId >= highestOrderId) {
+                lastStage = stage;
+                lastStageSlot = slotIndex;
+                highestOrderId = orderId;
+            }
         }
     }
 
-    if (foundAnyStage) {
+    // Use published summaries if we found stages
+    if (stageCount > 0 && firstStageSlot >= 0 && lastStageSlot >= 0) {
         signalQualityState.updateFromPublishedSummaries(
             firstStage.telemetry.inputSummary,
             lastStage.telemetry.outputSummary

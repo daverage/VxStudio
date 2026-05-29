@@ -369,6 +369,37 @@ target_link_libraries(VXCleanup PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXCleanupPlugin ALL DEPENDS VXCleanup_VST3)
 vxstudio_stage_vst3_bundle(VXCleanup_VST3 "VXCleanup")
 
+juce_add_plugin(VXClarity
+  VERSION 1.0.0
+  BUILD_VERSION 1.0.0
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxstudio.vxclarity"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXCR"
+)
+target_compile_definitions(VXClarity PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXClarity)
+target_sources(VXClarity PRIVATE
+  Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor_CLEAN.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
+)
+target_include_directories(VXClarity PRIVATE Source)
+target_link_libraries(VXClarity PRIVATE VxStudioFramework juce::juce_dsp)
+add_custom_target(VXClarityPlugin ALL DEPENDS VXClarity_VST3)
+vxstudio_stage_vst3_bundle(VXClarity_VST3 "VXClarity")
+
 juce_add_plugin(VXFinish
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXFINISH}
   BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXFINISH}
@@ -550,6 +581,37 @@ target_link_libraries(VXTone PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxstudio_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
+juce_add_plugin(VXRefine
+  VERSION 1.0.0
+  BUILD_VERSION 1.0.0
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxstudio.vxrefine"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXRF"
+)
+target_compile_definitions(VXRefine PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXRefine)
+target_sources(VXRefine PRIVATE
+  Source/vxstudio/products/tone_refine/VxToneRefineProcessor.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxDeMudDsp.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxDeHarshnessDsp.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxIntelligentSmoothDsp.cpp
+)
+target_include_directories(VXRefine PRIVATE Source)
+target_link_libraries(VXRefine PRIVATE VxStudioFramework juce::juce_dsp)
+add_custom_target(VXRefinePlugin ALL DEPENDS VXRefine_VST3)
+vxstudio_stage_vst3_bundle(VXRefine_VST3 "VXRefine")
+
 juce_add_plugin(VXLeveler
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXLEVELER}
   BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXLEVELER}
@@ -647,24 +709,28 @@ add_custom_target(VXSuite_VST3
     VXProximity_VST3
     VXProximityClassic_VST3
     VXCleanup_VST3
+    VXClarity_VST3
     VXFinish_VST3
     VXOptoComp_VST3
     VXSubtract_VST3
     VXDenoiser_VST3
     VXDeepFilterNet_VST3
     VXTone_VST3
+    VXRefine_VST3
     VXLeveler_VST3
     VXRebalance_VST3
     VXStudioAnalyser_VST3
     VXDeverbStage
     VXProximityStage
     VXCleanupStage
+    VXClarityStage
     VXFinishStage
     VXOptoCompStage
     VXSubtractStage
     VXDenoiserStage
     VXDeepFilterNetStage
     VXToneStage
+    VXRefineStage
     VXLevelerStage
     VXRebalanceStage
     VXStudioAnalyserStage
