@@ -97,24 +97,12 @@ void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
     StageView lastStage {};
     bool foundAnyStage = false;
 
-    // Search for stages in ANY domain (analyser's or fallback)
-    // The analyser might be in a different domain than the effects if load order causes
-    // the effects to bind to fallback before analyser registers its domain
+    // Search for active stages in any domain and use their published summaries
     for (int slotIndex = 0; slotIndex < maxSlots; ++slotIndex) {
         StageView stage {};
         if (!stageRegistry.readStage(slotIndex, stage))
             continue;
-
-        // Skip empty/inactive stages
         if (!stage.active)
-            continue;
-
-        // Look for stages that have meaningful data
-        const bool hasInputData = stage.telemetry.inputSummary.rms > 0.0f ||
-                                  stage.telemetry.inputSummary.peak > 0.0f;
-        const bool hasOutputData = stage.telemetry.outputSummary.rms > 0.0f ||
-                                   stage.telemetry.outputSummary.peak > 0.0f;
-        if (!hasInputData && !hasOutputData)
             continue;
 
         if (!foundAnyStage) {
