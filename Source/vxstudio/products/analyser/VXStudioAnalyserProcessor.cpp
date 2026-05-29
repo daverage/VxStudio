@@ -96,24 +96,32 @@ void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
     StageView firstStage {};
     StageView lastStage {};
     bool foundAnyStage = false;
-    std::uint64_t domainWithStages = 0;
 
-    // Find first and last stages across ALL active stages (any domain)
-    // This handles cases where the analyser and other effects are in different domains
+    // Search for stages in ANY domain (analyser's or fallback)
+    // The analyser might be in a different domain than the effects if load order causes
+    // the effects to bind to fallback before analyser registers its domain
     for (int slotIndex = 0; slotIndex < maxSlots; ++slotIndex) {
         StageView stage {};
         if (!stageRegistry.readStage(slotIndex, stage))
             continue;
-        if (stage.analysisDomainId == analysisDomainIdValue && analysisDomainIdValue != 0)
-            continue; // Skip analyser's own domain (analyser doesn't register itself as a stage)
+
+        // Skip empty/inactive stages
+        if (!stage.active)
+            continue;
+
+        // Look for stages that have meaningful data
+        const bool hasInputData = stage.telemetry.inputSummary.rms > 0.0f ||
+                                  stage.telemetry.inputSummary.peak > 0.0f;
+        const bool hasOutputData = stage.telemetry.outputSummary.rms > 0.0f ||
+                                   stage.telemetry.outputSummary.peak > 0.0f;
+        if (!hasInputData && !hasOutputData)
+            continue;
 
         if (!foundAnyStage) {
             firstStage = stage;
             lastStage = stage;
-            domainWithStages = stage.analysisDomainId;
             foundAnyStage = true;
-        } else if (stage.analysisDomainId == domainWithStages &&
-                   stage.telemetry.identity.localOrderId > lastStage.telemetry.identity.localOrderId) {
+        } else if (stage.telemetry.identity.localOrderId > lastStage.telemetry.identity.localOrderId) {
             lastStage = stage;
         }
     }
