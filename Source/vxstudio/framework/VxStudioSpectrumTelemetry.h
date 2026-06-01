@@ -284,9 +284,11 @@ public:
                                                     const std::array<char, 32>& stageId,
                                                     StageView& out) const noexcept;
     [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
+    [[nodiscard]] std::uint32_t getStageGeneration() const noexcept;
 
 private:
     mutable juce::CriticalSection registryMutex;
+    std::atomic<std::uint32_t> stageGeneration { 0 };
 };
 
 class StagePublisher {

@@ -40,6 +40,7 @@ private:
     void updateLearnUi();
     void updateModelDownloadUi();
     void updateAuxSelectorUi();
+    void updateExpertUi();
     void applyTextFit();
 
     SuiteLookAndFeel lookAndFeel;
@@ -60,6 +61,7 @@ private:
     juce::ComboBox traceZoomBox;
     juce::ComboBox modeBox;
     juce::ComboBox auxSelectorBox;
+    juce::ToggleButton expertButton;
     HelpButton helpButton;
     juce::TextButton modelButton;
     juce::ToggleButton listenButton;
@@ -86,6 +88,7 @@ private:
     std::array<std::unique_ptr<SliderAttachment>, ProductIdentity::maxControlBankControls> bankAttachments;
     std::unique_ptr<ComboAttachment> modeAttachment;
     std::unique_ptr<ComboAttachment> auxSelectorAttachment;
+    std::unique_ptr<ButtonAttachment> expertAttachment;
     std::unique_ptr<ButtonAttachment> listenAttachment;
     std::unique_ptr<ButtonAttachment> learnAttachment;
     juce::TooltipWindow tooltipWindow;
@@ -98,6 +101,7 @@ private:
     bool lastLowShelfOn  = false;
     bool lastHighShelfOn = false;
     bool lastSidechainActive = false;
+    bool lastExpertEnabled = false;
     int traceMissTicks = 0;
     juce::String transientStatusText;
     int transientStatusTicks = 0;

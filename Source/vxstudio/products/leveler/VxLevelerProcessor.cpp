@@ -6,6 +6,7 @@
 #include "VxStudioVersions.h"
 
 #include <cmath>
+#include <cstring>
 #include <utility>
 
 namespace {
@@ -120,6 +121,72 @@ void VXLevelerAudioProcessor::clearOfflineAnalysis() noexcept {
     dsp.clearOfflineAnalysis();
     analysisReady = false;
     analysisConfidence = 0.0f;
+}
+
+void VXLevelerAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    auto xml = parameters.copyState().createXml();
+    if (!xml)
+        return;
+
+    const auto& offlineAnalysis = dsp.getOfflineAnalysis();
+    if (offlineAnalysis.isValid()) {
+        auto* el = xml->createNewChildElement("OfflineAnalysis");
+        el->setAttribute("sampleRate", offlineAnalysis.sampleRate);
+        el->setAttribute("blockSize", offlineAnalysis.blockSize);
+        el->setAttribute("globalMedianDb", static_cast<double>(offlineAnalysis.globalMedianDb));
+        el->setAttribute("globalUpperDb", static_cast<double>(offlineAnalysis.globalUpperDb));
+        el->setAttribute("globalDynamicRangeDb", static_cast<double>(offlineAnalysis.globalDynamicRangeDb));
+        el->setAttribute("confidence", static_cast<double>(analysisConfidence));
+        el->setAttribute("observedSeconds", static_cast<double>(analysisObservedSeconds));
+        juce::MemoryBlock blob(offlineAnalysis.targetCurveDb.data(),
+                               offlineAnalysis.targetCurveDb.size() * sizeof(float));
+        el->setAttribute("targetCurve", blob.toBase64Encoding());
+    }
+
+    copyXmlToBinary(*xml, destData);
+}
+
+void VXLevelerAudioProcessor::setStateInformation(const void* data, const int sizeInBytes) {
+    std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
+    if (!xml)
+        return;
+
+    if (xml->hasTagName(parameters.state.getType()))
+        parameters.replaceState(juce::ValueTree::fromXml(*xml));
+
+    clearOfflineAnalysis();
+    analysisProgress = 0.0f;
+    analysisObservedSeconds = 0.0f;
+
+    auto* el = xml->getChildByName("OfflineAnalysis");
+    if (el == nullptr)
+        return;
+
+    juce::MemoryBlock blob;
+    if (!blob.fromBase64Encoding(el->getStringAttribute("targetCurve")))
+        return;
+
+    const size_t count = blob.getSize() / sizeof(float);
+    if (count == 0)
+        return;
+
+    vxsuite::leveler::OfflineAnalysisResult analysis {};
+    analysis.sampleRate = el->getDoubleAttribute("sampleRate", 48000.0);
+    analysis.blockSize = el->getIntAttribute("blockSize", 256);
+    analysis.globalMedianDb = static_cast<float>(el->getDoubleAttribute("globalMedianDb", -30.0));
+    analysis.globalUpperDb = static_cast<float>(el->getDoubleAttribute("globalUpperDb", -24.0));
+    analysis.globalDynamicRangeDb = static_cast<float>(el->getDoubleAttribute("globalDynamicRangeDb", 6.0));
+    analysis.targetCurveDb.resize(count);
+    std::memcpy(analysis.targetCurveDb.data(), blob.getData(), blob.getSize());
+
+    if (!analysis.isValid())
+        return;
+
+    dsp.setOfflineAnalysis(analysis);
+    analysisReady = true;
+    analysisConfidence = static_cast<float>(el->getDoubleAttribute("confidence", 1.0));
+    analysisObservedSeconds = static_cast<float>(el->getDoubleAttribute("observedSeconds", 0.0));
+    analysisProgress = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 18.0f);
 }
 
 vxsuite::leveler::Dsp::DebugSnapshot VXLevelerAudioProcessor::getDebugSnapshot() const noexcept {

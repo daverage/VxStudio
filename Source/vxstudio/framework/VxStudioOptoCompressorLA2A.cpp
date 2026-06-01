@@ -11,6 +11,10 @@ void OptoCompressorLA2A::prepare(const double sampleRate, int /*maxBlockSize*/, 
   y1.assign(static_cast<size_t>(channels), 0.0f);
   lfLp1.assign(static_cast<size_t>(channels), 0.0f);
   shelfLp1.assign(static_cast<size_t>(channels), 0.0f);
+  fastDbCh.assign(static_cast<size_t>(channels), 0.0f);
+  slowDbCh.assign(static_cast<size_t>(channels), 0.0f);
+  mem01Ch.assign(static_cast<size_t>(channels), 0.0f);
+  detectorDbCh.assign(static_cast<size_t>(channels), -120.0f);
 
   reset();
 }
@@ -19,10 +23,10 @@ void OptoCompressorLA2A::reset() noexcept {
   std::fill(y1.begin(), y1.end(), 0.0f);
   std::fill(lfLp1.begin(), lfLp1.end(), 0.0f);
   std::fill(shelfLp1.begin(), shelfLp1.end(), 0.0f);
-
-  fastDb = 0.0f;
-  slowDb = 0.0f;
-  mem01 = 0.0f;
+  std::fill(fastDbCh.begin(), fastDbCh.end(), 0.0f);
+  std::fill(slowDbCh.begin(), slowDbCh.end(), 0.0f);
+  std::fill(mem01Ch.begin(), mem01Ch.end(), 0.0f);
+  std::fill(detectorDbCh.begin(), detectorDbCh.end(), -120.0f);
 
   detectorDb = -120.0f;
   grDbSmoothed = 0.0f;
@@ -90,28 +94,13 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const float memRiseA = std::exp(-1.0f / (0.40f * static_cast<float>(sr)));
   const float memFallA = std::exp(-1.0f / (18.0f * static_cast<float>(sr)));
 
-  float scAbsEstimate = 0.0f;
-  float lfAbsEstimate = 0.0f;
-  for (int ch = 0; ch < numChannels; ++ch) {
-    scAbsEstimate += std::abs(y1[static_cast<size_t>(ch)]);
-    lfAbsEstimate += std::abs(lfLp1[static_cast<size_t>(ch)]);
-  }
-  scAbsEstimate /= static_cast<float>(numChannels);
-  lfAbsEstimate /= static_cast<float>(numChannels);
-
-  const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
-  const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
-  const float lfRatioEstimate = lfAbsEstimate / (scAbsEstimate + 1.0e-6f);
-  const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
-  const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01) * lfSlowFactor;
-  const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
-
   float grAcc = 0.0f;
+  float detectorAcc = 0.0f;
 
   for (int i = 0; i < numSamples; ++i) {
-    float scAbs = 0.0f;
-
     if (p.stereoLink) {
+      float scAbs = 0.0f;
+      float lfAbs = 0.0f;
       for (int ch = 0; ch < numChannels; ++ch) {
         const float yPrev = y1[static_cast<size_t>(ch)];
         scAbs += std::abs(yPrev);
@@ -119,52 +108,105 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
         float lf = lfLp1[static_cast<size_t>(ch)];
         lf = lfA * lf + (1.0f - lfA) * yPrev;
         lfLp1[static_cast<size_t>(ch)] = lf;
+        lfAbs += std::abs(lf);
       }
       scAbs /= static_cast<float>(numChannels);
+      lfAbs /= static_cast<float>(numChannels);
+
+      const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
+      const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
+      const float lfRatioEstimate = lfAbs / (scAbs + 1.0e-6f);
+      const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
+      const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01Ch[0]) * lfSlowFactor;
+      const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
+
+      const float scDb = gainToDb(std::max(scAbs, 1.0e-9f));
+      detectorDbCh[0] = scDb;
+      const float drivenDb = scDb + driveDb;
+      const float targetGrDb = compressionEnabled
+          ? std::max(0.0f, gainReductionSoftKneeDb(drivenDb, baseThresholdDb, ratio, kneeDb))
+          : 0.0f;
+
+      const float memTarget = clamp01(targetGrDb / 25.0f);
+      if (memTarget > mem01Ch[0])
+        mem01Ch[0] = memRiseA * mem01Ch[0] + (1.0f - memRiseA) * memTarget;
+      else
+        mem01Ch[0] = memFallA * mem01Ch[0] + (1.0f - memFallA) * memTarget;
+
+      const float aFast = (targetGrDb > fastDbCh[0]) ? atkA : relFastA;
+      const float aSlow = (targetGrDb > slowDbCh[0]) ? atkA : relSlowA;
+
+      fastDbCh[0] = aFast * fastDbCh[0] + (1.0f - aFast) * targetGrDb;
+      slowDbCh[0] = aSlow * slowDbCh[0] + (1.0f - aSlow) * targetGrDb;
+
+      const float grDb = 0.5f * (fastDbCh[0] + slowDbCh[0]);
+      const float grGain = dbToGain(-grDb);
+      const float makeup = dbToGain(p.outputGainDb);
+
+      grAcc += grDb;
+      detectorAcc += scDb;
+
+      for (int ch = 0; ch < numChannels; ++ch) {
+        auto* d = buffer.getWritePointer(ch);
+        const float x = d[i] * grGain * makeup;
+        d[i] = x;
+        y1[static_cast<size_t>(ch)] = x;
+      }
     } else {
-      const float yPrev = y1[0];
-      scAbs = std::abs(yPrev);
-      float lf = lfLp1[0];
-      lf = lfA * lf + (1.0f - lfA) * yPrev;
-      lfLp1[0] = lf;
-    }
+      for (int ch = 0; ch < numChannels; ++ch) {
+        const size_t idx = static_cast<size_t>(ch);
+        const float yPrev = y1[idx];
+        const float scAbs = std::abs(yPrev);
 
-    const float scDb = gainToDb(std::max(scAbs, 1.0e-9f));
-    detectorDb = scDb;
-    const float drivenDb = scDb + driveDb;
-    const float targetGrDb = compressionEnabled
-        ? std::max(0.0f, gainReductionSoftKneeDb(drivenDb, baseThresholdDb, ratio, kneeDb))
-        : 0.0f;
+        float lf = lfLp1[idx];
+        lf = lfA * lf + (1.0f - lfA) * yPrev;
+        lfLp1[idx] = lf;
 
-    const float memTarget = clamp01(targetGrDb / 25.0f);
-    if (memTarget > mem01)
-      mem01 = memRiseA * mem01 + (1.0f - memRiseA) * memTarget;
-    else
-      mem01 = memFallA * mem01 + (1.0f - memFallA) * memTarget;
+        const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
+        const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
+        const float lfRatioEstimate = std::abs(lf) / (scAbs + 1.0e-6f);
+        const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
+        const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01Ch[idx]) * lfSlowFactor;
+        const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
 
-    const float aFast = (targetGrDb > fastDb) ? atkA : relFastA;
-    const float aSlow = (targetGrDb > slowDb) ? atkA : relSlowA;
+        const float scDb = gainToDb(std::max(scAbs, 1.0e-9f));
+        detectorDbCh[idx] = scDb;
+        const float drivenDb = scDb + driveDb;
+        const float targetGrDb = compressionEnabled
+            ? std::max(0.0f, gainReductionSoftKneeDb(drivenDb, baseThresholdDb, ratio, kneeDb))
+            : 0.0f;
 
-    fastDb = aFast * fastDb + (1.0f - aFast) * targetGrDb;
-    slowDb = aSlow * slowDb + (1.0f - aSlow) * targetGrDb;
+        const float memTarget = clamp01(targetGrDb / 25.0f);
+        if (memTarget > mem01Ch[idx])
+          mem01Ch[idx] = memRiseA * mem01Ch[idx] + (1.0f - memRiseA) * memTarget;
+        else
+          mem01Ch[idx] = memFallA * mem01Ch[idx] + (1.0f - memFallA) * memTarget;
 
-    const float grDb = 0.5f * (fastDb + slowDb);
+        const float aFast = (targetGrDb > fastDbCh[idx]) ? atkA : relFastA;
+        const float aSlow = (targetGrDb > slowDbCh[idx]) ? atkA : relSlowA;
 
-    grDbSmoothed = grDb;
-    grAcc += grDb;
+        fastDbCh[idx] = aFast * fastDbCh[idx] + (1.0f - aFast) * targetGrDb;
+        slowDbCh[idx] = aSlow * slowDbCh[idx] + (1.0f - aSlow) * targetGrDb;
 
-    const float grGain = dbToGain(-grDb);
-    const float makeup = dbToGain(p.outputGainDb);
+        const float grDb = 0.5f * (fastDbCh[idx] + slowDbCh[idx]);
+        const float grGain = dbToGain(-grDb);
+        const float makeup = dbToGain(p.outputGainDb);
 
-    for (int ch = 0; ch < numChannels; ++ch) {
-      auto* d = buffer.getWritePointer(ch);
-      const float x = d[i] * grGain * makeup;
-      d[i] = x;
-      y1[static_cast<size_t>(ch)] = x;
+        grAcc += grDb;
+        detectorAcc += scDb;
+
+        auto* d = buffer.getWritePointer(ch);
+        const float x = d[i] * grGain * makeup;
+        d[i] = x;
+        y1[idx] = x;
+      }
     }
   }
 
-  const float grAvgDb = grAcc / static_cast<float>(numSamples);
+  const float meterDivisor = static_cast<float>(std::max(1, (p.stereoLink ? numSamples : numSamples * numChannels)));
+  const float grAvgDb = grAcc / meterDivisor;
+  detectorDb = detectorAcc / meterDivisor;
+  grDbSmoothed = grAvgDb;
   activity01 = compressionEnabled ? clamp01(grAvgDb / 12.0f) : 0.0f;
 
   applyBodyShelf(buffer);

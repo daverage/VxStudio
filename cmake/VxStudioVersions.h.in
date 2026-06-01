@@ -12,15 +12,18 @@ inline constexpr std::string_view proximity = "@VXSUITE_PLUGIN_VERSION_VXPROXIMI
 inline constexpr std::string_view ProximityClassic = "@VXSUITE_PLUGIN_VERSION_VXProximityClassic@";
 inline constexpr std::string_view cleanup = "@VXSUITE_PLUGIN_VERSION_VXCLEANUP@";
 inline constexpr std::string_view clarity = "@VXSUITE_PLUGIN_VERSION_VXCLARITY@";
+inline constexpr std::string_view speech_clarity = "@VXSUITE_PLUGIN_VERSION_VXSPEECHCLARITY@";
 inline constexpr std::string_view finish = "@VXSUITE_PLUGIN_VERSION_VXFINISH@";
 inline constexpr std::string_view optocomp = "@VXSUITE_PLUGIN_VERSION_VXOPTOCOMP@";
 inline constexpr std::string_view subtract = "@VXSUITE_PLUGIN_VERSION_VXSUBTRACT@";
 inline constexpr std::string_view denoiser = "@VXSUITE_PLUGIN_VERSION_VXDENOISER@";
 inline constexpr std::string_view deepfilternet = "@VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET@";
 inline constexpr std::string_view tone = "@VXSUITE_PLUGIN_VERSION_VXTONE@";
+inline constexpr std::string_view tone_refine = "@VXSUITE_PLUGIN_VERSION_VXREFINE@";
 inline constexpr std::string_view leveler = "@VXSUITE_PLUGIN_VERSION_VXLEVELER@";
 inline constexpr std::string_view rebalance = "@VXSUITE_PLUGIN_VERSION_VXREBALANCE@";
 inline constexpr std::string_view analyser = "@VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER@";
+inline constexpr std::string_view repair   = "@VXSUITE_PLUGIN_VERSION_VXREPAIR@";
 } // namespace plugins
 
 } // namespace vxsuite::versions

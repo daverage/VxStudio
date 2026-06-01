@@ -24,6 +24,8 @@ public:
     void setDebugTuning(const vxsuite::leveler::Dsp::Tuning& tuning) noexcept;
     void setOfflineAnalysis(vxsuite::leveler::OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
     [[nodiscard]] vxsuite::leveler::Dsp::DebugSnapshot getDebugSnapshot() const noexcept;
 
 protected:

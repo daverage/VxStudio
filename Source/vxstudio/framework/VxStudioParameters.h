@@ -35,6 +35,12 @@ inline juce::AudioParameterBoolAttributes makeLearnAttributes(std::string_view l
     return attrs;
 }
 
+inline juce::AudioParameterBoolAttributes makeExpertAttributes(std::string_view label) {
+    juce::AudioParameterBoolAttributes attrs;
+    attrs = attrs.withLabel(label.data());
+    return attrs;
+}
+
 inline juce::AudioParameterFloatAttributes makePercentFloatAttributes() {
     juce::AudioParameterFloatAttributes attrs;
     attrs = attrs.withLabel("%")
@@ -152,6 +158,13 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
                 juce::jlimit(0, choices.size() - 1, identity.auxSelectorDefaultIndex),
                 makeChoiceAttributes(identity.auxSelectorLabel.empty() ? "Option" : identity.auxSelectorLabel)));
         }
+    }
+    if (identity.supportsExpertMode()) {
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { identity.expertParamId.data(), 1 },
+            toJuceString(identity.expertButtonLabel.empty() ? "Pro" : identity.expertButtonLabel),
+            identity.expertDefaultValue,
+            makeExpertAttributes(identity.expertButtonLabel.empty() ? "Pro" : identity.expertButtonLabel)));
     }
     if (identity.supportsListenMode()) {
         layout.add(std::make_unique<juce::AudioParameterBool>(

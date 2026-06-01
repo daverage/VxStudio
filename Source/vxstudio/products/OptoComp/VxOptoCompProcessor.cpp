@@ -1,5 +1,6 @@
 #include "VxOptoCompProcessor.h"
 #include "../../framework/VxStudioHelpContent.h"
+#include "../../framework/VxStudioOptoProductVoicing.h"
 #include "VxStudioVersions.h"
 
 namespace {
@@ -10,6 +11,9 @@ constexpr std::string_view kPeakReductionParam = "peak_reduction";
 constexpr std::string_view kBodyParam = "body";
 constexpr std::string_view kGainParam = "gain";
 constexpr std::string_view kModeParam = "mode";
+constexpr std::string_view kProParam = "pro_mode";
+constexpr std::string_view kBehaviorParam = "behavior";
+constexpr std::string_view kStereoLinkParam = "stereo_link";
 constexpr std::string_view kListenParam = "listen";
 
 } // namespace
@@ -24,18 +28,31 @@ vxsuite::ProductIdentity VXOptoCompAudioProcessor::makeIdentity() {
     identity.primaryParamId = kPeakReductionParam;
     identity.secondaryParamId = kBodyParam;
     identity.tertiaryParamId = kGainParam;
+    identity.quaternaryParamId = kStereoLinkParam;
     identity.modeParamId = kModeParam;
+    identity.expertParamId = kProParam;
+    identity.expertButtonLabel = "Pro";
+    identity.expertDefaultValue = false;
+    identity.auxSelectorParamId = kBehaviorParam;
+    identity.auxSelectorLabel = "Behavior";
+    identity.auxSelectorChoiceLabels = { "Auto", "Compress", "Limit" };
+    identity.auxSelectorDefaultIndex = 0;
+    identity.auxSelectorRequiresExpert = true;
+    identity.quaternaryRequiresExpert = true;
     identity.listenParamId = kListenParam;
     identity.defaultMode = vxsuite::Mode::vocal;
     identity.primaryLabel = "Peak Red.";
     identity.secondaryLabel = "Body";
     identity.tertiaryLabel = "Gain";
+    identity.quaternaryLabel = "Stereo Link";
     identity.primaryDefaultValue = 0.0f;
     identity.secondaryDefaultValue = 0.5f;
     identity.tertiaryDefaultValue = 0.5f;
-    identity.primaryHint = "Drive the LA-2A style gain reduction. Higher values level harder.";
-    identity.secondaryHint = "Light post-compressor body shaping only. Middle stays neutral.";
-    identity.tertiaryHint = "Final output gain. Middle is neutral, left reduces, right increases.";
+    identity.quaternaryDefaultValue = 1.0f;
+    identity.primaryHint = "Drive the professional LA-2A style gain reduction. Higher values level harder.";
+    identity.secondaryHint = "Standalone body trim after compression. Middle stays neutral for classic opto voicing.";
+    identity.tertiaryHint = "Standalone output gain trim. Middle is neutral, left reduces, right increases.";
+    identity.quaternaryHint = "Right keeps channels linked for classic stereo tracking. Left allows dual-mono style channel response.";
     identity.stageId   = "vx.optocomp";
     identity.stageType = vxsuite::StageType::mixed;
     identity.dspVersion = vxsuite::versions::plugins::optocomp;
@@ -55,17 +72,25 @@ juce::String VXOptoCompAudioProcessor::getStatusText() const {
         return "Listen - opto delta";
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
-    return isVoice ? "Vocal - opto compression levelling"
-                   : "General - opto limiting levelling";
+    const bool proEnabled = vxsuite::readBool(parameters, kProParam, false);
+    const int behaviorIndex = proEnabled ? vxsuite::readChoiceIndex(parameters, kBehaviorParam, 0) : 0;
+    const juce::String behaviorLabel = behaviorIndex == 1 ? "Compress"
+        : (behaviorIndex == 2 ? "Limit" : "Auto");
+    const bool stereoLinked = !proEnabled || vxsuite::readNormalized(parameters, kStereoLinkParam, 1.0f) >= 0.5f;
+    const juce::String linkLabel = stereoLinked ? "Linked" : "Dual Mono";
+    const juce::String modeLabel = proEnabled ? "Pro" : "Simple";
+    return isVoice ? "Vocal - professional LA-2A style opto compression - " + modeLabel + " - " + behaviorLabel + " - " + linkLabel
+                   : "General - professional LA-2A style opto limiting - " + modeLabel + " - " + behaviorLabel + " - " + linkLabel;
 }
 
-int VXOptoCompAudioProcessor::getActivityLightCount() const noexcept { return 3; }
+int VXOptoCompAudioProcessor::getActivityLightCount() const noexcept { return 4; }
 
 float VXOptoCompAudioProcessor::getActivityLight(int index) const noexcept {
     switch (index) {
         case 0: return optoDsp.getCompActivity();
         case 1: return juce::jlimit(0.0f, 1.0f, optoDsp.getGainReductionDb() / 20.0f);
         case 2: return optoDsp.getLimiterActivity();
+        case 3: return juce::jlimit(0.0f, 1.0f, (optoDsp.getEnvelopeDb() + 60.0f) / 60.0f);
         default: return 0.0f;
     }
 }
@@ -75,6 +100,7 @@ std::string_view VXOptoCompAudioProcessor::getActivityLightLabel(int index) cons
         case 0: return "Opto";
         case 1: return "GR";
         case 2: return "Limit";
+        case 3: return "Env";
         default: return {};
     }
 }
@@ -112,45 +138,27 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     const auto& policy = currentModePolicy();
     const auto voiceContext = getVoiceContextSnapshot();
+    const bool proEnabled = vxsuite::readBool(parameters, kProParam, false);
+    const int behaviorIndex = proEnabled ? vxsuite::readChoiceIndex(parameters, kBehaviorParam, 0) : 0;
+    const bool stereoLinked = !proEnabled || vxsuite::readNormalized(parameters, kStereoLinkParam, 1.0f) >= 0.5f;
+    const auto behaviorMode = behaviorIndex == 1 ? vxsuite::opto::BehaviourMode::compress
+        : (behaviorIndex == 2 ? vxsuite::opto::BehaviourMode::limit
+                              : vxsuite::opto::BehaviourMode::autoFollowProgram);
 
-    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern)
-    const float vocalPriority = voiceMode
-        ? vxsuite::clamp01(0.38f * voiceContext.vocalDominance
-                         + 0.26f * voiceContext.intelligibility
-                         + 0.18f * voiceContext.phraseActivity
-                         + 0.10f * voiceContext.speechPresence
-                         + 0.08f * voiceContext.centerConfidence)
-        : 0.0f;
-    const float outputGainDb = juce::jmap(smoothedGain, 0.0f, 1.0f, -9.0f, 9.0f);
-
-    // 3. BUILD ProcessOptions (Framework Pattern)
-    vxsuite::ProcessOptions options {};
-    options.isVoiceMode = voiceMode;
-    options.sourceProtect = voiceMode
-        ? vxsuite::clamp01(0.64f + 0.36f * smoothedBody + 0.12f * vocalPriority)
-        : vxsuite::clamp01(0.30f + 0.50f * smoothedBody);
-    options.guardStrictness = voiceMode
-        ? vxsuite::clamp01(0.60f + 0.40f * smoothedBody + 0.15f * vocalPriority)
-        : vxsuite::clamp01(0.35f + 0.50f * smoothedBody);
-    options.speechFocus = voiceMode
-        ? juce::jmax(0.75f, policy.speechFocus + 0.15f * vocalPriority)
-        : juce::jmax(0.20f, policy.speechFocus);
-    options.voiceProtect = voiceMode ? 0.85f : 0.60f;
-    options.lateTailAggression = policy.lateTailAggression;
-
-    // 4. DSP PARAMETERS (Effect-specific)
-    vxsuite::finish::Dsp::Params dspParams {};
-    dspParams.contentMode = voiceMode ? 0 : 1;
-    dspParams.peakReduction = vxsuite::clamp01(smoothedPeakReduction
-                            * (voiceMode
-                                ? (1.05f - 0.08f * vocalPriority + 0.04f * voiceContext.buriedSpeech)
-                                : 1.08f));
-    dspParams.outputGainDb = outputGainDb;
-    dspParams.body = smoothedBody;
+    const auto renderConfig = vxsuite::opto::buildRenderConfig(
+        vxsuite::opto::ProductVariant::standalone,
+        voiceMode,
+        smoothedPeakReduction,
+        smoothedBody,
+        smoothedGain,
+        behaviorMode,
+        stereoLinked,
+        policy,
+        voiceContext);
 
     // 5. PROCESS (Framework + Effect-specific)
-    optoDsp.setParams(dspParams);
-    optoDsp.process(buffer, options);
+    optoDsp.setParams(renderConfig.dspParams);
+    optoDsp.process(buffer, renderConfig.options);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

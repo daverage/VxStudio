@@ -1,4 +1,6 @@
 #include "VxSpeechClarityProcessor_CLEAN.h"
+#include "../../framework/VxStudioHelpContent.h"
+#include "VxStudioVersions.h"
 
 namespace {
 constexpr std::string_view kProductName = "VX Studio Speech Clarity";
@@ -34,6 +36,10 @@ vxsuite::ProductIdentity VXSpeechClarityAudioProcessor::makeIdentity() {
     identity.primaryHint = "Reduce harsh sibilance (/s/ and /z/ sounds).";
     identity.secondaryHint = "Reduce plosive bursts (/p/, /b/, /t/, /d/, /k/, /g/).";
     identity.tertiaryHint = "Reduce breathing and wind noise.";
+    identity.dspVersion = vxsuite::versions::plugins::speech_clarity;
+    identity.helpTitle = vxsuite::help::speech_clarity.title;
+    identity.helpHtml = vxsuite::help::speech_clarity.html;
+    identity.readmeSection = vxsuite::help::speech_clarity.readmeSection;
     // Shelf controls (matching original Cleanup)
     identity.showLowShelfIcon = true;
     identity.showHighShelfIcon = true;

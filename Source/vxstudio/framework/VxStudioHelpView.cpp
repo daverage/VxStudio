@@ -92,7 +92,7 @@ void appendElement(const juce::XmlElement& element,
         return;
     }
     if (tag == "ul") {
-        forEachXmlChildElement(element, child) {
+        for (auto* child : element.getChildIterator()) {
             if (child->hasTagName("li")) {
                 appendText(out, "- ", style);
                 appendChildren(*child, out, style);
@@ -104,7 +104,7 @@ void appendElement(const juce::XmlElement& element,
     }
     if (tag == "ol") {
         int index = 1;
-        forEachXmlChildElement(element, child) {
+        for (auto* child : element.getChildIterator()) {
             if (child->hasTagName("li")) {
                 appendText(out, juce::String(index++) + ". ", style);
                 appendChildren(*child, out, style);
@@ -156,7 +156,7 @@ juce::AttributedString makeAttributedHtml(const juce::String& html) {
         return out;
     }
 
-    forEachXmlChildElement(*xml, child)
+    for (auto* child : xml->getChildIterator())
         appendElement(*child, out, baseStyle);
 
     return out;

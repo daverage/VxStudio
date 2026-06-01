@@ -121,6 +121,12 @@ EditorBase::EditorBase(ProcessorBase& owner)
         addAndMakeVisible(auxSelectorBox);
     }
 
+    expertButton.setWantsKeyboardFocus(true);
+    if (identity.supportsExpertMode()) {
+        expertButton.setButtonText(toJuceString(identity.expertButtonLabel.empty() ? "Pro" : identity.expertButtonLabel));
+        addAndMakeVisible(expertButton);
+    }
+
     listenButton.setButtonText("Listen");
     listenButton.setClickingTogglesState(true);
     listenButton.setWantsKeyboardFocus(true);
@@ -185,6 +191,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
         modeAttachment = std::make_unique<ComboAttachment>(state, identity.modeParamId.data(), modeBox);
     if (identity.supportsAuxSelector())
         auxSelectorAttachment = std::make_unique<ComboAttachment>(state, identity.auxSelectorParamId.data(), auxSelectorBox);
+    if (identity.supportsExpertMode())
+        expertAttachment = std::make_unique<ButtonAttachment>(state, identity.expertParamId.data(), expertButton);
     if (identity.supportsListenMode())
         listenAttachment = std::make_unique<ButtonAttachment>(state, identity.listenParamId.data(), listenButton);
     if (identity.supportsLearnButton())
@@ -365,17 +373,29 @@ void EditorBase::resized() {
 
     header.removeFromTop(scaled(4));
     auto modeRow = header.removeFromTop(scaled(40));
+    const auto& headerIdentity = processor.getProductIdentity();
+    const bool expertEnabledForHeader = headerIdentity.supportsExpertMode()
+        && vxsuite::readBool(processor.getValueTreeState(), headerIdentity.expertParamId, headerIdentity.expertDefaultValue);
+    const bool showAuxSelectorInHeader = headerIdentity.supportsAuxSelector()
+        && (!headerIdentity.auxSelectorRequiresExpert || expertEnabledForHeader)
+        && (!headerIdentity.supportsModeSwitch()
+            || !headerIdentity.auxSelectorFollowsGeneralMode
+            || vxsuite::readMode(processor.getValueTreeState(), headerIdentity) != Mode::vocal);
     if (processor.getProductIdentity().supportsModeSwitch()) {
         modeLabel.setBounds(modeRow.removeFromLeft(scaled(96)));
         modeRow.removeFromLeft(scaled(8));
         modeBox.setBounds(modeRow.removeFromLeft(scaled(228)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
     }
-    if (processor.getProductIdentity().supportsAuxSelector()) {
+    if (showAuxSelectorInHeader) {
         auxSelectorLabel.setBounds(modeRow.removeFromLeft(scaled(84)));
         modeRow.removeFromLeft(scaled(8));
         auxSelectorBox.setBounds(modeRow.removeFromLeft(scaled(180)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
+    }
+    if (processor.getProductIdentity().supportsExpertMode()) {
+        expertButton.setBounds(modeRow.removeFromLeft(scaled(92)).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(12));
     }
     if (processor.getProductIdentity().supportsListenMode()) {
         listenButton.setBounds(modeRow.removeFromLeft(scaled(116)).reduced(0, scaled(2)));
@@ -396,8 +416,13 @@ void EditorBase::resized() {
 
     sidechainBadgeBounds = modeRow.removeFromRight(scaled(48)).reduced(scaled(6), scaled(4));
 
-    const bool hasTertiary = processor.getProductIdentity().supportsTertiaryControl();
-    const bool hasQuaternary = processor.getProductIdentity().supportsQuaternaryControl();
+    const auto& identity = processor.getProductIdentity();
+    const bool expertEnabled = identity.supportsExpertMode()
+        && vxsuite::readBool(processor.getValueTreeState(), identity.expertParamId, identity.expertDefaultValue);
+    const bool hasTertiary = identity.supportsTertiaryControl()
+        && (!identity.tertiaryRequiresExpert || expertEnabled);
+    const bool hasQuaternary = identity.supportsQuaternaryControl()
+        && (!identity.quaternaryRequiresExpert || expertEnabled);
     const bool hasControlBank = processor.getProductIdentity().supportsControlBank();
     const bool wrapStatusRow = modeRow.getWidth() < scaled(220);
     if (wrapStatusRow) {
@@ -729,6 +754,7 @@ void EditorBase::timerCallback() {
     updateLearnUi();
     updateModelDownloadUi();
     updateAuxSelectorUi();
+    updateExpertUi();
     if (processor.supportsModelDownloadUi()) {
         modelButton.setVisible(!processor.isModelReadyForUi());
         modelButton.setEnabled(!processor.isModelDownloadInProgress());
@@ -879,11 +905,39 @@ void EditorBase::updateAuxSelectorUi() {
     if (!processor.getProductIdentity().supportsAuxSelector())
         return;
 
-    const bool show = !processor.getProductIdentity().supportsModeSwitch()
+    const auto& identity = processor.getProductIdentity();
+    const bool expertEnabled = !identity.auxSelectorRequiresExpert
+        || !identity.supportsExpertMode()
+        || vxsuite::readBool(processor.getValueTreeState(), identity.expertParamId, identity.expertDefaultValue);
+    const bool show = expertEnabled && (!identity.supportsModeSwitch()
         || !processor.getProductIdentity().auxSelectorFollowsGeneralMode
-        || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) != Mode::vocal;
+        || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) != Mode::vocal);
     auxSelectorLabel.setVisible(show);
     auxSelectorBox.setVisible(show);
+}
+
+void EditorBase::updateExpertUi() {
+    const auto& identity = processor.getProductIdentity();
+    if (!identity.supportsExpertMode())
+        return;
+
+    const bool expertEnabled = vxsuite::readBool(processor.getValueTreeState(), identity.expertParamId, identity.expertDefaultValue);
+    const bool showTertiary = identity.supportsTertiaryControl()
+        && (!identity.tertiaryRequiresExpert || expertEnabled);
+    const bool showQuaternary = identity.supportsQuaternaryControl()
+        && (!identity.quaternaryRequiresExpert || expertEnabled);
+
+    tertiarySlider.setVisible(showTertiary);
+    tertiaryLabel.setVisible(showTertiary);
+    tertiaryHint.setVisible(showTertiary);
+    quaternarySlider.setVisible(showQuaternary);
+    quaternaryLabel.setVisible(showQuaternary);
+    quaternaryHint.setVisible(showQuaternary);
+
+    if (expertEnabled != lastExpertEnabled) {
+        lastExpertEnabled = expertEnabled;
+        resized();
+    }
 }
 
 void EditorBase::showModelDownloadPrompt(const bool automatic) {

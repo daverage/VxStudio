@@ -1271,6 +1271,10 @@ std::uint32_t DomainRegistry::getDomainGeneration() const noexcept {
     return domainGeneration.load(std::memory_order_acquire);
 }
 
+std::uint32_t StageRegistry::getStageGeneration() const noexcept {
+    return stageGeneration.load(std::memory_order_acquire);
+}
+
 StageRegistry& StageRegistry::instance() noexcept {
     static StageRegistry registry;
     return registry;
@@ -1292,6 +1296,7 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         slot.telemetry.state.timestampMs = nowMs;
         slot.telemetry.state.isLive = true;
         slot.telemetry.state.isSilent = true;
+        slot.telemetry.state.isBypassed = false;
         analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
     };
@@ -1304,6 +1309,7 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
                 if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) != 0u)
                     continue;
                 allocateSharedSlot(slot);
+                stageGeneration.fetch_add(1u, std::memory_order_release);
                 return slotIndex;
             }
 
@@ -1314,6 +1320,7 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
                 if ((nowMs - slot.telemetry.state.timestampMs) < static_cast<std::uint64_t>(kStageSlotReuseMs))
                     continue;
                 allocateSharedSlot(slot);
+                stageGeneration.fetch_add(1u, std::memory_order_release);
                 return slotIndex;
             }
         }
@@ -1333,6 +1340,7 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         slot.telemetry.state.timestampMs = nowMs;
         slot.telemetry.state.isLive = true;
         slot.telemetry.state.isSilent = true;
+        stageGeneration.fetch_add(1u, std::memory_order_release);
         return slotIndex;
     }
 
@@ -1349,6 +1357,7 @@ void StageRegistry::unregisterStage(const int slotIndex, const std::uint64_t ins
             auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
             if (slot.active && slot.telemetry.identity.instanceId == instanceId) {
                 slot = {};
+                stageGeneration.fetch_add(1u, std::memory_order_release);
                 return;
             }
         }
@@ -1371,6 +1380,7 @@ void StageRegistry::unregisterStage(const int slotIndex, const std::uint64_t ins
     analysisAtomicRef(slot->active).store(0u, std::memory_order_release);
     slot->analysisDomainId = 0;
     slot->telemetry = {};
+    stageGeneration.fetch_add(1u, std::memory_order_release);
 }
 
 bool StageRegistry::publish(const int slotIndex,
@@ -1514,6 +1524,13 @@ void StagePublisher::prepare(const double sampleRate, const int maxBlockSize) no
 }
 
 void StagePublisher::reset() noexcept {
+    if (slotIndex >= 0)
+        StageRegistry::instance().unregisterStage(slotIndex, instanceIdValue);
+
+    slotIndex = -1;
+    instanceIdValue = 0;
+    localOrderIdValue = 0;
+
     if (inputAccumulator != nullptr)
         inputAccumulator->reset();
     if (outputAccumulator != nullptr)

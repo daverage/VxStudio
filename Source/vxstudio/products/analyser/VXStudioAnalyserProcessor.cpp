@@ -24,6 +24,10 @@ VXStudioAnalyserAudioProcessor::VXStudioAnalyserAudioProcessor()
 }
 
 VXStudioAnalyserAudioProcessor::~VXStudioAnalyserAudioProcessor() {
+    if (analysisDomainIdValue != 0) {
+        vxsuite::analysis::DomainRegistry::instance().unregisterAnalyserDomain(analysisDomainIdValue);
+        analysisDomainIdValue = 0;
+    }
 }
 
 vxsuite::ProductIdentity VXStudioAnalyserAudioProcessor::makeIdentity() {
@@ -67,9 +71,16 @@ void VXStudioAnalyserAudioProcessor::ensureAnalysisDomain() noexcept {
     // Register the analyser domain as the central analysis point for this process
     analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().registerAnalyserDomain(kStageId);
     if (analysisDomainIdValue == 0) {
-        // If registration fails, try to bind to an existing analyser domain
-        // This handles cases where another plugin already registered one
-        analysisDomainIdValue = vxsuite::analysis::DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
+        // If registration fails, bind to an existing active analyser domain before
+        // falling back to a synthetic process-local domain.
+        auto& domainRegistry = vxsuite::analysis::DomainRegistry::instance();
+        vxsuite::analysis::DomainView activeDomain {};
+        if (domainRegistry.latestDomainForProcess(domainRegistry.currentProcessId(), activeDomain))
+            analysisDomainIdValue = activeDomain.analysisDomainId;
+        else if (domainRegistry.latestActiveDomain(activeDomain))
+            analysisDomainIdValue = activeDomain.analysisDomainId;
+        else
+            analysisDomainIdValue = domainRegistry.fallbackDomainIdForCurrentProcess();
     }
 }
 

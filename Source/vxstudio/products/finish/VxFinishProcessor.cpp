@@ -1,5 +1,6 @@
 #include "VxFinishProcessor.h"
 #include "../../framework/VxStudioHelpContent.h"
+#include "../../framework/VxStudioOptoProductVoicing.h"
 #include "VxStudioVersions.h"
 
 namespace {
@@ -32,9 +33,9 @@ vxsuite::ProductIdentity VXFinishAudioProcessor::makeIdentity() {
     identity.primaryDefaultValue = 0.0f;
     identity.secondaryDefaultValue = 0.5f;
     identity.tertiaryDefaultValue = 0.5f;
-    identity.primaryHint = "Peak reduction and levelling. Push higher for firmer opto control.";
-    identity.secondaryHint = "Light body enhancement only. Keep it subtle and post-cleanup.";
-    identity.tertiaryHint = "Final output gain. Middle is neutral, left reduces, right increases.";
+    identity.primaryHint = "Intelligent peak reduction and levelling built on the same LA-2A style core as OptoComp.";
+    identity.secondaryHint = "Light guided body enhancement only. Keep it subtle and post-cleanup.";
+    identity.tertiaryHint = "Final guided output gain. Middle is neutral, left reduces, right increases.";
     identity.dspVersion = vxsuite::versions::plugins::finish;
     identity.helpTitle = vxsuite::help::finish.title;
     identity.helpHtml = vxsuite::help::finish.html;
@@ -52,8 +53,8 @@ juce::String VXFinishAudioProcessor::getStatusText() const {
     return "Listen - finish delta";
 
   const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
-  return isVoice ? "Vocal - LA-2A style compress levelling"
-                 : "General - LA-2A style limit levelling";
+  return isVoice ? "Vocal - intelligent LA-2A style finish levelling"
+                 : "General - intelligent LA-2A style finish limiting";
 }
 
 int VXFinishAudioProcessor::getActivityLightCount() const noexcept { return 3; }
@@ -110,44 +111,20 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const auto& policy = currentModePolicy();
     const auto voiceContext = getVoiceContextSnapshot();
 
-    // 2. CALCULATE VOCAL PRIORITY (Framework Pattern)
-    const float vocalPriority = voiceMode
-        ? vxsuite::clamp01(0.38f * voiceContext.vocalDominance
-                         + 0.26f * voiceContext.intelligibility
-                         + 0.18f * voiceContext.phraseActivity
-                         + 0.10f * voiceContext.speechPresence
-                         + 0.08f * voiceContext.centerConfidence)
-        : 0.0f;
-    const float outputGainDb = juce::jmap(smoothedGain, 0.0f, 1.0f, -12.0f, 12.0f);
-
-    // 3. BUILD ProcessOptions (Framework Pattern)
-    vxsuite::ProcessOptions options {};
-    options.isVoiceMode = voiceMode;
-    options.sourceProtect = voiceMode
-        ? vxsuite::clamp01(0.62f + 0.38f * smoothedBody + 0.10f * vocalPriority)
-        : vxsuite::clamp01(0.28f + 0.52f * smoothedBody);
-    options.guardStrictness = voiceMode
-        ? vxsuite::clamp01(0.58f + 0.42f * smoothedBody + 0.12f * vocalPriority)
-        : vxsuite::clamp01(0.33f + 0.52f * smoothedBody);
-    options.speechFocus = voiceMode
-        ? juce::jmax(0.73f, policy.speechFocus + 0.13f * vocalPriority)
-        : juce::jmax(0.18f, policy.speechFocus);
-    options.voiceProtect = voiceMode ? 0.82f : 0.58f;
-    options.lateTailAggression = policy.lateTailAggression;
-
-    // 4. DSP PARAMETERS (Effect-specific)
-    vxsuite::finish::Dsp::Params dspParams {};
-    dspParams.contentMode = voiceMode ? 0 : 1;
-    dspParams.peakReduction = vxsuite::clamp01(smoothedFinish
-                            * (voiceMode
-                                ? (1.0f - 0.10f * vocalPriority + 0.06f * voiceContext.buriedSpeech)
-                                : 1.0f));
-    dspParams.outputGainDb = outputGainDb;
-    dspParams.body = smoothedBody;
+    const auto renderConfig = vxsuite::opto::buildRenderConfig(
+        vxsuite::opto::ProductVariant::intelligentFinish,
+        voiceMode,
+        smoothedFinish,
+        smoothedBody,
+        smoothedGain,
+        vxsuite::opto::BehaviourMode::autoFollowProgram,
+        true,
+        policy,
+        voiceContext);
 
     // 5. PROCESS (Framework + Effect-specific)
-    finishChain.setParams(dspParams);
-    finishChain.process(buffer, options);
+    finishChain.setParams(renderConfig.dspParams);
+    finishChain.process(buffer, renderConfig.options);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

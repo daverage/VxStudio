@@ -170,7 +170,7 @@ void Dsp::updateOptoParams(const float outputGainDb) {
     op.peakReduction = juce::jlimit(0.0f, 1.0f, params.peakReduction);
     op.outputGainDb = outputGainDb;
     op.body = juce::jlimit(0.0f, 1.0f, params.body);
-    op.stereoLink = true;
+    op.stereoLink = params.stereoLink;
     op.mode = params.contentMode == 0 ? OptoCompressorLA2A::Mode::compress
                                       : OptoCompressorLA2A::Mode::limit;
     opto.setParams(op);

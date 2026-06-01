@@ -1,4 +1,6 @@
 #include "VxToneRefineProcessor.h"
+#include "../../framework/VxStudioHelpContent.h"
+#include "VxStudioVersions.h"
 
 namespace {
 constexpr std::string_view kProductName = "VX Studio Tone Refine";
@@ -32,6 +34,10 @@ vxsuite::ProductIdentity VXToneRefineAudioProcessor::makeIdentity() {
     identity.primaryHint = "Remove low-mid buildup (boxiness, muddiness).";
     identity.secondaryHint = "Reduce presence peak harshness (2-5 kHz brittleness).";
     identity.tertiaryHint = "Apply transparent tonal smoothing.";
+    identity.dspVersion = vxsuite::versions::plugins::tone_refine;
+    identity.helpTitle = vxsuite::help::tone_refine.title;
+    identity.helpHtml = vxsuite::help::tone_refine.html;
+    identity.readmeSection = vxsuite::help::tone_refine.readmeSection;
     identity.theme.accentRgb = { 0.94f, 0.68f, 0.25f };      // Gold
     identity.theme.accent2Rgb = { 0.24f, 0.16f, 0.06f };
     identity.theme.backgroundRgb = { 0.08f, 0.06f, 0.03f };

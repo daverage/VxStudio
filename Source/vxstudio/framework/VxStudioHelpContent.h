@@ -141,6 +141,32 @@ inline constexpr HelpContent proximity {
     "VXProximity"
 };
 
+inline constexpr HelpContent speech_clarity {
+    "VXSpeechClarity Help",
+    R"(
+<h1>VXSpeechClarity</h1>
+<p>Targeted speech-artifact cleanup for sibilance, plosives, and breath noise. It is the focused corrective stage for speech mechanics rather than broad tonal shaping.</p>
+<h2>How to use it</h2>
+<ul>
+<li>Raise Sibilance to soften harsh /s/ and /z/ bursts without dulling the whole take.</li>
+<li>Raise Plosive to reduce low-frequency consonant thumps from close mics.</li>
+<li>Raise Breath to pull back obvious inhalations and wind-like noise between phrases.</li>
+</ul>
+<h2>Example settings</h2>
+<ul>
+<li>Light de-essing only: Sibilance 35%, Plosive 0%, Breath 0%.</li>
+<li>Close-mic spoken voice cleanup: Sibilance 30%, Plosive 40%, Breath 25%.</li>
+<li>Podcast artifact control: Sibilance 45%, Plosive 35%, Breath 30%.</li>
+</ul>
+<h2>Practical scenarios</h2>
+<ul>
+<li>Speech tracks with sharp consonants and close-mic pops.</li>
+<li>Dialogue cleanup before tone shaping and final compression.</li>
+<li>Mechanical voice cleanup when VXTone or VXFinish would be too broad.</li>
+</ul>)",
+    "VXSpeechClarity"
+};
+
 inline constexpr HelpContent cleanup {
     "VXCleanup Help",
     R"(
@@ -195,6 +221,32 @@ inline constexpr HelpContent tone {
     "VXTone"
 };
 
+inline constexpr HelpContent tone_refine {
+    "VXToneRefine Help",
+    R"(
+<h1>VXToneRefine</h1>
+<p>Automatic tonal correction for mud, harshness, and general roughness. It is for targeted subtractive refinement when a track needs cleanup in specific problem regions without manual EQ moves.</p>
+<h2>How to use it</h2>
+<ul>
+<li>Raise Mud to reduce boxy low-mid buildup.</li>
+<li>Raise Harshness to soften brittle presence-region peaks.</li>
+<li>Raise Smooth to apply transparent broad tonal calming after the main problems are under control.</li>
+</ul>
+<h2>Example settings</h2>
+<ul>
+<li>Boxy room voice: Mud 45%, Harshness 20%, Smooth 10%.</li>
+<li>Brittle spoken voice: Mud 15%, Harshness 45%, Smooth 20%.</li>
+<li>General refinement pass: Mud 25%, Harshness 30%, Smooth 25%.</li>
+</ul>
+<h2>Practical scenarios</h2>
+<ul>
+<li>Speech that feels muddy, brittle, or rough after basic cleanup.</li>
+<li>Corrective refinement before finishing compression.</li>
+<li>Faster guided tonal repair when manual EQ is too slow or fussy.</li>
+</ul>)",
+    "VXToneRefine"
+};
+
 inline constexpr HelpContent finish {
     "VXFinish Help",
     R"(
@@ -225,24 +277,29 @@ inline constexpr HelpContent optoComp {
     "VXOptoComp Help",
     R"(
 <h1>VXOptoComp</h1>
-<p>LA2A-style opto levelling and limiting with slower, smoother program-dependent gain reduction than VXFinish. It is for natural dynamic control with opto character.</p>
+<p>Professional LA2A-style opto levelling and limiting with a visible Pro switch, standalone behaviour control, stereo-link options, and slower, smoother program-dependent gain reduction than VXFinish. It is for natural dynamic control with opto character when you want engineer-facing control instead of guided finishing.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Raise Peak Red. to drive more opto gain reduction.</li>
 <li>Use Body for light post-compressor weight shaping.</li>
 <li>Gain is unity-centered: left is 50%, centre is 100%, right is 150%.</li>
+<li>Leave Pro off for the simple guided view: Auto behaviour and linked stereo tracking stay engaged.</li>
+<li>Turn Pro on to reveal Behavior and Stereo Link.</li>
+<li>Behavior on Auto follows the program role; use Compress for classic levelling and Limit for firmer containment.</li>
+<li>Keep Stereo Link high for classic linked stereo tracking, or lower it for dual-mono style response.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
-<li>Gentle levelling: Peak Red. 35%, Body 52%, Gain 100%.</li>
-<li>Firm voice levelling: Peak Red. 55%, Body 54%, Gain 108%.</li>
-<li>Limiter-style general control: Peak Red. 65%, Body 50%, Gain 100%.</li>
+<li>Simple vocal levelling: Peak Red. 35%, Body 52%, Gain 100%, Pro Off.</li>
+<li>Firm vocal compression: Peak Red. 55%, Body 54%, Gain 108%, Pro On, Behavior Compress, Stereo Link 100%.</li>
+<li>Limiter-style bus control: Peak Red. 65%, Body 50%, Gain 100%, Pro On, Behavior Limit, Stereo Link 100%.</li>
+<li>Asymmetric stereo material: Peak Red. 45%, Body 50%, Gain 100%, Pro On, Behavior Compress, Stereo Link 0-25%.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>
 <li>Natural spoken-word levelling.</li>
 <li>Opto-style smoothing after cleanup and tone shaping.</li>
-<li>General dynamic control when VXFinish feels too produced.</li>
+<li>General dynamic control when VXFinish feels too guided or produced.</li>
 </ul>)",
     "VXOptoComp"
 };

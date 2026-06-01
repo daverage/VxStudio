@@ -536,10 +536,15 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
         for (std::size_t i = 0; i < stageRowBounds.size() && i < currentRenderModel.chainRows.size(); ++i) {
             auto rowBounds = stageRowBounds[i].toFloat();
             const auto& row = currentRenderModel.chainRows[i];
-            const auto rowFill = row.selected ? accent.withAlpha(0.18f) : juce::Colours::white.withAlpha(0.035f);
+            const auto rowFill = row.inactive
+                ? juce::Colours::white.withAlpha(0.018f)
+                : row.selected ? accent.withAlpha(0.18f)
+                               : juce::Colours::white.withAlpha(0.035f);
             g.setColour(rowFill);
             g.fillRoundedRectangle(rowBounds, 12.0f);
-            g.setColour(row.selected ? accent.withAlpha(0.42f) : text.withAlpha(0.10f));
+            g.setColour(row.inactive ? text.withAlpha(0.05f)
+                                     : row.selected ? accent.withAlpha(0.42f)
+                                                    : text.withAlpha(0.10f));
             g.drawRoundedRectangle(rowBounds, 12.0f, 1.0f);
 
             const auto indicator = rowBounds.removeFromLeft(5.0f);
@@ -548,27 +553,30 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
                                      : row.typeLabel == "Sparse"  ? juce::Colour(0xffd9d38b)
                                      : row.typeLabel == "Waiting" ? juce::Colours::white.withAlpha(0.25f)
                                      : juce::Colour(0xff8cd9bf);
-            g.setColour(impactColour.withAlpha(row.selected ? 0.90f : 0.55f));
+            g.setColour(row.inactive
+                            ? juce::Colours::white.withAlpha(0.14f)
+                            : impactColour.withAlpha(row.selected ? 0.90f : 0.55f));
             g.fillRoundedRectangle(indicator.reduced(0.0f, 7.0f), 2.0f);
 
             auto content = rowBounds.reduced(14.0f, 8.0f);
             auto top = content.removeFromTop(20.0f);
             const float statusWidth = std::min(88.0f, top.getWidth() * 0.28f);
-            g.setColour(text.withAlpha(0.95f));
+            g.setColour(text.withAlpha(row.inactive ? 0.45f : 0.95f));
             g.setFont(juce::FontOptions().withHeight(16.0f).withStyle("Bold"));
             g.drawFittedText(row.stageName,
                              top.removeFromLeft(top.getWidth() - statusWidth).toNearestInt(),
                              juce::Justification::centredLeft,
                              1);
-            g.setColour(text.withAlpha(0.62f));
+            g.setColour(text.withAlpha(row.inactive ? 0.38f : 0.62f));
             g.setFont(juce::FontOptions().withHeight(12.0f));
             g.drawFittedText(row.stateText, top.toNearestInt(), juce::Justification::centredRight, 1);
 
-            const auto secondLine = row.typeLabel == "Waiting"
+            const auto secondLine = row.inactive ? juce::String("Inactive")
+                                 : row.typeLabel == "Waiting"
                 ? juce::String("Waiting for telemetry")
                 : row.impactText + "  |  " + row.typeLabel
                     + (row.freqHint.isEmpty() ? "" : "  " + row.freqHint);
-            g.setColour(text.withAlpha(0.68f));
+            g.setColour(text.withAlpha(row.inactive ? 0.34f : 0.68f));
             g.setFont(juce::FontOptions().withHeight(11.8f));
             g.drawFittedText(secondLine,
                              content.withTrimmedTop(2.0f).toNearestInt(),
@@ -877,10 +885,13 @@ void VXStudioAnalyserEditor::timerCallback() {
 void VXStudioAnalyserEditor::refreshRenderModel() {
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
 
-    // Check if domain/stage topology changed via generation counter
-    const auto currentGeneration = vxsuite::analysis::DomainRegistry::instance().getDomainGeneration();
-    const bool generationChanged = (currentGeneration != lastEditorGeneration);
-    lastEditorGeneration = currentGeneration;
+    // Rescan whenever either the analyser domain or the stage registry topology changes.
+    const auto currentDomainGeneration = vxsuite::analysis::DomainRegistry::instance().getDomainGeneration();
+    const auto currentStageGeneration = vxsuite::analysis::StageRegistry::instance().getStageGeneration();
+    const bool generationChanged = currentDomainGeneration != lastDomainGeneration
+        || currentStageGeneration != lastStageGeneration;
+    lastDomainGeneration = currentDomainGeneration;
+    lastStageGeneration = currentStageGeneration;
 
     // If generation didn't change, reuse cached stages. Otherwise scan registry for new/removed stages.
     std::vector<StageEntry> externalStages = (generationChanged || cachedExternalStages.empty())
@@ -897,94 +908,99 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     int diagnosticNonStaleSlots = 0;
     int diagnosticDomainMatchSlots = 0;
 
-    // Only scan registry if topology changed (generation changed) or caches are empty
+    // Accept stages on the analyser's registered domain, or on the process-local fallback
+    // domain (which plugins use when they initialise before the analyser has registered).
+    const auto analyserDomainId = processor.analysisDomainId();
+    const auto fallbackDomainId = vxsuite::analysis::DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
+
+    // Only scan registry if topology changed or the caches are empty.
     if (generationChanged || cachedExternalStages.empty()) {
         externalStages.clear();
         analyserStage = std::nullopt;
         externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
 
         for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
-        vxsuite::analysis::StageView stage;
-        if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
-            continue;
-        ++diagnosticTotalSlots;
-        if (!stage.active)
-            continue;
-        ++diagnosticActiveSlots;
-        if (labelFromChars(stage.telemetry.identity.pluginFamily) != "VXSuite")
-            continue;
-        ++diagnosticVxSuiteSlots;
-        const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
-        if (stageAgeMs > kStaleThresholdMs)
-            continue;
-        ++diagnosticNonStaleSlots;
-        if (stage.analysisDomainId != processor.analysisDomainId())
-            continue;
-        ++diagnosticDomainMatchSlots;
+            vxsuite::analysis::StageView stage;
+            if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
+                continue;
+            ++diagnosticTotalSlots;
+            if (!stage.active)
+                continue;
+            ++diagnosticActiveSlots;
+            if (labelFromChars(stage.telemetry.identity.pluginFamily) != "VXSuite")
+                continue;
+            ++diagnosticVxSuiteSlots;
+            const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
+            if (stageAgeMs > kStaleThresholdMs)
+                continue;
+            ++diagnosticNonStaleSlots;
+            if (stage.analysisDomainId != analyserDomainId
+                && stage.analysisDomainId != fallbackDomainId)
+                continue;
+            ++diagnosticDomainMatchSlots;
 
-        StageEntry entry;
-        entry.view = stage;
-        entry.stageId = labelFromChars(stage.telemetry.identity.stageId);
-        entry.stageName = labelFromChars(stage.telemetry.identity.stageName);
-        entry.stateText = stage.telemetry.state.isBypassed ? "Bypassed"
-                        : stage.telemetry.state.isSilent ? "Silent"
-                                                         : "Active";
-        std::array<float, vxsuite::analysis::kSummarySpectrumBins> stageDeltaDb {};
-        float spectralDeltaSum = 0.0f;
-        float largestStageDelta = 0.0f;
-        int largestStageBand = 0;
-        for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
-            const float deltaDb = toDb(stage.telemetry.outputSummary.spectrum[static_cast<std::size_t>(i)])
-                                - toDb(stage.telemetry.inputSummary.spectrum[static_cast<std::size_t>(i)]);
-            stageDeltaDb[static_cast<std::size_t>(i)] = deltaDb;
-            spectralDeltaSum += std::abs(deltaDb);
-            if (std::abs(deltaDb) > std::abs(largestStageDelta)) {
-                largestStageDelta = deltaDb;
-                largestStageBand = i;
+            StageEntry entry;
+            entry.view = stage;
+            entry.stageId = labelFromChars(stage.telemetry.identity.stageId);
+            entry.stageName = labelFromChars(stage.telemetry.identity.stageName);
+            entry.stateText = stage.telemetry.state.isBypassed ? "Bypassed"
+                            : !stage.telemetry.state.isLive  ? "Inactive"
+                            : stage.telemetry.state.isSilent ? "Silent"
+                                                             : "Active";
+            std::array<float, vxsuite::analysis::kSummarySpectrumBins> stageDeltaDb {};
+            float spectralDeltaSum = 0.0f;
+            float largestStageDelta = 0.0f;
+            int largestStageBand = 0;
+            for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
+                const float deltaDb = toDb(stage.telemetry.outputSummary.spectrum[static_cast<std::size_t>(i)])
+                                    - toDb(stage.telemetry.inputSummary.spectrum[static_cast<std::size_t>(i)]);
+                stageDeltaDb[static_cast<std::size_t>(i)] = deltaDb;
+                spectralDeltaSum += std::abs(deltaDb);
+                if (std::abs(deltaDb) > std::abs(largestStageDelta)) {
+                    largestStageDelta = deltaDb;
+                    largestStageBand = i;
+                }
             }
-        }
-        entry.spectralChange = spectralDeltaSum / static_cast<float>(vxsuite::analysis::kSummarySpectrumBins);
-        entry.dynamicChange = std::abs(toDb(stage.telemetry.outputSummary.rms, -120.0f)
-                                       - toDb(stage.telemetry.inputSummary.rms, -120.0f));
-        entry.stereoChange = std::abs(stage.telemetry.outputSummary.stereoWidth - stage.telemetry.inputSummary.stereoWidth)
-                           + std::abs(stage.telemetry.outputSummary.correlation - stage.telemetry.inputSummary.correlation);
-        entry.impactScore = 0.45f * entry.spectralChange + 0.45f * entry.dynamicChange + 0.10f * entry.stereoChange;
-        entry.impactText = signedDb(juce::jlimit(-24.0f, 24.0f, largestStageDelta));
-        const auto sparseStage = classifySparseTone(stage.telemetry.inputSummary.spectrum,
-                                                    stage.telemetry.outputSummary.spectrum,
-                                                    stageDeltaDb);
-        entry.typeLabel = sparseStage.sparse ? "Sparse"
-                                             : classLabel(entry.spectralChange, entry.dynamicChange, entry.stereoChange);
-        entry.freqHint = "@" + formatFrequency(bandCenterHz(largestStageBand));
+            entry.spectralChange = spectralDeltaSum / static_cast<float>(vxsuite::analysis::kSummarySpectrumBins);
+            entry.dynamicChange = std::abs(toDb(stage.telemetry.outputSummary.rms, -120.0f)
+                                           - toDb(stage.telemetry.inputSummary.rms, -120.0f));
+            entry.stereoChange = std::abs(stage.telemetry.outputSummary.stereoWidth - stage.telemetry.inputSummary.stereoWidth)
+                               + std::abs(stage.telemetry.outputSummary.correlation - stage.telemetry.inputSummary.correlation);
+            entry.impactScore = 0.45f * entry.spectralChange + 0.45f * entry.dynamicChange + 0.10f * entry.stereoChange;
+            entry.impactText = signedDb(juce::jlimit(-24.0f, 24.0f, largestStageDelta));
+            const auto sparseStage = classifySparseTone(stage.telemetry.inputSummary.spectrum,
+                                                        stage.telemetry.outputSummary.spectrum,
+                                                        stageDeltaDb);
+            entry.typeLabel = sparseStage.sparse ? "Sparse"
+                                                 : classLabel(entry.spectralChange, entry.dynamicChange, entry.stereoChange);
+            entry.freqHint = "@" + formatFrequency(bandCenterHz(largestStageBand));
 
-        if (entry.stageId == processor.stageIdString()) {
-            analyserStage = entry;
-            continue;
+            if (entry.stageId == processor.stageIdString()) {
+                analyserStage = entry;
+                continue;
+            }
+
+            externalStages.push_back(std::move(entry));
         }
 
-        externalStages.push_back(std::move(entry));
-        }
-
-        // Cache the discovered stages for reuse on unchanged generation
         cachedExternalStages = externalStages;
         cachedAnalyserStage = analyserStage;
     }
 
     const bool hasAnalyserSignal = analyserStage.has_value()
         && analyserStage->view.telemetry.inputSummary.rms > 1.0e-6f;
-    // Framework automatically registers all stages in the analysis domain.
-    // Display all of them, sorted by localOrderId — no filtering needed.
-    externalStages.erase(std::remove_if(externalStages.begin(),
-                                        externalStages.end(),
-                                        [](const StageEntry& stage) {
-                                            return stage.view.telemetry.state.isBypassed
-                                                || !stage.view.telemetry.state.isLive;
-                                        }),
-                         externalStages.end());
 
     std::sort(externalStages.begin(), externalStages.end(), [](const auto& a, const auto& b) {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
     });
+
+    std::vector<int> activeStageIndices;
+    activeStageIndices.reserve(externalStages.size());
+    for (int i = 0; i < static_cast<int>(externalStages.size()); ++i) {
+        const auto& stage = externalStages[static_cast<std::size_t>(i)];
+        if (!stage.view.telemetry.state.isBypassed)
+            activeStageIndices.push_back(i);
+    }
 
     int selectedIndexValue = selectedStageIndex.load();
     const std::uint64_t selectedInstanceId = selectedStageInstanceId.load();
@@ -1015,18 +1031,31 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
     for (int i = 0; i < static_cast<int>(externalStages.size()); ++i) {
         const auto& stage = externalStages[static_cast<std::size_t>(i)];
+        const bool isInactive = stage.view.telemetry.state.isBypassed || !stage.view.telemetry.state.isLive;
         const bool isSelectedStage =
-            !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
+            !isInactive && !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
         model.chainRows.push_back({
             displayStageName(stage.stageName),
             stage.stateText,
             stage.impactText,
             stage.typeLabel,
             stage.freqHint,
+            isInactive,
             isSelectedStage
         });
-        model.chainRowStageIndices.push_back(i);
+        model.chainRowStageIndices.push_back(isInactive ? -1 : i);
         model.chainRowStageInstanceIds.push_back(stage.view.telemetry.identity.instanceId);
+    }
+
+    if (!fullChain && selectedIndexValue >= 0 && selectedIndexValue < static_cast<int>(model.chainRowStageIndices.size())
+        && model.chainRowStageIndices[static_cast<std::size_t>(selectedIndexValue)] < 0) {
+        selectedIndexValue = -1;
+        selectedStageIndex.store(-1);
+        selectedStageInstanceId.store(0);
+        fullChain = true;
+        fullChainSelected.store(true);
+        for (auto& row : model.chainRows)
+            row.selected = false;
     }
 
     juce::String selectedLabel = "Full Chain";
@@ -1034,7 +1063,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         selectedLabel = model.chainRows[static_cast<std::size_t>(selectedIndexValue)].stageName;
     model.statusText =
         "Domain " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
-        + " | live chain: " + juce::String(static_cast<int>(externalStages.size()))
+        + " | active chain: " + juce::String(static_cast<int>(activeStageIndices.size()))
         + " | selection: " + selectedLabel;
 
     vxsuite::analysis::AnalysisSummary before {};
@@ -1042,13 +1071,13 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     juce::String selectionKey = "empty";
     juce::String scopeLabel;
 
-    if (!externalStages.empty()) {
+    if (!activeStageIndices.empty()) {
         if (fullChain || selectedIndexValue < 0) {
             // Full chain: first stage input → analyser input (or last stage output)
-            before = externalStages.front().view.telemetry.inputSummary;
+            before = externalStages[static_cast<std::size_t>(activeStageIndices.front())].view.telemetry.inputSummary;
             after = analyserStage.has_value()
                 ? analyserStage->view.telemetry.inputSummary
-                : externalStages.back().view.telemetry.outputSummary;
+                : externalStages[static_cast<std::size_t>(activeStageIndices.back())].view.telemetry.outputSummary;
             scopeLabel = "Full Chain";
             selectionKey = "full";
         } else {
@@ -1314,7 +1343,8 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
         model.diagnosticsText =
             "Domain: " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
-            + "\nLive stages: " + juce::String(static_cast<int>(externalStages.size()))
+            + "\nVisible rows: " + juce::String(static_cast<int>(externalStages.size()))
+            + "\nActive stages: " + juce::String(static_cast<int>(activeStageIndices.size()))
             + "\n[Discovery Debug]"
             + "\n  Total slots: " + juce::String(diagnosticTotalSlots)
             + "\n  Active: " + juce::String(diagnosticActiveSlots)
@@ -1359,6 +1389,8 @@ void VXStudioAnalyserEditor::rebuildStageButtons() {
 
 void VXStudioAnalyserEditor::selectStage(const int index) {
     if (index < 0 || index >= static_cast<int>(currentRenderModel.chainRows.size()))
+        return;
+    if (currentRenderModel.chainRows[static_cast<std::size_t>(index)].inactive)
         return;
     selectedStageIndex.store(index);
     fullChainSelected.store(false);

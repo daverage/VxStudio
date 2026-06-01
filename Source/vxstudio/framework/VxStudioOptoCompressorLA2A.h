@@ -42,9 +42,10 @@ private:
   std::vector<float> y1;
   std::vector<float> lfLp1;
   std::vector<float> shelfLp1;
-  float fastDb = 0.0f;
-  float slowDb = 0.0f;
-  float mem01 = 0.0f;
+  std::vector<float> fastDbCh;
+  std::vector<float> slowDbCh;
+  std::vector<float> mem01Ch;
+  std::vector<float> detectorDbCh;
   float detectorDb = -120.0f;
   float grDbSmoothed = 0.0f;
   float activity01 = 0.0f;

@@ -92,11 +92,11 @@ void SuiteLookAndFeel::drawRotarySlider(juce::Graphics& g,
 
 void SuiteLookAndFeel::drawButtonBackground(juce::Graphics& g,
                                             juce::Button& button,
-                                            const juce::Colour&,
+                                            const juce::Colour& backgroundColour,
                                             bool shouldDrawButtonAsHighlighted,
                                             bool shouldDrawButtonAsDown) {
     auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
-    auto fill = accent2;
+    auto fill = backgroundColour;
     if (shouldDrawButtonAsDown)
         fill = fill.brighter(0.22f);
     else if (shouldDrawButtonAsHighlighted)
@@ -104,7 +104,11 @@ void SuiteLookAndFeel::drawButtonBackground(juce::Graphics& g,
 
     g.setColour(fill);
     g.fillRoundedRectangle(bounds, 6.0f);
-    g.setColour(accent.withAlpha(0.85f));
+    // Border: accent when fill is dark, subtle when fill is bright
+    const auto border = fill.getPerceivedBrightness() > 0.5f
+                      ? fill.darker(0.25f).withAlpha(0.6f)
+                      : accent.withAlpha(0.85f);
+    g.setColour(border);
     g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
 }
 

@@ -42,6 +42,7 @@ struct ProductIdentity {
     std::string_view quaternaryParamId;
     std::string_view modeParamId;
     std::string_view auxSelectorParamId;
+    std::string_view expertParamId;
     std::string_view listenParamId;
     std::string_view primaryLabel;
     std::string_view secondaryLabel;
@@ -62,9 +63,14 @@ struct ProductIdentity {
     std::string_view selectorLabel = "Mode";
     std::array<std::string_view, 3> selectorChoiceLabels {};
     std::string_view auxSelectorLabel;
+    std::string_view expertButtonLabel = "Pro";
     std::array<std::string_view, 3> auxSelectorChoiceLabels {};
     int auxSelectorDefaultIndex = 0;
     bool auxSelectorFollowsGeneralMode = true;
+    bool auxSelectorRequiresExpert = false;
+    bool tertiaryRequiresExpert = false;
+    bool quaternaryRequiresExpert = false;
+    bool expertDefaultValue = false;
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
     bool showLevelTrace = false;
@@ -114,6 +120,10 @@ struct ProductIdentity {
 
     bool supportsAuxSelector() const noexcept {
         return !auxSelectorParamId.empty();
+    }
+
+    bool supportsExpertMode() const noexcept {
+        return !expertParamId.empty();
     }
 
     bool supportsTertiaryControl() const noexcept {

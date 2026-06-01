@@ -93,6 +93,7 @@ public:
     float getGlobalConfidence() const noexcept { return globalTracker.getConfidence(); }
     bool hasOfflineTargetMap() const noexcept { return offlineAnalysis.isValid(); }
     bool isOfflineActive() const noexcept { return offlineActive; }
+    [[nodiscard]] const OfflineAnalysisResult& getOfflineAnalysis() const noexcept { return offlineAnalysis; }
     DebugSnapshot getDebugSnapshot() const noexcept;
 
 private:

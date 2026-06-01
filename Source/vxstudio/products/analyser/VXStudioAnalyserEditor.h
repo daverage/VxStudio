@@ -38,6 +38,7 @@ private:
         juce::String impactText;
         juce::String typeLabel;   // "Tone", "Dynamic", "Spatial", "Mixed", "Sparse"
         juce::String freqHint;    // "@1.2 kHz"
+        bool inactive = false;
         bool selected = false;
     };
 
@@ -134,7 +135,8 @@ private:
     bool diagnosticsExpanded = false;
     bool chainCollapsed = false;
     std::size_t prevChainRowCount = 0;
-    std::uint32_t lastEditorGeneration = 0;
+    std::uint32_t lastDomainGeneration = 0;
+    std::uint32_t lastStageGeneration = 0;
     std::vector<StageEntry> cachedExternalStages;
     std::optional<StageEntry> cachedAnalyserStage;
 

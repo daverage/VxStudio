@@ -11,15 +11,18 @@ set(VXSUITE_PLUGIN_VERSION_VXPROXIMITY "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXProximityClassic "0.1.0")
 set(VXSUITE_PLUGIN_VERSION_VXCLEANUP "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXCLARITY "0.1.0")
+set(VXSUITE_PLUGIN_VERSION_VXSPEECHCLARITY "0.1.0")
 set(VXSUITE_PLUGIN_VERSION_VXFINISH "0.3.0")
 set(VXSUITE_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
 set(VXSUITE_PLUGIN_VERSION_VXSUBTRACT "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXDENOISER "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXTONE "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXREFINE "0.1.0")
 set(VXSUITE_PLUGIN_VERSION_VXLEVELER "0.2.0")
 set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.1")
 set(VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.0")
+set(VXSUITE_PLUGIN_VERSION_VXREPAIR "0.1.0")
 
 execute_process(
   COMMAND python3 -c "import pathlib, onnxruntime; p = pathlib.Path(onnxruntime.__file__).resolve().parent / 'capi'; libs = sorted(p.glob('libonnxruntime*.dylib')); print(libs[0] if libs else '', end='')"
@@ -702,6 +705,43 @@ target_include_directories(VXStudioAnalyser PRIVATE Source)
 target_link_libraries(VXStudioAnalyser PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXStudioAnalyserPlugin ALL DEPENDS VXStudioAnalyser_VST3)
 vxstudio_stage_vst3_bundle(VXStudioAnalyser_VST3 "VXStudioAnalyser")
+juce_add_plugin(VXRepair
+  VERSION ${VXSUITE_PLUGIN_VERSION_VXREPAIR}
+  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXREPAIR}
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxstudio.vxrepair"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXRP"
+)
+target_compile_definitions(VXRepair PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXRepair)
+target_sources(VXRepair PRIVATE
+  Source/vxstudio/products/repair/VxRepairAnalysis.cpp
+  Source/vxstudio/products/repair/VxRepairProcessor.cpp
+  Source/vxstudio/products/repair/VxRepairEditor.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
+  Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
+)
+target_include_directories(VXRepair PRIVATE Source)
+target_link_libraries(VXRepair PRIVATE VxStudioFramework Eigen3::Eigen juce::juce_dsp)
+add_custom_target(VXRepairPlugin ALL DEPENDS VXRepair_VST3)
+vxstudio_stage_vst3_bundle(VXRepair_VST3 "VXRepair")
+
 
 add_custom_target(VXSuite_VST3
   DEPENDS
@@ -720,6 +760,7 @@ add_custom_target(VXSuite_VST3
     VXLeveler_VST3
     VXRebalance_VST3
     VXStudioAnalyser_VST3
+    VXRepair_VST3
     VXDeverbStage
     VXProximityStage
     VXCleanupStage
@@ -734,6 +775,7 @@ add_custom_target(VXSuite_VST3
     VXLevelerStage
     VXRebalanceStage
     VXStudioAnalyserStage
+    VXRepairStage
   COMMENT "Building all VX Suite VST3 products")
 
 add_executable(VXDeverbTests

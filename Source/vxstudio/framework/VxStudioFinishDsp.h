@@ -15,6 +15,7 @@ public:
         float peakReduction = 0.0f;
         float outputGainDb = 0.0f;
         float body = 0.5f;
+        bool stereoLink = true;
     };
 
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
