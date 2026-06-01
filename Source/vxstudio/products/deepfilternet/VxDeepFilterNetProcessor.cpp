@@ -278,86 +278,16 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
         return;
 
     const float cleanTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.5f);
-    const float guardTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
-
-    // Cache analysis snapshots for reuse throughout processing
-    const auto analysis = getVoiceAnalysisSnapshot();
-    const auto voiceContext = getVoiceContextSnapshot();
-    const auto signalQuality = getSignalQualitySnapshot();
-
-    ensureAnalysisScratch(numChannels, numSamples);
-    analysisScratch.makeCopyOf(buffer, true);
 
     if (!controlsPrimed) {
         smoothedClean = cleanTarget;
-        smoothedGuard = guardTarget;
         controlsPrimed = true;
     } else {
         smoothedClean = vxsuite::smoothBlockValue(smoothedClean, cleanTarget, currentSampleRateHz, numSamples, 0.050f);
-        smoothedGuard = vxsuite::smoothBlockValue(smoothedGuard, guardTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
-    const auto variant = selectedModelVariant();
-    const float wetMix = vxsuite::clamp01(smoothedClean);
-    const float adaptiveGuard = vxsuite::clamp01(smoothedGuard * (0.55f + 0.90f * lastArtifactRisk));
-
-    // Wire framework analysis for speech-aware suppression ceiling
-    // Reduce model strength in risky signal conditions: low speech presence, high intelligibility risk
-    const float speechPresence = juce::jlimit(0.0f, 1.0f, voiceContext.speechPresence);
-    const float intelligibilityRisk = 1.0f - juce::jlimit(0.0f, 1.0f, voiceContext.intelligibility);
-    const float separationConfidence = juce::jlimit(0.0f, 1.0f, signalQuality.separationConfidence);
-
-    // Safety factor: back off model strength when speech is ambiguous or intelligibility is at risk
-    const float speechSafetyFactor = juce::jlimit(0.45f, 1.0f,
-        0.65f + 0.35f * speechPresence
-              - 0.30f * intelligibilityRisk
-              + 0.15f * separationConfidence);
-
-    float effectiveClean = wetMix * speechSafetyFactor;
-    if (variant == ModelVariant::dfn2) {
-        // DFN2 reacts badly to post dry/wet recombination, so Guard should
-        // mainly back off the model drive rather than reintroduce dry signal.
-        effectiveClean = vxsuite::clamp01(effectiveClean * (1.0f - 0.30f * smoothedGuard - 0.30f * adaptiveGuard));
-    }
-    const bool processed = engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
-
-    if (processed) {
-        lastArtifactRisk = estimateArtifactRisk(analysisScratch, buffer, numChannels, numSamples);
-        const float confidenceGuard = vxsuite::clamp01(smoothedGuard * (0.25f + 0.90f * lastArtifactRisk));
-        if (variant != ModelVariant::dfn2)
-            effectiveClean = vxsuite::clamp01(effectiveClean * (1.0f - 0.34f * confidenceGuard));
-
-        // ReadabilityGuard post-pass: protect articulation and body from over-suppression
-        vxsuite::corrective::updateTonalAnalysis(tonalAnalysis, buffer, currentSampleRateHz, numSamples);
-        const auto evidence = vxsuite::corrective::deriveAnalysisEvidence(tonalAnalysis, analysis, voiceContext);
-        const auto readabilityGuard = vxsuite::corrective::deriveReadabilityGuard(
-            evidence, analysis, voiceContext,
-            0.5f,           // focus (neutral for ML safety pass)
-            true,           // voice mode (assume speech)
-            0.10f,          // persistentLowMidDensity
-            0.06f,          // shortLowMidDensity
-            0.14f,          // persistentPresenceDensity
-            0.08f,          // shortPresenceDensity
-            0.0f,           // cleanup drive (not applicable for ML model)
-            0.0f,           // body (not applicable)
-            0.0f, 0.0f, 0.0f, 0.0f, // deMud, deEss, breath, plosive disabled
-            0.20f);         // troubleSmooth (gentle smoothing for articulation risk)
-
-        // Scale wet mix down based on articulation and body loss risk
-        const float articulationProt = juce::jlimit(0.0f, 1.0f, 0.60f * readabilityGuard.articulationRisk);
-        const float bodyProt = juce::jlimit(0.0f, 1.0f, 0.40f * readabilityGuard.bodyLossRisk);
-        const float readabilityGuardFactor = 1.0f - (0.55f * articulationProt + 0.45f * bodyProt);
-
-        startupWetRamp = vxsuite::smoothBlockValue(startupWetRamp, 1.0f, currentSampleRateHz, numSamples, 0.040f);
-        ensureLatencyAlignedListenDry(numSamples);
-        const float restoreWet = variant == ModelVariant::dfn2
-            ? vxsuite::clamp01(effectiveClean * (1.0f - 0.10f * confidenceGuard) * readabilityGuardFactor)
-            : vxsuite::clamp01(effectiveClean * (1.0f - 0.32f * confidenceGuard) * readabilityGuardFactor);
-        blendProcessedWithDry(buffer, restoreWet * startupWetRamp);
-    } else {
-        startupWetRamp = 0.0f;
-        lastArtifactRisk = 0.0f;
-    }
+    const float effectiveClean = vxsuite::clamp01(smoothedClean);
+    engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
 }
 
 void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<float>& buffer, const float wetMix) {
