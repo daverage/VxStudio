@@ -62,21 +62,14 @@ void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
                                              const int    samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     denoiserDsp.prepare(currentSampleRateHz, samplesPerBlock);
-    artifactCleanupStage.prepare(currentSampleRateHz, getTotalNumOutputChannels());
     setReportedLatencySamples(denoiserDsp.getLatencySamples());
     resetSuite();
 }
 
 void VXDenoiserAudioProcessor::resetSuite() {
     denoiserDsp.reset();
-    artifactCleanupStage.reset();
-    tonalAnalysis.reset();
     controls.reset(0.0f, 0.5f);
     smoothedMakeupGain = 1.0f;
-    smoothedResidualTrim = 1.0f;
-    smoothedArtifactCleanupBlend = 0.0f;
-    smoothedStereoMakeupGain = { 1.0f, 1.0f };
-    outputTrimmer.reset();
     prevPhraseActive = true;
 }
 

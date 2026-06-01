@@ -1,15 +1,8 @@
 #pragma once
 
-#include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioBlockSmoothedControl.h"
-#include "../../framework/VxStudioCorrectiveStage.h"
-#include "../../framework/VxStudioEditorBase.h"
-#include "../../framework/VxStudioOutputTrimmer.h"
 #include "../../framework/VxStudioProcessorBase.h"
-#include "../../framework/VxStudioTonalAnalysis.h"
 #include "dsp/VxDenoiserDsp.h"
-
-#include <array>
 
 class VXDenoiserAudioProcessor final : public vxsuite::ProcessorBase {
 public:
@@ -17,7 +10,6 @@ public:
     ~VXDenoiserAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
-    float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -27,18 +19,9 @@ protected:
 private:
     static vxsuite::ProductIdentity makeIdentity();
 
-    vxsuite::denoiser::DenoiserDsp denoiserDsp;  // Single instance handles mono or stereo M/S internally
-    vxsuite::corrective::CorrectiveStage artifactCleanupStage;
-    vxsuite::corrective::TonalAnalysisState tonalAnalysis;
-    vxsuite::OutputTrimmer outputTrimmer;
-    juce::AudioBuffer<float> leftScratch;
-    juce::AudioBuffer<float> rightScratch;
-
+    vxsuite::denoiser::DenoiserDsp denoiserDsp;
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlPair controls;
     float  smoothedMakeupGain  = 1.0f;
-    float  smoothedResidualTrim = 1.0f;
-    float  smoothedArtifactCleanupBlend = 0.0f;
-    std::array<float, 2> smoothedStereoMakeupGain { 1.0f, 1.0f };
-    bool prevPhraseActive = true;  // Track phrase boundaries to sync STFT state
+    bool prevPhraseActive = true;
 };
