@@ -747,7 +747,7 @@ void DenoiserDsp::processFrame(const float amount,
 
     // General-mode minimum gain floor: prevent severe level collapse with amount-dependent scaling
     if (!voiceMode) {
-        const float adaptiveFloor = amount > 0.85f ? 0.87f : (0.40f + 0.40f * amount);
+        const float adaptiveFloor = amount > 0.85f ? 0.80f : (0.40f + 0.40f * amount);
         for (int k = 0; k < kBins; ++k)
             gainSmooth[k] = std::max(gainSmooth[k], adaptiveFloor);
     }
@@ -755,29 +755,10 @@ void DenoiserDsp::processFrame(const float amount,
     // ── 9b. High-frequency preservation at high denoise amounts ────────────────
     // When clean amount is high (> 0.7), preserve air and brightness above 8 kHz
     // to prevent the characteristic "muffled" sound from heavy denoising.
-    // In voice mode, apply extra reduction in the 3.4-8kHz band to suppress harsh artifacts.
     if (amount > 0.70f) {
         const float hfBoostAmount = juce::jlimit(0.0f, 1.0f, (amount - 0.70f) / 0.30f);
 
-        // In voice mode, apply aggressive reduction in problem frequency band
-        if (voiceMode && amount > 0.85f) {
-            const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
-            const float harshFloorHz = 3400.0f;
-            const float transitionHz = 8000.0f;
-            const int harshStartBin = std::max(0, static_cast<int>(harshFloorHz / binHz));
-            const int transitionBin = std::max(harshStartBin + 1, static_cast<int>(transitionHz / binHz));
-
-            // Apply extra harsh-artifact suppression: multiplicative damping in 3.4-8kHz band
-            // This creates stronger reduction of harsh artifacts compared to voiced material
-            const float harshDamp = 0.65f;  // multiplicative damping factor
-            for (int k = harshStartBin; k < transitionBin && k < kBins; ++k) {
-                gainSmooth[k] *= harshDamp;
-            }
-        }
-
-        // Standard HF boost above 8 kHz (reduced in voice mode)
-        const float boostScale = voiceMode ? 0.30f : 1.0f;
-        const float hfBoostGain = 0.12f * hfBoostAmount * boostScale;
+        const float hfBoostGain = 0.12f * hfBoostAmount;
         const float hfCutoffHz = 8000.0f;
         const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
         const int hfStartBin = std::max(0, static_cast<int>(hfCutoffHz / binHz));
