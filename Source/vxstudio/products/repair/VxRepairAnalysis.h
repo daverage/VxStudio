@@ -2,6 +2,7 @@
 
 #include "../../framework/VxStudioFft.h"
 
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <vector>
@@ -49,6 +50,11 @@ public:
 
     static float scoreToStrengthStatic(float score) noexcept;  // public; calls private impl
 
+    // Live spectrum snapshot for display during collection (24 log-spaced bands, 0..1 normalised).
+    // Safe to call from the UI thread at any time.
+    static constexpr int kDisplayBands = 24;
+    void getDisplayBands(std::array<float, kDisplayBands>& out) const noexcept;
+
 private:
     void processFrame() noexcept;
     void finalise()     noexcept;
@@ -60,9 +66,12 @@ private:
     static constexpr int kBins        = kFftSize / 2 + 1;  // 1025
 
     // Bin ranges at 48 kHz (bin = freq * kFftSize / sr)
-    static constexpr int kHumHiBin    = 15;   // 0–352 Hz
-    static constexpr int kLowMidHiBin = 50;   // 352–1172 Hz
-    static constexpr int kSpeechHiBin = 290;  // 1172–6797 Hz
+    // Speech reference band: 1–4 kHz  (bins 43–171)
+    // Sibilance band:        4.5–9 kHz (bins 192–384)
+    static constexpr int kSpeechLoBin  = 43;   // ~1 kHz
+    static constexpr int kSpeechHiBin2 = 171;  // ~4 kHz
+    static constexpr int kSibLoBin     = 192;  // ~4.5 kHz
+    static constexpr int kSibHiBin     = 384;  // ~9 kHz
 
     RealFft fft;
     double  sr            = 48000.0;
@@ -76,8 +85,7 @@ private:
 
     // Per-frame stats accumulated during collection
     std::vector<float> frameRms;
-    std::vector<float> humBandEnergy;
-    std::vector<float> speechBandEnergy;
+    std::vector<float> sibBandRatio;  // sibilance-band / speech-band energy ratio per frame
     int framesCollected = 0;
 
     std::atomic<bool>  collecting { false };
@@ -86,6 +94,11 @@ private:
 
     mutable std::mutex  assessmentMutex;
     RepairAssessment    assessment;
+
+    // Display spectrum — updated non-blockingly in processFrame, read by UI thread.
+    mutable std::mutex spectrumMutex;
+    std::array<float, kDisplayBands> displayBands {};
+    float spectrumPeakHold = 1.0e-6f;  // slow-decaying peak for normalisation
 };
 
 } // namespace vxsuite::repair

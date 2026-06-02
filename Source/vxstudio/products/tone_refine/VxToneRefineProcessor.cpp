@@ -97,103 +97,79 @@ void VXToneRefineAudioProcessor::resetSuite() {
 }
 
 void VXToneRefineAudioProcessor::performPreAnalysis(const juce::AudioBuffer<float>& buffer) {
-    // Pre-analysis: establish adaptive thresholds for mud, harshness, roughness
-
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
-
-    float maxMudEnergy = 0.0f;
-    float maxHarshnessEnergy = 0.0f;
-    float maxRoughness = 0.0f;
-
-    // Simple envelope-based measurement for each band
-    for (int ch = 0; ch < numChannels; ++ch) {
-        const float* data = buffer.getReadPointer(ch);
-
-        float mudAccum = 0.0f;
-        float harshnessAccum = 0.0f;
-        float prevSample = 0.0f;
-
-        for (int i = 0; i < numSamples; ++i) {
-            const float sample = data[i];
-
-            // Mud: very low mid (100-500 Hz approximation)
-            mudAccum = 0.98f * mudAccum + 0.02f * std::abs(sample);
-
-            // Harshness: presence peak (2-5 kHz approximation)
-            harshnessAccum = 0.97f * harshnessAccum + 0.03f * std::abs(sample);
-
-            // Roughness: spectral derivative (rate of change)
-            const float derivative = std::abs(sample - prevSample);
-
-            maxMudEnergy = std::max(maxMudEnergy, mudAccum);
-            maxHarshnessEnergy = std::max(maxHarshnessEnergy, harshnessAccum);
-            maxRoughness = std::max(maxRoughness, derivative);
-
-            prevSample = sample;
-        }
-    }
-
-    // Set adaptive thresholds
-    mudThreshold = maxMudEnergy * 0.80f;
-    harshnessThreshold = maxHarshnessEnergy * 0.80f;
-    roughnessThreshold = maxRoughness * 0.80f;
-
+    // Pre-analysis now sets fixed, ratio-based thresholds — no signal scanning needed.
+    // The previous wideband amplitude approach caused false positives on any signal.
+    //
+    // Mud threshold: lag-1 autocorrelation. Speech typically R1 ~ 0.60-0.80;
+    //   LF-dominant (muddy) content pushes R1 above 0.85.
+    // Harshness threshold: HF energy ratio (first-difference / broadband).
+    //   Normal speech ~ 0.05-0.18; elevated mid-HF (harshness) > 0.20.
+    // Roughness threshold: derivative/RMS ratio. Set relative so it's level-independent.
+    (void)buffer;
+    mudThreshold       = 0.85f;  // R1 autocorrelation threshold
+    harshnessThreshold = 0.20f;  // HF ratio threshold (first-difference / broadband)
+    roughnessThreshold = 0.50f;  // derivative/RMS ratio threshold
     detectorState.needsPreAnalysis = false;
 }
 
 void VXToneRefineAudioProcessor::detectAndUpdateIntensities(const juce::AudioBuffer<float>& buffer) {
-    // Per-block detection for mud, harshness, roughness
+    // Frequency-discriminating detection — replaces the wideband envelope approach
+    // that fired for any speech energy regardless of its spectral character.
+    //
+    // Mud     (100-500 Hz dominance): lag-1 autocorrelation. LF-heavy signals change
+    //   slowly so adjacent samples correlate strongly (R1 near 1.0). Normal speech
+    //   sits at R1 ~ 0.60-0.80; mud pushes R1 > 0.85.
+    //
+    // Harshness (2-5 kHz presence): HF energy proxy via first-difference, targeting
+    //   a moderate range above normal speech but below sibilance. Fires when HF content
+    //   is elevated (presence peak) without being sibilance-dominated.
+    //
+    // Roughness: first-difference magnitude normalised by RMS (level-independent
+    //   spectral irregularity). State-free and genuinely HF-sensitive — unchanged.
 
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
+    const int numCh = buffer.getNumChannels();
+    const int n     = buffer.getNumSamples();
+    if (n < 2) return;
 
-    float blockMudMax = 0.0f;
-    float blockHarshnessMax = 0.0f;
-    float blockRoughnessMax = 0.0f;
+    float sumSq = 0.0f, sumProd = 0.0f, hfEnergy = 0.0f, derivPeak = 0.0f;
 
-    for (int ch = 0; ch < numChannels; ++ch) {
-        const float* data = buffer.getReadPointer(ch);
+    for (int ch = 0; ch < numCh; ++ch) {
+        const float* d = buffer.getReadPointer(ch);
+        for (int i = 1; i < n; ++i) {
+            const float s    = d[i];
+            const float prev = d[i - 1];
+            const float diff = s - prev;
 
-        float mudEnv = 0.0f;
-        float harshnessEnv = 0.0f;
-        float prevSample = 0.0f;
-
-        for (int i = 0; i < numSamples; ++i) {
-            const float sample = std::abs(data[i]);
-
-            // Mud envelope (slow accumulation in low-mid)
-            mudEnv = 0.98f * mudEnv + 0.02f * sample;
-
-            // Harshness envelope (slightly faster in presence region)
-            harshnessEnv = 0.97f * harshnessEnv + 0.03f * sample;
-
-            // Roughness metric (spectral derivative)
-            const float derivative = std::abs(data[i] - prevSample);
-
-            blockMudMax = std::max(blockMudMax, mudEnv);
-            blockHarshnessMax = std::max(blockHarshnessMax, harshnessEnv);
-            blockRoughnessMax = std::max(blockRoughnessMax, derivative);
-
-            prevSample = data[i];
+            sumSq    += s * s;
+            sumProd  += s * prev;             // lag-1 cross-product
+            hfEnergy += diff * diff;          // first-difference energy (HF proxy)
+            derivPeak = std::max(derivPeak, std::abs(diff));
         }
     }
 
-    // Convert to LED intensity (0-1)
-    const float mudIntensity = blockMudMax > mudThreshold
-        ? std::min(1.0f, (blockMudMax - mudThreshold) / (mudThreshold * 0.5f))
+    const float bbTotal = std::max(sumSq, 1.0e-9f);
+    const float rms     = std::sqrt(sumSq / std::max(1, numCh * (n - 1)));
+    const bool  hasSig  = rms > 0.002f;  // −54 dBFS silence gate
+
+    // Mud: R1 (lag-1 autocorrelation) high → LF-dominated
+    const float r1 = sumProd / bbTotal;
+    const float mudIntensity = hasSig && r1 > mudThreshold
+        ? std::min(1.0f, (r1 - mudThreshold) / 0.10f)
         : 0.0f;
 
-    const float harshnessIntensity = blockHarshnessMax > harshnessThreshold
-        ? std::min(1.0f, (blockHarshnessMax - harshnessThreshold) / (harshnessThreshold * 0.5f))
+    // Harshness: HF ratio in the moderate range (above normal speech, below sibilance)
+    const float hfRatio = hfEnergy / bbTotal;
+    const float harshnessIntensity = hasSig && hfRatio > harshnessThreshold && hfRatio < 0.42f
+        ? std::min(1.0f, (hfRatio - harshnessThreshold) / 0.15f)
         : 0.0f;
 
-    const float roughnessIntensity = blockRoughnessMax > roughnessThreshold
-        ? std::min(1.0f, (blockRoughnessMax - roughnessThreshold) / (roughnessThreshold * 0.5f))
+    // Roughness: normalised derivative peak — level-independent spectral irregularity
+    const float normDeriv = rms > 1.0e-6f ? derivPeak / rms : 0.0f;
+    const float roughnessIntensity = hasSig && normDeriv > roughnessThreshold
+        ? std::min(1.0f, (normDeriv - roughnessThreshold) / 1.0f)
         : 0.0f;
 
-    // Smooth LED feedback
-    mudDetectionIntensity = 0.9f * mudDetectionIntensity + 0.1f * mudIntensity;
+    mudDetectionIntensity       = 0.9f * mudDetectionIntensity       + 0.1f * mudIntensity;
     harshnessDetectionIntensity = 0.9f * harshnessDetectionIntensity + 0.1f * harshnessIntensity;
     roughnessDetectionIntensity = 0.9f * roughnessDetectionIntensity + 0.1f * roughnessIntensity;
 }

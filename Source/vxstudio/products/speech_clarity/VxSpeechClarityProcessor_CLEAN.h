@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxStudioProcessorBase.h"
+#include "../../framework/VxStudioDspCommon.h"
 #include "dsp/VxDeEsserDsp.h"
 #include "dsp/VxDePolosiveDsp.h"
 #include "dsp/VxDeBreathDsp.h"
@@ -24,29 +25,23 @@ protected:
 private:
     // Detection state (LED intensity feedback: 0-1)
     float sibilanceDetectionIntensity = 0.0f;
-    float plosiveDetectionIntensity = 0.0f;
-    float breathDetectionIntensity = 0.0f;
+    float plosiveDetectionIntensity   = 0.0f;
+    float breathDetectionIntensity    = 0.0f;
 
-    // Adaptive thresholds (established during pre-analysis)
-    float sibilanceThreshold = 0.1f;
-    float plosiveThreshold = 0.1f;
-    float breathThreshold = 0.1f;
+    // Running peak hold for breath detection (slow-decay level reference)
+    float smoothedPeak = 0.01f;
 
-    // Detection state for filters
-    struct DetectorState {
-        float sibilanceEnvelope = 0.0f;
-        float plosiveEnvelope = 0.0f;
-        float breathEnvelope = 0.0f;
-        bool needsPreAnalysis = true;
-    } detectorState;
+    // HPF and hi-shelf biquad state (per-channel, sized in prepareSuite)
+    float hpfB0 = 1.f, hpfB1 = 0.f, hpfB2 = 0.f, hpfA1 = 0.f, hpfA2 = 0.f;
+    std::vector<float> hpfZ1, hpfZ2;
+    vxsuite::corrective::detail::BiquadCoeffs hiShelfCoeffs {};
+    std::vector<float> hiShelfZ1, hiShelfZ2;
 
     // DSP Components
-    vxsuite::speech_clarity::DeEsserDsp deEsserDsp;
+    vxsuite::speech_clarity::DeEsserDsp    deEsserDsp;
     vxsuite::speech_clarity::DePolosiveDsp dePolosiveDsp;
-    vxsuite::speech_clarity::DeBreathDsp deBreathDsp;
+    vxsuite::speech_clarity::DeBreathDsp   deBreathDsp;
 
-    // Detection implementation
-    void performPreAnalysis(const juce::AudioBuffer<float>& buffer);
     void detectAndUpdateIntensities(const juce::AudioBuffer<float>& buffer);
 
     double currentSampleRateHz = 48000.0;

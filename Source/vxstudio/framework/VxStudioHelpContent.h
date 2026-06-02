@@ -356,6 +356,38 @@ inline constexpr HelpContent analyser {
     "VXStudioAnalyser"
 };
 
+inline constexpr HelpContent repair {
+    "VX Repair Help",
+    R"(
+<h1>VX Repair</h1>
+<p>All-in-one voice repair assistant. Analyses your audio and automatically suggests which tools to enable and at what strength. It combines noise reduction, speech clarity cleanup, and dereverberation in a single guided workflow.</p>
+<h2>How to use it</h2>
+<ul>
+<li>Click Analyse and play a representative section — at least five seconds with real programme material, not silence.</li>
+<li>Repair detects the problems and sets the tools. Accept the suggestions, adjust to taste, or turn individual tools off.</li>
+<li>Drag any strength knob to enable that tool automatically if it is currently off.</li>
+<li>Use Listen on any tool row to hear only what that processor is removing.</li>
+<li>Click Reset Analysis to start again from scratch.</li>
+</ul>
+<h2>Two-phase analysis</h2>
+<p>If significant noise is detected in Phase 1, Repair runs a second five-second pass with noise reduction active. This lets the reverb and speech-clarity detectors work on a cleaner signal so their scores are not inflated by broadband noise.</p>
+<h2>Noise mode — DSP vs DeepFilter</h2>
+<p>The Noise tool has two modes selectable from the DeepFilter button in the Noise row.</p>
+<ul>
+<li><strong>DSP (default)</strong> — broadband spectral denoiser. Fast, low latency, works well for hiss, fans, HVAC, and steady room noise. Good for most podcast and narration work.</li>
+<li><strong>DeepFilter</strong> — ML-powered voice isolation. Stronger on complex or non-stationary backgrounds such as crowd noise, traffic, or cafes. Requires the DeepFilter model to be installed via VX Deep Filter Net. Falls back silently to the DSP denoiser if the model is not available. When DeepFilter is selected it is also used as the reference denoiser during Phase 2 analysis.</li>
+</ul>
+<h2>Tool order</h2>
+<p>The repair chain runs Noise first, then Speech Clarity, then Reverb. This order matters: cleaning noise before de-essing avoids false sibilance triggers, and de-essing before deverb stops the reverb tail from masking breath sounds.</p>
+<h2>Practical scenarios</h2>
+<ul>
+<li>Podcast or narration with background hiss and slight room reverb: let Repair analyse and apply all three tools.</li>
+<li>Phone or camera speech with strong interference: enable DeepFilter mode for heavier noise removal, then let Repair adjust reverb and clarity around it.</li>
+<li>Voice already mostly clean: Repair will leave inactive tools off — use only what is needed.</li>
+</ul>)",
+    "VXRepair"
+};
+
 inline constexpr HelpContent rebalance {
     "VXRebalance Help",
     R"(

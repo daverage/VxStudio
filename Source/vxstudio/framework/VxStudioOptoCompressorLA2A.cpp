@@ -207,7 +207,12 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const float grAvgDb = grAcc / meterDivisor;
   detectorDb = detectorAcc / meterDivisor;
   grDbSmoothed = grAvgDb;
-  activity01 = compressionEnabled ? clamp01(grAvgDb / 12.0f) : 0.0f;
+  // Gate on input signal presence: the slow opto release (up to 25 s) keeps
+  // grDbSmoothed > 0 long after audio stops, causing spurious LED activity.
+  // detectorDb reflects the actual input level this block, so when it's below
+  // the silence floor the indicator resets immediately rather than trailing off.
+  const bool inputPresent = detectorDb > -60.0f;
+  activity01 = (compressionEnabled && inputPresent) ? clamp01(grAvgDb / 12.0f) : 0.0f;
 
   applyBodyShelf(buffer);
 }

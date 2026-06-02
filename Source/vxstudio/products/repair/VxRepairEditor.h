@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VxRepairProcessor.h"
+#include "../../framework/VxStudioHelpView.h"
 #include "../../framework/VxStudioLookAndFeel.h"
 
 #include <array>
@@ -45,6 +46,7 @@ private:
     juce::TextButton analyseButton;
     juce::Label      promptLabel;
     juce::Label      collectingLabel;
+    juce::Label      phaseLabel;
 
     // ── Per-tool rows (3 tools) ───────────────────────────────────────────────
     struct ToolRow {
@@ -62,16 +64,26 @@ private:
 
     std::array<ToolRow, 3> rows;
 
+    // ── Noise row DeepFilter toggle (row 0 only) ──────────────────────────────
+    juce::ToggleButton deepFilterToggle;
+    juce::Label        deepFilterStatus;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> deepFilterAttach;
+
     // ── Makeup gain ──────────────────────────────────────────────────────────
     juce::Slider makeupSlider;
     juce::Label  makeupLabel;
-    juce::Label  makeupHint;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> makeupAttach;
 
     // ── Footer ────────────────────────────────────────────────────────────────
-    juce::TextButton resetButton;
-    juce::Label      deepFilterNote;
+    juce::TextButton  resetButton;
+    vxsuite::HelpButton helpButton;
 
     VXRepairAudioProcessor& repairProcessor;
     vxsuite::repair::RepairAssessment lastAssessment;
+
+    // Live display data updated each timer tick from the audio thread
+    std::array<float, 24> smoothedBands {};
+    float noiseActivityDisplay   = 0.0f;
+    float clarityActivityDisplay = 0.0f;
+    float reverbActivityDisplay  = 0.0f;
 };

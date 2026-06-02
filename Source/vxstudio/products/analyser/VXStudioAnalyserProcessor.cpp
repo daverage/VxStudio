@@ -77,8 +77,6 @@ void VXStudioAnalyserAudioProcessor::ensureAnalysisDomain() noexcept {
         vxsuite::analysis::DomainView activeDomain {};
         if (domainRegistry.latestDomainForProcess(domainRegistry.currentProcessId(), activeDomain))
             analysisDomainIdValue = activeDomain.analysisDomainId;
-        else if (domainRegistry.latestActiveDomain(activeDomain))
-            analysisDomainIdValue = activeDomain.analysisDomainId;
         else
             analysisDomainIdValue = domainRegistry.fallbackDomainIdForCurrentProcess();
     }
@@ -107,6 +105,8 @@ void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
     const int maxSlots = stageRegistry.maxSlots();
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
     constexpr std::uint64_t kStaleThresholdMs = 2000;  // Consider stages stale after 2 seconds
+    const auto analyserDomainId = analysisDomainId();
+    const auto fallbackDomainId = DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
 
     StageView firstStage {};
     StageView lastStage {};
@@ -123,10 +123,15 @@ void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
         // Must be active
         if (!stage.active)
             continue;
+        if (stage.telemetry.state.isBypassed || !stage.telemetry.state.isLive)
+            continue;
 
         // Skip stale stages (help with stability in edge cases)
         const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
         if (stageAgeMs > kStaleThresholdMs)
+            continue;
+        if (stage.analysisDomainId != analyserDomainId
+            && stage.analysisDomainId != fallbackDomainId)
             continue;
 
         stageCount++;

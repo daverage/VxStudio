@@ -1153,29 +1153,6 @@ bool DomainRegistry::latestDomainForProcess(const std::uint64_t hostProcessId, D
         }
     }
 
-    // Fallback: if exact process ID match returns nothing, check all active domains
-    if (!found) {
-        for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
-            auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
-            if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
-                continue;
-            if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
-                continue;
-            if (!found
-                || slot.creationTimeMs > out.creationTimeMs
-                || (slot.creationTimeMs == out.creationTimeMs
-                    && slot.analysisDomainId > out.analysisDomainId)) {
-                out.active = true;
-                out.slotIndex = slotIndex;
-                out.analysisDomainId = slot.analysisDomainId;
-                out.hostProcessId = slot.hostProcessId;
-                out.creationTimeMs = slot.creationTimeMs;
-                out.contextKeyHash = slot.contextKeyHash;
-                found = true;
-            }
-        }
-    }
-
     return found;
 }
 
@@ -1224,19 +1201,6 @@ int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
             continue;
         if (count < static_cast<int>(out.size()))
             out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
-    }
-
-    // Fallback: if exact process ID match returns 0 but there are active domains,
-    // return all active domains (with context filtering if specified). This handles process ID corruption in shared memory.
-    if (count == 0) {
-        for (auto& slot : state->slots) {
-            if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
-                continue;
-            if (contextKeyHash != 0 && slot.contextKeyHash != contextKeyHash)
-                continue;
-            if (count < static_cast<int>(out.size()))
-                out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
-        }
     }
 
     return count;
@@ -1543,23 +1507,14 @@ void StagePublisher::reset() noexcept {
 void StagePublisher::publish(const juce::AudioBuffer<float>& inputBuffer,
                              const juce::AudioBuffer<float>& outputBuffer,
                              const bool bypassed) noexcept {
-    if (slotIndex < 0 || inputAccumulator == nullptr || outputAccumulator == nullptr)
+    if (inputAccumulator == nullptr || outputAccumulator == nullptr)
         return;
 
-    // If we're in a fallback domain and an Analyser domain has appeared, rebind immediately.
-    // This ensures products added before the Analyser discover it as soon as audio starts.
-    const bool inFallbackDomain = (analysisDomainIdValue & (static_cast<std::uint64_t>(1) << 63)) != 0;
-    const int slotIndexBeforeRebind = slotIndex;
-    if (inFallbackDomain) {
-        refreshDomainBinding(true);  // Force rebind if we detect an Analyser domain
-    } else {
-        refreshDomainBinding();
-    }
+    refreshDomainBinding();
+    ensureRegistered();
 
-    // If domain rebinding unregistered us, register with the new domain before publishing
-    if (slotIndexBeforeRebind >= 0 && slotIndex < 0) {
-        ensureRegistered();
-    }
+    if (slotIndex < 0)
+        return;
 
     inputAccumulator->update(inputBuffer);
     outputAccumulator->update(outputBuffer);
@@ -1663,15 +1618,13 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
         }
     }
 
-    if (newDomainId == 0 && domainCount == 0) {
-        // Process ID filtering failed - use global domain discovery as fallback
-        // Look through all active domains for the latest one (should be analyser domain)
-        DomainView latestGlobal {};
-        if (domainReg.latestActiveDomain(latestGlobal)) {
-            newDomainId = latestGlobal.analysisDomainId;
-        } else {
-            newDomainId = domainReg.fallbackDomainIdForCurrentProcess();
-        }
+    if (newDomainId == 0) {
+        const auto fallbackId = domainReg.fallbackDomainIdForCurrentProcess();
+        // Don't abandon a working real domain due to a transient shared-memory read failure.
+        // If allDomainsForProcess returned 0 but we're already on a non-fallback domain, keep it.
+        if (!force && analysisDomainIdValue != 0 && analysisDomainIdValue != fallbackId)
+            return;
+        newDomainId = fallbackId;
     }
 
     // If the domain hasn't changed and we're already registered, nothing to do.

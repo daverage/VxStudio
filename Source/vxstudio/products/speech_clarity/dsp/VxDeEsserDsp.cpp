@@ -5,164 +5,74 @@
 namespace vxsuite {
 namespace speech_clarity {
 
-void DeEsserDsp::prepare(double sampleRate, int maxBlockSize, int numChannels) {
-    this->sampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    channels.clear();
-    channels.resize(numChannels);
+void DeEsserDsp::prepare(double sr, int /*maxBlockSize*/, int numChannels) {
+    sampleRate   = sr > 1000.0 ? sr : 48000.0;
+    attCoeff     = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.001f));  // 1 ms
+    relCoeff     = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.100f));  // 100 ms
+    thresholdLin = std::pow(10.0f, -40.0f / 20.0f);
 
-    // Design band-pass filter centered at 5.5 kHz (sibilance region center)
-    // Q=2 gives a reasonably narrow band (roughly 4.5-8 kHz for vocal range)
-    for (auto& ch : channels) {
-        designBandPassCoefficients(this->sampleRate, 5500.0f, 2.0f, ch.bandPassFilter);
-    }
-
+    channels.resize(static_cast<size_t>(numChannels));
+    for (auto& c : channels)
+        designBandPass(sampleRate, 5500.0f, 1.5f, c.bp);
     reset();
 }
 
 void DeEsserDsp::reset() noexcept {
-    for (auto& ch : channels) {
-        ch.bandPassFilter.x1 = ch.bandPassFilter.x2 = 0.0f;
-        ch.bandPassFilter.y1 = ch.bandPassFilter.y2 = 0.0f;
-        ch.envelopeDb = 0.0f;
+    for (auto& c : channels) {
+        c.bp.x1 = c.bp.x2 = c.bp.y1 = c.bp.y2 = 0.0f;
+        c.env = 0.0f;
     }
-    lastReductionDb = 0.0f;
 }
 
-void DeEsserDsp::designBandPassCoefficients(
-    double sampleRate,
-    float centerHz,
-    float qFactor,
-    BiquadState& state) {
-    // Design normalized biquad band-pass coefficients
-    const float omega = 2.0f * 3.14159265359f * centerHz / static_cast<float>(sampleRate);
-    const float sinOmega = std::sin(omega);
-    const float cosOmega = std::cos(omega);
-    const float alpha = sinOmega / (2.0f * qFactor);
-
-    const float a0 = 1.0f + alpha;
-    const float b0 = alpha;
-    const float b1 = 0.0f;
-    const float b2 = -alpha;
-    const float a1 = -2.0f * cosOmega;
-    const float a2 = 1.0f - alpha;
-
-    // Normalize
-    state.b0 = b0 / a0;
-    state.b1 = b1 / a0;
-    state.b2 = b2 / a0;
-    state.a1 = a1 / a0;
-    state.a2 = a2 / a0;
+void DeEsserDsp::designBandPass(double sr, float hz, float q, BiquadState& s) noexcept {
+    const float w     = 2.0f * 3.14159265f * hz / static_cast<float>(sr);
+    const float sw    = std::sin(w);
+    const float cw    = std::cos(w);
+    const float alpha = sw / (2.0f * q);
+    const float a0    = 1.0f + alpha;
+    s.b0 =  alpha / a0;
+    s.b1 =  0.0f;
+    s.b2 = -alpha / a0;
+    s.a1 = (-2.0f * cw) / a0;
+    s.a2 = (1.0f - alpha) / a0;
 }
 
-float DeEsserDsp::processBiquad(float sample, BiquadState& state) noexcept {
-    const float out = state.b0 * sample + state.b1 * state.x1 + state.b2 * state.x2
-                    - state.a1 * state.y1 - state.a2 * state.y2;
-    state.x2 = state.x1;
-    state.x1 = sample;
-    state.y2 = state.y1;
-    state.y1 = out;
-    return out;
-}
-
-float DeEsserDsp::applySoftCompression(
-    float inputDb,
-    float thresholdDb,
-    float ratio,
-    float kneeDb) noexcept {
-    // Soft-knee compressor for smooth, natural reduction
-    // Returns gain reduction in dB (0 = no reduction, negative = reduce)
-
-    if (inputDb < thresholdDb - kneeDb / 2.0f) {
-        return 0.0f;  // Below knee: no reduction
-    }
-
-    if (inputDb > thresholdDb + kneeDb / 2.0f) {
-        // Above knee: full compression ratio
-        const float overDb = inputDb - thresholdDb;
-        return -overDb * (1.0f - 1.0f / ratio);
-    }
-
-    // Inside knee: smooth interpolation
-    const float kneeCenter = thresholdDb;
-    const float kneeHalf = kneeDb / 2.0f;
-    const float normalizedPos = (inputDb - (kneeCenter - kneeHalf)) / kneeDb;
-    const float clampedPos = std::max(0.0f, std::min(1.0f, normalizedPos));
-
-    // Quadratic ease for smooth knee
-    const float easePos = clampedPos * clampedPos;
-    const float overDb = (inputDb - kneeCenter) * easePos;
-    return -overDb * (1.0f - 1.0f / ratio);
+float DeEsserDsp::processBiquad(float x, BiquadState& s) noexcept {
+    const float y = s.b0*x + s.b1*s.x1 + s.b2*s.x2 - s.a1*s.y1 - s.a2*s.y2;
+    s.x2 = s.x1; s.x1 = x;
+    s.y2 = s.y1; s.y1 = y;
+    return y;
 }
 
 void DeEsserDsp::process(juce::AudioBuffer<float>& buffer, const Params& params) {
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
-
-    if (numSamples <= 0 || numChannels <= 0)
-        return;
-
-    // Early exit if not active
     if (params.strength < 0.001f || params.detectionIntensity < 0.001f)
         return;
 
-    // Single pass: measure and process simultaneously to avoid filter state corruption
-    float maxSibilanceEnergy = 0.0f;
-    std::vector<std::vector<float>> sibBands(numChannels, std::vector<float>(numSamples));
+    const int   numCh    = buffer.getNumChannels();
+    const int   n        = buffer.getNumSamples();
+    const float ratio    = 2.0f + params.strength * 6.0f;         // 2:1 – 8:1
+    const float exponent = 1.0f - 1.0f / ratio;
+    const float maxGain  = std::pow(10.0f, -12.0f * params.strength / 20.0f);
+    const float detScale = params.detectionIntensity;
 
-    // 1. MEASURE & EXTRACT sibilance band in single pass
-    for (int ch = 0; ch < numChannels; ++ch) {
-        const float* inputData = buffer.getReadPointer(ch);
-        auto& chState = channels[ch];
+    for (int ch = 0; ch < std::min(numCh, static_cast<int>(channels.size())); ++ch) {
+        auto&  c   = channels[static_cast<size_t>(ch)];
+        float* buf = buffer.getWritePointer(ch);
 
-        for (int i = 0; i < numSamples; ++i) {
-            // Filter input through band-pass (sibilance region)
-            float bandFiltered = processBiquad(inputData[i], chState.bandPassFilter);
-            sibBands[ch][i] = bandFiltered;
-            maxSibilanceEnergy = std::max(maxSibilanceEnergy, std::abs(bandFiltered));
-        }
-    }
+        for (int i = 0; i < n; ++i) {
+            const float sib  = processBiquad(buf[i], c.bp);
+            const float rect = std::abs(sib);
 
-    // 2. COMPUTE reduction amount based on sibilance intensity
-    const float sibilanceDb = 20.0f * std::log10(std::max(maxSibilanceEnergy, 1.0e-6f));
+            // Asymmetric envelope: fast attack catches sibilant onset, slow release avoids pumping
+            c.env = rect > c.env ? attCoeff * c.env + (1.0f - attCoeff) * rect
+                                 : relCoeff * c.env + (1.0f - relCoeff) * rect;
 
-    // Threshold at -40dB (soft knee of ±3dB)
-    const float thresholdDb = -40.0f;
-    const float kneeDb = 6.0f;
+            float gain = 1.0f;
+            if (c.env > thresholdLin)
+                gain = std::max(maxGain, std::pow(thresholdLin / std::max(c.env, 1.0e-9f), exponent));
 
-    // Compression ratio: higher strength = higher ratio (more aggressive)
-    // strength 0.5 = 4:1, strength 1.0 = 8:1
-    const float ratio = 2.0f + params.strength * 6.0f;
-
-    // Calculate reduction in dB
-    float targetReductionDb = applySoftCompression(sibilanceDb, thresholdDb, ratio, kneeDb);
-
-    // Gate the reduction by detection intensity (only reduce when sibilance detected)
-    targetReductionDb *= params.detectionIntensity;
-
-    // Limit max reduction to -12dB (never too aggressive)
-    targetReductionDb = std::max(targetReductionDb, -12.0f);
-
-    // Smooth reduction amount (prevents pumping/artifacts)
-    lastReductionDb = 0.95f * lastReductionDb + 0.05f * targetReductionDb;
-
-    // 3. APPLY reduction to sibilance band only
-    const float gainLinear = std::pow(10.0f, lastReductionDb / 20.0f);
-
-    for (int ch = 0; ch < numChannels; ++ch) {
-        float* audioData = buffer.getWritePointer(ch);
-
-        for (int i = 0; i < numSamples; ++i) {
-            // Get the pre-computed sibilance band
-            const float sibBand = sibBands[ch][i];
-
-            // Apply reduction to sibilance band only
-            const float reduced = sibBand * gainLinear;
-
-            // Blend: reduce only the sibilance, keep the rest of spectrum
-            const float blendedBand = sibBand - reduced;  // Difference = amount reduced
-
-            // Apply back to original (subtract the reduction from sibilance band)
-            audioData[i] -= blendedBand;
+            // Subtract the gain-reduced portion of the sibilance band only
+            buf[i] -= sib * (detScale * (1.0f - gain));
         }
     }
 }

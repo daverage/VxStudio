@@ -5,135 +5,64 @@
 namespace vxsuite {
 namespace speech_clarity {
 
-void DePolosiveDsp::prepare(double sampleRate, int maxBlockSize, int numChannels) {
-    this->sampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    channels.clear();
-    channels.resize(numChannels);
+void DePolosiveDsp::prepare(double sr, int /*maxBlockSize*/, int numChannels) {
+    sampleRate = sr > 1000.0 ? sr : 48000.0;
+
+    // 2nd-order Butterworth LP at 180 Hz (plosive burst range)
+    const float K    = std::tan(3.14159265f * 180.0f / static_cast<float>(sampleRate));
+    const float K2   = K * K;
+    const float norm = 1.0f / (1.0f + 1.41421356f * K + K2);
+    lpB0 =  K2 * norm;
+    lpB1 =  2.0f * K2 * norm;
+    lpB2 =  K2 * norm;
+    lpA1 =  2.0f * (K2 - 1.0f) * norm;
+    lpA2 = (1.0f - 1.41421356f * K + K2) * norm;
+
+    attCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.002f));  // 2 ms
+    relCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.040f));  // 40 ms
+
+    channels.resize(static_cast<size_t>(numChannels));
     reset();
 }
 
 void DePolosiveDsp::reset() noexcept {
-    for (auto& ch : channels) {
-        ch.onsetDetector.prevEnvelope = 0.0f;
-        ch.onsetDetector.peakHoldDb = -80.0f;
-        ch.onsetDetector.peakHoldSamples = 0;
-        ch.currentGateDb = 0.0f;
+    for (auto& c : channels) {
+        c.lpZ1 = c.lpZ2 = c.env = 0.0f;
+        c.gateGain = 1.0f;
     }
-    lastOnsetEnergy = 0.0f;
-}
-
-float DePolosiveDsp::measureBurstEnergy(const float* data, int numSamples) noexcept {
-    // Measure energy in very low frequencies (where plosive bursts live: 50-200 Hz)
-    // Use simple low-pass filtering to approximate sub-200Hz energy
-
-    float envelope = 0.0f;
-    for (int i = 0; i < numSamples; ++i) {
-        const float sample = std::abs(data[i]);
-        // Very slow attack (accumulates energy), fast release
-        envelope = (sample > envelope) ? sample : 0.98f * envelope + 0.02f * sample;
-    }
-
-    return envelope;
-}
-
-float DePolosiveDsp::detectOnsetSlope(float currentEnv, float& previousEnv) noexcept {
-    // Measure how fast the envelope is rising
-    // Plosives have very fast rise (steep slope); normal speech is gradual
-
-    const float slope = currentEnv - previousEnv;
-    previousEnv = currentEnv;
-
-    // Normalize to 0-1 range (based on typical speech dynamics)
-    return std::max(0.0f, slope / 0.1f);  // 0.1 is threshold for "fast rise"
-}
-
-float DePolosiveDsp::applySoftGate(
-    float inputDb,
-    float gateDb,
-    float kneeDb) noexcept {
-    // Soft gate: opens/closes smoothly without clicks
-
-    if (gateDb > -0.5f) {
-        return 0.0f;  // Gate fully open
-    }
-
-    // Calculate how much to reduce
-    const float targetDb = gateDb;
-    const float kneeStart = gateDb - kneeDb;
-
-    if (inputDb > kneeStart) {
-        // In the knee region: smooth transition
-        const float kneePos = (inputDb - kneeStart) / kneeDb;
-        const float clampedPos = std::max(0.0f, std::min(1.0f, kneePos));
-        // Ease curve for smoothness
-        const float easePos = clampedPos * clampedPos;
-        return targetDb * easePos;
-    }
-
-    return targetDb;
 }
 
 void DePolosiveDsp::process(juce::AudioBuffer<float>& buffer, const Params& params) {
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
-
-    if (numSamples <= 0 || numChannels <= 0)
-        return;
-
-    // Early exit if not active
     if (params.strength < 0.001f || params.detectionIntensity < 0.001f)
         return;
 
-    // 1. DETECT plosive bursts (onset detection in low-frequency energy)
-    float maxOnsetSlope = 0.0f;
+    const int   numCh      = buffer.getNumChannels();
+    const int   n          = buffer.getNumSamples();
+    // Target gain for LP band: up to -12 dB at full settings
+    const float targetGain = std::pow(10.0f, -12.0f * params.strength * params.detectionIntensity / 20.0f);
 
-    for (int ch = 0; ch < numChannels; ++ch) {
-        const float* audioData = buffer.getReadPointer(ch);
-        auto& chState = channels[ch];
+    for (int ch = 0; ch < std::min(numCh, static_cast<int>(channels.size())); ++ch) {
+        auto&  c   = channels[static_cast<size_t>(ch)];
+        float* buf = buffer.getWritePointer(ch);
 
-        // Measure burst energy in this block
-        float burstEnergy = measureBurstEnergy(audioData, numSamples);
-        float onsetSlope = detectOnsetSlope(burstEnergy, chState.onsetDetector.prevEnvelope);
+        for (int i = 0; i < n; ++i) {
+            // LP filter (DF2 transposed)
+            const float lp = lpB0 * buf[i] + c.lpZ1;
+            c.lpZ1 = lpB1 * buf[i] - lpA1 * lp + c.lpZ2;
+            c.lpZ2 = lpB2 * buf[i] - lpA2 * lp;
 
-        maxOnsetSlope = std::max(maxOnsetSlope, onsetSlope);
+            // Envelope of LP content
+            const float rect = std::abs(lp);
+            c.env = rect > c.env ? attCoeff * c.env + (1.0f - attCoeff) * rect
+                                 : relCoeff * c.env + (1.0f - relCoeff) * rect;
 
-        // Track peak onset for gating
-        if (onsetSlope > 0.5f) {
-            chState.onsetDetector.peakHoldDb = 0.0f;  // Gate triggered
-            chState.onsetDetector.peakHoldSamples = static_cast<int>(0.05 * sampleRate);  // Hold for 50ms (shorter than before)
-        } else {
-            chState.onsetDetector.peakHoldSamples--;
-        }
-    }
+            // Gate gain: close fast toward target, open slowly to avoid pumping
+            c.gateGain = targetGain < c.gateGain
+                ? attCoeff * c.gateGain + (1.0f - attCoeff) * targetGain
+                : relCoeff * c.gateGain + (1.0f - relCoeff) * targetGain;
 
-    // 2. COMPUTE gentle gate amount based on onset detection
-    // Much more conservative than before: max -6dB instead of -60dB
-    const float gateDb = -6.0f * params.strength * params.detectionIntensity;  // Gentle reduction
-    const float kneeDb = 3.0f;
-
-    // 3. APPLY soft gate ONLY to low-frequency region (50-300 Hz where plosives live)
-    // This prevents full-signal pumping
-    for (int ch = 0; ch < numChannels; ++ch) {
-        float* audioData = buffer.getWritePointer(ch);
-        auto& chState = channels[ch];
-
-        // Update current gate amount (smooth to avoid artifacts)
-        const float targetGateDb = (chState.onsetDetector.peakHoldSamples > 0) ? gateDb : 0.0f;
-        chState.currentGateDb = 0.95f * chState.currentGateDb + 0.05f * targetGateDb;
-
-        // Apply soft gate only to low frequencies
-        const float gateGainLinear = std::pow(10.0f, chState.currentGateDb / 20.0f);
-
-        // Simple single-pole lowpass to extract low-frequency component
-        for (int i = 0; i < numSamples; ++i) {
-            // Very slow lowpass (acts as low-pass for frequency-selective gating)
-            float lowFreq = 0.999f * chState.onsetDetector.prevEnvelope + 0.001f * std::abs(audioData[i]);
-            chState.onsetDetector.prevEnvelope = lowFreq;
-
-            // Only gate the low-frequency component (gentle soft attenuation, not hard gate)
-            // This preserves the original signal's character while reducing plosive energy
-            float reduction = (1.0f - gateGainLinear) * 0.5f;  // Further reduced: max 3% attenuation
-            audioData[i] *= (1.0f - reduction);
+            // Subtract the gated LP component only — HP component is untouched
+            buf[i] -= lp * (1.0f - c.gateGain);
         }
     }
 }

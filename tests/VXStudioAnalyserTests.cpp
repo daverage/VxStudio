@@ -1,4 +1,5 @@
 #include "../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h"
+#include "../Source/vxstudio/products/analyser/VXStudioAnalyserEditor.h"
 #include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
@@ -288,6 +289,70 @@ bool testAnalyserBasicOperation() {
     }
 }
 
+// Test 7: Live analyser rows track active, bypassed, and removed plugin state.
+bool testLiveChainStateTracking() {
+    std::cout << "[VXAnalyserTest] Testing live chain state tracking...\n";
+
+    try {
+        juce::ScopedJuceInitialiser_GUI guiInit;
+
+        auto analyser = std::make_unique<VXStudioAnalyserAudioProcessor>();
+        const double sr = 48000.0;
+        const int blockSize = 256;
+        analyser->prepareToPlay(sr, blockSize);
+
+        auto* editorBase = analyser->createEditor();
+        auto editor = std::unique_ptr<VXStudioAnalyserEditor>(dynamic_cast<VXStudioAnalyserEditor*>(editorBase));
+        if (editor == nullptr) {
+            delete editorBase;
+            std::cerr << "[VXAnalyserTest] ✗ Live chain state tracking test failed: analyser editor type mismatch\n";
+            return false;
+        }
+
+        auto cleanup = std::make_unique<VXCleanupAudioProcessor>();
+        cleanup->prepareToPlay(sr, blockSize);
+
+        auto signal = makeTestSignal(sr, 0.1f);
+        juce::MidiBuffer midi;
+
+        cleanup->processBlock(signal, midi);
+        analyser->processBlock(signal, midi);
+        editor->debugRefreshNow();
+
+        if (editor->debugVisibleChainRowCount() != 1 || editor->debugChainRowStateText(0) != "Active") {
+            std::cerr << "[VXAnalyserTest] ✗ Live chain state tracking test failed: active state not shown\n";
+            return false;
+        }
+
+        signal = makeTestSignal(sr, 0.1f);
+        cleanup->processBlockBypassed(signal, midi);
+        analyser->processBlock(signal, midi);
+        editor->debugRefreshNow();
+
+        if (editor->debugVisibleChainRowCount() != 1 || editor->debugChainRowStateText(0) != "Bypassed") {
+            std::cerr << "[VXAnalyserTest] ✗ Live chain state tracking test failed: bypassed state not shown\n";
+            return false;
+        }
+
+        cleanup.reset();
+        signal = makeTestSignal(sr, 0.1f);
+        analyser->processBlock(signal, midi);
+        editor->debugRefreshNow();
+
+        if (editor->debugVisibleChainRowCount() != 0) {
+            std::cerr << "[VXAnalyserTest] ✗ Live chain state tracking test failed: removed stage still visible\n";
+            return false;
+        }
+
+        analyser->releaseResources();
+        std::cout << "[VXAnalyserTest] ✓ Live chain state tracking test passed\n";
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[VXAnalyserTest] ✗ Live chain state tracking test failed: " << e.what() << "\n";
+        return false;
+    }
+}
+
 } // namespace
 
 int main() {
@@ -303,6 +368,7 @@ int main() {
     if (testDomainRegistrationClearsOnDestruct()) passed++; else failed++;
     if (testPluginAddRemoveRapidly()) passed++; else failed++;
     if (testLongSessionMemoryStability()) passed++; else failed++;
+    if (testLiveChainStateTracking()) passed++; else failed++;
 
     std::cout << "\n=== Results ===\n";
     std::cout << "Passed: " << passed << "\n";

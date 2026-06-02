@@ -24,8 +24,7 @@ void RepairAnalyser::prepare(double sampleRate, int /*maxBlockSize*/) {
     fftBuf.assign(static_cast<size_t>(kFftSize * 2), 0.0f);
 
     frameRms.reserve(static_cast<size_t>(targetFrames + 8));
-    humBandEnergy.reserve(static_cast<size_t>(targetFrames + 8));
-    speechBandEnergy.reserve(static_cast<size_t>(targetFrames + 8));
+    sibBandRatio.reserve(static_cast<size_t>(targetFrames + 8));
 
     reset();
 }
@@ -36,8 +35,7 @@ void RepairAnalyser::reset() {
     framesCollected = 0;
 
     frameRms.clear();
-    humBandEnergy.clear();
-    speechBandEnergy.clear();
+    sibBandRatio.clear();
 
     collecting.store(false, std::memory_order_relaxed);
     progress.store(0.0f, std::memory_order_relaxed);
@@ -53,8 +51,7 @@ void RepairAnalyser::startCollection() {
     framesCollected = 0;
 
     frameRms.clear();
-    humBandEnergy.clear();
-    speechBandEnergy.clear();
+    sibBandRatio.clear();
 
     complete.store(false, std::memory_order_relaxed);
     progress.store(0.0f, std::memory_order_relaxed);
@@ -108,6 +105,29 @@ void RepairAnalyser::processFrame() noexcept {
 
     fft.performFrequencyOnlyForward(fftBuf.data());
 
+    // Update 24-band display spectrum (non-blocking: skip if UI is reading).
+    {
+        const int maxBin = std::min(kBins - 1, static_cast<int>(20000.0 * kFftSize / sr));
+        const float logMin = std::log(1.0f);
+        const float logMax = std::log(static_cast<float>(std::max(2, maxBin)));
+        std::array<float, kDisplayBands> bands {};
+        for (int b = 0; b < kDisplayBands; ++b) {
+            const int binLo = std::max(1, static_cast<int>(std::exp(logMin + (logMax - logMin) * b / kDisplayBands)));
+            const int binHi = std::min(maxBin, static_cast<int>(std::exp(logMin + (logMax - logMin) * (b + 1) / kDisplayBands)));
+            float sum = 0.0f;
+            int   cnt = 0;
+            for (int k = binLo; k <= binHi; ++k) { sum += fftBuf[static_cast<size_t>(k)]; ++cnt; }
+            bands[static_cast<size_t>(b)] = cnt > 0 ? sum / cnt : 0.0f;
+        }
+        if (spectrumMutex.try_lock()) {
+            spectrumPeakHold = std::max(spectrumPeakHold * 0.9985f, *std::max_element(bands.begin(), bands.end()));
+            const float invPeak = spectrumPeakHold > 1.0e-9f ? 1.0f / spectrumPeakHold : 0.0f;
+            for (int b = 0; b < kDisplayBands; ++b)
+                displayBands[static_cast<size_t>(b)] = bands[static_cast<size_t>(b)] * invPeak;
+            spectrumMutex.unlock();
+        }
+    }
+
     // RMS from time-domain (before windowing divides energy slightly)
     float sumSq = 0.0f;
     for (int i = 0; i < kFftSize; ++i) {
@@ -125,19 +145,18 @@ void RepairAnalyser::processFrame() noexcept {
 
     frameRms.push_back(rms);
 
-    // Band energies from magnitude spectrum
-    float humSum    = 0.0f;
+    // Sibilance score: ratio of sibilance-band (4.5–9 kHz) to speech-band (1–4 kHz) energy.
+    // Only meaningful on voiced frames (above silence floor) — quiet frames are skipped.
+    float sibSum    = 0.0f;
     float speechSum = 0.0f;
-    for (int k = 1; k < kHumHiBin; ++k)
-        humSum += fftBuf[static_cast<size_t>(k)];
-    for (int k = kLowMidHiBin; k < kSpeechHiBin; ++k)
+    for (int k = kSpeechLoBin; k < kSpeechHiBin2; ++k)
         speechSum += fftBuf[static_cast<size_t>(k)];
+    for (int k = kSibLoBin; k <= kSibHiBin; ++k)
+        sibSum += fftBuf[static_cast<size_t>(k)];
 
-    const float humRange    = static_cast<float>(kHumHiBin - 1);
-    const float speechRange = static_cast<float>(kSpeechHiBin - kLowMidHiBin);
-
-    humBandEnergy.push_back(humSum / std::max(1.0f, humRange));
-    speechBandEnergy.push_back(speechSum / std::max(1.0f, speechRange));
+    const float speechAvg = speechSum / static_cast<float>(kSpeechHiBin2 - kSpeechLoBin);
+    const float sibAvg    = sibSum    / static_cast<float>(kSibHiBin - kSibLoBin + 1);
+    sibBandRatio.push_back(sibAvg / std::max(1.0e-9f, speechAvg));
 
     ++framesCollected;
 }
@@ -191,25 +210,22 @@ void RepairAnalyser::finalise() noexcept {
     // Map 0.65..0.95 → 0..1.
     const float reverbScore = juce::jlimit(0.0f, 1.0f, (meanDecayRatio - 0.65f) / 0.30f);
 
-    // ── Hum / mud score ───────────────────────────────────────────────────────
-    // Compare hum-band energy to speech-band energy during quieter frames.
-    // Strong low-frequency dominance in quiet passages = hum or tonal mud.
-    std::vector<float> quietHumRatios;
-    const float medianRms = sortedRms[static_cast<size_t>(n / 2)];
-    for (int i = 0; i < n; ++i) {
-        if (frameRms[static_cast<size_t>(i)] < medianRms * 0.5f) {
-            const float h = humBandEnergy[static_cast<size_t>(i)];
-            const float s = std::max(speechBandEnergy[static_cast<size_t>(i)], 1.0e-9f);
-            quietHumRatios.push_back(h / s);
-        }
+    // ── Speech clarity score ──────────────────────────────────────────────────
+    // Measure sibilance-band / speech-band ratio across all voiced frames.
+    // High ratio on a consistent basis indicates sibilance-heavy audio that will
+    // benefit from de-essing. Use the upper quartile (P75) to catch persistent
+    // harshness without being skewed by occasional transient frames.
+    float clarityScore = 0.0f;
+    if (!sibBandRatio.empty()) {
+        std::vector<float> sortedRatios = sibBandRatio;
+        std::sort(sortedRatios.begin(), sortedRatios.end());
+        const int p75idx = std::min(static_cast<int>(sortedRatios.size()) - 1,
+                                    static_cast<int>(0.75f * static_cast<float>(sortedRatios.size())));
+        const float p75Ratio = sortedRatios[static_cast<size_t>(p75idx)];
+        // Typical speech: ratio ~0.25. Harsh/sibilant: ratio > 0.55. Extreme: > 0.80.
+        clarityScore = juce::jlimit(0.0f, 1.0f, (p75Ratio - 0.25f) / 0.55f);
     }
-    float humMudScore = 0.0f;
-    if (!quietHumRatios.empty()) {
-        const float meanRatio = std::accumulate(quietHumRatios.begin(), quietHumRatios.end(), 0.0f)
-                                / static_cast<float>(quietHumRatios.size());
-        // Ratio ~1.0 = balanced; ratio > 3.0 = strong hum/mud presence.
-        humMudScore = juce::jlimit(0.0f, 1.0f, (meanRatio - 1.0f) / 2.5f);
-    }
+    const float humMudScore = clarityScore;
 
     // ── Build assessment ──────────────────────────────────────────────────────
     RepairAssessment a;
@@ -252,11 +268,16 @@ void RepairAnalyser::restoreAssessment(const RepairAssessment& a) noexcept {
 
 float RepairAnalyser::scoreToStrengthStatic(float score) noexcept { return scoreToStrength(score); }
 
+void RepairAnalyser::getDisplayBands(std::array<float, kDisplayBands>& out) const noexcept {
+    std::lock_guard<std::mutex> lock(spectrumMutex);
+    out = displayBands;
+}
+
 float RepairAnalyser::scoreToStrength(float score) noexcept {
     if (score < kActiveThreshold) return 0.0f;
-    // Map [0.10 .. 1.0] → [0.30 .. 0.85]: starts at a solid working level,
-    // reaches 85% at maximum — bolder defaults, user can still pull back.
-    return 0.30f + (score - kActiveThreshold) / (1.0f - kActiveThreshold) * 0.55f;
+    // Map [0.10 .. 1.0] → [0.30 .. 0.95]: starts at a solid working level,
+    // reaches 95% at maximum score — heavy problems get heavy treatment.
+    return 0.30f + (score - kActiveThreshold) / (1.0f - kActiveThreshold) * 0.65f;
 }
 
 } // namespace vxsuite::repair

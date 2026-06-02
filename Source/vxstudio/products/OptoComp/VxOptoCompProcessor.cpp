@@ -37,6 +37,7 @@ vxsuite::ProductIdentity VXOptoCompAudioProcessor::makeIdentity() {
     identity.auxSelectorLabel = "Behavior";
     identity.auxSelectorChoiceLabels = { "Auto", "Compress", "Limit" };
     identity.auxSelectorDefaultIndex = 0;
+    identity.auxSelectorFollowsGeneralMode = false;
     identity.auxSelectorRequiresExpert = true;
     identity.quaternaryRequiresExpert = true;
     identity.listenParamId = kListenParam;

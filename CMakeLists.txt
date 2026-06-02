@@ -57,6 +57,7 @@ include(VxStudioValidation)
 
 set(VXSTUDIO_VST3_STAGE_DIR "${CMAKE_SOURCE_DIR}/Source/vxstudio/vst")
 set(VXSTUDIO_VST3_INSTALL_DIR "/Library/Audio/Plug-Ins/VST3/VxStudio")
+option(VXSTUDIO_INSTALL_VST3_TO_SYSTEM "Copy staged VST3 bundles into the system VST3 folder" OFF)
 
 function(vxstudio_stage_vst3_bundle target_name bundle_name)
   set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
@@ -66,11 +67,16 @@ function(vxstudio_stage_vst3_bundle target_name bundle_name)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${bundle_source_dir}"
             "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_INSTALL_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
-            "${VXSTUDIO_VST3_INSTALL_DIR}/${bundle_name}.vst3"
-    COMMENT "Staging ${bundle_name}.vst3 into Source/vxstudio/vst and installing to system VST3")
+    COMMENT "Staging ${bundle_name}.vst3 into Source/vxstudio/vst")
+
+  if(VXSTUDIO_INSTALL_VST3_TO_SYSTEM)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_INSTALL_DIR}"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+              "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
+              "${VXSTUDIO_VST3_INSTALL_DIR}/${bundle_name}.vst3"
+      COMMENT "Installing ${bundle_name}.vst3 to system VST3")
+  endif()
 
   add_custom_target(${bundle_name}Stage
     COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_STAGE_DIR}"
@@ -78,12 +84,17 @@ function(vxstudio_stage_vst3_bundle target_name bundle_name)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${bundle_source_dir}"
             "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_INSTALL_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
-            "${VXSTUDIO_VST3_INSTALL_DIR}/${bundle_name}.vst3"
     DEPENDS ${target_name}
-    COMMENT "Refreshing staged ${bundle_name}.vst3 in Source/vxstudio/vst and system VST3")
+    COMMENT "Refreshing staged ${bundle_name}.vst3 in Source/vxstudio/vst")
+
+  if(VXSTUDIO_INSTALL_VST3_TO_SYSTEM)
+    add_custom_command(TARGET ${bundle_name}Stage POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_INSTALL_DIR}"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+              "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
+              "${VXSTUDIO_VST3_INSTALL_DIR}/${bundle_name}.vst3"
+      COMMENT "Installing staged ${bundle_name}.vst3 to system VST3")
+  endif()
 endfunction()
 
 function(vxstudio_copy_vst3_resources target_name bundle_name)
@@ -736,9 +747,16 @@ target_sources(VXRepair PRIVATE
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
+  Source/vxstudio/products/deepfilternet/dsp/VxDeepFilterNetService.cpp
 )
 target_include_directories(VXRepair PRIVATE Source)
-target_link_libraries(VXRepair PRIVATE VxStudioFramework Eigen3::Eigen juce::juce_dsp)
+target_link_libraries(VXRepair PRIVATE
+  VxStudioFramework
+  Eigen3::Eigen
+  juce::juce_dsp
+  VxStudioDeepFilterRuntime
+  VxStudioDeepFilterRuntimeDfn2
+)
 add_custom_target(VXRepairPlugin ALL DEPENDS VXRepair_VST3)
 vxstudio_stage_vst3_bundle(VXRepair_VST3 "VXRepair")
 

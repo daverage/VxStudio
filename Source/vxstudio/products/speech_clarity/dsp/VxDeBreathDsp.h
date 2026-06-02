@@ -1,37 +1,21 @@
 #pragma once
 
 #include <juce_audio_basics/juce_audio_basics.h>
-#include <array>
+#include <vector>
 #include <cmath>
 
 namespace vxsuite {
 namespace speech_clarity {
 
-// ============================================================================
-// DeBreath: Breath & Wind Noise Reduction
-// ============================================================================
-// Reduces breathing sounds and wind noise while preserving voice integrity.
-//
-// Control parameters:
-//   - strength: 0-1, controls noise reduction intensity
-//   - detectionIntensity: 0-1, gates the effect
-//
-// Algorithm:
-//   1. Identify breath/wind as low-frequency noise (spectral flatness)
-//   2. Selective subtraction (not full gating)
-//   3. Preserve voice fundamentals by only reducing non-harmonic content
-//
-// Design philosophy:
-//   - Transparent: doesn't affect sung vowels or consonants
-//   - Surgical: targets only noise-like characteristics
-//   - Preserves naturalness (selective removal, not obvious processing)
-// ============================================================================
-
+// Level-relative breath gate: applies smooth gain reduction when the external
+// detector signals a quiet, broadband passage. Reduction scales linearly with
+// detectionIntensity and strength (max ~8 dB at full settings).
+// Attack 10 ms / release 80 ms prevents pumping artefacts.
 class DeBreathDsp {
 public:
     struct Params {
-        float strength = 0.0f;              // 0-1: reduction strength
-        float detectionIntensity = 0.0f;    // 0-1: gates effect
+        float strength = 0.0f;            // 0-1: reduction depth
+        float detectionIntensity = 0.0f;  // 0-1: scales reduction depth
     };
 
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
@@ -39,29 +23,14 @@ public:
     void process(juce::AudioBuffer<float>& buffer, const Params& params);
 
 private:
-    // Breath detector state
-    struct BreathDetectorState {
-        float noiseFloorDb = -80.0f;
-        float smoothedFlatness = 0.0f;
-    };
-
-    // Per-channel state
     struct ChannelState {
-        BreathDetectorState detector;
-        float noiseBuffer[2048];  // Noise profile for spectral subtraction
-        int noiseBufferSize = 0;
-        float lastSubtractionAmount = 0.0f;
+        float currentGain = 1.0f;
     };
-
-    // Helper: estimate spectral flatness (noise-like character)
-    static float estimateSpectralFlatness(const float* data, int numSamples) noexcept;
-
-    // Helper: measure noise floor (minimum spectral energy)
-    static float measureNoiseFloor(const float* data, int numSamples) noexcept;
 
     std::vector<ChannelState> channels;
     double sampleRate = 48000.0;
-    int blockCounter = 0;
+    float  attCoeff   = 0.0f;
+    float  relCoeff   = 0.0f;
 };
 
 } // namespace speech_clarity

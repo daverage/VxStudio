@@ -12,10 +12,6 @@ constexpr std::uint64_t kStaleThresholdMs = 1500;
 constexpr int kUiRefreshHz = 24;
 constexpr float kSpectrumMinDb = -78.0f;
 constexpr float kSpectrumMaxDb = -18.0f;
-constexpr float kDynamicsMinDb = -60.0f;
-constexpr float kDynamicsMaxDb = 0.0f;
-constexpr float kLowHighBoundaryHz = 200.0f;
-constexpr float kMidHighBoundaryHz = 2000.0f;
 constexpr float kDisplaySlopeDbPerOct = 4.5f;
 constexpr float kDisplaySlopeReferenceHz = 1000.0f;
 
@@ -69,13 +65,6 @@ juce::String formatFrequency(const float hz) {
     return juce::String(juce::roundToInt(hz)) + " Hz";
 }
 
-float signedAverage(const auto& values) noexcept {
-    double sum = 0.0;
-    for (const auto value : values)
-        sum += static_cast<double>(value);
-    return static_cast<float>(sum / static_cast<double>(std::max<std::size_t>(1, values.size())));
-}
-
 juce::String signedDb(const float value, const int decimals = 1) {
     return juce::String(value >= 0.0f ? "+" : "") + juce::String(value, decimals) + " dB";
 }
@@ -118,18 +107,7 @@ juce::String classLabel(const float spectral, const float dynamic, const float s
     return "Tone";
 }
 
-float smoothToward(const float current,
-                   const float target,
-                   const float attackSeconds,
-                   const float releaseSeconds) noexcept {
-    return vxsuite::smoothBlockToward(current, target, kUiRefreshHz, 1, attackSeconds, releaseSeconds);
-}
-
 float smoothScalar(const float current, const float target, const float timeSeconds) noexcept {
-    return vxsuite::smoothBlockValue(current, target, kUiRefreshHz, 1, timeSeconds);
-}
-
-float smoothDisplayValue(const float current, const float target, const float timeSeconds) noexcept {
     return vxsuite::smoothBlockValue(current, target, kUiRefreshHz, 1, timeSeconds);
 }
 
@@ -229,24 +207,18 @@ juce::String describeSparseBands(const std::vector<int>& bands,
     return parts.joinIntoString("   ");
 }
 
-std::array<juce::String, 4> buildToneSummary(const juce::String& title,
-                                             const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& deltaDb,
+std::array<juce::String, 3> buildToneSummary(const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& deltaDb,
                                              const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& beforeLinear,
                                              const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& afterLinear,
                                              const int largestToneBand,
                                              const bool sparseTone,
                                              const std::vector<int>& sparseToneBands,
                                              const float dryRmsDb,
-                                             const float wetRmsDb,
-                                             const float lowAvg,
-                                             const float midAvg,
-                                             const float highAvg) {
+                                             const float wetRmsDb) {
     const float largestDelta = deltaDb[static_cast<std::size_t>(largestToneBand)];
-    juce::ignoreUnused(lowAvg, midAvg, highAvg);
 
     if (sparseTone) {
         return {
-            title,
             "Dry RMS " + juce::String(dryRmsDb, 1) + " dB   Wet RMS " + juce::String(wetRmsDb, 1) + " dB",
             "Primary: " + signedDb(largestDelta) + " @ " + formatFrequency(bandCenterHz(largestToneBand)),
             describeSparseBands(sparseToneBands, deltaDb) + "   Sparse / narrowband spectrum"
@@ -284,37 +256,9 @@ std::array<juce::String, 4> buildToneSummary(const juce::String& title,
                                                       : dominantBands.joinIntoString("   ");
 
     return {
-        title,
         "Dry RMS " + juce::String(dryRmsDb, 1) + " dB   Wet RMS " + juce::String(wetRmsDb, 1) + " dB",
         "Largest: " + signedDb(largestDelta) + " @ " + formatFrequency(bandCenterHz(largestToneBand)),
         dominantText
-    };
-}
-
-std::array<juce::String, 4> buildDynamicsSummary(const juce::String& title,
-                                                 const float peakDeltaDb,
-                                                 const float rmsDeltaDb,
-                                                 const float crestDeltaDb,
-                                                 const float transientDelta) {
-    juce::String transientText = transientDelta < -0.8f ? "Down"
-                               : transientDelta > 0.8f  ? "Up"
-                               : "Stable";
-
-    juce::String behaviour = "Broad level reduction";
-    if (std::abs(peakDeltaDb) < 0.5f && std::abs(rmsDeltaDb) < 0.5f)
-        behaviour = "Minimal change";
-    else if ((peakDeltaDb - rmsDeltaDb) < -1.2f)
-        behaviour = "Peak control";
-    else if (std::abs(crestDeltaDb) > 1.5f && crestDeltaDb < 0.0f)
-        behaviour = "Gentle compression";
-    else if ((peakDeltaDb - rmsDeltaDb) > 1.2f)
-        behaviour = "Transient reduction";
-
-    return {
-        title,
-        "Peak " + signedDb(peakDeltaDb) + "   RMS " + signedDb(rmsDeltaDb),
-        "Crest " + signedDb(crestDeltaDb) + "   Transients " + transientText,
-        "Behaviour: " + behaviour
     };
 }
 
@@ -430,26 +374,6 @@ VXStudioAnalyserEditor::VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor& o
     fullChainButton.onClick = [this] { selectFullChain(); };
     addAndMakeVisible(fullChainButton);
 
-    toneTabButton.setButtonText("Tone");
-    toneTabButton.onClick = [this] {
-        currentTabIndex.store(static_cast<int>(Tab::tone));
-        updateTabButtons();
-        refreshRenderModel();
-        applyPendingRenderModel();
-    };
-    addAndMakeVisible(toneTabButton);
-
-    dynamicsTabButton.setButtonText("Dynamics");
-    dynamicsTabButton.onClick = [this] {
-        currentTabIndex.store(static_cast<int>(Tab::dynamics));
-        updateTabButtons();
-        refreshRenderModel();
-        applyPendingRenderModel();
-    };
-    addAndMakeVisible(dynamicsTabButton);
-    toneTabButton.setVisible(false);
-    dynamicsTabButton.setVisible(false);
-
     diagnosticsToggleButton.setButtonText("Diagnostics >");
     diagnosticsToggleButton.onClick = [this] {
         diagnosticsExpanded = !diagnosticsExpanded;
@@ -468,9 +392,6 @@ VXStudioAnalyserEditor::VXStudioAnalyserEditor(VXStudioAnalyserAudioProcessor& o
     };
     addAndMakeVisible(chainToggleButton);
 
-    updateTabButtons();
-    // Domain generation counter provides immediate stage discovery, so no need for
-    // aggressive startup refresh. Run at normal UI refresh rate.
     juce::Timer::startTimerHz(kUiRefreshHz);
     refreshRenderModel();
     applyPendingRenderModel();
@@ -533,9 +454,13 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
         g.setFont(juce::FontOptions().withHeight(12.0f).withKerningFactor(0.1f));
         g.drawText("STAGE CHAIN", railHeader, juce::Justification::centredLeft, false);
 
-        for (std::size_t i = 0; i < stageRowBounds.size() && i < currentRenderModel.chainRows.size(); ++i) {
+        for (std::size_t i = 0; i < stageRowBounds.size(); ++i) {
+            const int logicalIdx = i < stageRowLogicalIndices.size()
+                ? stageRowLogicalIndices[i] : static_cast<int>(i);
+            if (logicalIdx < 0 || logicalIdx >= static_cast<int>(currentRenderModel.chainRows.size()))
+                continue;
             auto rowBounds = stageRowBounds[i].toFloat();
-            const auto& row = currentRenderModel.chainRows[i];
+            const auto& row = currentRenderModel.chainRows[static_cast<std::size_t>(logicalIdx)];
             const auto rowFill = row.inactive
                 ? juce::Colours::white.withAlpha(0.018f)
                 : row.selected ? accent.withAlpha(0.18f)
@@ -593,18 +518,22 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
     }
 
     if (!currentRenderModel.valid) {
+        const bool isBypassed = currentRenderModel.bypassed;
+        auto plotRegion = plotBounds.toFloat().reduced(80.0f, 60.0f);
+        if (plotRegion.getHeight() < 40.0f)
+            return;
+        auto upper = plotRegion.removeFromTop(plotRegion.getHeight() * 0.5f);
         g.setColour(text.withAlpha(0.84f));
         g.setFont(juce::FontOptions().withHeight(24.0f).withStyle("Bold"));
-        const bool isBypassed = currentRenderModel.bypassed;
         g.drawFittedText(isBypassed ? "Analyser is bypassed" : "Waiting for live signal",
-                         plotBounds.reduced(40, 80), juce::Justification::centred, 1);
+                         upper.toNearestInt(), juce::Justification::centredBottom, 1);
         g.setFont(juce::FontOptions().withHeight(14.0f));
         g.setColour(text.withAlpha(0.60f));
         g.drawFittedText(isBypassed
                              ? "Enable the plugin in the host to resume analysis."
                              : "Insert VX Studio Analyser last in the chain. It will show the dry baseline even before other VX stages join.",
-                         plotBounds.reduced(80, 130),
-                         juce::Justification::centred,
+                         plotRegion.withTrimmedTop(12.0f).toNearestInt(),
+                         juce::Justification::centredTop,
                          2);
         return;
     }
@@ -738,7 +667,7 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
 
 void VXStudioAnalyserEditor::resized() {
     auto area = getLocalBounds().reduced(20, 18);
-    auto header = area.removeFromTop(96);
+    auto header = area.removeFromTop(116);
     auto topRow = header.removeFromTop(18);
     if (processor.getProductIdentity().hasHelpContent()) {
         helpButton.setBounds(topRow.removeFromRight(92));
@@ -766,6 +695,7 @@ void VXStudioAnalyserEditor::resized() {
         fullChainButton.setBounds(chainArea.removeFromTop(34));
         chainArea.removeFromTop(14);
         stageRowBounds.clear();
+        stageRowLogicalIndices.clear();
 
         constexpr int kStageRowHeight = 58;
         constexpr int kRowSpacing = 10;
@@ -778,12 +708,14 @@ void VXStudioAnalyserEditor::resized() {
             const auto rowBounds = scrollableArea.removeFromTop(kStageRowHeight);
             if (rowBounds.intersects(chainArea)) {
                 stageRowBounds.push_back(rowBounds.translated(0, chainScrollOffset));
+                stageRowLogicalIndices.push_back(static_cast<int>(i));
             }
             scrollableArea.removeFromTop(kRowSpacing);
         }
     } else {
         fullChainButton.setBounds({});
         stageRowBounds.clear();
+        stageRowLogicalIndices.clear();
         chainScrollOffset = 0;
         maxChainScroll = 0;
     }
@@ -794,9 +726,6 @@ void VXStudioAnalyserEditor::resized() {
     const int summaryHeight = compactControls ? 96 : 82;
     summaryBounds = contentArea.removeFromTop(summaryHeight);
     summaryLabel.setBounds(summaryBounds.reduced(0, 2));
-    tabsBounds = {};
-    toneTabButton.setBounds({});
-    dynamicsTabButton.setBounds({});
     auto controlsArea = contentArea.removeFromTop(compactControls ? 72 : 34);
     if (compactControls) {
         auto rowOne = controlsArea.removeFromTop(32);
@@ -848,7 +777,10 @@ void VXStudioAnalyserEditor::mouseUp(const juce::MouseEvent& event) {
     const auto localPosition = event.getEventRelativeTo(this).position.toInt();
     for (int index = 0; index < static_cast<int>(stageRowBounds.size()); ++index) {
         if (stageRowBounds[static_cast<std::size_t>(index)].contains(localPosition)) {
-            selectStage(index);
+            const int logicalIndex = index < static_cast<int>(stageRowLogicalIndices.size())
+                ? stageRowLogicalIndices[static_cast<std::size_t>(index)]
+                : index;
+            selectStage(logicalIndex);
             return;
         }
     }
@@ -862,7 +794,8 @@ void VXStudioAnalyserEditor::mouseWheelMove(const juce::MouseEvent& event, const
     constexpr int kScrollStep = 30;
     int scrollDelta = wheel.deltaY > 0 ? -kScrollStep : kScrollStep;
     chainScrollOffset = juce::jlimit(0, maxChainScroll, chainScrollOffset + scrollDelta);
-    refreshRenderModel();
+    resized();
+    repaint();
 }
 
 void VXStudioAnalyserEditor::visibilityChanged() {
@@ -884,22 +817,8 @@ void VXStudioAnalyserEditor::timerCallback() {
 
 void VXStudioAnalyserEditor::refreshRenderModel() {
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
-
-    // Rescan whenever either the analyser domain or the stage registry topology changes.
-    const auto currentDomainGeneration = vxsuite::analysis::DomainRegistry::instance().getDomainGeneration();
-    const auto currentStageGeneration = vxsuite::analysis::StageRegistry::instance().getStageGeneration();
-    const bool generationChanged = currentDomainGeneration != lastDomainGeneration
-        || currentStageGeneration != lastStageGeneration;
-    lastDomainGeneration = currentDomainGeneration;
-    lastStageGeneration = currentStageGeneration;
-
-    // If generation didn't change, reuse cached stages. Otherwise scan registry for new/removed stages.
-    std::vector<StageEntry> externalStages = (generationChanged || cachedExternalStages.empty())
-        ? std::vector<StageEntry>()
-        : cachedExternalStages;
-    std::optional<StageEntry> analyserStage = (generationChanged || !cachedAnalyserStage)
-        ? std::optional<StageEntry>()
-        : cachedAnalyserStage;
+    std::vector<StageEntry> externalStages;
+    std::optional<StageEntry> analyserStage;
 
     // Diagnostics: count filtering results (initialized for all code paths)
     int diagnosticTotalSlots = 0;
@@ -913,82 +832,86 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     const auto analyserDomainId = processor.analysisDomainId();
     const auto fallbackDomainId = vxsuite::analysis::DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
 
-    // Only scan registry if topology changed or the caches are empty.
-    if (generationChanged || cachedExternalStages.empty()) {
-        externalStages.clear();
-        analyserStage = std::nullopt;
-        externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
+    externalStages.reserve(vxsuite::analysis::StageRegistry::instance().maxSlots());
 
-        for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
-            vxsuite::analysis::StageView stage;
-            if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
-                continue;
-            ++diagnosticTotalSlots;
-            if (!stage.active)
-                continue;
-            ++diagnosticActiveSlots;
-            if (labelFromChars(stage.telemetry.identity.pluginFamily) != "VXSuite")
-                continue;
-            ++diagnosticVxSuiteSlots;
-            const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
-            if (stageAgeMs > kStaleThresholdMs)
-                continue;
+    for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
+        vxsuite::analysis::StageView stage;
+        if (!vxsuite::analysis::StageRegistry::instance().readStage(slotIndex, stage))
+            continue;
+        ++diagnosticTotalSlots;
+        if (!stage.active)
+            continue;
+        ++diagnosticActiveSlots;
+        if (labelFromChars(stage.telemetry.identity.pluginFamily) != "VXSuite")
+            continue;
+        ++diagnosticVxSuiteSlots;
+        const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
+        const bool isStale = stageAgeMs > kStaleThresholdMs;
+        if (!isStale)
             ++diagnosticNonStaleSlots;
-            if (stage.analysisDomainId != analyserDomainId
-                && stage.analysisDomainId != fallbackDomainId)
-                continue;
-            ++diagnosticDomainMatchSlots;
+        if (stage.analysisDomainId != analyserDomainId
+            && stage.analysisDomainId != fallbackDomainId)
+            continue;
+        ++diagnosticDomainMatchSlots;
 
-            StageEntry entry;
-            entry.view = stage;
-            entry.stageId = labelFromChars(stage.telemetry.identity.stageId);
-            entry.stageName = labelFromChars(stage.telemetry.identity.stageName);
-            entry.stateText = stage.telemetry.state.isBypassed ? "Bypassed"
-                            : !stage.telemetry.state.isLive  ? "Inactive"
-                            : stage.telemetry.state.isSilent ? "Silent"
-                                                             : "Active";
-            std::array<float, vxsuite::analysis::kSummarySpectrumBins> stageDeltaDb {};
-            float spectralDeltaSum = 0.0f;
-            float largestStageDelta = 0.0f;
-            int largestStageBand = 0;
-            for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
-                const float deltaDb = toDb(stage.telemetry.outputSummary.spectrum[static_cast<std::size_t>(i)])
-                                    - toDb(stage.telemetry.inputSummary.spectrum[static_cast<std::size_t>(i)]);
-                stageDeltaDb[static_cast<std::size_t>(i)] = deltaDb;
-                spectralDeltaSum += std::abs(deltaDb);
-                if (std::abs(deltaDb) > std::abs(largestStageDelta)) {
-                    largestStageDelta = deltaDb;
-                    largestStageBand = i;
-                }
-            }
-            entry.spectralChange = spectralDeltaSum / static_cast<float>(vxsuite::analysis::kSummarySpectrumBins);
-            entry.dynamicChange = std::abs(toDb(stage.telemetry.outputSummary.rms, -120.0f)
-                                           - toDb(stage.telemetry.inputSummary.rms, -120.0f));
-            entry.stereoChange = std::abs(stage.telemetry.outputSummary.stereoWidth - stage.telemetry.inputSummary.stereoWidth)
-                               + std::abs(stage.telemetry.outputSummary.correlation - stage.telemetry.inputSummary.correlation);
-            entry.impactScore = 0.45f * entry.spectralChange + 0.45f * entry.dynamicChange + 0.10f * entry.stereoChange;
-            entry.impactText = signedDb(juce::jlimit(-24.0f, 24.0f, largestStageDelta));
-            const auto sparseStage = classifySparseTone(stage.telemetry.inputSummary.spectrum,
-                                                        stage.telemetry.outputSummary.spectrum,
-                                                        stageDeltaDb);
-            entry.typeLabel = sparseStage.sparse ? "Sparse"
-                                                 : classLabel(entry.spectralChange, entry.dynamicChange, entry.stereoChange);
-            entry.freqHint = "@" + formatFrequency(bandCenterHz(largestStageBand));
+        StageEntry entry;
+        entry.view = stage;
+        entry.stageId = labelFromChars(stage.telemetry.identity.stageId);
+        entry.stageName = labelFromChars(stage.telemetry.identity.stageName);
+        entry.stale = isStale;
 
+        if (isStale) {
+            entry.stateText = "Inactive";
+            entry.impactText = "";
+            entry.typeLabel = "";
+            entry.freqHint = "";
             if (entry.stageId == processor.stageIdString()) {
                 analyserStage = entry;
                 continue;
             }
-
             externalStages.push_back(std::move(entry));
+            continue;
         }
 
-        cachedExternalStages = externalStages;
-        cachedAnalyserStage = analyserStage;
-    }
+        entry.stateText = stage.telemetry.state.isBypassed ? "Bypassed"
+                        : !stage.telemetry.state.isLive  ? "Inactive"
+                        : stage.telemetry.state.isSilent ? "Silent"
+                                                         : "Active";
+        std::array<float, vxsuite::analysis::kSummarySpectrumBins> stageDeltaDb {};
+        float spectralDeltaSum = 0.0f;
+        float largestStageDelta = 0.0f;
+        int largestStageBand = 0;
+        for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
+            const float deltaDb = toDb(stage.telemetry.outputSummary.spectrum[static_cast<std::size_t>(i)])
+                                - toDb(stage.telemetry.inputSummary.spectrum[static_cast<std::size_t>(i)]);
+            stageDeltaDb[static_cast<std::size_t>(i)] = deltaDb;
+            spectralDeltaSum += std::abs(deltaDb);
+            if (std::abs(deltaDb) > std::abs(largestStageDelta)) {
+                largestStageDelta = deltaDb;
+                largestStageBand = i;
+            }
+        }
+        entry.spectralChange = spectralDeltaSum / static_cast<float>(vxsuite::analysis::kSummarySpectrumBins);
+        entry.dynamicChange = std::abs(toDb(stage.telemetry.outputSummary.rms, -120.0f)
+                                       - toDb(stage.telemetry.inputSummary.rms, -120.0f));
+        entry.stereoChange = std::abs(stage.telemetry.outputSummary.stereoWidth - stage.telemetry.inputSummary.stereoWidth)
+                           + std::abs(stage.telemetry.outputSummary.correlation - stage.telemetry.inputSummary.correlation);
+        entry.impactScore = 0.45f * entry.spectralChange + 0.45f * entry.dynamicChange + 0.10f * entry.stereoChange;
+        entry.impactText = signedDb(juce::jlimit(-24.0f, 24.0f, largestStageDelta));
+        const auto sparseStage = classifySparseTone(stage.telemetry.inputSummary.spectrum,
+                                                    stage.telemetry.outputSummary.spectrum,
+                                                    stageDeltaDb);
+        entry.typeLabel = sparseStage.sparse ? "Sparse"
+                                             : classLabel(entry.spectralChange, entry.dynamicChange, entry.stereoChange);
+        entry.freqHint = "@" + formatFrequency(bandCenterHz(largestStageBand));
 
-    const bool hasAnalyserSignal = analyserStage.has_value()
-        && analyserStage->view.telemetry.inputSummary.rms > 1.0e-6f;
+        if (entry.stageId == processor.stageIdString()) {
+            analyserStage = entry;
+            continue;
+        }
+
+        externalStages.push_back(std::move(entry));
+    }
 
     std::sort(externalStages.begin(), externalStages.end(), [](const auto& a, const auto& b) {
         return a.view.telemetry.identity.localOrderId < b.view.telemetry.identity.localOrderId;
@@ -998,7 +921,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
     activeStageIndices.reserve(externalStages.size());
     for (int i = 0; i < static_cast<int>(externalStages.size()); ++i) {
         const auto& stage = externalStages[static_cast<std::size_t>(i)];
-        if (!stage.view.telemetry.state.isBypassed)
+        if (!stage.stale && !stage.view.telemetry.state.isBypassed)
             activeStageIndices.push_back(i);
     }
 
@@ -1013,13 +936,13 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         fullChainSelected.store(true);
     }
 
-    if (analyserStage.has_value() && analyserStage->view.telemetry.state.isBypassed) {
+    if (analyserStage.has_value() && !analyserStage->stale && analyserStage->view.telemetry.state.isBypassed) {
         currentRenderModel = {};
         currentRenderModel.bypassed = true;
         currentRenderModel.valid = false;
         currentRenderModel.selectionTitle = "Bypassed";
         currentRenderModel.statusText = "Analyser is bypassed";
-        currentRenderModel.summaryLines = { "Analyser bypassed", "Plugin is disabled in the host", "", "" };
+        currentRenderModel.summaryLines = { "Plugin is disabled in the host", "", "" };
         return;
     }
 
@@ -1031,7 +954,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
     for (int i = 0; i < static_cast<int>(externalStages.size()); ++i) {
         const auto& stage = externalStages[static_cast<std::size_t>(i)];
-        const bool isInactive = stage.view.telemetry.state.isBypassed || !stage.view.telemetry.state.isLive;
+        const bool isInactive = stage.stale || stage.view.telemetry.state.isBypassed || !stage.view.telemetry.state.isLive;
         const bool isSelectedStage =
             !isInactive && !fullChain && stage.view.telemetry.identity.instanceId == selectedInstanceId;
         model.chainRows.push_back({
@@ -1169,23 +1092,6 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 std::max(1.0e-6f, backendState.afterToneLinearSum[static_cast<std::size_t>(i)] * historyScale);
         }
 
-        float beforeMeanDb = 0.0f;
-        float afterMeanDb = 0.0f;
-        for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {
-            const float beforeBandDb = toDb(backendState.beforeToneLinear[static_cast<std::size_t>(i)], -120.0f);
-            const float afterBandDb = toDb(backendState.afterToneLinear[static_cast<std::size_t>(i)], -120.0f);
-            beforeMeanDb += beforeBandDb;
-            afterMeanDb += afterBandDb;
-        }
-        beforeMeanDb /= static_cast<float>(vxsuite::analysis::kSummarySpectrumBins);
-        afterMeanDb /= static_cast<float>(vxsuite::analysis::kSummarySpectrumBins);
-
-        float lowSum = 0.0f;
-        float midSum = 0.0f;
-        float highSum = 0.0f;
-        int lowCount = 0;
-        int midCount = 0;
-        int highCount = 0;
         float largestDelta = 0.0f;
         int largestBand = 0;
 
@@ -1209,9 +1115,9 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                 backendState.deltaToneDb[static_cast<std::size_t>(i)] = deltaTarget;
             } else {
                 backendState.deltaToneDb[static_cast<std::size_t>(i)] =
-                    smoothDisplayValue(backendState.deltaToneDb[static_cast<std::size_t>(i)],
-                                       deltaTarget,
-                                       deltaDisplaySeconds);
+                    smoothScalar(backendState.deltaToneDb[static_cast<std::size_t>(i)],
+                                 deltaTarget,
+                                 deltaDisplaySeconds);
             }
 
             backendState.displayBeforeToneDb[static_cast<std::size_t>(i)] = beforeDb;
@@ -1229,17 +1135,6 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
                                  averageSeconds);
             }
             smoothedDeltaTone[static_cast<std::size_t>(i)] = backendState.displayDeltaToneDb[static_cast<std::size_t>(i)];
-
-            if (hz < kLowHighBoundaryHz) {
-                lowSum += smoothedDeltaTone[static_cast<std::size_t>(i)];
-                ++lowCount;
-            } else if (hz < kMidHighBoundaryHz) {
-                midSum += smoothedDeltaTone[static_cast<std::size_t>(i)];
-                ++midCount;
-            } else {
-                highSum += smoothedDeltaTone[static_cast<std::size_t>(i)];
-                ++highCount;
-            }
 
             if (hasMeaningfulBandEnergy(beforeLinear, afterLinear)
                 && std::abs(smoothedDeltaTone[static_cast<std::size_t>(i)]) > std::abs(largestDelta)) {
@@ -1265,81 +1160,18 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
         }
 
         model.largestToneBand = largestBand;
-        const float lowAvg = lowCount > 0 ? lowSum / static_cast<float>(lowCount) : 0.0f;
-        const float midAvg = midCount > 0 ? midSum / static_cast<float>(midCount) : 0.0f;
-        const float highAvg = highCount > 0 ? highSum / static_cast<float>(highCount) : 0.0f;
-
         backendState.largestToneDeltaDb = resetSmoothing ? largestDelta
                                                          : smoothScalar(backendState.largestToneDeltaDb, largestDelta, summarySmoothingSeconds);
-        backendState.lowToneDeltaDb = resetSmoothing ? lowAvg
-                                                     : smoothScalar(backendState.lowToneDeltaDb, lowAvg, summarySmoothingSeconds);
-        backendState.midToneDeltaDb = resetSmoothing ? midAvg
-                                                     : smoothScalar(backendState.midToneDeltaDb, midAvg, summarySmoothingSeconds);
-        backendState.highToneDeltaDb = resetSmoothing ? highAvg
-                                                      : smoothScalar(backendState.highToneDeltaDb, highAvg, summarySmoothingSeconds);
-
-        for (int i = 0; i < vxsuite::analysis::kSummaryEnvelopeBins; ++i) {
-            const float beforeTarget = std::max(1.0e-6f, before.envelope[static_cast<std::size_t>(i)]);
-            const float afterTarget = std::max(1.0e-6f, after.envelope[static_cast<std::size_t>(i)]);
-            if (resetSmoothing) {
-                backendState.beforeDynamicsLinear[static_cast<std::size_t>(i)] = beforeTarget;
-                backendState.afterDynamicsLinear[static_cast<std::size_t>(i)] = afterTarget;
-            } else {
-                backendState.beforeDynamicsLinear[static_cast<std::size_t>(i)] =
-                    smoothScalar(backendState.beforeDynamicsLinear[static_cast<std::size_t>(i)],
-                                 beforeTarget,
-                                 averageSeconds);
-                backendState.afterDynamicsLinear[static_cast<std::size_t>(i)] =
-                    smoothScalar(backendState.afterDynamicsLinear[static_cast<std::size_t>(i)],
-                                 afterTarget,
-                                 averageSeconds);
-            }
-
-            model.beforeDynamicsDb[static_cast<std::size_t>(i)] =
-                juce::jlimit(kDynamicsMinDb, kDynamicsMaxDb, toDb(backendState.beforeDynamicsLinear[static_cast<std::size_t>(i)], -120.0f));
-            model.afterDynamicsDb[static_cast<std::size_t>(i)] =
-                juce::jlimit(kDynamicsMinDb, kDynamicsMaxDb, toDb(backendState.afterDynamicsLinear[static_cast<std::size_t>(i)], -120.0f));
-        }
-
-        model.beforeDynamicsDb = smoothNeighbourBins(model.beforeDynamicsDb, std::max(1, smoothingRadius));
-        model.afterDynamicsDb = smoothNeighbourBins(model.afterDynamicsDb, std::max(1, smoothingRadius));
-
-        const float peakDeltaTarget = toDb(after.peak, -120.0f) - toDb(before.peak, -120.0f);
-        const float rmsDeltaTarget = toDb(after.rms, -120.0f) - toDb(before.rms, -120.0f);
-        const float crestDeltaTarget = toDb(std::max(1.0e-6f, after.crestFactor), -120.0f)
-            - toDb(std::max(1.0e-6f, before.crestFactor), -120.0f);
-        const float transientDeltaTarget = after.transientScore - before.transientScore;
-        backendState.peakDeltaDb = resetSmoothing ? peakDeltaTarget
-                                                  : smoothScalar(backendState.peakDeltaDb, peakDeltaTarget, summarySmoothingSeconds);
-        backendState.rmsDeltaDb = resetSmoothing ? rmsDeltaTarget
-                                                 : smoothScalar(backendState.rmsDeltaDb, rmsDeltaTarget, summarySmoothingSeconds);
-        backendState.crestDeltaDb = resetSmoothing ? crestDeltaTarget
-                                                   : smoothScalar(backendState.crestDeltaDb, crestDeltaTarget, summarySmoothingSeconds);
-        backendState.transientDelta = resetSmoothing ? transientDeltaTarget
-                                                     : smoothScalar(backendState.transientDelta, transientDeltaTarget, summarySmoothingSeconds);
 
         model.selectionTitle = "Spectrum  |  " + scopeLabel;
-        if (selectionKey.startsWith("waiting:")) {
-            model.summaryLines = {
-                "Spectrum -> Waiting for telemetry",
-                "Live chain row is present, but this stage has not published matched telemetry yet",
-                "Analysis will appear as soon as telemetry arrives",
-                "Current graph is analyser passthrough only to avoid false spikes"
-            };
-        } else {
-            model.summaryLines = buildToneSummary("Spectrum -> " + scopeLabel,
-                                                  model.deltaToneDb,
-                                                  backendState.beforeToneLinear,
-                                                  backendState.afterToneLinear,
-                                                  model.largestToneBand,
-                                                  model.sparseTone,
-                                                  model.sparseToneBands,
-                                                  toDb(before.rms, -120.0f),
-                                                  toDb(after.rms, -120.0f),
-                                                  backendState.lowToneDeltaDb,
-                                                  backendState.midToneDeltaDb,
-                                                  backendState.highToneDeltaDb);
-        }
+        model.summaryLines = buildToneSummary(model.deltaToneDb,
+                                              backendState.beforeToneLinear,
+                                              backendState.afterToneLinear,
+                                              model.largestToneBand,
+                                              model.sparseTone,
+                                              model.sparseToneBands,
+                                              toDb(before.rms, -120.0f),
+                                              toDb(after.rms, -120.0f));
 
         model.diagnosticsText =
             "Domain: " + juce::String(static_cast<juce::int64>(processor.analysisDomainId()))
@@ -1368,9 +1200,9 @@ void VXStudioAnalyserEditor::applyPendingRenderModel() {
     recordingLabel.setText(signalQualityLabel(processor.getSignalQualitySnapshot()), juce::dontSendNotification);
     statusLabel.setText(currentRenderModel.statusText, juce::dontSendNotification);
     selectionLabel.setText(currentRenderModel.selectionTitle, juce::dontSendNotification);
-    summaryLabel.setText(currentRenderModel.summaryLines[1] + "\n"
-                             + currentRenderModel.summaryLines[2] + "\n"
-                             + currentRenderModel.summaryLines[3],
+    summaryLabel.setText(currentRenderModel.summaryLines[0] + "\n"
+                             + currentRenderModel.summaryLines[1] + "\n"
+                             + currentRenderModel.summaryLines[2],
                          juce::dontSendNotification);
     rebuildStageButtons();
     repaint();
@@ -1408,9 +1240,19 @@ void VXStudioAnalyserEditor::selectFullChain() {
     applyPendingRenderModel();
 }
 
-void VXStudioAnalyserEditor::updateTabButtons() {
-    toneTabButton.setVisible(false);
-    dynamicsTabButton.setVisible(false);
+void VXStudioAnalyserEditor::debugRefreshNow() {
+    refreshRenderModel();
+    applyPendingRenderModel();
+}
+
+int VXStudioAnalyserEditor::debugVisibleChainRowCount() const noexcept {
+    return static_cast<int>(currentRenderModel.chainRows.size());
+}
+
+juce::String VXStudioAnalyserEditor::debugChainRowStateText(const int index) const {
+    if (index < 0 || index >= static_cast<int>(currentRenderModel.chainRows.size()))
+        return {};
+    return currentRenderModel.chainRows[static_cast<std::size_t>(index)].stateText;
 }
 
 float VXStudioAnalyserEditor::currentAverageTimeSeconds() const noexcept {
@@ -1457,37 +1299,6 @@ juce::Path VXStudioAnalyserEditor::makeTonePath(
     path.startNewSubPath(pts[0]);
     for (int i = 1; i < n; ++i)
         path.lineTo(pts[static_cast<std::size_t>(i)]);
-    return path;
-}
-
-juce::Path VXStudioAnalyserEditor::makeDynamicsPath(
-    const std::array<float, vxsuite::analysis::kSummaryEnvelopeBins>& valuesDb,
-    const juce::Rectangle<float> bounds) const {
-    juce::Path path;
-    std::array<juce::Point<float>, vxsuite::analysis::kSummaryEnvelopeBins> points {};
-    for (int i = 0; i < static_cast<int>(valuesDb.size()); ++i) {
-        points[static_cast<std::size_t>(i)] = {
-            bounds.getX() + (bounds.getWidth() * static_cast<float>(i))
-                / static_cast<float>(std::max(1, static_cast<int>(valuesDb.size()) - 1)),
-            juce::jmap(valuesDb[static_cast<std::size_t>(i)],
-                       kDynamicsMinDb,
-                       kDynamicsMaxDb,
-                       bounds.getBottom(),
-                       bounds.getY())
-        };
-    }
-
-    if (points.empty())
-        return path;
-
-    path.startNewSubPath(points.front());
-    for (int i = 1; i < static_cast<int>(points.size()) - 1; ++i) {
-        const auto current = points[static_cast<std::size_t>(i)];
-        const auto next = points[static_cast<std::size_t>(i + 1)];
-        const auto mid = juce::Point<float>((current.x + next.x) * 0.5f, (current.y + next.y) * 0.5f);
-        path.quadraticTo(current, mid);
-    }
-    path.lineTo(points.back());
     return path;
 }
 

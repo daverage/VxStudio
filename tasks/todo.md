@@ -1,29 +1,11 @@
-# VxRepair Build Plan
+# VxRepair + VxClarity Fixes — DONE
 
-## Goal
-New VST3 plugin — single intelligent repair assistant. Analyses ~5s of audio, detects noise/reverb/hum-mud, suggests per-tool strength. Three tool rows (Cleanup, Denoiser, Deverb), each with one knob + listen + bypass.
-
-## Files
-- [x] `products/repair/VxRepairAnalysis.h/.cpp` — audio analysis layer
-- [x] `products/repair/VxRepairProcessor.h/.cpp` — processor
-- [x] `products/repair/VxRepairEditor.h/.cpp` — custom 3-state UI
-- [x] `CMakeLists.txt` — VXRepair target
-- [x] `cmake/VxStudioVersions.h.in` — version entry
-- [x] Builds and stages to Source/vxstudio/vst/VXRepair.vst3
-
-## States
-1. **Idle** — prompt + Analyse button
-2. **Collecting** — 5s progress arc + level display
-3. **Repair** — 3 tool rows (Cleanup / Noise / Reverb) + DeepFilterNet note + Reset
-
-## Tools
-| Row | DSP | Score drives |
-|-----|-----|-------------|
-| Hum & Mud | `cleanup::Dsp` | `humMudScore` |
-| Noise | `denoiser::DenoiserDsp` | `noiseScore` |
-| Reverb | `deverb::SpectralProcessor` | `reverbScore` |
-
-DeepFilterNet: not embedded — show tip in footer if standard noise detected.
-
-## Accent
-Orange `{1.0f, 0.52f, 0.08f}` — distinctive from suite cyan.
+- [x] 1. VxRepair: Fix clarity analysis (sibilance-band FFT score, not hum/mud)
+- [x] 2. VxRepair: Adapt denoiser ProcessOptions to strength
+- [x] 3. VxRepair: Adapt deverb ProcessOptions to strength
+- [x] 4. VxRepair: Remove dead deverb opts (voiceProtect + labRawMode)
+- [x] 5. VxRepair: Raise scoreToStrength cap 0.85 → 0.95
+- [x] 6. VxRepair: DeepFilter toggle moved lower (60→76px, 20px gap from confidence label)
+- [x] 7. VxRepair + VxClarity: Fix sibilance detection threshold 0.25 → 0.08
+- [x] 8. VxClarity: Remove broken performPreAnalysis; replace breathThreshold with running smoothedPeak
+- [x] 9. VxClarity: Wire HPF (80 Hz, 2nd-order Butterworth) and hi-shelf (-2.5 dB @ 7 kHz) to hpf_on / hishelf_on params

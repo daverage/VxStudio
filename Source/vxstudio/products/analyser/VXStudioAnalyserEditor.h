@@ -26,18 +26,17 @@ public:
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     void visibilityChanged() override;
 
-private:
-    enum class Tab {
-        tone = 0,
-        dynamics = 1
-    };
+    void debugRefreshNow();
+    [[nodiscard]] int debugVisibleChainRowCount() const noexcept;
+    [[nodiscard]] juce::String debugChainRowStateText(int index) const;
 
+private:
     struct ChainRow {
         juce::String stageName;
         juce::String stateText;
         juce::String impactText;
-        juce::String typeLabel;   // "Tone", "Dynamic", "Spatial", "Mixed", "Sparse"
-        juce::String freqHint;    // "@1.2 kHz"
+        juce::String typeLabel;
+        juce::String freqHint;
         bool inactive = false;
         bool selected = false;
     };
@@ -48,7 +47,7 @@ private:
         bool sparseTone = false;
         juce::String statusText;
         juce::String selectionTitle;
-        std::array<juce::String, 4> summaryLines {};
+        std::array<juce::String, 3> summaryLines {};
         juce::String diagnosticsText;
         std::vector<ChainRow> chainRows;
         std::vector<int> chainRowStageIndices;
@@ -57,8 +56,6 @@ private:
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> beforeToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> afterToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> deltaToneDb {};
-        std::array<float, vxsuite::analysis::kSummaryEnvelopeBins> beforeDynamicsDb {};
-        std::array<float, vxsuite::analysis::kSummaryEnvelopeBins> afterDynamicsDb {};
         int largestToneBand = 0;
     };
 
@@ -80,16 +77,7 @@ private:
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> displayAfterToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> displayDeltaToneDb {};
         std::array<float, vxsuite::analysis::kSummarySpectrumBins> deltaToneDb {};
-        std::array<float, vxsuite::analysis::kSummaryEnvelopeBins> beforeDynamicsLinear {};
-        std::array<float, vxsuite::analysis::kSummaryEnvelopeBins> afterDynamicsLinear {};
-        float peakDeltaDb = 0.0f;
-        float rmsDeltaDb = 0.0f;
-        float crestDeltaDb = 0.0f;
-        float transientDelta = 0.0f;
         float largestToneDeltaDb = 0.0f;
-        float lowToneDeltaDb = 0.0f;
-        float midToneDeltaDb = 0.0f;
-        float highToneDeltaDb = 0.0f;
     };
 
     struct StageEntry {
@@ -98,12 +86,13 @@ private:
         juce::String stageName;
         juce::String stateText;
         juce::String impactText;
-        juce::String typeLabel;   // "Tone", "Dynamic", "Spatial", "Mixed", "Sparse"
-        juce::String freqHint;    // "@1.2 kHz"
+        juce::String typeLabel;
+        juce::String freqHint;
         float spectralChange = 0.0f;
         float dynamicChange = 0.0f;
         float stereoChange = 0.0f;
         float impactScore = 0.0f;
+        bool stale = false;
     };
 
     void timerCallback() override;
@@ -113,14 +102,11 @@ private:
     void rebuildStageButtons();
     void selectStage(int index);
     void selectFullChain();
-    void updateTabButtons();
     [[nodiscard]] float currentAverageTimeSeconds() const noexcept;
     [[nodiscard]] int currentSpectrumSmoothingRadius() const noexcept;
 
     [[nodiscard]] juce::Path makeTonePath(const std::array<float, vxsuite::analysis::kSummarySpectrumBins>& valuesDb,
                                           juce::Rectangle<float> bounds) const;
-    [[nodiscard]] juce::Path makeDynamicsPath(const std::array<float, vxsuite::analysis::kSummaryEnvelopeBins>& valuesDb,
-                                              juce::Rectangle<float> bounds) const;
     [[nodiscard]] juce::Colour colourFromRgb(const std::array<float, 3>& rgb, float alpha = 1.0f) const noexcept;
 
     VXStudioAnalyserAudioProcessor& processor;
@@ -129,16 +115,11 @@ private:
     std::atomic<int> selectedStageIndex { -1 };
     std::atomic<std::uint64_t> selectedStageInstanceId { 0 };
     std::atomic<bool> fullChainSelected { true };
-    std::atomic<int> currentTabIndex { static_cast<int>(Tab::tone) };
     std::atomic<int> averageTimeIndex { 3 };
     std::atomic<int> smoothingIndex { 3 };
     bool diagnosticsExpanded = false;
     bool chainCollapsed = false;
     std::size_t prevChainRowCount = 0;
-    std::uint32_t lastDomainGeneration = 0;
-    std::uint32_t lastStageGeneration = 0;
-    std::vector<StageEntry> cachedExternalStages;
-    std::optional<StageEntry> cachedAnalyserStage;
 
     RenderModel currentRenderModel;
     BackendState backendState;
@@ -154,8 +135,6 @@ private:
     juce::Label smoothingLabel;
     vxsuite::HelpButton helpButton;
     juce::TextButton fullChainButton;
-    juce::TextButton toneTabButton;
-    juce::TextButton dynamicsTabButton;
     juce::TextButton chainToggleButton;
     juce::TextButton diagnosticsToggleButton;
     juce::ComboBox averageTimeBox;
@@ -164,10 +143,10 @@ private:
     juce::Rectangle<int> chainBounds;
     juce::Rectangle<int> contentBounds;
     juce::Rectangle<int> summaryBounds;
-    juce::Rectangle<int> tabsBounds;
     juce::Rectangle<int> plotBounds;
     juce::Rectangle<int> diagnosticsBounds;
     std::vector<juce::Rectangle<int>> stageRowBounds;
+    std::vector<int> stageRowLogicalIndices;
 
     int chainScrollOffset = 0;
     int maxChainScroll = 0;

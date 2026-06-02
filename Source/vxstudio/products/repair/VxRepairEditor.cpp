@@ -8,20 +8,19 @@ constexpr int kEditorH = 580;
 
 constexpr int kHeaderH  = 60;
 constexpr int kStatusH  = 30;
-constexpr int kFooterH  = 70;    // taller footer to fit makeup knob
-constexpr int kRowH     = 110;   // per tool row
+constexpr int kFooterH  = 70;
+constexpr int kRowH     = 110;
 constexpr int kRowPad   = 8;
 
 juce::Colour fromRgb(const std::array<float, 3>& c) {
     return juce::Colour::fromFloatRGBA(c[0], c[1], c[2], 1.0f);
 }
 
-// Thresholds match RepairAnalyser::kActiveThreshold (0.10)
 juce::Colour scoreColour(float score) {
-    if (score < 0.10f) return juce::Colour(0xff3a4a3a);   // inactive grey-green
-    if (score < 0.40f) return juce::Colour(0xffbbaa00);   // amber
-    if (score < 0.70f) return juce::Colour(0xffdd6622);   // orange
-    return juce::Colour(0xffdd2222);                       // red
+    if (score < 0.10f) return juce::Colour(0xff3a4a3a);
+    if (score < 0.40f) return juce::Colour(0xffbbaa00);
+    if (score < 0.70f) return juce::Colour(0xffdd6622);
+    return juce::Colour(0xffdd2222);
 }
 
 juce::String scoreLabel(float score) {
@@ -63,6 +62,12 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
 
+    // Help button
+    helpButton.onClick = [this] {
+        vxsuite::showHelpDialog(*this, repairProcessor.getProductIdentity());
+    };
+    addAndMakeVisible(helpButton);
+
     // Idle state
     analyseButton.setButtonText("Analyse");
     analyseButton.setColour(juce::TextButton::buttonColourId, accent.withAlpha(0.88f));
@@ -84,6 +89,11 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
     collectingLabel.setColour(juce::Label::textColourId, text);
     collectingLabel.setJustificationType(juce::Justification::centred);
     addChildComponent(collectingLabel);
+
+    phaseLabel.setFont(juce::FontOptions().withHeight(13.0f));
+    phaseLabel.setColour(juce::Label::textColourId, text.withAlpha(0.55f));
+    phaseLabel.setJustificationType(juce::Justification::centred);
+    addChildComponent(phaseLabel);
 
     // Tool rows
     const char* toolNames[3]      = { "Noise", "Speech Clarity", "Reverb" };
@@ -108,6 +118,14 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
         row.strengthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
         row.strengthSlider.setRange(0.0, 1.0, 0.001);
         addChildComponent(row.strengthSlider);
+
+        // Auto-enable the tool when the user starts dragging the strength knob
+        const juce::String onId { onIds[i] };
+        row.strengthSlider.onDragStart = [this, onId] {
+            if (auto* p = repairProcessor.getValueTreeState().getParameter(onId))
+                if (p->getValue() < 0.5f)
+                    p->setValueNotifyingHost(1.0f);
+        };
 
         row.strengthLabel.setText("Strength", juce::dontSendNotification);
         row.strengthLabel.setFont(juce::FontOptions().withHeight(11.5f));
@@ -139,6 +157,22 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
             apvts, onIds[i], row.bypassButton);
     }
 
+    // DeepFilter toggle — Noise row only
+    deepFilterToggle.setButtonText("DeepFilter");
+    deepFilterToggle.setClickingTogglesState(true);
+    deepFilterToggle.setColour(juce::ToggleButton::textColourId,         text.withAlpha(0.75f));
+    deepFilterToggle.setColour(juce::ToggleButton::tickColourId,         accent);
+    deepFilterToggle.setColour(juce::ToggleButton::tickDisabledColourId, text.withAlpha(0.30f));
+    addChildComponent(deepFilterToggle);
+
+    deepFilterStatus.setFont(juce::FontOptions().withHeight(11.0f));
+    deepFilterStatus.setColour(juce::Label::textColourId, text.withAlpha(0.45f));
+    deepFilterStatus.setJustificationType(juce::Justification::centredLeft);
+    addChildComponent(deepFilterStatus);
+
+    deepFilterAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        apvts, "noise_deepfilter", deepFilterToggle);
+
     // Makeup gain
     makeupSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     makeupSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, scaled(52), scaled(16));
@@ -169,14 +203,7 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
     };
     addChildComponent(resetButton);
 
-    deepFilterNote.setText("Tip: for complex background noise, also run VX Deep Filter Net in your chain.",
-                           juce::dontSendNotification);
-    deepFilterNote.setFont(juce::FontOptions().withHeight(11.5f));
-    deepFilterNote.setColour(juce::Label::textColourId, text.withAlpha(0.38f));
-    deepFilterNote.setJustificationType(juce::Justification::centred);
-    addChildComponent(deepFilterNote);
-
-    // If a previous analysis was saved with the project, restore the repair screen.
+    // Restore repair state from previously saved analysis
     if (repairProcessor.isAnalysisComplete()) {
         lastAssessment = repairProcessor.getAssessment();
         uiState = UIState::Repair;
@@ -184,7 +211,7 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
         showRepairState();
     }
 
-    startTimerHz(15);
+    startTimerHz(30);
 }
 
 VXRepairEditor::~VXRepairEditor() {
@@ -195,15 +222,41 @@ VXRepairEditor::~VXRepairEditor() {
 void VXRepairEditor::timerCallback() {
     statusLabel.setText(repairProcessor.getStatusText(), juce::dontSendNotification);
 
-    // Keep On/Off label in sync with toggle state
-    for (auto& row : rows) {
+    for (auto& row : rows)
         row.bypassButton.setButtonText(row.bypassButton.getToggleState() ? "On" : "Off");
+
+    // Update DeepFilter status label while in Repair state
+    if (uiState == UIState::Repair) {
+        const bool dfOn = deepFilterToggle.getToggleState();
+        deepFilterStatus.setVisible(dfOn);
+        if (dfOn) {
+            if (repairProcessor.isDeepFilterReady())
+                deepFilterStatus.setText("Model ready", juce::dontSendNotification);
+            else if (repairProcessor.isDeepFilterPrepared())
+                deepFilterStatus.setText("Loading model...", juce::dontSendNotification);
+            else
+                deepFilterStatus.setText("Model not installed — use VX Deep Filter Net to install",
+                                         juce::dontSendNotification);
+        }
     }
 
     if (uiState == UIState::Collecting) {
         const float prog = repairProcessor.getAnalysisProgress();
         collectingLabel.setText("Analysing...  " + juce::String(static_cast<int>(prog * 100.0f)) + "%",
                                 juce::dontSendNotification);
+
+        const auto phase = repairProcessor.getAnalysisPhase();
+        using Phase = VXRepairAudioProcessor::AnalysisPhase;
+        if (phase == Phase::Phase2)
+            phaseLabel.setText("Phase 2 — reverb & clarity (noise-corrected)", juce::dontSendNotification);
+        else
+            phaseLabel.setText("Phase 1 — detecting noise level", juce::dontSendNotification);
+
+        std::array<float, 24> raw {};
+        repairProcessor.getDisplayBands(raw);
+        for (int i = 0; i < 24; ++i)
+            smoothedBands[static_cast<size_t>(i)] = 0.72f * smoothedBands[static_cast<size_t>(i)]
+                                                   + 0.28f * raw[static_cast<size_t>(i)];
         repaint();
 
         if (repairProcessor.isAnalysisComplete()) {
@@ -213,6 +266,12 @@ void VXRepairEditor::timerCallback() {
             buildRepairRows();
             showRepairState();
         }
+    } else if (uiState == UIState::Repair) {
+        const auto act = repairProcessor.getToolActivity();
+        noiseActivityDisplay   = 0.80f * noiseActivityDisplay   + 0.20f * act.noise;
+        clarityActivityDisplay = 0.80f * clarityActivityDisplay + 0.20f * act.clarity;
+        reverbActivityDisplay  = 0.80f * reverbActivityDisplay  + 0.20f * act.reverb;
+        repaint();
     }
 }
 
@@ -220,6 +279,7 @@ void VXRepairEditor::showIdleState() {
     analyseButton.setVisible(uiState == UIState::Idle);
     promptLabel.setVisible(uiState == UIState::Idle);
     collectingLabel.setVisible(uiState == UIState::Collecting);
+    phaseLabel.setVisible(uiState == UIState::Collecting);
 
     for (auto& row : rows) {
         row.nameLabel.setVisible(false);
@@ -230,7 +290,8 @@ void VXRepairEditor::showIdleState() {
         row.bypassButton.setVisible(false);
     }
     resetButton.setVisible(false);
-    deepFilterNote.setVisible(false);
+    deepFilterToggle.setVisible(false);
+    deepFilterStatus.setVisible(false);
     makeupSlider.setVisible(false);
     makeupLabel.setVisible(false);
     resized();
@@ -238,7 +299,6 @@ void VXRepairEditor::showIdleState() {
 }
 
 void VXRepairEditor::buildRepairRows() {
-    // Row order: Noise, Speech Clarity, Reverb
     const float scores[3] = { lastAssessment.noiseScore,
                                lastAssessment.humMudScore,
                                lastAssessment.reverbScore };
@@ -261,6 +321,7 @@ void VXRepairEditor::showRepairState() {
     analyseButton.setVisible(false);
     promptLabel.setVisible(false);
     collectingLabel.setVisible(false);
+    phaseLabel.setVisible(false);
 
     for (auto& row : rows) {
         row.nameLabel.setVisible(true);
@@ -271,7 +332,8 @@ void VXRepairEditor::showRepairState() {
         row.bypassButton.setVisible(true);
     }
     resetButton.setVisible(true);
-    deepFilterNote.setVisible(lastAssessment.noiseScore >= 0.10f);
+    deepFilterToggle.setVisible(true);
+    // deepFilterStatus visibility is managed by timerCallback
     makeupSlider.setVisible(true);
     makeupLabel.setVisible(true);
     resized();
@@ -282,16 +344,14 @@ void VXRepairEditor::paint(juce::Graphics& g) {
     const auto& theme = repairProcessor.getProductIdentity().theme;
     g.fillAll(fromRgb(theme.backgroundRgb));
 
-    // Header separator
     const auto panel = fromRgb(theme.panelRgb);
     g.setColour(panel.brighter(0.06f));
     g.fillRect(0, scaled(kHeaderH + kStatusH), getWidth(), 1);
 
-    if (uiState == UIState::Idle)        paintIdle(g);
+    if (uiState == UIState::Idle)            paintIdle(g);
     else if (uiState == UIState::Collecting) paintCollecting(g);
-    else                                  paintRepair(g);
+    else                                     paintRepair(g);
 
-    // Footer separator
     g.setColour(panel.brighter(0.04f));
     g.fillRect(0, getHeight() - scaled(kFooterH), getWidth(), 1);
 }
@@ -301,49 +361,132 @@ void VXRepairEditor::paintIdle(juce::Graphics& /*g*/) {}
 void VXRepairEditor::paintCollecting(juce::Graphics& g) {
     const auto& theme = repairProcessor.getProductIdentity().theme;
     const auto accent = fromRgb(theme.accentRgb);
+    const auto text   = fromRgb(theme.textRgb);
 
     const float prog = repairProcessor.getAnalysisProgress();
     const float cx = getWidth() * 0.5f;
-    const float cy = static_cast<float>(scaled(kHeaderH + kStatusH)) + static_cast<float>(getHeight() - scaled(kHeaderH + kStatusH + kFooterH)) * 0.38f;
-    const float radius = static_cast<float>(scaled(44));
+    const int bodyTop = scaled(kHeaderH + kStatusH);
+    const int bodyH   = getHeight() - bodyTop - scaled(kFooterH);
+    const float cy = static_cast<float>(bodyTop) + static_cast<float>(bodyH) * 0.34f;
+    const float radius = static_cast<float>(scaled(42));
 
-    // Progress arc
-    g.setColour(accent.withAlpha(0.12f));
-    g.drawEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, 2.0f);
-    juce::Path arc;
-    const float startAngle = -juce::MathConstants<float>::halfPi;
-    const float endAngle   = startAngle + juce::MathConstants<float>::twoPi * prog;
-    arc.addArc(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, startAngle, endAngle, true);
-    g.setColour(accent.withAlpha(0.85f));
-    g.strokePath(arc, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    // Progress ring — second phase shown in slightly brighter accent
+    const auto phase = repairProcessor.getAnalysisPhase();
+    const float ringAlpha = (phase == VXRepairAudioProcessor::AnalysisPhase::Phase2) ? 0.14f : 0.10f;
+    g.setColour(accent.withAlpha(ringAlpha));
+    g.drawEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, 2.5f);
+    if (prog > 0.0f) {
+        juce::Path arc;
+        const float startAngle = -juce::MathConstants<float>::halfPi;
+        arc.addArc(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f,
+                   startAngle, startAngle + juce::MathConstants<float>::twoPi * prog, true);
+        g.setColour(accent.withAlpha(0.90f));
+        g.strokePath(arc, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    g.setColour(text.withAlpha(0.80f));
+    g.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(18))).withStyle("Bold"));
+    g.drawText(juce::String(static_cast<int>(prog * 100)) + "%",
+               static_cast<int>(cx - radius), static_cast<int>(cy - radius),
+               static_cast<int>(radius * 2.0f), static_cast<int>(radius * 2.0f),
+               juce::Justification::centred);
+
+    // Live spectrum bars below the ring
+    const int barAreaTop  = static_cast<int>(cy) + scaled(52);
+    const int barAreaH    = scaled(70);
+    const int barAreaX    = scaled(40);
+    const int barAreaW    = getWidth() - scaled(80);
+    const float barW      = static_cast<float>(barAreaW) / 24.0f;
+    const float gap       = barW * 0.18f;
+
+    for (int i = 0; i < 24; ++i) {
+        const float v    = smoothedBands[static_cast<size_t>(i)];
+        const float barH = std::max(3.0f, v * static_cast<float>(barAreaH));
+        const float x    = static_cast<float>(barAreaX) + static_cast<float>(i) * barW + gap * 0.5f;
+        const float w    = barW - gap;
+        const float y    = static_cast<float>(barAreaTop + barAreaH) - barH;
+
+        const float hue = 0.08f + static_cast<float>(i) / 23.0f * 0.15f;
+        g.setColour(juce::Colour::fromHSV(hue, 0.75f, 0.82f, 0.72f + 0.25f * v));
+        g.fillRoundedRectangle(x, y, w, barH, 1.5f);
+    }
+
+    g.setColour(text.withAlpha(0.08f));
+    g.fillRect(barAreaX, barAreaTop + barAreaH, barAreaW, 1);
 }
 
 void VXRepairEditor::paintRepair(juce::Graphics& g) {
     const auto& theme = repairProcessor.getProductIdentity().theme;
     const auto panel  = fromRgb(theme.panelRgb);
+    const auto accent = fromRgb(theme.accentRgb);
+    const auto text   = fromRgb(theme.textRgb);
 
     const int bodyTop = scaled(kHeaderH + kStatusH + 4);
-    const int x = scaled(20);
-    const int w = getWidth() - scaled(40);
+    const int rowX    = scaled(20);
+    const int rowW    = getWidth() - scaled(40);
+    const int rowH    = scaled(kRowH);
+
+    const float scores[3]     = { lastAssessment.noiseScore,
+                                   lastAssessment.humMudScore,
+                                   lastAssessment.reverbScore };
+    const float activities[3] = { noiseActivityDisplay,
+                                   clarityActivityDisplay,
+                                   reverbActivityDisplay };
 
     for (int i = 0; i < 3; ++i) {
-        const int y = bodyTop + i * scaled(kRowH + kRowPad);
-        const float scores[3] = { lastAssessment.humMudScore,
-                                   lastAssessment.noiseScore,
-                                   lastAssessment.reverbScore };
-        const float alpha = scores[i] >= 0.10f ? 1.0f : 0.55f;
+        const int   y     = bodyTop + i * scaled(kRowH + kRowPad);
+        const float score = scores[i];
+        const bool  active = score >= 0.10f;
+        const float alpha = active ? 1.0f : 0.60f;
+
         g.setColour(panel.withAlpha(alpha));
-        g.fillRoundedRectangle(static_cast<float>(x), static_cast<float>(y),
-                               static_cast<float>(w), static_cast<float>(scaled(kRowH)),
+        g.fillRoundedRectangle(static_cast<float>(rowX), static_cast<float>(y),
+                               static_cast<float>(rowW), static_cast<float>(rowH),
                                static_cast<float>(scaled(6)));
 
-        // Score dot
-        const auto dotColour = scoreColour(scores[i]);
-        g.setColour(dotColour);
-        const float dotR = static_cast<float>(scaled(5));
-        g.fillEllipse(static_cast<float>(x + scaled(14)),
-                      static_cast<float>(y + scaled(kRowH / 2)) - dotR,
-                      dotR * 2.0f, dotR * 2.0f);
+        const auto stripColour = active ? scoreColour(score) : scoreColour(0.0f);
+        g.setColour(stripColour.withAlpha(active ? 0.90f : 0.30f));
+        g.fillRoundedRectangle(static_cast<float>(rowX), static_cast<float>(y),
+                               static_cast<float>(scaled(4)), static_cast<float>(rowH),
+                               static_cast<float>(scaled(3)));
+
+        const int barX  = rowX + scaled(28);
+        const int barY  = y + scaled(62);
+        const int barW  = scaled(132);
+        const int barH2 = scaled(6);
+
+        g.setColour(text.withAlpha(0.08f));
+        g.fillRoundedRectangle(static_cast<float>(barX), static_cast<float>(barY),
+                               static_cast<float>(barW), static_cast<float>(barH2),
+                               static_cast<float>(barH2 / 2));
+
+        if (score > 0.01f) {
+            const float fill = juce::jlimit(0.0f, 1.0f, score);
+            const auto  barCol = scoreColour(score);
+            juce::ColourGradient grad(barCol.withAlpha(0.90f), static_cast<float>(barX), 0.0f,
+                                      barCol.withAlpha(0.30f), static_cast<float>(barX) + fill * static_cast<float>(barW), 0.0f,
+                                      false);
+            g.setGradientFill(grad);
+            g.fillRoundedRectangle(static_cast<float>(barX), static_cast<float>(barY),
+                                   fill * static_cast<float>(barW), static_cast<float>(barH2),
+                                   static_cast<float>(barH2 / 2));
+        }
+
+        const float act = activities[i];
+        if (act > 0.005f) {
+            const int meterX = rowX + rowW - scaled(10);
+            const int meterW = scaled(4);
+            const float meterH = static_cast<float>(rowH - scaled(16)) * act;
+            const float meterY = static_cast<float>(y + scaled(8)) + static_cast<float>(rowH - scaled(16)) * (1.0f - act);
+            g.setColour(accent.withAlpha(0.25f));
+            g.fillRoundedRectangle(static_cast<float>(meterX), static_cast<float>(y + scaled(8)),
+                                   static_cast<float>(meterW), static_cast<float>(rowH - scaled(16)),
+                                   static_cast<float>(meterW / 2));
+            g.setColour(accent.withAlpha(0.80f + 0.20f * act));
+            g.fillRoundedRectangle(static_cast<float>(meterX), meterY,
+                                   static_cast<float>(meterW), meterH,
+                                   static_cast<float>(meterW / 2));
+        }
     }
 }
 
@@ -354,9 +497,14 @@ void VXRepairEditor::resized() {
     const int headerTop = scaled(12);
     suiteLabel.setBounds(scaled(24), headerTop, scaled(120), scaled(20));
     productLabel.setBounds(scaled(24), headerTop + scaled(18), scaled(200), scaled(32));
-    statusLabel.setBounds(getWidth() - scaled(280), headerTop + scaled(22), scaled(256), scaled(20));
 
-    // Status strip
+    // Help button — top-right of header
+    const int helpW = scaled(58);
+    const int helpH = scaled(24);
+    helpButton.setBounds(getWidth() - scaled(20) - helpW, headerTop + scaled(20), helpW, helpH);
+
+    statusLabel.setBounds(getWidth() - scaled(280), headerTop + scaled(22), scaled(256) - helpW - scaled(8), scaled(20));
+
     const int bodyTop = scaled(kHeaderH + kStatusH + 4);
     const int bodyH   = getHeight() - bodyTop - scaled(kFooterH);
 
@@ -374,6 +522,9 @@ void VXRepairEditor::resized() {
         collectingLabel.setBounds((getWidth() - labelW) / 2,
                                   bodyTop + bodyH / 2 + scaled(52),
                                   labelW, labelH);
+        phaseLabel.setBounds((getWidth() - labelW) / 2,
+                             bodyTop + bodyH / 2 + scaled(52) + scaled(26),
+                             labelW, scaled(22));
 
     } else {  // Repair
         const int rowX = scaled(20);
@@ -406,11 +557,17 @@ void VXRepairEditor::resized() {
             row.bypassButton.setBounds(listenX + btnW + btnGap, btnY, btnW, btnH);
         }
 
-        // Footer row
+        // DeepFilter toggle — Noise row (row 0), below the confidence label
+        {
+            const int row0Top = bodyTop;
+            const int pad = scaled(28);
+            deepFilterToggle.setBounds(rowX + pad, row0Top + scaled(76), scaled(112), scaled(22));
+            deepFilterStatus.setBounds(rowX + pad + scaled(116), row0Top + scaled(78), scaled(260), scaled(18));
+        }
+
+        // Footer
         const int footerY = getHeight() - scaled(kFooterH);
         resetButton.setBounds(scaled(24), footerY + scaled(11), scaled(120), scaled(28));
-        deepFilterNote.setBounds(scaled(160), footerY + scaled(16),
-                                 getWidth() - scaled(340), scaled(22));
 
         // Makeup gain knob — right side of footer
         const int mkSize = scaled(46);

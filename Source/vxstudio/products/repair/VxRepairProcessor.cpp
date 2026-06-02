@@ -1,6 +1,7 @@
 #include "VxRepairProcessor.h"
 #include "VxRepairEditor.h"
 #include "../../framework/VxStudioParameters.h"
+#include "../../framework/VxStudioHelpContent.h"
 
 #include "VxStudioVersions.h"
 
@@ -10,16 +11,17 @@ constexpr std::string_view kProductName  = "VX Repair";
 constexpr std::string_view kShortTag     = "RPR";
 constexpr std::string_view kStageId      = "repair";
 
-constexpr std::string_view kClarityStrength = "clarity_strength";
-constexpr std::string_view kNoiseStrength   = "noise_strength";
-constexpr std::string_view kReverbStrength  = "reverb_strength";
-constexpr std::string_view kClarityOn       = "clarity_on";
-constexpr std::string_view kNoiseOn         = "noise_on";
-constexpr std::string_view kReverbOn        = "reverb_on";
-constexpr std::string_view kClarityListen   = "clarity_listen";
-constexpr std::string_view kNoiseListen     = "noise_listen";
-constexpr std::string_view kReverbListen    = "reverb_listen";
-constexpr std::string_view kMakeupGain      = "makeup_gain";
+constexpr std::string_view kClarityStrength  = "clarity_strength";
+constexpr std::string_view kNoiseStrength    = "noise_strength";
+constexpr std::string_view kReverbStrength   = "reverb_strength";
+constexpr std::string_view kClarityOn        = "clarity_on";
+constexpr std::string_view kNoiseOn          = "noise_on";
+constexpr std::string_view kReverbOn         = "reverb_on";
+constexpr std::string_view kClarityListen    = "clarity_listen";
+constexpr std::string_view kNoiseListen      = "noise_listen";
+constexpr std::string_view kReverbListen     = "reverb_listen";
+constexpr std::string_view kMakeupGain       = "makeup_gain";
+constexpr std::string_view kNoiseDeepFilter  = "noise_deepfilter";
 
 } // namespace
 
@@ -41,6 +43,8 @@ vxsuite::ProductIdentity VXRepairAudioProcessor::makeIdentity() {
     id.stageType              = vxsuite::StageType::spectral;
     id.requiresVoiceAnalysis  = true;
     id.requiresSignalQuality  = false;
+    id.helpTitle = vxsuite::help::repair.title;
+    id.helpHtml  = vxsuite::help::repair.html;
     id.theme.accentRgb     = { 1.0f, 0.52f, 0.08f };
     id.theme.accent2Rgb    = { 0.15f, 0.09f, 0.03f };
     id.theme.backgroundRgb = { 0.07f, 0.05f, 0.03f };
@@ -77,6 +81,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRepairAudioProcessor::make
     addBool    (kNoiseListen,     "Noise Listen",   false);
     addBool    (kReverbListen,    "Reverb Listen",  false);
     addBool    (kClarityListen,   "Clarity Listen", false);
+    addBool    (kNoiseDeepFilter, "Noise DeepFilter", false);
 
     // Makeup gain: 0 = −12 dB, 0.5 = 0 dB (unity), 1.0 = +12 dB
     layout.add(std::make_unique<AudioParameterFloat>(
@@ -88,9 +93,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRepairAudioProcessor::make
 }
 
 juce::String VXRepairAudioProcessor::getStatusText() const {
-    if (analyser.isCollecting())
-        return "Analysing — play a representative section";
-    if (analyser.isComplete()) {
+    const auto phase = getAnalysisPhase();
+    if (phase == AnalysisPhase::Phase1)
+        return "Phase 1 — play a representative section";
+    if (phase == AnalysisPhase::Phase2)
+        return "Phase 2 — detecting reverb & clarity";
+    if (phase == AnalysisPhase::Done) {
         const auto a = analyser.getAssessment();
         const int n = (a.cleanupActive ? 1 : 0) + (a.noiseActive ? 1 : 0) + (a.reverbActive ? 1 : 0);
         return n == 0 ? "No significant issues detected"
@@ -107,7 +115,7 @@ void VXRepairAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     auto xml = parameters.copyState().createXml();
     if (!xml) return;
 
-    if (analyser.isComplete()) {
+    if (isAnalysisComplete()) {
         const auto a = analyser.getAssessment();
         xml->setAttribute("ra_noise",   a.noiseScore);
         xml->setAttribute("ra_reverb",  a.reverbScore);
@@ -137,6 +145,7 @@ void VXRepairAudioProcessor::setStateInformation(const void* data, int sizeInByt
         a.suggestedReverbStrength  = vxsuite::repair::RepairAnalyser::scoreToStrengthStatic(a.reverbScore);
         a.suggestedCleanupStrength = vxsuite::repair::RepairAnalyser::scoreToStrengthStatic(a.humMudScore);
         analyser.restoreAssessment(a);
+        analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_relaxed);
     }
 }
 
@@ -164,14 +173,31 @@ void VXRepairAudioProcessor::applyAssessmentToParams() {
     setBool (kClarityOn,       a.cleanupActive);
 }
 
+float VXRepairAudioProcessor::getAnalysisProgress() const noexcept {
+    const auto phase = getAnalysisPhase();
+    switch (phase) {
+        case AnalysisPhase::Phase1: return analyser.getProgress() * 0.5f;
+        case AnalysisPhase::Phase2: return 0.5f + analyser.getProgress() * 0.5f;
+        case AnalysisPhase::Done:   return 1.0f;
+        default:                    return 0.0f;
+    }
+}
+
+bool VXRepairAudioProcessor::isAnalysisRunning() const noexcept {
+    const auto phase = getAnalysisPhase();
+    return phase == AnalysisPhase::Phase1 || phase == AnalysisPhase::Phase2;
+}
+
 void VXRepairAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock) {
     const int channels = getTotalNumOutputChannels();
     denoiserDsp.prepare(sampleRate, samplesPerBlock);
+    analyserDenoiserDsp.prepare(sampleRate, samplesPerBlock);
     deverbDsp.setChannelCount(channels);
     deverbDsp.prepare(sampleRate, samplesPerBlock);
     deEsserDsp.prepare(sampleRate, samplesPerBlock, channels);
     dePlosiveDsp.prepare(sampleRate, samplesPerBlock, channels);
     deBreathDsp.prepare(sampleRate, samplesPerBlock, channels);
+    dfService.prepareRealtime(sampleRate, samplesPerBlock);
 
     if (sampleRate != currentSampleRate || samplesPerBlock != currentBlockSize) {
         currentSampleRate = sampleRate;
@@ -179,9 +205,8 @@ void VXRepairAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock
         analyser.prepare(sampleRate, samplesPerBlock);
     }
 
-    // Size dry-delay buffers to each DSP's reported latency so listen can
-    // output dry − wet with correct time alignment.
-    const int noiseLat  = denoiserDsp.getLatencySamples();
+    // Size dry-delay buffers to the larger of denoiser / deepfilter latency
+    const int noiseLat  = std::max(denoiserDsp.getLatencySamples(), dfService.getLatencySamples());
     const int reverbLat = deverbDsp.getLatencySamples();
     const int ch        = getTotalNumOutputChannels();
 
@@ -193,17 +218,67 @@ void VXRepairAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock
 
 void VXRepairAudioProcessor::resetSuite() {
     denoiserDsp.reset();
+    analyserDenoiserDsp.reset();
     deverbDsp.reset();
     deEsserDsp.reset();
     dePlosiveDsp.reset();
     deBreathDsp.reset();
-    // Analyser is NOT reset here — the host calls reset() on every transport
-    // start, which would wipe an in-progress collection. Analyser lifetime is
-    // controlled explicitly via triggerAnalysis() and resetAnalysis().
+    dfService.resetRealtime();
+    // Analyser is NOT reset here — see triggerAnalysis() and resetAnalysis().
 }
 
 void VXRepairAudioProcessor::resetAnalysis() {
     analyser.reset();
+    analysisPhase.store(static_cast<int>(AnalysisPhase::Idle), std::memory_order_relaxed);
+    savedNoiseScore = 0.0f;
+    sibilanceIntensity.store(0.0f);
+    plosiveIntensity.store(0.0f);
+    breathIntensity.store(0.0f);
+    smoothedPeak = 0.01f;
+}
+
+void VXRepairAudioProcessor::detectClarityIntensities(const juce::AudioBuffer<float>& buf, int n) noexcept {
+    if (n < 2) return;
+    const int numCh = buf.getNumChannels();
+
+    float hfEnergy = 0.0f, bbEnergy = 0.0f, peakSq = 0.0f;
+
+    for (int ch = 0; ch < numCh; ++ch) {
+        const float* d = buf.getReadPointer(ch);
+        for (int i = 1; i < n; ++i) {
+            const float s    = d[i];
+            const float diff = s - d[i - 1];
+            hfEnergy += diff * diff;
+            bbEnergy += s * s;
+            peakSq = std::max(peakSq, s * s);
+        }
+    }
+
+    const float bbTotal = std::max(bbEnergy, 1.0e-9f);
+    const float rms     = std::sqrt(bbEnergy / std::max(1, numCh * (n - 1)));
+    const bool  hasSig  = rms > 0.002f;
+
+    const float hfRatio = hfEnergy / bbTotal;
+    // Threshold lowered from 0.25 to 0.08: voiced speech 6 dB above sibilance
+    // drives the ratio down to ~0.12, which the old threshold missed entirely.
+    const float sib = hasSig && hfRatio > 0.08f
+        ? juce::jlimit(0.0f, 1.0f, (hfRatio - 0.08f) / 0.30f)
+        : 0.0f;
+
+    const float crest = std::sqrt(peakSq * static_cast<float>(numCh * (n - 1)) / bbTotal);
+    const float plos = hasSig && crest > 4.0f
+        ? juce::jlimit(0.0f, 1.0f, (crest - 4.0f) / 4.0f)
+        : 0.0f;
+
+    smoothedPeak = std::max(smoothedPeak * 0.9998f, rms);
+    const float levelRel = smoothedPeak > 1.0e-6f ? rms / smoothedPeak : 0.0f;
+    const float brea = hasSig && levelRel < 0.35f && hfRatio > 0.06f
+        ? juce::jlimit(0.0f, 1.0f, (0.35f - levelRel) / 0.20f)
+        : 0.0f;
+
+    sibilanceIntensity.store(0.90f * sibilanceIntensity.load(std::memory_order_relaxed) + 0.10f * sib,  std::memory_order_relaxed);
+    plosiveIntensity.store  (0.90f * plosiveIntensity.load(std::memory_order_relaxed)   + 0.10f * plos, std::memory_order_relaxed);
+    breathIntensity.store   (0.90f * breathIntensity.load(std::memory_order_relaxed)    + 0.10f * brea, std::memory_order_relaxed);
 }
 
 void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
@@ -211,11 +286,58 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const int numSamples = buffer.getNumSamples();
     if (numSamples == 0) return;
 
-    if (triggerPending.exchange(false, std::memory_order_acq_rel))
+    // Trigger Phase 1 on request
+    if (triggerPending.exchange(false, std::memory_order_acq_rel)) {
+        analyserDenoiserDsp.reset();
         analyser.startCollection();
+        analysisPhase.store(static_cast<int>(AnalysisPhase::Phase1), std::memory_order_release);
+    }
 
-    if (analyser.isCollecting())
-        analyser.process(buffer, numSamples);
+    // Phase transitions (audio thread — no allocation)
+    const auto phase = getAnalysisPhase();
+
+    if (phase == AnalysisPhase::Phase1 && analyser.isComplete()) {
+        const auto a = analyser.getAssessment();
+        if (a.noiseScore >= vxsuite::repair::RepairAnalyser::kActiveThreshold) {
+            // Significant noise found — run Phase 2 with denoised audio
+            savedNoiseScore = a.noiseScore;
+            analyserDenoiserDsp.reset();
+            analyser.startCollection();
+            analysisPhase.store(static_cast<int>(AnalysisPhase::Phase2), std::memory_order_release);
+        } else {
+            // No significant noise — single-pass is sufficient
+            analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_release);
+        }
+    } else if (phase == AnalysisPhase::Phase2 && analyser.isComplete()) {
+        // Merge Phase 2 reverb/clarity with Phase 1 noise score
+        auto merged = analyser.getAssessment();
+        merged.noiseScore             = savedNoiseScore;
+        merged.noiseActive            = savedNoiseScore >= vxsuite::repair::RepairAnalyser::kActiveThreshold;
+        merged.suggestedNoiseStrength = vxsuite::repair::RepairAnalyser::scoreToStrengthStatic(savedNoiseScore);
+        analyser.restoreAssessment(merged);
+        analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_release);
+    }
+
+    // Feed analyser — Phase 2 uses a denoised copy so reverb/clarity are noise-corrected
+    if (analyser.isCollecting()) {
+        const auto currentPhase = getAnalysisPhase();
+        if (currentPhase == AnalysisPhase::Phase2) {
+            juce::AudioBuffer<float> analysisBuf;
+            analysisBuf.makeCopyOf(buffer);
+            vxsuite::ProcessOptions noiseOptsForAnalysis {};
+            noiseOptsForAnalysis.isVoiceMode     = true;
+            noiseOptsForAnalysis.voiceProtect    = 0.75f;
+            noiseOptsForAnalysis.speechFocus     = 0.75f;
+            // Denoise at a moderate fixed strength so the reverb/clarity scores
+            // see a clean signal without over-suppressing residue.
+            analyserDenoiserDsp.processInPlace(analysisBuf,
+                                               juce::jlimit(0.35f, 0.65f, savedNoiseScore * 0.8f),
+                                               noiseOptsForAnalysis);
+            analyser.process(analysisBuf, numSamples);
+        } else {
+            analyser.process(buffer, numSamples);
+        }
+    }
 
     const float noiseStr   = vxsuite::readNormalized(parameters, kNoiseStrength,   0.5f);
     const float reverbStr  = vxsuite::readNormalized(parameters, kReverbStrength,  0.5f);
@@ -226,6 +348,8 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const bool  noiseListen   = vxsuite::readBool(parameters, kNoiseListen,   false);
     const bool  reverbListen  = vxsuite::readBool(parameters, kReverbListen,  false);
     const bool  clarityListen = vxsuite::readBool(parameters, kClarityListen, false);
+    const bool  useDeepFilter = vxsuite::readBool(parameters, kNoiseDeepFilter, false)
+                                && dfService.isRealtimeReady();
     const float makeupDb   = [&] {
         auto* p = parameters.getParameter(kMakeupGain.data());
         return p ? p->convertFrom0to1(p->getValue()) : 0.0f;
@@ -234,94 +358,154 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const bool anyListen = noiseListen || reverbListen || clarityListen;
     const bool anyActive = noiseOn    || reverbOn    || clarityOn;
 
-    if (!anyActive && !anyListen)
+    if (!anyActive && !anyListen) {
+        noiseActivity.store(noiseActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+        clarityActivity.store(clarityActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+        reverbActivity.store(reverbActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
         return;
+    }
 
-    vxsuite::ProcessOptions opts {};
-    opts.isVoiceMode        = true;
-    opts.voiceProtect       = 0.75f;
-    opts.sourceProtect      = 0.75f;
-    opts.guardStrictness    = 0.65f;
-    opts.lateTailAggression = 0.55f;
+    auto bufRms = [](const juce::AudioBuffer<float>& b) -> float {
+        double sum = 0.0;
+        int total = 0;
+        for (int ch = 0; ch < b.getNumChannels(); ++ch) {
+            const float* d = b.getReadPointer(ch);
+            for (int i = 0; i < b.getNumSamples(); ++i) { sum += d[i] * d[i]; ++total; }
+        }
+        return total > 0 ? static_cast<float>(std::sqrt(sum / total)) : 0.0f;
+    };
+
+    // Denoiser opts — scale protection inversely with strength:
+    //   low strength → high guard, low aggression (surgical)
+    //   high strength → lower guard, higher aggression (heavy removal)
+    vxsuite::ProcessOptions noiseOpts {};
+    noiseOpts.isVoiceMode        = true;
+    noiseOpts.sourceProtect      = 0.85f - 0.25f * noiseStr;   // 0.85 → 0.60
+    noiseOpts.guardStrictness    = 0.85f - 0.30f * noiseStr;   // 0.85 → 0.55
+    noiseOpts.lateTailAggression = 0.35f + 0.40f * noiseStr;   // 0.35 → 0.75
+    noiseOpts.speechFocus        = 0.75f;
+
+    // Deverb opts — same adaptive philosophy
+    vxsuite::ProcessOptions reverbOpts {};
+    reverbOpts.isVoiceMode        = true;
+    reverbOpts.sourceProtect      = 0.82f - 0.22f * reverbStr;  // 0.82 → 0.60
+    reverbOpts.guardStrictness    = 0.80f - 0.25f * reverbStr;  // 0.80 → 0.55
+    reverbOpts.lateTailAggression = 0.35f + 0.35f * reverbStr;  // 0.35 → 0.70
+    reverbOpts.speechFocus        = 0.82f;
+
+    auto applyNoiseDsp = [&](juce::AudioBuffer<float>& buf, float str) {
+        if (useDeepFilter)
+            dfService.processRealtime(buf, currentSampleRate, str, 0);
+        else
+            denoiserDsp.processInPlace(buf, str, noiseOpts);
+    };
 
     using vxsuite::speech_clarity::DeEsserDsp;
     using vxsuite::speech_clarity::DePolosiveDsp;
     using vxsuite::speech_clarity::DeBreathDsp;
 
+    detectClarityIntensities(buffer, numSamples);
+    const float sibI  = sibilanceIntensity.load(std::memory_order_relaxed);
+    const float plosI = plosiveIntensity.load(std::memory_order_relaxed);
+    const float breaI = breathIntensity.load(std::memory_order_relaxed);
+
     if (anyListen) {
-        // delta listen: output dry − wet, time-aligned via per-DSP delay buffer.
-        // Denoiser and deverb each have ~16 ms algorithmic latency; without
-        // compensation dry − wet sounds like a comb-filter echo.
         const int numCh = buffer.getNumChannels();
 
         auto pushDry = [&](juce::AudioBuffer<float>& delayBuf, int& pos) {
             const int delayLen  = delayBuf.getNumSamples();
-            const int startPos  = pos;  // all channels must start from the same position
+            const int startPos  = pos;
             juce::AudioBuffer<float> delayedDry(numCh, numSamples);
             for (int ch = 0; ch < numCh; ++ch) {
-                int p             = startPos;
-                const float* src  = buffer.getReadPointer(ch);
+                int p            = startPos;
+                const float* src = buffer.getReadPointer(ch);
                 float*       ring = delayBuf.getWritePointer(ch);
                 float*       dst  = delayedDry.getWritePointer(ch);
                 for (int i = 0; i < numSamples; ++i) {
-                    dst[i]  = ring[p];   // oldest sample = latency-delayed dry
-                    ring[p] = src[i];    // overwrite with current dry
+                    dst[i]  = ring[p];
+                    ring[p] = src[i];
                     p = (p + 1) % delayLen;
                 }
             }
-            pos = (startPos + numSamples) % delayLen;  // advance shared pos once
+            pos = (startPos + numSamples) % delayLen;
             return delayedDry;
         };
 
         if (noiseListen) {
             auto delayed = pushDry(noiseDryDelay, noiseDryDelayPos);
-            denoiserDsp.processInPlace(buffer, noiseStr, opts);
+            applyNoiseDsp(buffer, noiseStr);
             for (int ch = 0; ch < numCh; ++ch) {
                 auto* out = buffer.getWritePointer(ch);
                 const float* dry = delayed.getReadPointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    out[i] = dry[i] - out[i];
+                for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
             }
         } else if (reverbListen) {
             auto delayed = pushDry(reverbDryDelay, reverbDryDelayPos);
-            deverbDsp.processInPlace(buffer, reverbStr, opts);
+            const float reduce = std::pow(reverbStr, 0.76f);
+            deverbDsp.processInPlace(buffer, reduce, reverbOpts);
             for (int ch = 0; ch < numCh; ++ch) {
                 auto* out = buffer.getWritePointer(ch);
                 const float* dry = delayed.getReadPointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    out[i] = dry[i] - out[i];
+                for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
             }
         } else if (clarityListen) {
-            // Speech clarity DSPs are IIR — negligible latency, direct subtract is clean.
             juce::AudioBuffer<float> dryCopy;
             dryCopy.makeCopyOf(buffer);
-            dePlosiveDsp.process(buffer, { clarityStr, 1.0f });
-            deEsserDsp.process  (buffer, { clarityStr, 1.0f });
-            deBreathDsp.process (buffer, { clarityStr, 1.0f });
+            dePlosiveDsp.process(buffer, { clarityStr, plosI });
+            deEsserDsp.process  (buffer, { clarityStr, sibI  });
+            deBreathDsp.process (buffer, { clarityStr, breaI });
             for (int ch = 0; ch < numCh; ++ch) {
                 auto* out = buffer.getWritePointer(ch);
                 const float* dry = dryCopy.getReadPointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    out[i] = dry[i] - out[i];
+                for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
             }
         }
         return;
     }
 
-    // Repair chain: Noise → Speech Clarity → Reverb
-    if (noiseOn)
-        denoiserDsp.processInPlace(buffer, noiseStr, opts);
+    // ── Repair chain: Noise → Speech Clarity → Reverb ────────────────────────
 
-    if (clarityOn) {
-        dePlosiveDsp.process(buffer, { clarityStr, 1.0f });
-        deEsserDsp.process  (buffer, { clarityStr, 1.0f });
-        deBreathDsp.process (buffer, { clarityStr, 1.0f });
+    if (noiseOn) {
+        const float preRms = bufRms(buffer);
+        applyNoiseDsp(buffer, noiseStr);
+        const float wetRms = bufRms(buffer);
+        const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
+        noiseActivity.store(0.88f * noiseActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);
+    } else {
+        noiseActivity.store(noiseActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
     }
 
-    if (reverbOn)
-        deverbDsp.processInPlace(buffer, reverbStr, opts);
+    if (clarityOn) {
+        dePlosiveDsp.process(buffer, { clarityStr, plosI });
+        deEsserDsp.process  (buffer, { clarityStr, sibI  });
+        deBreathDsp.process (buffer, { clarityStr, breaI });
+        // Clarity tools act on narrow bands — broadband RMS barely moves.
+        // Use detection intensity directly, same as the standalone VxClarity plugin.
+        const float activity = clarityStr * std::max({ sibI, plosI, breaI });
+        clarityActivity.store(0.88f * clarityActivity.load(std::memory_order_relaxed) + 0.12f * activity, std::memory_order_relaxed);
+    } else {
+        clarityActivity.store(clarityActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+    }
 
-    // Makeup gain (applied after all processing)
+    if (reverbOn) {
+        const float preRms = bufRms(buffer);
+        const float reduce = std::pow(reverbStr, 0.76f);
+        deverbDsp.processInPlace(buffer, reduce, reverbOpts);
+        const float wetRms = bufRms(buffer);
+
+        if (preRms > 1.0e-5f && wetRms > 1.0e-5f) {
+            const float targetGain = juce::jlimit(1.0f, 1.6f, (preRms * 0.92f) / wetRms);
+            smoothedReverbMakeup = 0.92f * smoothedReverbMakeup + 0.08f * targetGain;
+            buffer.applyGain(smoothedReverbMakeup);
+        }
+
+        const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
+        reverbActivity.store(0.88f * reverbActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);
+    } else {
+        smoothedReverbMakeup = 0.92f * smoothedReverbMakeup + 0.08f * 1.0f;
+        reverbActivity.store(reverbActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+    }
+
     const float makeupLinear = std::pow(10.0f, makeupDb / 20.0f);
     if (std::abs(makeupLinear - 1.0f) > 0.001f)
         buffer.applyGain(makeupLinear);
