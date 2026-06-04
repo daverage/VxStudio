@@ -322,7 +322,6 @@ VXToneAudioProcessor::peakingEqCoeffs(const double sampleRate,
     const float cw  = std::cos(w0);
     const float sw  = std::sin(w0);
     const float alpha = sw / (2.f * q);
-    const float twoSqrtA = 2.f * std::sqrt(A);
 
     const float b0 = 1.f + alpha * A;
     const float b1 = -2.f * cw;

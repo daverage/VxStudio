@@ -164,6 +164,7 @@ void DenoiserDsp::reset() {
     firstFrame      = true;
     prevFrameEnergy = kEps;
     signalPresence  = 0.5f;
+    smoothedGrDb    = 0.0f;
 }
 
 void DenoiserDsp::resetFifoState() {
@@ -326,6 +327,15 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         monoOut[static_cast<size_t>(i)] = safe(olaAcc[static_cast<size_t>(idx)] * 0.5f);
         olaAcc [static_cast<size_t>(idx)] = 0.0f;
         ++olaReadPos;
+    }
+
+    // ── Update smoothed GR display (mean of gainSmooth across bins → dB) ────────
+    if (!gainSmooth.empty()) {
+        float meanGain = 0.0f;
+        for (float g : gainSmooth) meanGain += g;
+        meanGain /= static_cast<float>(gainSmooth.size());
+        const float grDbTarget = 20.0f * std::log10(std::max(1.0e-6f, meanGain));
+        smoothedGrDb = 0.85f * smoothedGrDb + 0.15f * grDbTarget;
     }
 
     // ── Reconstruct stereo from mid + delayed side ────────────────────────────

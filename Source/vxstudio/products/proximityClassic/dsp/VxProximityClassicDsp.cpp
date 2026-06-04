@@ -112,7 +112,6 @@ void ProximityClassicDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                     const bool isVoice,
                                     const float vocalFocus,
                                     const float mudAmount) noexcept {
-    (void)mudAmount; // Unused in ProximityClassic EQ model
     if (numSamples <= 0)
         return;
 
@@ -124,6 +123,7 @@ void ProximityClassicDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float closer = juce::jlimit(0.f, 1.f, closerAmount);
     const float air    = juce::jlimit(0.f, 1.f, airAmount);
     const float focus  = juce::jlimit(0.0f, 1.0f, vocalFocus);
+    const float mud    = juce::jlimit(0.0f, 1.0f, mudAmount);
     const float shapedCloser = std::pow(closer, isVoice ? 0.78f : 0.70f);
     const float shapedAir    = std::pow(air, isVoice ? 0.74f : 0.66f);
     const float modelDepth   = juce::jlimit(0.0f, 1.0f,
@@ -198,7 +198,7 @@ void ProximityClassicDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         ? juce::jlimit(220.0f, 320.0f, 255.0f + 22.0f * (1.0f - focus))
         : 300.0f;
     const float mudCutQ = isVoice ? 0.82f : 0.75f;
-    const float mudCutDb = -modelDepth
+    const float mudCutDb = -(2.0f * mud) * modelDepth
         * (isVoice ? (3.2f + 0.8f * (1.0f - focus)) : 2.6f)
         * juce::jlimit(0.72f, 1.30f, 0.82f + 0.42f * mudRisk);
 

@@ -143,6 +143,7 @@ void VXRebalanceAudioProcessor::resetSuite() {
         std::fill(channel.begin(), channel.end(), 0.0f);
     dryDelayWritePos = 0;
     wasNeutral = false;
+    rebalanceRampGain = 1.0f;
 }
 
 void VXRebalanceAudioProcessor::processNeutralWithLatency(juce::AudioBuffer<float>& buffer) {
@@ -211,12 +212,32 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     if (wasNeutral) {
-        dsp.reset();
+        // Ramp in over ~80 ms instead of hard reset to avoid audible discontinuity
+        rebalanceRampGain = 0.0f;
         wasNeutral = false;
     }
 
     dsp.setControlTargets(targets);
     dsp.process(buffer);
+
+    const float rampStep = static_cast<float>(numSamples)
+                           / (0.080f * static_cast<float>(currentSampleRateHz));
+    rebalanceRampGain = std::min(1.0f, rebalanceRampGain + rampStep);
+    if (rebalanceRampGain < 1.0f) {
+        const int numChannels = std::min(buffer.getNumChannels(),
+                                         static_cast<int>(dryDelayLines.size()));
+        for (int ch = 0; ch < numChannels; ++ch) {
+            auto* wet = buffer.getWritePointer(ch);
+            auto& delay = dryDelayLines[static_cast<size_t>(ch)];
+            const int delaySize = static_cast<int>(delay.size());
+            int readPos = (dryDelayWritePos - numSamples + delaySize) % delaySize;
+            for (int i = 0; i < numSamples; ++i) {
+                const float dryOut = delay[static_cast<size_t>(readPos)];
+                wet[i] = dryOut + (wet[i] - dryOut) * rebalanceRampGain;
+                readPos = (readPos + 1) % delaySize;
+            }
+        }
+    }
 
     const float strengthDrive = juce::jlimit(0.0f, 1.0f, strength);
     float positiveIntentSum = 0.0f;

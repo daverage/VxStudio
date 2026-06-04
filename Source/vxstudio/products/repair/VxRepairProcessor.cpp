@@ -74,7 +74,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRepairAudioProcessor::make
 
     addStrength(kNoiseStrength,   "Noise",          0.5f);
     addStrength(kReverbStrength,  "Reverb",         0.5f);
-    addStrength(kClarityStrength, "Speech Clarity", 0.5f);
+    addStrength(kClarityStrength, "Speech Clarity", 0.0f);
     addBool    (kNoiseOn,         "Noise On",       false);
     addBool    (kReverbOn,        "Reverb On",      false);
     addBool    (kClarityOn,       "Clarity On",     false);

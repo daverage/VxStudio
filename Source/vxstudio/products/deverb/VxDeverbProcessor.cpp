@@ -92,6 +92,10 @@ vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
     return identity;
 }
 
+float VXDeverbAudioProcessor::getActivityLight(int) const noexcept {
+    return vxsuite::clamp01(deverbProcessor.getGainReductionDb() / -20.0f);
+}
+
 juce::String VXDeverbAudioProcessor::getStatusText() const {
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
     return isVoice ? "Vocal - LRSV dereverberation with body restore"
@@ -214,7 +218,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
       + 0.20f * (1.0f - analysis.directness)
       + 0.16f * voiceContext.buriedSpeech
       + 0.12f * (1.0f - voiceContext.intelligibility));
-    deverbProcessor.voiceMode = voiceMode;
+    deverbProcessor.setVoiceMode(voiceMode);
 
     // Pass reduce directly as the Wiener amount — at reduce=0, amount=0 so all
     // Wiener gains collapse to 1.0 (true bypass with no dry blend needed).
@@ -346,6 +350,8 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     wetBuffer.applyGain(appliedGain);
 }
 
+#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXDeverbAudioProcessor();
 }
+#endif

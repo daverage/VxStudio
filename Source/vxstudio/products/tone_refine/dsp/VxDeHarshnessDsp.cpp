@@ -34,7 +34,7 @@ void DeHarshnessDsp::designHighShelfCoefficients(
     ShelfFilterState& state) {
     // Design normalized biquad high-shelf filter coefficients
 
-    const float omega = 2.0f * 3.14159265359f * shelfFreqHz / static_cast<float>(sampleRate);
+    const float omega = 2.0f * juce::MathConstants<float>::pi * shelfFreqHz / static_cast<float>(sampleRate);
     const float sinOmega = std::sin(omega);
     const float cosOmega = std::cos(omega);
 

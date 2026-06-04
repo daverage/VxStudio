@@ -30,9 +30,9 @@ vxsuite::ProductIdentity VXSpeechClarityAudioProcessor::makeIdentity() {
     identity.primaryLabel = "Sibilance";
     identity.secondaryLabel = "Plosive";
     identity.tertiaryLabel = "Breath";
-    identity.primaryDefaultValue = 0.0f;
-    identity.secondaryDefaultValue = 0.0f;
-    identity.tertiaryDefaultValue = 0.0f;
+    identity.primaryDefaultValue = 0.4f;   // Sibilance — light de-essing by default
+    identity.secondaryDefaultValue = 0.3f; // Plosive — light correction
+    identity.tertiaryDefaultValue = 0.2f;  // Breath — minimal
     identity.primaryHint = "Reduce harsh sibilance (/s/ and /z/ sounds).";
     identity.secondaryHint = "Reduce plosive bursts (/p/, /b/, /t/, /d/, /k/, /g/).";
     identity.tertiaryHint = "Reduce breathing and wind noise.";
@@ -97,6 +97,11 @@ void VXSpeechClarityAudioProcessor::prepareSuite(const double sampleRate, const 
 
     onsetDetector.setSampleRate(currentSampleRateHz);
 
+    const int numChannels = getTotalNumOutputChannels();
+    deEsserDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
+    dePlosiveDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
+    deBreathDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
+
     resetSuite();
 }
 
@@ -109,6 +114,9 @@ void VXSpeechClarityAudioProcessor::resetSuite() {
     breathBandFilter.reset();
     detectionState = {};
     needsPreAnalysis = true;
+    deEsserDsp.reset();
+    dePlosiveDsp.reset();
+    deBreathDsp.reset();
 }
 
 void VXSpeechClarityAudioProcessor::performPreAnalysis(const juce::AudioBuffer<float>& buffer) {
@@ -244,10 +252,13 @@ void VXSpeechClarityAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     detectionState.plosiveIntensity = detectPlosive(buffer);
     detectionState.breathIntensity = detectBreath(buffer);
 
-    // 4. APPLY PROCESSING (placeholder - DSP will be implemented)
-    // TODO: Apply sibilance reduction when sibilanceStrength > 0
-    // TODO: Apply plosive reduction when plosiveStrength > 0
-    // TODO: Apply breath reduction when breathStrength > 0
+    // 4. APPLY PROCESSING
+    if (sibilanceStrength > 0.001f)
+        deEsserDsp.process(buffer, { sibilanceStrength, detectionState.sibilanceIntensity });
+    if (plosiveStrength > 0.001f)
+        dePlosiveDsp.process(buffer, { plosiveStrength, detectionState.plosiveIntensity });
+    if (breathStrength > 0.001f)
+        deBreathDsp.process(buffer, { breathStrength, detectionState.breathIntensity });
 }
 
 void VXSpeechClarityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

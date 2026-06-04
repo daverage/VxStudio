@@ -49,6 +49,11 @@ vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
     return id;
 }
 
+float VXDenoiserAudioProcessor::getActivityLight(int) const noexcept {
+    // GR in dB is negative; normalise to 0-1 display range over 0–20 dB reduction
+    return vxsuite::clamp01(denoiserDsp.getGainReductionDb() / -20.0f);
+}
+
 juce::String VXDenoiserAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen - removed noise only";

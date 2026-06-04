@@ -176,6 +176,7 @@ void SpectralProcessor::reset() {
             estimator.setFixedRt60(rt60PresetSeconds);
     }
     for (auto& ch : chans) allocateAndResetChannel(ch);
+    smoothedGrDb = 0.0f;
 }
 
 // ── processInPlace ────────────────────────────────────────────────────────────
@@ -236,6 +237,15 @@ bool SpectralProcessor::processInPlace(juce::AudioBuffer<float>& buffer,
             ch.olaAccum[idx] = 0.0f; // clear slot after reading
             ++ch.olaReadPos;
         }
+    }
+
+    // Update smoothed GR display from first channel's gainSmooth
+    if (!chans.empty() && !chans[0].gainSmooth.empty()) {
+        float meanGain = 0.0f;
+        for (float g : chans[0].gainSmooth) meanGain += g;
+        meanGain /= static_cast<float>(chans[0].gainSmooth.size());
+        const float grDbTarget = 20.0f * std::log10(std::max(1.0e-6f, meanGain));
+        smoothedGrDb = 0.85f * smoothedGrDb + 0.15f * grDbTarget;
     }
 
     return true;
@@ -409,7 +419,7 @@ float SpectralProcessor::lrsvCoeffFromRt60(const float rt60Seconds) noexcept {
     //   RT60 = 1.0 s  →  coeff ≈ 0.50   (medium room)
     //   RT60 = 2.0 s  →  coeff ≈ 0.71   (large reverberant space)
     const float rt60 = std::max(0.05f, rt60Seconds);
-    return std::exp(-0.6908f / rt60);
+    return std::exp(-2.0f * std::log(1000.0f) * kTBoundaryS / rt60);
 }
 
 } // namespace vxsuite::deverb

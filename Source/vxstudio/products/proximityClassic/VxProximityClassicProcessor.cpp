@@ -34,9 +34,9 @@ vxsuite::ProductIdentity VXProximityClassicAudioProcessor::makeIdentity() {
     identity.stageId          = "vx.ProximityClassic";
     identity.stageType        = vxsuite::StageType::mixed;
     identity.dspVersion       = vxsuite::versions::plugins::ProximityClassic;
-    identity.helpTitle        = vxsuite::help::proximity.title;
-    identity.helpHtml         = vxsuite::help::proximity.html;
-    identity.readmeSection    = vxsuite::help::proximity.readmeSection;
+    identity.helpTitle        = vxsuite::help::proximityClassic.title;
+    identity.helpHtml         = vxsuite::help::proximityClassic.html;
+    identity.readmeSection    = vxsuite::help::proximityClassic.readmeSection;
     identity.theme.accentRgb      = { 1.00f, 0.65f, 0.10f };
     identity.theme.accent2Rgb     = { 0.10f, 0.08f, 0.05f };
     identity.theme.backgroundRgb  = { 0.06f, 0.05f, 0.04f };

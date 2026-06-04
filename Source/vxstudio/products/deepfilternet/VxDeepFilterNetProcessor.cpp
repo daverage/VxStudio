@@ -272,22 +272,45 @@ void VXDeepFilterNetAudioProcessor::timerCallback() {
 void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
     juce::ScopedNoDenormals noDenormals;
 
-    const int numSamples = buffer.getNumSamples();
+    const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
     const float cleanTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.5f);
+    const float guardTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
 
     if (!controlsPrimed) {
         smoothedClean = cleanTarget;
+        smoothedGuard = guardTarget;
         controlsPrimed = true;
     } else {
         smoothedClean = vxsuite::smoothBlockValue(smoothedClean, cleanTarget, currentSampleRateHz, numSamples, 0.050f);
+        smoothedGuard = vxsuite::smoothBlockValue(smoothedGuard, guardTarget, currentSampleRateHz, numSamples, 0.080f);
     }
 
     const float effectiveClean = vxsuite::clamp01(smoothedClean);
+
+    // Capture dry for wet/dry blend and artifact detection
+    ensureLatencyAlignedListenDry(numSamples);
+    ensureAnalysisScratch(numChannels, numSamples);
+    for (int ch = 0; ch < numChannels; ++ch)
+        analysisScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+
     engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
+
+    // Artifact risk: scale Guard back when model over-suppresses
+    lastArtifactRisk = 0.85f * lastArtifactRisk
+                     + 0.15f * estimateArtifactRisk(analysisScratch, buffer, numChannels, numSamples);
+    const float artifactPenalty = vxsuite::clamp01(lastArtifactRisk * 0.50f);
+    const float effectiveGuard  = vxsuite::clamp01(smoothedGuard * (1.0f - artifactPenalty));
+
+    // Startup ramp: fade in over ~200 ms to prevent click on first process
+    const float rampStep = static_cast<float>(numSamples) / (0.200f * static_cast<float>(currentSampleRateHz));
+    startupWetRamp = std::min(1.0f, startupWetRamp + rampStep);
+    const float wetMix = effectiveGuard * startupWetRamp;
+
+    blendProcessedWithDry(buffer, wetMix);
 }
 
 void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<float>& buffer, const float wetMix) {

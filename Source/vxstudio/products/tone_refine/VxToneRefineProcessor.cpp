@@ -28,9 +28,9 @@ vxsuite::ProductIdentity VXToneRefineAudioProcessor::makeIdentity() {
     identity.primaryLabel = "Mud";
     identity.secondaryLabel = "Harshness";
     identity.tertiaryLabel = "Smooth";
-    identity.primaryDefaultValue = 0.0f;
-    identity.secondaryDefaultValue = 0.0f;
-    identity.tertiaryDefaultValue = 0.0f;
+    identity.primaryDefaultValue = 0.25f;  // Mud — gentle low-mid cleanup
+    identity.secondaryDefaultValue = 0.20f; // Harshness — light presence softening
+    identity.tertiaryDefaultValue = 0.15f;  // Smooth — barely perceptible on clean sources
     identity.primaryHint = "Remove low-mid buildup (boxiness, muddiness).";
     identity.secondaryHint = "Reduce presence peak harshness (2-5 kHz brittleness).";
     identity.tertiaryHint = "Apply transparent tonal smoothing.";
@@ -107,8 +107,8 @@ void VXToneRefineAudioProcessor::performPreAnalysis(const juce::AudioBuffer<floa
     // Roughness threshold: derivative/RMS ratio. Set relative so it's level-independent.
     (void)buffer;
     mudThreshold       = 0.85f;  // R1 autocorrelation threshold
-    harshnessThreshold = 0.20f;  // HF ratio threshold (first-difference / broadband)
-    roughnessThreshold = 0.50f;  // derivative/RMS ratio threshold
+    harshnessThreshold = 0.10f;  // HF ratio threshold (first-difference / broadband)
+    roughnessThreshold = 0.30f;  // derivative/RMS ratio threshold
     detectorState.needsPreAnalysis = false;
 }
 
@@ -159,7 +159,7 @@ void VXToneRefineAudioProcessor::detectAndUpdateIntensities(const juce::AudioBuf
 
     // Harshness: HF ratio in the moderate range (above normal speech, below sibilance)
     const float hfRatio = hfEnergy / bbTotal;
-    const float harshnessIntensity = hasSig && hfRatio > harshnessThreshold && hfRatio < 0.42f
+    const float harshnessIntensity = hasSig && hfRatio > harshnessThreshold && hfRatio < 0.55f
         ? std::min(1.0f, (hfRatio - harshnessThreshold) / 0.15f)
         : 0.0f;
 

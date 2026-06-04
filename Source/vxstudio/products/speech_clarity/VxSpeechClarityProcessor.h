@@ -2,13 +2,16 @@
 
 #include "../../framework/VxStudioProcessorBase.h"
 #include "../../framework/VxStudioArtifactDetectors.h"
+#include "dsp/VxDeEsserDsp.h"
+#include "dsp/VxDePolosiveDsp.h"
+#include "dsp/VxDeBreathDsp.h"
 
 class VXSpeechClarityAudioProcessor final : public vxsuite::ProcessorBase {
 public:
     VXSpeechClarityAudioProcessor();
 
 protected:
-    vxsuite::ProductIdentity makeIdentity() override;
+    static vxsuite::ProductIdentity makeIdentity();
     juce::String getStatusText() const override;
     int getActivityLightCount() const noexcept override;
     float getActivityLight(int index) const noexcept override;
@@ -40,10 +43,15 @@ private:
     float detectPlosive(const juce::AudioBuffer<float>& buffer);
     float detectBreath(const juce::AudioBuffer<float>& buffer);
 
+    // DSP processors
+    vxsuite::speech_clarity::DeEsserDsp   deEsserDsp;
+    vxsuite::speech_clarity::DePolosiveDsp dePlosiveDsp;
+    vxsuite::speech_clarity::DeBreathDsp  deBreathDsp;
+
     // Detection filter states
-    vxsuite::detectors::OnePoleLowpass sibilanceEnvFollower;
-    vxsuite::detectors::OnePoleLowpass plosiveEnvFollower;
-    vxsuite::detectors::OnePoleLowpass breathEnvFollower;
+    vxsuite::detectors::EnvelopeFollower sibilanceEnvFollower;
+    vxsuite::detectors::EnvelopeFollower plosiveEnvFollower;
+    vxsuite::detectors::EnvelopeFollower breathEnvFollower;
 
     vxsuite::detectors::BiquadFilter sibilanceBandFilter;
     vxsuite::detectors::BiquadFilter plosiveBandFilter;

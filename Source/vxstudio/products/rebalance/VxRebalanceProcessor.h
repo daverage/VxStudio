@@ -33,6 +33,7 @@ private:
     std::vector<std::vector<float>> dryDelayLines;
     int dryDelayWritePos = 0;
     bool wasNeutral = false;
+    float rebalanceRampGain = 1.0f;
     float smoothedOutputTrimDb = 0.0f;
     bool outputTrimPrimed = false;
 };

@@ -50,6 +50,10 @@ vxsuite::ProductIdentity VXSubtractAudioProcessor::makeIdentity() {
     return identity;
 }
 
+float VXSubtractAudioProcessor::getActivityLight(int) const noexcept {
+    return subtractDisplayLevel.load(std::memory_order_relaxed);
+}
+
 juce::String VXSubtractAudioProcessor::getStatusText() const {
     if (isListenEnabled())
         return "Listen: hearing what was removed — lower Subtract or disable Listen to return to normal";
@@ -70,6 +74,12 @@ juce::String VXSubtractAudioProcessor::getStatusText() const {
         const juce::String conf = confidencePct < 40 ? "low — recapture for better results"
                                 : confidencePct < 70 ? "usable"
                                                      : "strong";
+        const int64_t learnMs = learnCompletedTimeMs.load(std::memory_order_relaxed);
+        const float profileAgeSeconds = learnMs > 0
+            ? static_cast<float>((juce::Time::currentTimeMillis() - learnMs) / 1000LL)
+            : 0.0f;
+        if (profileAgeSeconds > 1200.0f)
+            return "Profile ready — note: noise floor may have changed, consider re-learning";
         return "Profile ready (" + juce::String(confidencePct) + "% confidence, " + conf
              + ") — raise Subtract to remove the captured noise";
     }
@@ -135,6 +145,7 @@ void VXSubtractAudioProcessor::resetSuite() {
     controls.reset(vxsuite::readNormalized(parameters, productIdentity.primaryParamId, productIdentity.primaryDefaultValue),
                    vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, productIdentity.secondaryDefaultValue));
     activeTailSamplesRemaining = 0;
+    subtractDisplayLevel.store(0.0f, std::memory_order_relaxed);
     learnToggleLatched = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
     controlsNeedRelatchAfterLearn = false;
     subtractDspMono.setLearning(learnToggleLatched);
@@ -242,7 +253,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     options.sourceProtect = isVoice ? vxsuite::clamp01(0.64f + 0.36f * protectStrength + 0.18f * vocalPriority)
                                     : vxsuite::clamp01(0.12f + 0.38f * protectStrength);
     options.guardStrictness = isVoice ? vxsuite::clamp01(0.82f * protectStrength + 0.16f * vocalPriority)
-                                      : vxsuite::clamp01(0.30f * protectStrength);
+                                      : vxsuite::clamp01(0.72f * protectStrength);
     options.speechFocus = isVoice ? vxsuite::clamp01(0.78f + 0.22f * protectStrength + 0.12f * vocalPriority) : 0.12f;
     options.learningActive = learningActiveNow;
     options.subtract = isVoice ? (6.00f * subtractStrength * (1.0f - 0.06f * vocalPriority))
@@ -261,6 +272,10 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
                                                 : (learnedReady ? 0.0f
                                                                 : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
                                                                           * subtractStrength));
+    // Update display level: profile subtract strength or blind amount
+    subtractDisplayLevel.store(
+        learnedReady ? subtractStrength : blindAmount,
+        std::memory_order_relaxed);
     if (learningActiveNow) {
         const auto channelHasLearnSignal = [&](const int channel) {
             if (channel < 0 || channel >= buffer.getNumChannels())
@@ -486,8 +501,10 @@ void VXSubtractAudioProcessor::updateLearnTelemetry(const int numChannels) {
         learnObservedSeconds.store(0.5f * (subtractDspLeft.getLearnObservedSeconds() + subtractDspRight.getLearnObservedSeconds()),
                                    std::memory_order_relaxed);
         learnActive.store(subtractDspLeft.isLearning() || subtractDspRight.isLearning(), std::memory_order_relaxed);
-        learnReady.store(leftReady || rightReady,
-                         std::memory_order_relaxed);
+        const bool nowReady = leftReady || rightReady;
+        if (nowReady && !learnReady.load(std::memory_order_relaxed))
+            learnCompletedTimeMs.store(juce::Time::currentTimeMillis(), std::memory_order_relaxed);
+        learnReady.store(nowReady, std::memory_order_relaxed);
         return;
     }
 
@@ -495,7 +512,10 @@ void VXSubtractAudioProcessor::updateLearnTelemetry(const int numChannels) {
     learnConfidence.store(subtractDspMono.getLearnConfidence(), std::memory_order_relaxed);
     learnObservedSeconds.store(subtractDspMono.getLearnObservedSeconds(), std::memory_order_relaxed);
     learnActive.store(subtractDspMono.isLearning(), std::memory_order_relaxed);
-    learnReady.store(subtractDspMono.hasLearnedProfile(), std::memory_order_relaxed);
+    const bool nowReadyMono = subtractDspMono.hasLearnedProfile();
+    if (nowReadyMono && !learnReady.load(std::memory_order_relaxed))
+        learnCompletedTimeMs.store(juce::Time::currentTimeMillis(), std::memory_order_relaxed);
+    learnReady.store(nowReadyMono, std::memory_order_relaxed);
 }
 
 void VXSubtractAudioProcessor::applySavedProfiles() {

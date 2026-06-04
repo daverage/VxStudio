@@ -141,6 +141,32 @@ inline constexpr HelpContent proximity {
     "VXProximity"
 };
 
+inline constexpr HelpContent proximityClassic {
+    "VXProximity Classic Help",
+    R"(
+<h1>VXProximity Classic</h1>
+<p>A simplified two-control proximity simulator. <b>Closer</b> adds low-end body by emulating the proximity effect of a directional mic. <b>Air</b> adds upper-presence shimmer. For the three-control version with Mud compensation, use VX Proximity.</p>
+<h2>How to use it</h2>
+<ul>
+<li>Raise Closer to add weight and intimacy to a distant or thin-sounding voice.</li>
+<li>Use Air to prevent the sound becoming too thick or congested.</li>
+<li>Apply it after noise and room problems are already under control.</li>
+</ul>
+<h2>Example settings</h2>
+<ul>
+<li>Thin distant voice: Closer 65%, Air 45%.</li>
+<li>Subtle warmth lift: Closer 40%, Air 35%.</li>
+<li>Spoken-word polish: Closer 55%, Air 40%.</li>
+</ul>
+<h2>Practical scenarios</h2>
+<ul>
+<li>Phone or room mics that feel too far away.</li>
+<li>Voice tracks that need warmth after cleanup.</li>
+<li>Situations where the three-dial version is more than needed.</li>
+</ul>)",
+    "proximity-classic"
+};
+
 inline constexpr HelpContent speech_clarity {
     "VXSpeechClarity Help",
     R"(

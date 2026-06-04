@@ -9,14 +9,14 @@ void DePolosiveDsp::prepare(double sr, int /*maxBlockSize*/, int numChannels) {
     sampleRate = sr > 1000.0 ? sr : 48000.0;
 
     // 2nd-order Butterworth LP at 180 Hz (plosive burst range)
-    const float K    = std::tan(3.14159265f * 180.0f / static_cast<float>(sampleRate));
+    const float K    = std::tan(juce::MathConstants<float>::pi * 180.0f / static_cast<float>(sampleRate));
     const float K2   = K * K;
-    const float norm = 1.0f / (1.0f + 1.41421356f * K + K2);
+    const float norm = 1.0f / (1.0f + juce::MathConstants<float>::sqrt2 * K + K2);
     lpB0 =  K2 * norm;
     lpB1 =  2.0f * K2 * norm;
     lpB2 =  K2 * norm;
     lpA1 =  2.0f * (K2 - 1.0f) * norm;
-    lpA2 = (1.0f - 1.41421356f * K + K2) * norm;
+    lpA2 = (1.0f - juce::MathConstants<float>::sqrt2 * K + K2) * norm;
 
     attCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.002f));  // 2 ms
     relCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.040f));  // 40 ms

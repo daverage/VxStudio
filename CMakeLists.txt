@@ -353,35 +353,8 @@ target_link_libraries(VXProximityClassic PRIVATE VxStudioFramework juce::juce_ds
 add_custom_target(VXProximityClassicPlugin ALL DEPENDS VXProximityClassic_VST3)
 vxstudio_stage_vst3_bundle(VXProximityClassic_VST3 "VXProximityClassic")
 
-juce_add_plugin(VXCleanup
-  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXCLEANUP}
-  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXCLEANUP}
-  FORMATS VST3
-  COMPANY_NAME "VX Suite"
-  BUNDLE_ID "com.vxstudio.vxcleanup"
-  IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
-  NEEDS_MIDI_OUTPUT FALSE
-  IS_MIDI_EFFECT FALSE
-  PLUGIN_MANUFACTURER_CODE "VXS1"
-  PLUGIN_CODE "VXCL"
-)
-target_compile_definitions(VXCleanup PRIVATE
-  JUCE_VST3_CAN_REPLACE_VST2=0
-  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
-  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
-  JUCE_WEB_BROWSER=0
-)
-juce_generate_juce_header(VXCleanup)
-target_sources(VXCleanup PRIVATE
-  Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
-  Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
-)
-target_include_directories(VXCleanup PRIVATE Source)
-target_link_libraries(VXCleanup PRIVATE VxStudioFramework juce::juce_dsp)
-add_custom_target(VXCleanupPlugin ALL DEPENDS VXCleanup_VST3)
-vxstudio_stage_vst3_bundle(VXCleanup_VST3 "VXCleanup")
+# VXCleanup archived — replaced by VXClarity and VXRefine. Sources kept for reference.
+# juce_add_plugin(VXCleanup ...)
 
 juce_add_plugin(VXClarity
   VERSION 1.0.0
@@ -404,7 +377,7 @@ target_compile_definitions(VXClarity PRIVATE
 )
 juce_generate_juce_header(VXClarity)
 target_sources(VXClarity PRIVATE
-  Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor_CLEAN.cpp
+  Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
@@ -766,7 +739,6 @@ add_custom_target(VXSuite_VST3
     VXDeverb_VST3
     VXProximity_VST3
     VXProximityClassic_VST3
-    VXCleanup_VST3
     VXClarity_VST3
     VXFinish_VST3
     VXOptoComp_VST3
@@ -781,7 +753,6 @@ add_custom_target(VXSuite_VST3
     VXRepair_VST3
     VXDeverbStage
     VXProximityStage
-    VXCleanupStage
     VXClarityStage
     VXFinishStage
     VXOptoCompStage

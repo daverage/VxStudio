@@ -56,6 +56,7 @@ public:
 
     float getSignalPresence() const noexcept { return signalPresence; }
     float getNoiseFloorDb() const noexcept { return noiseFloorDb; }
+    float getGainReductionDb() const noexcept { return smoothedGrDb; }
 
 private:
     [[nodiscard]] bool hasValidProcessingState(int numChannels, int numSamples) const noexcept;
@@ -151,6 +152,7 @@ private:
     int   midDryDelayCount = 0;
 
     // ── Signal state ─────────────────────────────────────────────────────────
+    float smoothedGrDb    = 0.0f;
     bool  phaseReady      = false;
     bool  fifoLive        = false; // false after reset() or early-exit; reset STFT on next active call
     float prevFrameEnergy = kEps;

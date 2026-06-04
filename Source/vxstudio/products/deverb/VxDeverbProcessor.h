@@ -14,6 +14,9 @@ public:
     ~VXDeverbAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
+    int getActivityLightCount() const noexcept override { return 1; }
+    float getActivityLight(int) const noexcept override;
+    std::string_view getActivityLightLabel(int) const noexcept override { return "GR"; }
     // Test/analysis control API — used by regression tests and development tools
     void setTestRt60PresetSeconds(float rt60Seconds);
     void clearTestRt60Preset();

@@ -12,7 +12,7 @@ void IntelligentSmoothDsp::prepare(double sampleRate, int maxBlockSize, int numC
     // Configure one-pole filter with moderate cutoff (gentle smoothing)
     // Using ~500 Hz cutoff for gentle tonal smoothing
     const float cutoffHz = 500.0f;
-    const float omega = 2.0f * 3.14159265359f * cutoffHz / static_cast<float>(sampleRate);
+    const float omega = 2.0f * juce::MathConstants<float>::pi * cutoffHz / static_cast<float>(sampleRate);
     const float coeff = omega / (1.0f + omega);
 
     for (auto& ch : channels) {

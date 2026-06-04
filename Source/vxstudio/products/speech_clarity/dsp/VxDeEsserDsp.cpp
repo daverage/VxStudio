@@ -25,7 +25,7 @@ void DeEsserDsp::reset() noexcept {
 }
 
 void DeEsserDsp::designBandPass(double sr, float hz, float q, BiquadState& s) noexcept {
-    const float w     = 2.0f * 3.14159265f * hz / static_cast<float>(sr);
+    const float w     = 2.0f * juce::MathConstants<float>::pi * hz / static_cast<float>(sr);
     const float sw    = std::sin(w);
     const float cw    = std::cos(w);
     const float alpha = sw / (2.0f * q);

@@ -73,8 +73,10 @@ public:
     float getOverSubtract() const noexcept { return overSubtract; }
     void setDebugNoCepstral(bool shouldBypass) noexcept { debugNoCepstral = shouldBypass; }
     bool isDebugNoCepstral() const noexcept { return debugNoCepstral; }
+    float getGainReductionDb() const noexcept { return smoothedGrDb; }
 
     /** Voice mode: enables the per-channel WPE dereverberation stage. */
+    void  setVoiceMode(bool v) noexcept { voiceMode = v; }
     bool  voiceMode  = false;
     float wpeAmount  = 1.0f;
 
@@ -195,6 +197,7 @@ private:
     bool   useDeterministicReset = false;
     float  overSubtract = kDefaultOverSubtract;
     bool   debugNoCepstral = false;
+    float  smoothedGrDb = 0.0f;
 
     std::vector<ChannelState> chans; ///< one entry per audio channel
 

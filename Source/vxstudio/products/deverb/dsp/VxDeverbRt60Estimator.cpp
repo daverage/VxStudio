@@ -6,6 +6,10 @@
 
 namespace vxsuite::deverb {
 
+namespace {
+    constexpr float kPi = 3.14159265358979f;
+} // namespace
+
 LollmannRt60Estimator::LollmannRt60Estimator() {
     subFrameCount.fill(0);
     subFrameIdx.fill(0);
@@ -41,7 +45,7 @@ void LollmannRt60Estimator::computeBandCoeffs() {
 
     for (int b = 0; b < kNumBands; ++b) {
         const float fc = kCentreFreqs[b];
-        const float w0 = 2.0f * 3.14159265f * fc / static_cast<float>(kInternalRate);
+        const float w0 = 2.0f * kPi * fc / static_cast<float>(kInternalRate);
         const float alpha = std::sin(w0) / (2.0f * kQ);
         const float a0    = 1.0f + alpha;
 

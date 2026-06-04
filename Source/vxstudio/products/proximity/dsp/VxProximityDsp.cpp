@@ -125,14 +125,16 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float closer = juce::jlimit(0.f, 1.f, closerAmount);
     const float air    = juce::jlimit(0.f, 1.f, airAmount);
     const float mud    = juce::jlimit(0.f, 1.f, mudAmount);
-    (void)vocalFocus; // Unused in physics model
+    const float focus = juce::jlimit(0.0f, 1.0f, vocalFocus);
 
     // Physics constants for distance mapping
     const float d_ref = 0.50f;   // 50 cm reference
     const float d_near = 0.02f;  // 2 cm minimum (on capsule)
     const float ln_ratio = std::log(d_ref / d_near);
     const float distance = d_ref * std::exp(-closer * ln_ratio);
-    const float patternFactor = isVoice ? 0.50f : 0.80f;
+    // In voice mode, higher vocalFocus (clearly vocal content) uses the conservative
+    // cardioid vocal factor (0.50); lower focus (ambiguous source) allows slightly more effect.
+    const float patternFactor = isVoice ? (0.50f + 0.15f * (1.0f - focus)) : 0.80f;
 
     // Distance-derived proximity parameters
     const float proximityFcHz = juce::jlimit(80.0f, 3000.0f,

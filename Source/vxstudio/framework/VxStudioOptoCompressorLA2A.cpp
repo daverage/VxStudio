@@ -82,7 +82,7 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const bool compressionEnabled = pr01 > 1.0e-4f;
 
   const float atkSeconds = 0.010f;
-  const float fastHalfLife = 0.060f;
+  const float fastHalfLife = (mode == Mode::limit) ? 0.110f : 0.060f;
   const float ratio = (mode == Mode::limit) ? 12.0f : 3.0f;
   const float kneeDb = (mode == Mode::limit) ? 7.0f : 9.0f;
   const float baseThresholdDb = -24.0f;

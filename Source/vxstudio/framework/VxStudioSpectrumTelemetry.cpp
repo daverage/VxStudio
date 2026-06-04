@@ -1264,10 +1264,31 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
     };
+    // Build a fixed-width stageId for comparison (mirrors setStageIdentityFromProduct)
+    std::array<char, 32> incomingStageId {};
+    copyFixedLabel(identity.stageId.empty() ? identity.productName : identity.stageId,
+                   incomingStageId.data(), incomingStageId.size());
+
     if (state != nullptr) {
         const juce::ScopedLock threadScoped(registryMutex);
         juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
         if (scoped.isLocked()) {
+            // Evict any orphaned slots with the same stageId in the same domain —
+            // these are left behind when a previous unregisterStage call lost the
+            // inter-process lock mid-flight. Without this sweep, the same plugin
+            // appears twice in the analyser stage chain.
+            for (auto& slot : state->slots) {
+                if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                    continue;
+                if (slot.analysisDomainId != analysisDomainId)
+                    continue;
+                if (slot.telemetry.identity.stageId != incomingStageId)
+                    continue;
+                analysisAtomicRef(slot.active).store(0u, std::memory_order_release);
+                slot.analysisDomainId = 0;
+                slot.telemetry = {};
+            }
+
             for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
                 auto& slot = state->slots[static_cast<std::size_t>(slotIndex)];
                 if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) != 0u)
@@ -1292,6 +1313,14 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
 
     auto& localState = localStageRegistryState();
     const juce::ScopedLock localScoped(localState.lock);
+    // Evict orphaned local slots with the same stageId+domain before allocating a new one
+    for (auto& slot : localState.slots) {
+        if (!slot.active || slot.analysisDomainId != analysisDomainId)
+            continue;
+        if (slot.telemetry.identity.stageId != incomingStageId)
+            continue;
+        slot = {};
+    }
     for (int slotIndex = 0; slotIndex < static_cast<int>(localState.slots.size()); ++slotIndex) {
         auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
         if (slot.active)

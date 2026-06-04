@@ -17,6 +17,9 @@ public:
     ~VXSubtractAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
+    int getActivityLightCount() const noexcept override { return 1; }
+    float getActivityLight(int) const noexcept override;
+    std::string_view getActivityLightLabel(int) const noexcept override { return "Sub"; }
     float getLearnProgress() const noexcept override { return learnProgress.load(std::memory_order_relaxed); }
     float getLearnConfidence() const noexcept override { return learnConfidence.load(std::memory_order_relaxed); }
     float getLearnObservedSeconds() const noexcept override { return learnObservedSeconds.load(std::memory_order_relaxed); }
@@ -62,4 +65,6 @@ private:
     std::atomic<float> learnObservedSeconds { 0.0f };
     std::atomic<bool> learnActive { false };
     std::atomic<bool> learnReady { false };
+    std::atomic<int64_t> learnCompletedTimeMs { 0 };
+    std::atomic<float> subtractDisplayLevel { 0.0f };
 };

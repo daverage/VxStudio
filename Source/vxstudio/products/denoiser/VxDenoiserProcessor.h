@@ -10,6 +10,9 @@ public:
     ~VXDenoiserAudioProcessor() override = default;
 
     juce::String getStatusText() const override;
+    int getActivityLightCount() const noexcept override { return 1; }
+    float getActivityLight(int) const noexcept override;
+    std::string_view getActivityLightLabel(int) const noexcept override { return "GR"; }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
