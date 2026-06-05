@@ -7,7 +7,7 @@
 namespace vxsuite {
 
 // Safety output trimmer: instantaneous gain reduction when a block peaks above
-// the ceiling, slow exponential release back to unity. Stateful — one instance
+// the ceiling, slow exponential release back to unity. Stateful  -  one instance
 // per processor, reset on prepare/reset.
 class OutputTrimmer {
 public:

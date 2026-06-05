@@ -157,7 +157,7 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
             apvts, onIds[i], row.bypassButton);
     }
 
-    // DeepFilter toggle — Noise row only
+    // DeepFilter toggle  -  Noise row only
     deepFilterToggle.setButtonText("DeepFilter");
     deepFilterToggle.setClickingTogglesState(true);
     deepFilterToggle.setColour(juce::ToggleButton::textColourId,         text.withAlpha(0.75f));
@@ -235,7 +235,7 @@ void VXRepairEditor::timerCallback() {
             else if (repairProcessor.isDeepFilterPrepared())
                 deepFilterStatus.setText("Loading model...", juce::dontSendNotification);
             else
-                deepFilterStatus.setText("Model not installed — use VX Deep Filter Net to install",
+                deepFilterStatus.setText("Model not installed  -  use VX Deep Filter Net to install",
                                          juce::dontSendNotification);
         }
     }
@@ -248,9 +248,9 @@ void VXRepairEditor::timerCallback() {
         const auto phase = repairProcessor.getAnalysisPhase();
         using Phase = VXRepairAudioProcessor::AnalysisPhase;
         if (phase == Phase::Phase2)
-            phaseLabel.setText("Phase 2 — reverb & clarity (noise-corrected)", juce::dontSendNotification);
+            phaseLabel.setText("Phase 2  -  reverb & clarity (noise-corrected)", juce::dontSendNotification);
         else
-            phaseLabel.setText("Phase 1 — detecting noise level", juce::dontSendNotification);
+            phaseLabel.setText("Phase 1  -  detecting noise level", juce::dontSendNotification);
 
         std::array<float, 24> raw {};
         repairProcessor.getDisplayBands(raw);
@@ -370,7 +370,7 @@ void VXRepairEditor::paintCollecting(juce::Graphics& g) {
     const float cy = static_cast<float>(bodyTop) + static_cast<float>(bodyH) * 0.34f;
     const float radius = static_cast<float>(scaled(42));
 
-    // Progress ring — second phase shown in slightly brighter accent
+    // Progress ring  -  second phase shown in slightly brighter accent
     const auto phase = repairProcessor.getAnalysisPhase();
     const float ringAlpha = (phase == VXRepairAudioProcessor::AnalysisPhase::Phase2) ? 0.14f : 0.10f;
     g.setColour(accent.withAlpha(ringAlpha));
@@ -498,7 +498,7 @@ void VXRepairEditor::resized() {
     suiteLabel.setBounds(scaled(24), headerTop, scaled(120), scaled(20));
     productLabel.setBounds(scaled(24), headerTop + scaled(18), scaled(200), scaled(32));
 
-    // Help button — top-right of header
+    // Help button  -  top-right of header
     const int helpW = scaled(58);
     const int helpH = scaled(24);
     helpButton.setBounds(getWidth() - scaled(20) - helpW, headerTop + scaled(20), helpW, helpH);
@@ -557,7 +557,7 @@ void VXRepairEditor::resized() {
             row.bypassButton.setBounds(listenX + btnW + btnGap, btnY, btnW, btnH);
         }
 
-        // DeepFilter toggle — Noise row (row 0), below the confidence label
+        // DeepFilter toggle  -  Noise row (row 0), below the confidence label
         {
             const int row0Top = bodyTop;
             const int pad = scaled(28);
@@ -569,7 +569,7 @@ void VXRepairEditor::resized() {
         const int footerY = getHeight() - scaled(kFooterH);
         resetButton.setBounds(scaled(24), footerY + scaled(11), scaled(120), scaled(28));
 
-        // Makeup gain knob — right side of footer
+        // Makeup gain knob  -  right side of footer
         const int mkSize = scaled(46);
         const int mkX    = getWidth() - scaled(22) - mkSize;
         const int mkY    = footerY + scaled(8);

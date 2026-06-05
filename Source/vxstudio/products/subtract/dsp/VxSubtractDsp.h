@@ -147,7 +147,7 @@ private:
     void setQueueSizes(int maxBlockSize);
     void updateSmoothingCoeffs();
 
-    // Reset helpers — shared between reset() and resetStreamingState()
+    // Reset helpers  -  shared between reset() and resetStreamingState()
     void clearLearnSessionState();
     void clearStreamingState();
 

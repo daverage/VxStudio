@@ -61,7 +61,7 @@ void DePolosiveDsp::process(juce::AudioBuffer<float>& buffer, const Params& para
                 ? attCoeff * c.gateGain + (1.0f - attCoeff) * targetGain
                 : relCoeff * c.gateGain + (1.0f - relCoeff) * targetGain;
 
-            // Subtract the gated LP component only — HP component is untouched
+            // Subtract the gated LP component only  -  HP component is untouched
             buf[i] -= lp * (1.0f - c.gateGain);
         }
     }

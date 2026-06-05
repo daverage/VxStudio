@@ -22,7 +22,7 @@ void Detector::prepare(const double sampleRate, const int maxBlockSize) {
     alphaFast  = timeAlpha(sr, 0.010f);   // per-sample inner loop
     alphaSlow  = timeAlpha(sr, 0.120f);   // per-sample inner loop
     alphaBand  = timeAlpha(sr, 0.070f);   // per-sample inner loop
-    // alphaScore is applied once per block — use block-rate coefficient
+    // alphaScore is applied once per block  -  use block-rate coefficient
     alphaScore = std::pow(timeAlpha(sr, 0.160f), static_cast<float>(maxBlock));
     reset();
 }

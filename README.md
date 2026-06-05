@@ -4,8 +4,6 @@ Focused, realtime-safe audio processors for voice, vocal production, and fast st
 
 VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, compact control surfaces, and product-specific DSP. Each plugin is meant to do one job clearly instead of acting like a broad channel strip.
 
-The current suite pass is complete: the core products, shared finishing framework, and analyser have all been retuned and reverified together. The most recent work focused on making top-of-range controls less polite, tightening source-local analyser behavior, removing pop-prone adaptive retuning in `VXProximity`, and keeping the full regression harness green.
-
 The shared framework lives in `Source/vxstudio/framework/`. It handles parameter registration, the default editor shell, smoothing, status/help UI, listen-mode plumbing, and output safety so each product can stay focused on its DSP contract. See `Source/vxstudio/framework/README.md` for framework-level guidance.
 
 This README and the in-plugin Help popup are a shared documentation contract. When a plugin's UI, selector behavior, DSP contract, or recommended usage changes, update both together.
@@ -22,13 +20,14 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXDeverb | LRSV dereverberation with RT60 tracking | `Reduce`, `Blend` | Echoey rooms, distant speech, reverberant dialogue |
 | VXSpeechClarity | Focused speech-artifact cleanup | `Sibilance`, `Plosive`, `Breath` | De-essing, pop control, breath cleanup |
 | VXProximity | Directional proximity model with adaptive filtering | `Closer`, `Air`, `Mud` | Intimacy, warmth, fullness, boom control after cleanup |
-| VXCleanup | Corrective voice cleanup | `Cleanup`, `Body`, `Focus` | Mud, harshness, breaths, plosives, sibilance |
+| VXProximityClassic | Simplified two-control proximity simulator | `Closer`, `Air` | Warmth and intimacy without the full three-dial model |
 | VXTone | Bass, mid, and treble shaping | `Bass`, `Treble`, `Mid` | Warmth, presence, brightness, tonal balance |
 | VXToneRefine | Guided tonal correction | `Mud`, `Harshness`, `Smooth` | Boxiness, brittleness, transparent smoothing |
 | VXFinish | Final polish and level control | `Finish`, `Body`, `Gain` | Compression, recovery lift, controlled loudness |
 | VXOptoComp | Professional LA2A-style opto levelling | `Peak Red.`, `Body`, `Gain`, `Pro`, `Behavior`, `Stereo Link` | Smooth riding, gentle limiting, opto character, engineer-facing control |
 | VXLeveler | Adaptive riding and programme levelling | `Level`, `Control` | Speech riding, long-form consistency |
 | VXRebalance | Confidence-driven source-family rebalance | `Vocals`, `Drums`, `Bass`, `Guitar`, `Other`, `Strength` | Broad mix moves without stems |
+| VXRepair | All-in-one guided voice repair | `Noise`, `Speech Clarity`, `Reverb` | Automatic problem detection and one-step correction |
 | VXStudioAnalyser | Chain-aware dry-vs-wet analyser | `Avg Time`, `Smoothing` | Inspecting stage impact and whole-chain tone |
 
 ---
@@ -39,34 +38,41 @@ Framework and plugin DSP versions are tracked independently.
 
 | Component | Version |
 |---|---|
-| VX Suite Framework | `0.2.0` |
-| VXDeepFilterNet | `0.2.0` |
-| VXDenoiser | `0.2.0` |
-| VXSubtract | `0.2.0` |
-| VXDeverb | `0.2.0` |
-| VXProximity | `0.2.0` |
-| VXCleanup | `0.2.0` |
+| VX Suite Framework | `0.2.1` |
+| VXDeepFilterNet | `0.2.1` |
+| VXDenoiser | `0.2.1` |
+| VXSubtract | `0.2.1` |
+| VXDeverb | `0.2.1` |
+| VXSpeechClarity | `1.0.0` |
+| VXProximity | `0.2.1` |
+| VXProximityClassic | `0.1.0` |
 | VXTone | `0.2.0` |
+| VXToneRefine | `1.0.0` |
 | VXFinish | `0.3.0` |
 | VXOptoComp | `0.3.0` |
 | VXLeveler | `0.2.0` |
-| VXRebalance | `0.2.1` |
-| VXStudioAnalyser | `0.2.0` |
+| VXRebalance | `0.2.2` |
+| VXRepair | `0.1.1` |
+| VXStudioAnalyser | `0.2.1` |
 
 ---
 
 ## Current status
 
-- `12` focused plugins are implemented and shipping in the shared VX Suite shell.
-- The latest suite-wide upgrade pass is complete across `Rebalance`, `Leveler`, `Finish` / `OptoComp`, `Cleanup`, `Denoiser`, `Deverb`, `Subtract`, `Proximity`, `Tone`, `DeepFilterNet`, and `VXStudioAnalyser`.
-- Strong-setting behavior has been retuned so extreme control travel is more decisive instead of being overly compensated back toward unity.
-- The analyser is now explicitly track-local and ignores bypassed/non-live upstream stages.
+- `15` focused plugins are implemented and shipping in the shared VX Suite shell.
+- VXSpeechClarity and VXToneRefine (formerly VXClarity and VXRefine) are live  -  DSP is active for all three bands.
+- VXProximityClassic is a new two-control simplified proximity model.
+- VXRepair is a new all-in-one guided repair assistant combining noise, clarity, and deverb in a single analysed workflow.
+- VXCleanup has been archived  -  replaced by VXSpeechClarity (speech artifacts) and VXToneRefine (tonal refinement).
+- GR meters are now active on VXDenoiser and VXDeverb.
+- VXDeepFilterNet now has an active Guard control with artifact-aware blending.
+- VXSubtract now warns when a learned noise profile may be stale (> 20 min old).
 - The full regression harness currently passes end-to-end.
 
 Latest verification:
 
 ```text
-cmake --build build --target VXStudioPluginRegressionTests -j4
+cmake --build build --target VXStudioPluginRegressionTests -j$(nproc)
 ./build/VXStudioPluginRegressionTests
 ```
 
@@ -79,30 +85,35 @@ On the latest clean run, `VXStudioPluginRegressionTests` completed with exit cod
 VX Suite is designed around composability. When a recording has multiple problems, this order is usually the best starting point:
 
 ```text
-VXDeepFilterNet / VXDenoiser / VXSubtract -> VXDeverb -> VXCleanup -> VXProximity -> VXTone -> VXFinish / VXOptoComp -> VXStudioAnalyser
+VXDeepFilterNet / VXDenoiser / VXSubtract -> VXDeverb -> VXSpeechClarity -> VXProximity -> VXTone / VXToneRefine -> VXFinish / VXOptoComp -> VXStudioAnalyser
 ```
 
 Why this order:
 
 1. Remove noise first so later stages do not react to or enhance the noise floor.
 2. Remove room tail before enhancement so proximity and tone moves do not lift reverberant smear.
-3. Do corrective cleanup before additive shaping.
+3. Do corrective cleanup (sibilance, plosive, breath) before additive shaping.
 4. Add closeness after cleanup.
 5. Shape tone after proximity.
 6. Finish or compress last.
 7. Put VXStudioAnalyser at the end when you want to inspect the whole chain or an individual VX stage.
 
+For a fully guided single-plugin workflow, use **VXRepair**  -  it analyses, selects, and applies noise, clarity, and reverb reduction automatically.
+
 Example chains:
 
 ```text
 Heavy street noise, reflective room:
-  VXDeepFilterNet -> VXDeverb -> VXCleanup -> VXFinish -> VXStudioAnalyser
+  VXDeepFilterNet -> VXDeverb -> VXSpeechClarity -> VXFinish -> VXStudioAnalyser
 
 HVAC noise, thin and distant vocal:
-  VXSubtract -> VXDeverb -> VXCleanup -> VXProximity -> VXTone -> VXFinish
+  VXSubtract -> VXDeverb -> VXSpeechClarity -> VXProximity -> VXTone -> VXFinish
 
 Levelling and polish after a clean recording:
-  VXCleanup -> VXTone -> VXOptoComp
+  VXToneRefine -> VXTone -> VXOptoComp
+
+Quick single-plugin repair:
+  VXRepair
 ```
 
 Denoiser choice:
@@ -113,6 +124,7 @@ Denoiser choice:
 | Steady broadband noise | VXDenoiser |
 | Noise with a learnable fingerprint | VXSubtract |
 | Both present | Use ML isolation first, then target the remaining steady bed |
+| Full guided repair | VXRepair |
 
 ---
 
@@ -207,6 +219,7 @@ How to use it:
 - Enable `Learn` and play the noise by itself for about one to two seconds.
 - Turn `Learn` off to lock the profile.
 - Raise `Subtract` for more removal and raise `Protect` if the source becomes hollow or over-scooped.
+- If the status bar shows a stale-profile warning, re-learn to re-capture the current noise floor.
 
 Example settings:
 
@@ -223,12 +236,6 @@ Practical scenarios:
 ### VXDeverb
 
 Research-grade dereverberation using LRSV (Late-Reverberant Spectral Variance) with RT60 room-decay estimation and optional WPE (Weighted Prediction Error) enhancement for voice. Reduces reverberant tail and ambience while preserving direct sound clarity.
-
-**Advanced features:**
-- Per-bin RT60-adaptive Wiener filtering (Habets et al. 2009)
-- Frame-online WPE in voice mode for speech-specific enhancement
-- Temporal smoothing to suppress musical artifacts
-- Adaptive body restoration (prevents over-thinning)
 
 How to use it:
 
@@ -250,7 +257,7 @@ Practical scenarios:
 
 ### VXSpeechClarity
 
-Targeted speech-artifact cleanup for sibilance, plosives, and breath noise. It is the focused corrective stage for speech mechanics rather than broad tonal shaping.
+Targeted speech-artifact cleanup for sibilance, plosives, and breath noise. It is the focused corrective stage for speech mechanics rather than broad tonal shaping. All three DSP bands are active.
 
 How to use it:
 
@@ -272,15 +279,7 @@ Practical scenarios:
 
 ### VXProximity
 
-Directional microphone proximity model with real-time spectral analysis and adaptive 4-stage cascaded filtering. Simulates the tonal character of moving a microphone closer to a source—adding weight, intimacy, and presence—without altering spatial location or introducing artifacts.
-
-**Advanced features:**
-- Per-band energy tracking with adaptive filter parameter selection
-- Context-aware modulation from voice analysis (transient risk, intelligibility)
-- Physically plausible cascaded biquad approach (models real microphone impedance behavior)
-- Non-linear control curves for natural proximity sensation
-- Zero-latency pure IIR filtering
-- Boom compensation control for different source characters
+Directional microphone proximity model with real-time spectral analysis and adaptive 4-stage cascaded filtering. Simulates the tonal character of moving a microphone closer to a source  -  adding weight, intimacy, and presence  -  without altering spatial location or introducing artifacts.
 
 How to use it:
 
@@ -301,33 +300,27 @@ Practical scenarios:
 - Voice tracks that need warmth after cleanup
 - Pre-tone-shaping enhancement before `VXTone`
 
-### VXCleanup
+### VXProximityClassic
 
-Dual-stage spectral corrective processor with real-time multi-feature detection (8+ acoustic properties per frame). Targets mud, harshness, breaths, plosives, sibilance with problem-specific algorithms rather than one-size-fits-all spectral subtraction. Subtractive repair before enhancement.
-
-**Advanced features:**
-- Real-time spectral feature detection: flatness, harmonicity, high-frequency ratio, breath/sibilance/plosive envelopes
-- Dual correction pipeline: aggressive corrective chain + broader persistent clarity stage
-- Noise-floor integration from framework signal quality (voiceContext, separationConfidence)
-- Voice-mode intelligibility protection with OutputTrimmer safety net
+A simplified two-control proximity simulator. Adds low-end body and upper-presence shimmer without the full three-dial model. Use this when VXProximity's Mud control is more than the source needs.
 
 How to use it:
 
-- Raise `Cleanup` until the distracting problems start to fall away.
-- Increase `Body` if the result becomes too thin.
-- Use `Focus` to steer the correction toward low-mid cleanup or more presence and air control.
+- Raise `Closer` to add weight and intimacy.
+- Use `Air` to prevent the sound becoming too thick or congested.
+- Apply it after noise and room problems are under control.
 
 Example settings:
 
-- Muddy spoken voice: `Cleanup 55%`, `Body 55%`, `Focus 45%`
-- Harsh, breathy voice: `Cleanup 60%`, `Body 50%`, `Focus 70%`
-- Light corrective tidy-up: `Cleanup 35%`, `Body 55%`, `Focus 55%`
+- Thin distant voice: `Closer 65%`, `Air 45%`
+- Subtle warmth lift: `Closer 40%`, `Air 35%`
+- Spoken-word polish: `Closer 55%`, `Air 40%`
 
 Practical scenarios:
 
-- Dialogue that needs cleanup before any enhancement
-- Speech with boxiness, spit, or low-end bumps
-- Preparation stage before proximity, tone, or final compression
+- Phone or room mics that feel too far away
+- Voice tracks that need warmth after cleanup
+- Situations where the three-dial version is more than needed
 
 ### VXTone
 
@@ -468,10 +461,27 @@ Practical scenarios:
 - Making speech or lead lines feel more present without remixing stems
 - Light source-family shaping before final tone and dynamics
 
-Notes:
+### VXRepair
 
-- Current tuning work is aimed at making the render behave more like confident source allocation than EQ or weighted remix.
-- Current debug builds can show a diagnostics panel for dominant-bin ownership, confidence, and `Other` leakage while tuning the DSP.
+All-in-one guided voice repair assistant. Analyses the audio and automatically suggests which tools to enable and at what strength. Combines noise reduction, speech clarity cleanup, and dereverberation in a single workflow.
+
+How to use it:
+
+- Insert VXRepair and let it analyse for a few seconds. It detects problems and pre-sets each tool.
+- Accept the suggestions, adjust each slider to taste, or toggle individual tools off.
+- Use the `Noise`, `Speech Clarity`, and `Reverb` sliders to scale each stage.
+
+Example settings:
+
+- Podcast with background hiss and slight room reverb: let Repair analyse and apply all three tools.
+- Phone or camera speech with strong interference: Repair handles all three stages together.
+- Mostly clean voice: Repair will leave inactive tools off and only apply what is needed.
+
+Practical scenarios:
+
+- Fast single-plugin repair when there is no time to build a chain manually
+- First pass on unfamiliar material
+- All-in-one correction for noisy remote recording
 
 ### VXStudioAnalyser
 
@@ -509,10 +519,10 @@ Shared scenario names:
 
 | Preset | Use case | Recommended chain |
 |---|---|---|
-| `Camera Review - Far Phone` | Slightly noisy review-to-camera audio from a phone a few meters from the presenter | `VXSubtract -> VXCleanup -> VXDenoiser -> VXDeepFilterNet -> VXDeverb -> VXProximity -> VXTone -> VXOptoComp -> VXFinish` |
-| `Live Music - Front Of Room` | Single-point live music or rehearsal capture where preserving the whole mix matters more than voice isolation | `VXCleanup -> VXTone -> VXOptoComp -> VXFinish` |
-| `Podcast Finishing - Clean Voice` | Already-decent spoken-word capture that mainly needs polish and density | `VXCleanup -> VXProximity -> VXTone -> VXOptoComp -> VXFinish` |
-| `Mixed Audio - Voice + Guitar` | One track containing both voice and live instrument, where aggressive speech-only denoise would damage the instrument | `VXCleanup -> VXTone -> VXOptoComp -> VXFinish` |
+| `Camera Review - Far Phone` | Slightly noisy review-to-camera audio from a phone a few meters from the presenter | `VXSubtract -> VXSpeechClarity -> VXDenoiser -> VXDeepFilterNet -> VXDeverb -> VXProximity -> VXTone -> VXOptoComp -> VXFinish` |
+| `Live Music - Front Of Room` | Single-point live music or rehearsal capture where preserving the whole mix matters more than voice isolation | `VXToneRefine -> VXTone -> VXOptoComp -> VXFinish` |
+| `Podcast Finishing - Clean Voice` | Already-decent spoken-word capture that mainly needs polish and density | `VXSpeechClarity -> VXProximity -> VXTone -> VXOptoComp -> VXFinish` |
+| `Mixed Audio - Voice + Guitar` | One track containing both voice and live instrument, where aggressive speech-only denoise would damage the instrument | `VXToneRefine -> VXTone -> VXOptoComp -> VXFinish` |
 
 ---
 
@@ -532,13 +542,13 @@ Prerequisites:
 git clone --recurse-submodules <repo-url>
 cd VxStudio
 cmake -S . -B build
-cmake --build build -j4
+cmake --build build -j$(nproc)
 ```
 
 Build a single plugin:
 
 ```bash
-cmake --build build --target VXRebalancePlugin -j4
+cmake --build build --target VXRebalancePlugin -j$(nproc)
 ```
 
 Built `.vst3` bundles are staged into `Source/vxstudio/vst/`.
@@ -557,7 +567,7 @@ Prerequisites:
 
 ```bat
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build -j4
+cmake --build build -j$(nproc)
 ```
 
 ### Install built plugins
@@ -581,12 +591,15 @@ Useful plugin targets:
 | `VXSubtract_VST3` | Subtract plugin |
 | `VXDeverb_VST3` | Deverb plugin |
 | `VXProximity_VST3` | Proximity plugin |
-| `VXCleanup_VST3` | Cleanup plugin |
+| `VXProximityClassic_VST3` | ProximityClassic plugin |
+| `VXClarity_VST3` | Speech Clarity plugin |
 | `VXTone_VST3` | Tone plugin |
+| `VXRefine_VST3` | ToneRefine plugin |
 | `VXFinish_VST3` | Finish plugin |
 | `VXOptoComp_VST3` | Opto compressor plugin |
 | `VXLeveler_VST3` | Leveler plugin |
 | `VXRebalance_VST3` | Rebalance plugin |
+| `VXRepair_VST3` | Repair plugin |
 | `VXStudioAnalyser_VST3` | Studio analyser plugin |
 
 ---
@@ -603,13 +616,17 @@ Source/
       subtract/       VXSubtract processor and DSP
       deverb/         VXDeverb processor and DSP
       proximity/      VXProximity processor and DSP
-      cleanup/        VXCleanup processor and DSP
+      proximityClassic/ VXProximityClassic processor and DSP
+      speech_clarity/ VXSpeechClarity processor and DSP (built as VXClarity)
       tone/           VXTone processor
+      tone_refine/    VXToneRefine processor and DSP (built as VXRefine)
       finish/         VXFinish processor and DSP
       OptoComp/       VXOptoComp processor
       leveler/        VXLeveler processor and DSP
       rebalance/      VXRebalance processor, DSP, and diagnostics UI
+      repair/         VXRepair processor (embeds denoiser/deverb/speech_clarity DSP)
       analyser/       VXStudioAnalyser processor and custom analyser UI
+      cleanup/        VXCleanup  -  archived, sources kept for reference
 tests/                Measurement and behaviour tests
 tools/                Utility scripts and fixture builders
 assets/               Models, REAPER presets, and related resources
@@ -623,6 +640,6 @@ tasks/                Working plans, reports, and lessons
 
 - macOS VST3 builds are confirmed and staged.
 - Windows build generation is present but needs broader end-to-end host validation.
-- All 12 plugins build on macOS from the current tree.
+- All 15 plugins build on macOS from the current tree.
 - VXDeepFilterNet is the only plugin with extra runtime model dependencies.
-- VXRebalance is under active tuning and now includes a compact diagnostics panel in the current debug-oriented editor path.
+- VXRepair embeds DSP from VXDenoiser, VXDeverb, and VXSpeechClarity  -  modifying those DSP files requires re-testing VXRepair.

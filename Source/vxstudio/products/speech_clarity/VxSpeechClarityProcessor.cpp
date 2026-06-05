@@ -30,9 +30,9 @@ vxsuite::ProductIdentity VXSpeechClarityAudioProcessor::makeIdentity() {
     identity.primaryLabel = "Sibilance";
     identity.secondaryLabel = "Plosive";
     identity.tertiaryLabel = "Breath";
-    identity.primaryDefaultValue = 0.4f;   // Sibilance — light de-essing by default
-    identity.secondaryDefaultValue = 0.3f; // Plosive — light correction
-    identity.tertiaryDefaultValue = 0.2f;  // Breath — minimal
+    identity.primaryDefaultValue = 0.4f;   // Sibilance  -  light de-essing by default
+    identity.secondaryDefaultValue = 0.3f; // Plosive  -  light correction
+    identity.tertiaryDefaultValue = 0.2f;  // Breath  -  minimal
     identity.primaryHint = "Reduce harsh sibilance (/s/ and /z/ sounds).";
     identity.secondaryHint = "Reduce plosive bursts (/p/, /b/, /t/, /d/, /k/, /g/).";
     identity.tertiaryHint = "Reduce breathing and wind noise.";

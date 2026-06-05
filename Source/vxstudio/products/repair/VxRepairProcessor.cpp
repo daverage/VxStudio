@@ -95,16 +95,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRepairAudioProcessor::make
 juce::String VXRepairAudioProcessor::getStatusText() const {
     const auto phase = getAnalysisPhase();
     if (phase == AnalysisPhase::Phase1)
-        return "Phase 1 — play a representative section";
+        return "Phase 1  -  play a representative section";
     if (phase == AnalysisPhase::Phase2)
-        return "Phase 2 — detecting reverb & clarity";
+        return "Phase 2  -  detecting reverb & clarity";
     if (phase == AnalysisPhase::Done) {
         const auto a = analyser.getAssessment();
         const int n = (a.cleanupActive ? 1 : 0) + (a.noiseActive ? 1 : 0) + (a.reverbActive ? 1 : 0);
         return n == 0 ? "No significant issues detected"
                       : juce::String(n) + " issue" + (n > 1 ? "s" : "") + " detected";
     }
-    return "Ready — click Analyse to scan your audio";
+    return "Ready  -  click Analyse to scan your audio";
 }
 
 juce::AudioProcessorEditor* VXRepairAudioProcessor::createEditor() {
@@ -224,7 +224,7 @@ void VXRepairAudioProcessor::resetSuite() {
     dePlosiveDsp.reset();
     deBreathDsp.reset();
     dfService.resetRealtime();
-    // Analyser is NOT reset here — see triggerAnalysis() and resetAnalysis().
+    // Analyser is NOT reset here  -  see triggerAnalysis() and resetAnalysis().
 }
 
 void VXRepairAudioProcessor::resetAnalysis() {
@@ -293,19 +293,19 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         analysisPhase.store(static_cast<int>(AnalysisPhase::Phase1), std::memory_order_release);
     }
 
-    // Phase transitions (audio thread — no allocation)
+    // Phase transitions (audio thread  -  no allocation)
     const auto phase = getAnalysisPhase();
 
     if (phase == AnalysisPhase::Phase1 && analyser.isComplete()) {
         const auto a = analyser.getAssessment();
         if (a.noiseScore >= vxsuite::repair::RepairAnalyser::kActiveThreshold) {
-            // Significant noise found — run Phase 2 with denoised audio
+            // Significant noise found  -  run Phase 2 with denoised audio
             savedNoiseScore = a.noiseScore;
             analyserDenoiserDsp.reset();
             analyser.startCollection();
             analysisPhase.store(static_cast<int>(AnalysisPhase::Phase2), std::memory_order_release);
         } else {
-            // No significant noise — single-pass is sufficient
+            // No significant noise  -  single-pass is sufficient
             analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_release);
         }
     } else if (phase == AnalysisPhase::Phase2 && analyser.isComplete()) {
@@ -318,7 +318,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_release);
     }
 
-    // Feed analyser — Phase 2 uses a denoised copy so reverb/clarity are noise-corrected
+    // Feed analyser  -  Phase 2 uses a denoised copy so reverb/clarity are noise-corrected
     if (analyser.isCollecting()) {
         const auto currentPhase = getAnalysisPhase();
         if (currentPhase == AnalysisPhase::Phase2) {
@@ -375,7 +375,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         return total > 0 ? static_cast<float>(std::sqrt(sum / total)) : 0.0f;
     };
 
-    // Denoiser opts — scale protection inversely with strength:
+    // Denoiser opts  -  scale protection inversely with strength:
     //   low strength → high guard, low aggression (surgical)
     //   high strength → lower guard, higher aggression (heavy removal)
     vxsuite::ProcessOptions noiseOpts {};
@@ -385,7 +385,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     noiseOpts.lateTailAggression = 0.35f + 0.40f * noiseStr;   // 0.35 → 0.75
     noiseOpts.speechFocus        = 0.75f;
 
-    // Deverb opts — same adaptive philosophy
+    // Deverb opts  -  same adaptive philosophy
     vxsuite::ProcessOptions reverbOpts {};
     reverbOpts.isVoiceMode        = true;
     reverbOpts.sourceProtect      = 0.82f - 0.22f * reverbStr;  // 0.82 → 0.60
@@ -479,7 +479,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         dePlosiveDsp.process(buffer, { clarityStr, plosI });
         deEsserDsp.process  (buffer, { clarityStr, sibI  });
         deBreathDsp.process (buffer, { clarityStr, breaI });
-        // Clarity tools act on narrow bands — broadband RMS barely moves.
+        // Clarity tools act on narrow bands  -  broadband RMS barely moves.
         // Use detection intensity directly, same as the standalone VxClarity plugin.
         const float activity = clarityStr * std::max({ sibI, plosI, breaI });
         clarityActivity.store(0.88f * clarityActivity.load(std::memory_order_relaxed) + 0.12f * activity, std::memory_order_relaxed);

@@ -142,7 +142,7 @@ void WpeStage::processSpectrum(float* re, float* im, const float amount) noexcep
         // 7. Write original observation to history (needed for future ỹ)
         hist(histWrite_, k) = Y_mk;
 
-        // 8. Wet mix to output — clamp xhat magnitude to input to prevent amplification
+        // 8. Wet mix to output  -  clamp xhat magnitude to input to prevent amplification
         const float inMag   = std::abs(Y_mk);
         const float hatMag  = std::abs(xhat);
         const Cx    xhatSafe = (hatMag > inMag && hatMag > 1.0e-20f)

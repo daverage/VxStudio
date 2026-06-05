@@ -41,7 +41,7 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     identity.defaultMode = vxsuite::Mode::general;
     identity.primaryLabel = "Level";
     identity.secondaryLabel = "Control";
-    identity.primaryDefaultValue = 0.0f;  // Default transparent — no processing unless explicitly set
+    identity.primaryDefaultValue = 0.0f;  // Default transparent  -  no processing unless explicitly set
     identity.secondaryDefaultValue = 0.0f;
     identity.primaryHint = "Ride voice phrases or the full mix toward a more even perceived level.";
     identity.secondaryHint = "Set how firmly peaks and harsh bursts are contained without flattening the take.";

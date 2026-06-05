@@ -136,7 +136,7 @@ void RepairAnalyser::processFrame() noexcept {
     }
     const float rms = std::sqrt(sumSq / static_cast<float>(kFftSize));
 
-    // Skip silent frames — don't count them toward the 5-second budget.
+    // Skip silent frames  -  don't count them toward the 5-second budget.
     // This means "Analyse" can be pressed before playback starts; collection
     // only advances once real audio arrives.
     static constexpr float kSilenceThresh = 3.16e-4f;  // −70 dBFS
@@ -146,7 +146,7 @@ void RepairAnalyser::processFrame() noexcept {
     frameRms.push_back(rms);
 
     // Sibilance score: ratio of sibilance-band (4.5–9 kHz) to speech-band (1–4 kHz) energy.
-    // Only meaningful on voiced frames (above silence floor) — quiet frames are skipped.
+    // Only meaningful on voiced frames (above silence floor)  -  quiet frames are skipped.
     float sibSum    = 0.0f;
     float speechSum = 0.0f;
     for (int k = kSpeechLoBin; k < kSpeechHiBin2; ++k)
@@ -276,7 +276,7 @@ void RepairAnalyser::getDisplayBands(std::array<float, kDisplayBands>& out) cons
 float RepairAnalyser::scoreToStrength(float score) noexcept {
     if (score < kActiveThreshold) return 0.0f;
     // Map [0.10 .. 1.0] → [0.30 .. 0.95]: starts at a solid working level,
-    // reaches 95% at maximum score — heavy problems get heavy treatment.
+    // reaches 95% at maximum score  -  heavy problems get heavy treatment.
     return 0.30f + (score - kActiveThreshold) / (1.0f - kActiveThreshold) * 0.65f;
 }
 

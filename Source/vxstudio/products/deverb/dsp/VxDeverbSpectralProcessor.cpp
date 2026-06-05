@@ -284,7 +284,7 @@ void SpectralProcessor::processFrame(ChannelState& ch,
     //
     // History ring semantics (see header documentation):
     //   ch.magSqHist[ histWriteIdx × numBins + k ]  contains the power from
-    //   tHistFrames frames ago — exactly T_boundary seconds of delay.
+    //   tHistFrames frames ago  -  exactly T_boundary seconds of delay.
     //   We READ it first, then OVERWRITE it with the current frame's power.
     //   This avoids a separate "delayed index" calculation.
     const size_t histBase = static_cast<size_t>(ch.histWriteIdx) * nbins;

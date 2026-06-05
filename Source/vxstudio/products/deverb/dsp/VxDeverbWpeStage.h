@@ -7,7 +7,7 @@ namespace vxsuite::deverb {
 /**
  * Frame-online single-channel WPE dereverberation stage.
  *
- * Operates in the STFT domain — it receives and returns complex spectra
+ * Operates in the STFT domain  -  it receives and returns complex spectra
  * directly, without its own FFT.  It is designed to be called from
  * SpectralProcessor::processFrame() after the forward FFT and before
  * the inverse FFT.

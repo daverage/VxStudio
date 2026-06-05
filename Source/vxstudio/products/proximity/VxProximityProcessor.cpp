@@ -34,7 +34,7 @@ vxsuite::ProductIdentity VXProximityAudioProcessor::makeIdentity() {
     identity.tertiaryLabel     = "Mud";
     identity.primaryHint       = "Simulate moving the mic closer for natural bass body and warmth.";
     identity.secondaryHint     = "Add upper presence and clarity that characterises a close placement.";
-    identity.tertiaryHint      = "Control boom compensation—balance bass depth vs mud for different sources.";
+    identity.tertiaryHint      = "Control boom compensation - balance bass depth vs mud for different sources.";
     identity.primaryDefaultValue = 0.0f;
     identity.secondaryDefaultValue = 0.0f;
     identity.tertiaryDefaultValue = 0.5f;

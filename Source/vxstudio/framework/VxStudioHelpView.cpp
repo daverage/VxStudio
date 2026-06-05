@@ -194,12 +194,10 @@ public:
                                                     : toJuceString(identity.helpTitle)),
           versionLabel({}, "DSP v" + juce::String(identity.dspVersion.data()) +
                               "   Framework v" + juce::String(vxsuite::versions::framework.data())),
-          reminderLabel({}, "Documentation contract: keep this help popup and the README in sync."),
           document(std::make_unique<HtmlDocumentComponent>(toJuceString(identity.helpHtml))),
           documentViewport("HelpViewport") {
         addAndMakeVisible(titleLabel);
         addAndMakeVisible(versionLabel);
-        addAndMakeVisible(reminderLabel);
         documentViewport.setViewedComponent(document.get(), false);
         documentViewport.setScrollBarsShown(true, false);
         addAndMakeVisible(documentViewport);
@@ -209,9 +207,6 @@ public:
         versionLabel.setJustificationType(juce::Justification::centredLeft);
         versionLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.68f));
         versionLabel.setFont(juce::FontOptions().withHeight(13.0f));
-        reminderLabel.setJustificationType(juce::Justification::centredLeft);
-        reminderLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.68f));
-        reminderLabel.setFont(juce::FontOptions().withHeight(12.0f));
     }
 
     void paint(juce::Graphics& g) override {
@@ -225,8 +220,6 @@ public:
         titleLabel.setBounds(area.removeFromTop(30));
         versionLabel.setBounds(area.removeFromTop(18));
         area.removeFromTop(8);
-        reminderLabel.setBounds(area.removeFromBottom(18));
-        area.removeFromBottom(8);
         documentViewport.setBounds(area);
         document->updateLayout(std::max(180, documentViewport.getMaximumVisibleWidth() - 12));
     }
@@ -234,7 +227,6 @@ public:
 private:
     juce::Label titleLabel;
     juce::Label versionLabel;
-    juce::Label reminderLabel;
     std::unique_ptr<HtmlDocumentComponent> document;
     juce::Viewport documentViewport;
 };

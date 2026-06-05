@@ -95,7 +95,7 @@ private:
     mutable std::mutex  assessmentMutex;
     RepairAssessment    assessment;
 
-    // Display spectrum — updated non-blockingly in processFrame, read by UI thread.
+    // Display spectrum  -  updated non-blockingly in processFrame, read by UI thread.
     mutable std::mutex spectrumMutex;
     std::array<float, kDisplayBands> displayBands {};
     float spectrumPeakHold = 1.0e-6f;  // slow-decaying peak for normalisation

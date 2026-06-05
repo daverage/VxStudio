@@ -1273,7 +1273,7 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         const juce::ScopedLock threadScoped(registryMutex);
         juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
         if (scoped.isLocked()) {
-            // Evict any orphaned slots with the same stageId in the same domain —
+            // Evict any orphaned slots with the same stageId in the same domain  - 
             // these are left behind when a previous unregisterStage call lost the
             // inter-process lock mid-flight. Without this sweep, the same plugin
             // appears twice in the analyser stage chain.

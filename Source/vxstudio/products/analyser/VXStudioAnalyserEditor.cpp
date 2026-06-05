@@ -555,7 +555,7 @@ void VXStudioAnalyserEditor::paint(juce::Graphics& g) {
             g.drawVerticalLine(juce::roundToInt(x), plot.getY(), plot.getBottom());
         }
 
-        // Key frequency lines — slightly stronger
+        // Key frequency lines  -  slightly stronger
         for (float hz : { 100.0f, 1000.0f, 10000.0f }) {
             const float x = xForFrequency(hz, plot);
             g.setColour(text.withAlpha(0.14f));
@@ -1060,7 +1060,7 @@ void VXStudioAnalyserEditor::refreshRenderModel() {
 
         const auto averageWindowMs = static_cast<std::uint64_t>(std::max(100.0f, averageSeconds * 1000.0f));
 
-        // Enforce max history frames before push — never let deque exceed capacity
+        // Enforce max history frames before push  -  never let deque exceed capacity
         while (static_cast<int>(backendState.spectrumHistory.size()) >= kMaxSpectrumHistoryFrames) {
             const auto& expired = backendState.spectrumHistory.front();
             for (int i = 0; i < vxsuite::analysis::kSummarySpectrumBins; ++i) {

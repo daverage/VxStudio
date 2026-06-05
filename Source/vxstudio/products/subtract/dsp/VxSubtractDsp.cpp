@@ -14,7 +14,7 @@ inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
 } // namespace
 
 // ---------------------------------------------------------------------------
-// FrameCtx — scalar parameters derived from options, passed to per-frame stages
+// FrameCtx  -  scalar parameters derived from options, passed to per-frame stages
 // ---------------------------------------------------------------------------
 struct SubtractDsp::FrameCtx {
     float wetCore;
@@ -482,7 +482,7 @@ void SubtractDsp::computeGainTargets(const FrameCtx& ctx,
 // Per-frame stage: Bark mask floor + frequency smoothing + harmonic comb + temporal smoothing
 // ---------------------------------------------------------------------------
 void SubtractDsp::smoothGains(bool subtractEnabled, float wetCore) {
-    // Bark masking floor — protect tonal peaks from over-suppression
+    // Bark masking floor  -  protect tonal peaks from over-suppression
     std::fill(barkMaskFloor.begin(), barkMaskFloor.end(), 0.0f);
     for (size_t k = 0; k < bins; ++k) {
         const float n     = std::max(kEps, activeNoise(k));
@@ -499,7 +499,7 @@ void SubtractDsp::smoothGains(bool subtractEnabled, float wetCore) {
     for (size_t k = 0; k < bins; ++k)
         gainTarget[k] = std::max(gainTarget[k], barkMaskFloor[k]);
 
-    // Frequency smoothing — SNR-weighted 3-tap
+    // Frequency smoothing  -  SNR-weighted 3-tap
     for (size_t k = 0; k < bins; ++k) {
         const float localGamma = currPow[k] / std::max(kEps, activeNoise(k));
         const float snrWeight  = vxsuite::clamp01((localGamma - 1.0f) / 15.0f);
@@ -512,7 +512,7 @@ void SubtractDsp::smoothGains(bool subtractEnabled, float wetCore) {
                                + wSide * gainTarget[kp];
     }
 
-    // Harmonic comb — lock gain valleys across harmonic series to prevent chirpy residuals
+    // Harmonic comb  -  lock gain valleys across harmonic series to prevent chirpy residuals
     std::fill(harmonicFloor.begin(), harmonicFloor.end(), 0.0f);
     const size_t maxF0Bin = std::max<size_t>(8u, bins / 5u);
     for (size_t k = 8; k < maxF0Bin; ++k) {
@@ -574,7 +574,7 @@ void SubtractDsp::applyGainAndOLA() {
         if (k == 0u || k == bins - 1u) {
             frame[2u * k] = safe(reIn >= 0.0f ? mag : -mag);
         } else {
-            // Keep input phase — standard spectral subtraction, no phase vocoder.
+            // Keep input phase  -  standard spectral subtraction, no phase vocoder.
             const float phaseIn     = std::atan2(imIn, reIn);
             frame[2u * k]           = safe(mag * std::cos(phaseIn));
             frame[2u * k + 1u]      = safe(mag * std::sin(phaseIn));
@@ -683,7 +683,7 @@ void SubtractDsp::reconstructStereo(juce::AudioBuffer<float>& buffer,
 }
 
 // ---------------------------------------------------------------------------
-// processInPlace — orchestration
+// processInPlace  -  orchestration
 // ---------------------------------------------------------------------------
 bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                                  float amount,
@@ -740,7 +740,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float floorBest  = options.isVoiceMode ? 1.5e-4f : 5.0e-5f;
     ctx.subtractFloor = lerp(floorStart, lerp(floorMin, floorBest, profileAuthority), subtractMix);
 
-    // Profile trust — how well the frozen profile still matches the current noise floor.
+    // Profile trust  -  how well the frozen profile still matches the current noise floor.
     // Uses noisePowBlind from the previous frame so this runs once per block, not per-bin.
     if (subtractEnabled) {
         float weightedMismatch = 0.0f, mismatchWeightSum = 0.0f;
@@ -847,7 +847,7 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
             const float energyRatio = frameEnergy / std::max(1.0e-8f, prevFrameEnergy);
             prevFrameEnergy = frameEnergy;
 
-            // Spectral flatness — for learn quality only
+            // Spectral flatness  -  for learn quality only
             float logPowMean = 0.0f, linPowMean = 0.0f;
             for (size_t k = 0; k < bins; ++k) {
                 logPowMean += std::log(std::max(kEps, currPow[k]));

@@ -156,7 +156,7 @@ bool VXDeverbAudioProcessor::isTestNoCepstral() const noexcept {
 }
 
 void VXDeverbAudioProcessor::setVoiceMode(const bool enabled) noexcept {
-    deverbProcessor.voiceMode = enabled;
+    deverbProcessor.setVoiceMode(enabled);
 }
 
 bool VXDeverbAudioProcessor::isVoiceMode() const noexcept {
@@ -220,7 +220,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
       + 0.12f * (1.0f - voiceContext.intelligibility));
     deverbProcessor.setVoiceMode(voiceMode);
 
-    // Pass reduce directly as the Wiener amount — at reduce=0, amount=0 so all
+    // Pass reduce directly as the Wiener amount  -  at reduce=0, amount=0 so all
     // Wiener gains collapse to 1.0 (true bypass with no dry blend needed).
     // overSubtract still scales with reduce so depth ramps up with the knob.
     const float reduce = vxsuite::clamp01(smoothedReduce);

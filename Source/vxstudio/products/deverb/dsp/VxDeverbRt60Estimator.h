@@ -11,7 +11,7 @@ namespace vxsuite::deverb {
  * internally).  Call pushSamples() from the audio thread each block;
  * the estimator updates asynchronously at its own frame rate.
  *
- * getEstimatedRt60() is safe to call from the audio thread — it returns
+ * getEstimatedRt60() is safe to call from the audio thread  -  it returns
  * the last committed estimate (written on the same audio thread).
  *
  * Algorithm outline:

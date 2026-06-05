@@ -28,9 +28,9 @@ vxsuite::ProductIdentity VXToneRefineAudioProcessor::makeIdentity() {
     identity.primaryLabel = "Mud";
     identity.secondaryLabel = "Harshness";
     identity.tertiaryLabel = "Smooth";
-    identity.primaryDefaultValue = 0.25f;  // Mud — gentle low-mid cleanup
-    identity.secondaryDefaultValue = 0.20f; // Harshness — light presence softening
-    identity.tertiaryDefaultValue = 0.15f;  // Smooth — barely perceptible on clean sources
+    identity.primaryDefaultValue = 0.25f;  // Mud  -  gentle low-mid cleanup
+    identity.secondaryDefaultValue = 0.20f; // Harshness  -  light presence softening
+    identity.tertiaryDefaultValue = 0.15f;  // Smooth  -  barely perceptible on clean sources
     identity.primaryHint = "Remove low-mid buildup (boxiness, muddiness).";
     identity.secondaryHint = "Reduce presence peak harshness (2-5 kHz brittleness).";
     identity.tertiaryHint = "Apply transparent tonal smoothing.";
@@ -97,7 +97,7 @@ void VXToneRefineAudioProcessor::resetSuite() {
 }
 
 void VXToneRefineAudioProcessor::performPreAnalysis(const juce::AudioBuffer<float>& buffer) {
-    // Pre-analysis now sets fixed, ratio-based thresholds — no signal scanning needed.
+    // Pre-analysis now sets fixed, ratio-based thresholds  -  no signal scanning needed.
     // The previous wideband amplitude approach caused false positives on any signal.
     //
     // Mud threshold: lag-1 autocorrelation. Speech typically R1 ~ 0.60-0.80;
@@ -113,7 +113,7 @@ void VXToneRefineAudioProcessor::performPreAnalysis(const juce::AudioBuffer<floa
 }
 
 void VXToneRefineAudioProcessor::detectAndUpdateIntensities(const juce::AudioBuffer<float>& buffer) {
-    // Frequency-discriminating detection — replaces the wideband envelope approach
+    // Frequency-discriminating detection  -  replaces the wideband envelope approach
     // that fired for any speech energy regardless of its spectral character.
     //
     // Mud     (100-500 Hz dominance): lag-1 autocorrelation. LF-heavy signals change
@@ -125,7 +125,7 @@ void VXToneRefineAudioProcessor::detectAndUpdateIntensities(const juce::AudioBuf
     //   is elevated (presence peak) without being sibilance-dominated.
     //
     // Roughness: first-difference magnitude normalised by RMS (level-independent
-    //   spectral irregularity). State-free and genuinely HF-sensitive — unchanged.
+    //   spectral irregularity). State-free and genuinely HF-sensitive  -  unchanged.
 
     const int numCh = buffer.getNumChannels();
     const int n     = buffer.getNumSamples();
@@ -163,7 +163,7 @@ void VXToneRefineAudioProcessor::detectAndUpdateIntensities(const juce::AudioBuf
         ? std::min(1.0f, (hfRatio - harshnessThreshold) / 0.15f)
         : 0.0f;
 
-    // Roughness: normalised derivative peak — level-independent spectral irregularity
+    // Roughness: normalised derivative peak  -  level-independent spectral irregularity
     const float normDeriv = rms > 1.0e-6f ? derivPeak / rms : 0.0f;
     const float roughnessIntensity = hasSig && normDeriv > roughnessThreshold
         ? std::min(1.0f, (normDeriv - roughnessThreshold) / 1.0f)

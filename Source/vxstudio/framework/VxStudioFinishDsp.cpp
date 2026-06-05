@@ -98,7 +98,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& option
     const float dryRms = static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(dryCount)));
     const float dryTruePeak = estimateTruePeak(buffer, numChannels);
 
-    const float autoMakeupMaxDb = voiceMode ? 18.0f : 18.0f;
+    const float autoMakeupMaxDb = 18.0f;
     const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, voiceMode ? 0.40f : 0.43f);
     if (!finishStageEnabled)
         smoothedAutoMakeupDb = 0.0f;

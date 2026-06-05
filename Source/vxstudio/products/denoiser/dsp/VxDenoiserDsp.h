@@ -11,7 +11,7 @@
 namespace vxsuite::denoiser {
 
 /**
- * Self-contained spectral denoiser — VX Suite framework.
+ * Self-contained spectral denoiser  -  VX Suite framework.
  *
  * ── Algorithm ────────────────────────────────────────────────────────────────
  * OM-LSA (Cohen 2003) with Decision-Directed a priori SNR estimation.
@@ -20,9 +20,9 @@ namespace vxsuite::denoiser {
  *
  * Per-frame extras:
  *   • Bark-domain transient detection (24 bands, flux ratio, 3-frame hold)
- *   • Harmonic comb protection (voice mode — locks gain across harmonics)
+ *   • Harmonic comb protection (voice mode  -  locks gain across harmonics)
  *   • ERB-adaptive frequency smoothing (variable kernel: 1–10 bins)
- *   • Phase-vocoder synthesis (std::remainder wrapPi — no loop drift)
+ *   • Phase-vocoder synthesis (std::remainder wrapPi  -  no loop drift)
  *
  * ── Stereo ───────────────────────────────────────────────────────────────────
  * M/S processing: mid is denoised, side is latency-aligned and energy-scaled.
@@ -32,7 +32,7 @@ namespace vxsuite::denoiser {
  * ── STFT ─────────────────────────────────────────────────────────────────────
  *   FFT:      1024 points
  *   Hop:       256 samples (75 % overlap)
- *   Window:   sqrt-Hann (WOLA — applied at both analysis and synthesis)
+ *   Window:   sqrt-Hann (WOLA  -  applied at both analysis and synthesis)
  *   Latency:  fftSize − hop = 768 samples ≈ 16 ms @ 48 kHz
  *
  * ── ProcessOptions wiring ────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ private:
 
     // ── Anti-flicker ─────────────────────────────────────────────────────────
     std::vector<int> suppressCount;  // slow-release suppression counter
-    int stftFrameCount = 0;          // monotonic frame index — used for slow-release gating
+    int stftFrameCount = 0;          // monotonic frame index  -  used for slow-release gating
 
     // ── Bark transient detection ──────────────────────────────────────────────
     std::array<float, 24> barkFluxAvg {};
@@ -142,7 +142,7 @@ private:
     int   sideDelayRead  = 0;
     int   sideDelayCount = 0;
     float smoothedSideRatio = 1.0f;
-    float prevSideScale     = 1.0f;  // sideScale from previous block — interpolated per-sample
+    float prevSideScale     = 1.0f;  // sideScale from previous block  -  interpolated per-sample
 
     // Latency-aligned dry mid for side ratio computation
     std::vector<float> midDryDelayBuf;

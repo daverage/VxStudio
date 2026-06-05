@@ -1,4 +1,4 @@
-# VX Suite VST Plugin Comprehensive Review — May 2026
+# VX Suite VST Plugin Comprehensive Review  -  May 2026
 
 **Critical Finding**: README is severely outdated and misrepresents plugin capabilities.
 
@@ -7,16 +7,16 @@
 ## Executive Summary
 
 ✅ **12 plugins shipping in production**
-✅ **Framework architecture is excellent** — clean ProcessorBase/EditorBase separation
-✅ **Proximity & Deverb are genuinely state-of-the-art research-grade DSP** — far beyond simple EQ
+✅ **Framework architecture is excellent**  -  clean ProcessorBase/EditorBase separation
+✅ **Proximity & Deverb are genuinely state-of-the-art research-grade DSP**  -  far beyond simple EQ
 ⚠️ **README must be completely rewritten** to reflect actual sophistication
-⚠️ **Rebalance Phase 2/3 implementation needs verification** — code exists but active features unclear
+⚠️ **Rebalance Phase 2/3 implementation needs verification**  -  code exists but active features unclear
 
 ---
 
 ## Plugin-by-Plugin Deep Dive
 
-### **1. VXProximity (0.2.0)** — NOT "tone shaping" ⚠️ MISREPRESENTED IN README
+### **1. VXProximity (0.2.0)**  -  NOT "tone shaping" ⚠️ MISREPRESENTED IN README
 
 **Actual Implementation**: Sophisticated 4-stage directional microphone proximity model with real-time spectral analysis.
 
@@ -57,7 +57,7 @@ Adaptive output trim (prevents cascading filter buildup)
    - Closer: power 0.78 (voice) / 0.70 (general)
    - Air: power 0.74 (voice) / 0.66 (general)
 
-5. **Zero-latency DSP** — pure IIR filtering, no delay
+5. **Zero-latency DSP**  -  pure IIR filtering, no delay
 
 **What's State-of-the-Art**:
 - ✅ Physically plausible directional mic model (not a generic EQ)
@@ -67,13 +67,13 @@ Adaptive output trim (prevents cascading filter buildup)
 - ✅ Cascaded filter approach models real mic impedance behavior
 
 **Potential Updates**:
-- [ ] Cross-band energy feedback (current approach is band-local) — consider inter-band dynamics
+- [ ] Cross-band energy feedback (current approach is band-local)  -  consider inter-band dynamics
 - [ ] Transient-aware adaptation (presence boost during attacks/consonants)
 - [ ] Stereo width preservation/enhancement during proximity boost
 
 ---
 
-### **2. VXDeverb (0.2.0)** — Research-grade dereverberation ✅
+### **2. VXDeverb (0.2.0)**  -  Research-grade dereverberation ✅
 
 **Actual Implementation**: Multi-stage scientific dereverberation using LRSV (Late-Reverberant Spectral Variance) + WPE (Weighted Prediction Error).
 
@@ -115,7 +115,7 @@ Output
    - Per-bin IIR temporal smoothing suppresses musical-noise artifacts
    - Voice-protected bins (200-4000 Hz) use `kVoiceFloor` when in voice mode
 
-4. **WPE Stage** (voice mode only) — Weighted Prediction Error:
+4. **WPE Stage** (voice mode only)  -  Weighted Prediction Error:
    - Frame-online single-channel processing
    - Works in STFT domain (receives complex spectra directly)
    - Prediction filter: K=10 taps, delta=3 frame delay
@@ -124,18 +124,18 @@ Output
    - Memory: ~125 KB per channel
 
 5. **STFT Windowing**:
-   - FFT size: 1024 @ 48 kHz (21.3 ms), 2048 @ 96 kHz (21.3 ms) — auto-scaled
+   - FFT size: 1024 @ 48 kHz (21.3 ms), 2048 @ 96 kHz (21.3 ms)  -  auto-scaled
    - Hop size: FFT/4 (75% overlap, COLA-satisfying periodic Hann)
    - Latency: FFT − Hop = 3×Hop ≈ 16 ms @ 48 kHz
    - OLA (Overlap-Add) accumulator with safe sizing for large block sizes
 
 **What's State-of-the-Art**:
 - ✅ Rooted in published research (Habets et al. 2009, Lebart et al. 2001)
-- ✅ Signal-agnostic — handles voice and polyphonic equally
-- ✅ RT60-adaptive — tunes dereverberation to room decay time
-- ✅ WPE for voice mode — optional speech-specific enhancement
+- ✅ Signal-agnostic  -  handles voice and polyphonic equally
+- ✅ RT60-adaptive  -  tunes dereverberation to room decay time
+- ✅ WPE for voice mode  -  optional speech-specific enhancement
 - ✅ Temporal smoothing reduces musical artifacts
-- ✅ Per-bin gain and filtering — frequency-dependent processing
+- ✅ Per-bin gain and filtering  -  frequency-dependent processing
 
 **Recent Improvements** (May 2026):
 - Body restoration with adaptive compensation gain
@@ -143,14 +143,14 @@ Output
 - Optimized WPE coefficient updates
 
 **Potential Updates**:
-- [ ] Adaptive κ coefficient (currently fixed at 1.0) — could improve subtraction accuracy
+- [ ] Adaptive κ coefficient (currently fixed at 1.0)  -  could improve subtraction accuracy
 - [ ] Per-frame RT60 refinement using power decay tracking
 - [ ] Cross-channel correlation for stereo processing (currently per-channel)
 - [ ] Transient detection to reduce over-subtraction on onsets
 
 ---
 
-### **3. VXCleanup (0.2.0)** — Research-grade corrective processing ✅
+### **3. VXCleanup (0.2.0)**  -  Research-grade corrective processing ✅
 
 **Actual Implementation**: Dual-stage spectral correction with frame-level feature extraction and mode-specific filtering.
 
@@ -182,8 +182,8 @@ Output
    - Harshness envelope (harsh frequency content)
 
 2. **Dual correction stages**:
-   - **Corrective chain** — aggressive removal targeting detected problems
-   - **Persistent clarity stage** — broader low-mid correction with protection
+   - **Corrective chain**  -  aggressive removal targeting detected problems
+   - **Persistent clarity stage**  -  broader low-mid correction with protection
 
 3. **Noise-floor integration**:
    - Uses framework signal quality (voiceContext, separationConfidence)
@@ -216,7 +216,7 @@ Output
 
 ---
 
-### **4. VXDenoiser (0.2.0)** — Spectral broadband denoise ✅
+### **4. VXDenoiser (0.2.0)**  -  Spectral broadband denoise ✅
 
 **Implementation**: Spectral subtraction with guard controls and artifact suppression.
 
@@ -233,7 +233,7 @@ Output
 
 ---
 
-### **5. VXSubtract (0.2.0)** — Profile-guided subtraction ✅
+### **5. VXSubtract (0.2.0)**  -  Profile-guided subtraction ✅
 
 **Implementation**: Learn noise profile, then subtract with protection.
 
@@ -244,7 +244,7 @@ Output
 
 ---
 
-### **6. VXDeepFilterNet (0.2.0)** — ML-powered voice isolation ✅
+### **6. VXDeepFilterNet (0.2.0)**  -  ML-powered voice isolation ✅
 
 **Implementation**: ONNX Runtime inference with model download/management UI.
 
@@ -274,7 +274,7 @@ Output
 
 ---
 
-### **8. VXTone (0.2.0)** — EQ shaping ✅
+### **8. VXTone (0.2.0)**  -  EQ shaping ✅
 
 **Implementation**: Two independent Audio EQ Cookbook biquad shelf filters.
 
@@ -285,7 +285,7 @@ Output
 
 ---
 
-### **9. VXFinish (0.3.0)** — Final dynamics ✅
+### **9. VXFinish (0.3.0)**  -  Final dynamics ✅
 
 **Version**: 0.3.0 (patch above base 0.2.0)
 
@@ -296,7 +296,7 @@ Output
 
 ---
 
-### **10. VXOptoComp (0.3.0)** — Opto levelling ✅
+### **10. VXOptoComp (0.3.0)**  -  Opto levelling ✅
 
 **Version**: 0.3.0 (patch above base 0.2.0)
 
@@ -307,11 +307,11 @@ Output
 
 ---
 
-### **11. VXLeveler (0.2.0)** — Adaptive riding ✅
+### **11. VXLeveler (0.2.0)**  -  Adaptive riding ✅
 
 **Dual-mode operation**:
-- **Vocal Rider** — speech-focused riding (Level/Control)
-- **Mix Leveler** — broader programme smoothing
+- **Vocal Rider**  -  speech-focused riding (Level/Control)
+- **Mix Leveler**  -  broader programme smoothing
 
 **Analysis selector** (custom, not Vocal/General):
 - Realtime
@@ -325,9 +325,9 @@ Output
 
 ---
 
-### **12. VXRebalance (0.2.1)** — Source-family rebalance ⚠️ VERIFY IMPLEMENTATION
+### **12. VXRebalance (0.2.1)**  -  Source-family rebalance ⚠️ VERIFY IMPLEMENTATION
 
-**Actual State**: AMBIGUOUS — Code is committed but active features unclear.
+**Actual State**: AMBIGUOUS  -  Code is committed but active features unclear.
 
 **What's Definitely Implemented**:
 - ✅ Harmonic clustering (2-8x fundamental detection)
@@ -337,23 +337,23 @@ Output
 - ✅ Mode-specific (Studio/Live/Phone/Rough) tuning
 
 **What Needs Verification**:
-- ❓ `persistClusters()` — is cluster lifecycle tracking called each frame?
-- ❓ `updateTrackedClusters()` — does frame matching/persistence work?
-- ❓ `sourceProbabilities[]` — are these computed from harmonic analysis or stubs?
-- ❓ `transient boost` — is the transient enhance logic actually applied?
+- ❓ `persistClusters()`  -  is cluster lifecycle tracking called each frame?
+- ❓ `updateTrackedClusters()`  -  does frame matching/persistence work?
+- ❓ `sourceProbabilities[]`  -  are these computed from harmonic analysis or stubs?
+- ❓ `transient boost`  -  is the transient enhance logic actually applied?
 
 **Recent Context**:
-- Commit 5106aca "Pre Refactor" — last Rebalance-specific work (~3 months ago)
+- Commit 5106aca "Pre Refactor"  -  last Rebalance-specific work (~3 months ago)
 - Most recent work has been on Cleanup/Denoiser/Deverb
 - Phase 2/3 specs exist but unclear if fully implemented
 
 **Action Required**:
 ```cpp
 // In VxRebalanceDsp.cpp processFrame(), trace which of these are called:
-// 1. persistClusters() — updates ageFrames, lifecycleState
-// 2. updateTrackedClusters() — matches current frame to tracked objects  
-// 3. computeSourceProbabilities() — harmonic analysis → [vocals, drums, bass, guitar, other]
-// 4. transientBoost() — scaling for attack handling
+// 1. persistClusters()  -  updates ageFrames, lifecycleState
+// 2. updateTrackedClusters()  -  matches current frame to tracked objects  
+// 3. computeSourceProbabilities()  -  harmonic analysis → [vocals, drums, bass, guitar, other]
+// 4. transientBoost()  -  scaling for attack handling
 ```
 
 **Phase 2/3 Spec Status**:
@@ -364,7 +364,7 @@ Output
 
 ---
 
-### **13. VXStudioAnalyser (0.2.0)** — Chain inspector ✅
+### **13. VXStudioAnalyser (0.2.0)**  -  Chain inspector ✅
 
 **Implementation**: Custom UI (not EditorBase), real-time spectrum telemetry.
 
@@ -397,17 +397,17 @@ Output
 
 ## Critical Updates Needed
 
-### **P0 — README Rewrite** 🔴 URGENT
+### **P0  -  README Rewrite** 🔴 URGENT
 
 Current README severely misrepresents Proximity and Deverb. Must rewrite sections:
 
 **Current (WRONG)**:
-> VXProximity — "Close-mic tone shaping"
-> VXDeverb — "Room tail and reverb reduction"
+> VXProximity  -  "Close-mic tone shaping"
+> VXDeverb  -  "Room tail and reverb reduction"
 
 **Should be**:
-> VXProximity — "Directional microphone proximity model with real-time spectral analysis and adaptive 4-stage filtering"
-> VXDeverb — "LRSV-based dereverberation with RT60 tracking and optional WPE stage for voice"
+> VXProximity  -  "Directional microphone proximity model with real-time spectral analysis and adaptive 4-stage filtering"
+> VXDeverb  -  "LRSV-based dereverberation with RT60 tracking and optional WPE stage for voice"
 
 **What to add for each plugin**:
 - Algorithm foundation (what research is it based on?)
@@ -417,7 +417,7 @@ Current README severely misrepresents Proximity and Deverb. Must rewrite section
 
 ---
 
-### **P1 — VXRebalance Verification** 🟡 IMPORTANT
+### **P1  -  VXRebalance Verification** 🟡 IMPORTANT
 
 1. **Audit VxRebalanceDsp.cpp**:
    ```bash
@@ -440,13 +440,13 @@ Current README severely misrepresents Proximity and Deverb. Must rewrite section
 
 ---
 
-### **P2 — Polish & Optimization** 🟢 NICE-TO-HAVE
+### **P2  -  Polish & Optimization** 🟢 NICE-TO-HAVE
 
 - [ ] **VXDeepFilterNet**: Async model download with better UX (timeouts, fallback)
 - [ ] **VXDeverb**: Verify RT60 estimation accuracy under poor conditions
 - [ ] **VXProximity**: Consider transient-aware presence boost (suppress during sibilants, enhance during fundamentals)
-- [ ] **VXCleanup**: Benchmark OutputTrimmer — does it clip in extreme settings?
-- [ ] **All Plugins**: Regression suite — confirm all tests pass
+- [ ] **VXCleanup**: Benchmark OutputTrimmer  -  does it clip in extreme settings?
+- [ ] **All Plugins**: Regression suite  -  confirm all tests pass
 
 ---
 
@@ -477,13 +477,13 @@ git log -20 --oneline Source/vxstudio/products/
 - Both adapt intelligently to input signal characteristics and framework voice analysis
 
 **The main gaps**:
-1. **README is misleading** — must be rewritten
-2. **Rebalance Phase 2/3 unclear** — implementation exists but active features need verification
-3. **Documentation/research attribution missing** — add citations to published papers
+1. **README is misleading**  -  must be rewritten
+2. **Rebalance Phase 2/3 unclear**  -  implementation exists but active features need verification
+3. **Documentation/research attribution missing**  -  add citations to published papers
 
 **Everything else is shipping-ready.**
 
-# VXStudioAnalyser Stability Review — May 2026
+# VXStudioAnalyser Stability Review  -  May 2026
 
 **Status**: Shipping but with known fragility and ongoing fixes required.
 
@@ -548,8 +548,8 @@ stages in the chain are discovered quickly.
 ### **2. Dual Registry Architecture Issues** 🟡 HIGH
 
 **Problem**: Two overlapping registries can drift out of sync:
-- `DomainRegistry` — tracks Analyser domains (one per DAW project)
-- `StageRegistry` — tracks all stage telemetry per domain
+- `DomainRegistry`  -  tracks Analyser domains (one per DAW project)
+- `StageRegistry`  -  tracks all stage telemetry per domain
 
 **Fragility**:
 - If a plugin crashes/unloads, StageRegistry may have stale slots
@@ -580,7 +580,7 @@ bool publish(int slotIndex, std::uint64_t instanceId, ...) noexcept;  // no lock
 **Mitigations used**:
 - Atomic values for simple fields
 - `std::memory_order_relaxed` (no synchronization cost, but no ordering guarantees)
-- Stale threshold (`kStaleThresholdMs = 1500`) — data older than 1.5s is ignored
+- Stale threshold (`kStaleThresholdMs = 1500`)  -  data older than 1.5s is ignored
 
 **Risk**:
 - Data races on `StageTelemetry` struct (copy-while-updating)
@@ -671,7 +671,7 @@ Based on code analysis, users probably experience:
 
 ## Stability Roadmap
 
-### **P0 — Thread Safety** (Critical, do this first)
+### **P0  -  Thread Safety** (Critical, do this first)
 
 Add mutex protection to StageRegistry / DomainRegistry:
 
@@ -695,7 +695,7 @@ class StageRegistry {
 
 ---
 
-### **P1 — Unify Registry Architecture**
+### **P1  -  Unify Registry Architecture**
 
 Eliminate DomainRegistry/StageRegistry duality. Single source of truth:
 
@@ -719,7 +719,7 @@ class UnifiedAnalysisRegistry {
 
 ---
 
-### **P2 — Synchronous Stage Discovery**
+### **P2  -  Synchronous Stage Discovery**
 
 Instead of relying on StageRegistry polling when stages process audio, explicitly discover on editor open:
 
@@ -737,7 +737,7 @@ void VXStudioAnalyserEditor::visibilityChanged() {
 
 ---
 
-### **P3 — Validated Data Access**
+### **P3  -  Validated Data Access**
 
 ```cpp
 // Current (unsafe):
@@ -757,7 +757,7 @@ if (timestampOutOfDate > kStaleThresholdMs) {
 
 ---
 
-### **P4 — Buffer Bounds Enforcement**
+### **P4  -  Buffer Bounds Enforcement**
 
 ```cpp
 void timerCallback() override {
@@ -830,12 +830,12 @@ TEST(AnalyserStability, LongSessionMemoryStability) {
 
 **The Analyser works most of the time but should NOT ship to production without**:
 
-1. **Thread safety** (mutexes in registries) — solves crashes
-2. **Unified registry architecture** — prevents drift/leaks
-3. **Regression tests** — prevents regressions
-4. **Synchronous discovery** — guarantees complete chain visibility
+1. **Thread safety** (mutexes in registries)  -  solves crashes
+2. **Unified registry architecture**  -  prevents drift/leaks
+3. **Regression tests**  -  prevents regressions
+4. **Synchronous discovery**  -  guarantees complete chain visibility
 
-**Current state**: "Works if you use it gently" — risky for production systems where users might:
+**Current state**: "Works if you use it gently"  -  risky for production systems where users might:
 - Rapidly add/remove plugins
 - Use the Analyser in long-session projects
 - Expect full chain inspection immediately upon opening

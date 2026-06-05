@@ -9,7 +9,7 @@ namespace speech_clarity {
 
 // Split-band de-esser: bandpass-extracts the sibilance region (5.5 kHz, Q=1.5),
 // applies a soft-knee compressor to that band only, and subtracts the gain-reduced
-// band from the original — leaving the rest of the spectrum untouched.
+// band from the original  -  leaving the rest of the spectrum untouched.
 // Fast attack (1 ms) / slow release (100 ms) envelope ensures the onset is caught.
 class DeEsserDsp {
 public:

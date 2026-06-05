@@ -66,7 +66,7 @@ void VoiceAnalysisState::update(const juce::AudioBuffer<float>& input, const int
         // Envelope trackers
         eF  = alphaFast * eF  + (1.0f - alphaFast) * absm;
         eS  = alphaSlow * eS  + (1.0f - alphaSlow) * absm;
-        // Noise floor: minimum-statistics tracker — only follows signal downward.
+        // Noise floor: minimum-statistics tracker  -  only follows signal downward.
         // This lets it stay near zero during speech while converging quickly to
         // the true noise floor during quiet passages.
         if (absm < eVS)

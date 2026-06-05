@@ -54,7 +54,7 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     lfStab      .resize(kBins);
     for (int k = 0; k < kBins; ++k) {
         const float hz   = static_cast<float>(k) * binHz;
-        // Moore & Glasberg (1990) ERB — drives smoother half-width
+        // Moore & Glasberg (1990) ERB  -  drives smoother half-width
         const float erb = 24.7f * (4.37f * hz / 1000.0f + 1.0f);
         erbKernelHW[k] = juce::jlimit(1.0f, 10.0f, erb / binHz);
 
@@ -283,7 +283,7 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
     const int accSz = olaAccumSize;
 
-    // ── Stereo M/S — push side & dry-mid into delay lines ────────────────────
+    // ── Stereo M/S  -  push side & dry-mid into delay lines ────────────────────
     if (numCh >= 2) {
         const float* l = buffer.getReadPointer(0);
         const float* r = buffer.getReadPointer(1);
@@ -350,7 +350,7 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
                 --midDryDelayCount;
             }
         }
-        // Side is passed through at unity — dynamic M/S balance scaling
+        // Side is passed through at unity  -  dynamic M/S balance scaling
         // was causing time-varying stereo width modulation perceived as delay.
         const float sideScale = 1.0f;
 
@@ -551,7 +551,7 @@ void DenoiserDsp::processFrame(const float amount,
     }
 
     // Per-bin seeding is handled inside updateMinStats on the first non-zero frame;
-    // no global seed needed here — seeding at currPow caused immediate muting because
+    // no global seed needed here  -  seeding at currPow caused immediate muting because
     // noisePow ≥ signal power → Γ < 1 → gains → floor for the first Martin-window
     // convergence period (~40 frames / 200 ms at 48 kHz).
     firstFrame = false;
@@ -610,7 +610,7 @@ void DenoiserDsp::processFrame(const float amount,
                         + (1.0f - pSm) * std::log(kGH0);
         float g = std::exp(lnG);
 
-        // Tonalness — protect spectral peaks from over-suppression
+        // Tonalness  -  protect spectral peaks from over-suppression
         const float left       = currPow[(k > 0) ? k - 1 : k];
         const float right      = currPow[(k + 1 < kBins) ? k + 1 : k];
         tonalness[k] = spectral::tonalnessFromNeighbors(p, left, right);
@@ -689,7 +689,7 @@ void DenoiserDsp::processFrame(const float amount,
         gainTarget[k] = std::max(gainTarget[k], barkMaskFloor[k]);
 
     // ── 7. ERB-adaptive frequency smoothing ───────────────────────────────────
-    // Variable triangular kernel width per bin — eliminates high-frequency
+    // Variable triangular kernel width per bin  -  eliminates high-frequency
     // graininess without over-smoothing low-frequency detail.
     for (int k = 0; k < kBins; ++k) {
         const int hw = static_cast<int>(erbKernelHW[k]);  // half-width in bins
@@ -795,7 +795,7 @@ void DenoiserDsp::processFrame(const float amount,
             const float phIn = std::atan2(imIn, reIn);
             float phOut = phIn;
             if (phaseReady) {
-                // std::remainder — no loop, handles arbitrarily large jumps
+                // std::remainder  -  no loop, handles arbitrarily large jumps
                 const float dphi = spectral::wrapPi((phIn - prevPhaseIn[k]) - phaseAdv[k]);
                 phOut = spectral::wrapPi(prevPhaseOut[k] + phaseAdv[k] + dphi);
             }

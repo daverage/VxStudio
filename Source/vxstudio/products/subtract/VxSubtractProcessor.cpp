@@ -56,22 +56,22 @@ float VXSubtractAudioProcessor::getActivityLight(int) const noexcept {
 
 juce::String VXSubtractAudioProcessor::getStatusText() const {
     if (isListenEnabled())
-        return "Listen: hearing what was removed — lower Subtract or disable Listen to return to normal";
+        return "Listen: hearing what was removed  -  lower Subtract or disable Listen to return to normal";
 
     if (isLearnActive()) {
         const int coveragePct   = juce::roundToInt(100.0f * getLearnProgress());
         const int qualityPct    = juce::roundToInt(100.0f * getLearnConfidence());
-        const juce::String qual = qualityPct < 40 ? "low quality — play noise with no signal"
+        const juce::String qual = qualityPct < 40 ? "low quality  -  play noise with no signal"
                                 : qualityPct < 70 ? "moderate quality"
                                                   : "good quality";
         return "Capturing: play noise only, no signal. Coverage "
              + juce::String(coveragePct) + "% | Quality " + juce::String(qualityPct) + "% ("
-             + qual + ") — press Learn again to lock";
+             + qual + ")  -  press Learn again to lock";
     }
 
     if (isLearnReady()) {
         const int confidencePct = juce::roundToInt(100.0f * getLearnConfidence());
-        const juce::String conf = confidencePct < 40 ? "low — recapture for better results"
+        const juce::String conf = confidencePct < 40 ? "low  -  recapture for better results"
                                 : confidencePct < 70 ? "usable"
                                                      : "strong";
         const int64_t learnMs = learnCompletedTimeMs.load(std::memory_order_relaxed);
@@ -79,9 +79,9 @@ juce::String VXSubtractAudioProcessor::getStatusText() const {
             ? static_cast<float>((juce::Time::currentTimeMillis() - learnMs) / 1000LL)
             : 0.0f;
         if (profileAgeSeconds > 1200.0f)
-            return "Profile ready — note: noise floor may have changed, consider re-learning";
+            return "Profile ready  -  note: noise floor may have changed, consider re-learning";
         return "Profile ready (" + juce::String(confidencePct) + "% confidence, " + conf
-             + ") — raise Subtract to remove the captured noise";
+             + ")  -  raise Subtract to remove the captured noise";
     }
 
     const bool isVoice = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
@@ -153,7 +153,7 @@ void VXSubtractAudioProcessor::resetSuite() {
     subtractDspRight.setLearning(learnToggleLatched);
     learnActive.store(learnToggleLatched, std::memory_order_relaxed);
     // learnReady / learnProgress / learnConfidence / learnObservedSeconds are
-    // intentionally preserved — the learned noise profile survives playback stops.
+    // intentionally preserved  -  the learned noise profile survives playback stops.
     // Note: learned profile is static; in long sessions with changing noise floors (e.g., HVAC cycling),
     // users should re-learn to adapt. This is a known limitation; continuous re-learning is future work.
 }

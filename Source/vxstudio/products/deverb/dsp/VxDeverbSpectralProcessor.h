@@ -217,7 +217,7 @@ private:
 
     /** Base minimum Wiener gain for speech bins in voice mode (~−12 dB).
      *  Applied to bins in the 200–4000 Hz range to protect vocal fundamentals
-     *  and formants — consistent with Polish's voice-preserve policy. */
+     *  and formants  -  consistent with Polish's voice-preserve policy. */
     static constexpr float kVoiceFloor   = 0.18f;
     /** Strong-setting minimum speech-bin floor in voice mode (~−16 dB). */
     static constexpr float kMinVoiceFloor = 0.14f;

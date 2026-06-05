@@ -152,7 +152,7 @@
     <section class="download-hero">
         <div class="container">
             <h1>Download VX Studio</h1>
-            <p style="font-size: 1.125rem; margin-bottom: 2rem;">The current VX Studio suite pass is complete and regression-verified. Choose your platform below.</p>
+            <p style="font-size: 1.125rem; margin-bottom: 2rem;">VX Studio v1.0.1  -  15 plugins, regression-verified. Choose your platform below.</p>
         </div>
     </section>
 
@@ -166,7 +166,7 @@
                         🍎 macOS
                         <span class="status-badge status-available">Available</span>
                     </h3>
-                    <p class="version">VX Studio v1.0.0 (Current Verified Build)</p>
+                    <p class="version">VX Studio v1.0.1 (Current Verified Build)</p>
                     <p class="file-size">📦 21 KB</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
                         <strong>Compatible with:</strong><br>
@@ -197,7 +197,7 @@
                         VST3 (64-bit)
                     </p>
                     <button disabled class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">
-                        Windows Version Coming Q2 2026
+                        Windows Version Coming Soon
                     </button>
                     <p style="font-size: 0.85rem; color: var(--text-light); margin-top: var(--spacing-md);">
                         Join our <a href="/support/">mailing list</a> for notifications.
@@ -207,14 +207,16 @@
 
             <!-- Release Notes -->
             <div class="release-notes">
-                <h3>✨ Current Build Highlights</h3>
+                <h3>✨ Current Build Highlights  -  v1.0.1</h3>
                 <ul>
-                    <li><strong>Suite pass complete:</strong> `Rebalance`, `Leveler`, `Finish` / `OptoComp`, `Cleanup`, `Denoiser`, `Deverb`, `Subtract`, `Proximity`, `Tone`, `DeepFilterNet`, and `Studio Analyser` were all updated together.</li>
-                    <li><strong>Stronger controls:</strong> extreme settings were retuned so top-of-range moves feel materially less polite.</li>
-                    <li><strong>Cleanup and denoise:</strong> less hidden give-back, tighter voiced protection, and stronger residual cleanup.</li>
-                    <li><strong>Analyser scope:</strong> the analyser now stays locked to the active local upstream chain instead of drifting across unrelated or bypassed stages.</li>
-                    <li><strong>Realtime stability:</strong> pop-prone adaptive retuning paths were smoothed, especially in `VXProximity`.</li>
-                    <li><strong>Verification:</strong> the full `VXStudioPluginRegressionTests` harness completes successfully on the current build.</li>
+                    <li><strong>3 new plugins:</strong> VXProximityClassic (simplified two-control proximity), VXRepair (all-in-one guided repair), and VXToneRefine (automatic mud/harshness correction).</li>
+                    <li><strong>VXSpeechClarity DSP now active:</strong> all three bands (de-esser, plosive, breath) process audio  -  no longer placeholder.</li>
+                    <li><strong>GR meters:</strong> VXDenoiser and VXDeverb now show live gain-reduction activity lights.</li>
+                    <li><strong>VXDeepFilterNet Guard control active:</strong> artifact-aware blending with startup ramp prevents clicks on load.</li>
+                    <li><strong>VXSubtract stale-profile warning:</strong> status bar alerts when a learned profile is older than 20 minutes.</li>
+                    <li><strong>VXRebalance transition fix:</strong> neutral→active transition now resets DSP state before ramp-in, preventing spectral smearing.</li>
+                    <li><strong>VXCleanup archived:</strong> replaced by VXSpeechClarity and VXToneRefine.</li>
+                    <li><strong>Verification:</strong> the full regression harness completes successfully on the current build.</li>
                 </ul>
             </div>
 
@@ -255,17 +257,27 @@
                 <h2 style="margin-bottom: var(--spacing-xl);">Version History</h2>
 
                 <div class="version-item">
-                    <h4>v1.0.0 - Current Verified Build</h4>
-                    <p class="date">April 1, 2026</p>
-                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">All 12 plugins updated through the latest suite pass, with full regression verification completing successfully on the current tree.</p>
+                    <h4>v1.0.1 - Current Verified Build</h4>
+                    <p class="date">June 2026</p>
+                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">3 new plugins, active DSP for VXSpeechClarity and VXToneRefine, GR meters on Denoiser and Deverb, Guard control active on DeepFilterNet, stale-profile warning on Subtract, and Rebalance transition fix.</p>
                     <div style="font-size: 0.9rem; margin-top: var(--spacing-sm);">
-                        <strong>Fixed:</strong>
+                        <strong>Changes:</strong>
                         <ul style="list-style: none; padding-left: 0; margin-top: 0.5rem;">
-                            <li>✓ Denoiser realtime safety violation</li>
-                            <li>✓ Code duplication in parameter smoothing</li>
-                            <li>✓ Framework documentation completeness</li>
+                            <li>✓ Added VXProximityClassic, VXRepair, VXToneRefine</li>
+                            <li>✓ VXSpeechClarity DSP active (all three bands)</li>
+                            <li>✓ VXDeepFilterNet Guard control active</li>
+                            <li>✓ GR meters on VXDenoiser and VXDeverb</li>
+                            <li>✓ VXSubtract stale-profile warning</li>
+                            <li>✓ VXRebalance neutral→active transition fix</li>
+                            <li>✓ VXCleanup archived (replaced by VXSpeechClarity + VXToneRefine)</li>
                         </ul>
                     </div>
+                </div>
+
+                <div class="version-item">
+                    <h4>v1.0.0 - Initial Release</h4>
+                    <p class="date">April 2026</p>
+                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">12 plugins in the initial suite pass. Full regression verification completing successfully.</p>
                 </div>
             </div>
 

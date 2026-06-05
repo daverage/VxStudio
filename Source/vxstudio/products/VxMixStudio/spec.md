@@ -11,7 +11,7 @@ No ambiguity, no “AI magic”.
 
 ---
 
-# VxMixStudio — Full Technical Specification
+# VxMixStudio  -  Full Technical Specification
 
 ## 1. System Overview
 

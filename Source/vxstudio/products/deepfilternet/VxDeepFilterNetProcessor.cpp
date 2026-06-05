@@ -200,7 +200,7 @@ float VXDeepFilterNetAudioProcessor::estimateArtifactRisk(const juce::AudioBuffe
     // 3. BrightBias: high-frequency artifacts detected via delta derivative
     //
     // Weighting: 34% suppression + 36% dominance + 30% bright bias (empirically tuned)
-    // This is a reactive detector — artifacts are measured after the fact.
+    // This is a reactive detector  -  artifacts are measured after the fact.
     // Better approach: predict artifacts using speech analysis (see framework snapshots).
 
     double drySquares = 0.0;

@@ -11,7 +11,7 @@ There IS a common baseline protection framework applied at the framework level v
 4. Applies effect-specific modifications on top
 
 ```cpp
-// Framework baseline — all effects use this
+// Framework baseline  -  all effects use this
 struct ProcessOptions {
     bool isVoiceMode = true;              // Mode flag
     float voiceProtect = 0.75f;           // Voice-specific protection
@@ -78,7 +78,7 @@ Then each applies its own logic:
 
 ## Effects Summary
 
-### 1. **Leveler** — Most Sophisticated Mode Differentiation
+### 1. **Leveler**  -  Most Sophisticated Mode Differentiation
 **File:** `Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp`
 
 **Voice Mode Implementation:**
@@ -103,7 +103,7 @@ Then each applies its own logic:
 
 ---
 
-### 2. **Deverb** — Reverb Tail Handling
+### 2. **Deverb**  -  Reverb Tail Handling
 **File:** `Source/vxstudio/products/deverb/VxDeverbProcessor.cpp`
 
 **Voice Mode:**
@@ -120,7 +120,7 @@ Then each applies its own logic:
 
 ---
 
-### 3. **Denoiser** — Spectral Floor & Protection
+### 3. **Denoiser**  -  Spectral Floor & Protection
 **File:** `Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp`
 
 **Voice Mode Differences:**
@@ -137,7 +137,7 @@ Then each applies its own logic:
 
 ---
 
-### 4. **Cleanup** — Artifact Suppression Intensity
+### 4. **Cleanup**  -  Artifact Suppression Intensity
 **File:** `Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp`
 
 **Voice Mode Adjustments:**
@@ -169,7 +169,7 @@ contentMode = voiceMode ? 0 : 1
 
 ---
 
-### 5. **Tone** — EQ Curve Adaptation
+### 5. **Tone**  -  EQ Curve Adaptation
 **File:** `Source/vxstudio/products/tone/VxToneProcessor.cpp`
 
 **Voice Mode vs General:**
@@ -191,7 +191,7 @@ contentMode = voiceMode ? 0 : 1
 
 ---
 
-### 6. **OptoComp** — Compressor Adaptation
+### 6. **OptoComp**  -  Compressor Adaptation
 **File:** `Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp`
 
 **Vocal Priority:**
@@ -211,7 +211,7 @@ voiceMode ? (1.05f - 0.08f×priority + 0.04f×buriedSpeech) : 1.08f
 
 ---
 
-### 7. **Finish** — Limiter & Polish
+### 7. **Finish**  -  Limiter & Polish
 **File:** `Source/vxstudio/products/finish/VxFinishProcessor.cpp`
 
 **Vocal Priority:** (same formula as OptoComp)
@@ -227,7 +227,7 @@ voiceMode ? (1.0f - 0.10f×priority + 0.06f×buriedSpeech) : 1.0f
 
 ---
 
-### 8. **Subtract** — Spectral Subtraction Control
+### 8. **Subtract**  -  Spectral Subtraction Control
 **File:** `Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp`
 
 **Speech Protection Masking:**
@@ -279,7 +279,7 @@ voiceMode ? 185 dB reduction threshold : 188 dB
 
 ## Common Patterns (Framework + Effect-Specific)
 
-### Framework Level — All Effects Implement This
+### Framework Level  -  All Effects Implement This
 
 **1. Mode Detection (Universal)**
 ```cpp
@@ -361,24 +361,24 @@ Key context fields used:
 
 ### Framework-First Design
 All effects share:
-- **ProcessOptions baseline** — defines the common protection envelope
-- **Vocal priority formula** — quantifies how "vocal" the content is
-- **Mode policy** — ModePolicy object provides per-product voice/general tuning
+- **ProcessOptions baseline**  -  defines the common protection envelope
+- **Vocal priority formula**  -  quantifies how "vocal" the content is
+- **Mode policy**  -  ModePolicy object provides per-product voice/general tuning
 
 Each product then **only adds what it needs** on top:
 
 ### Simple Adaptation (Parameter Scaling Only)
 Effects that just scale existing parameters:
-- **Tone** — Shifts EQ curves with vocal priority
-- **OptoComp/Finish** — Scales compressor gain with priority
-- **Subtract** — Adjusts noise subtraction aggressiveness
+- **Tone**  -  Shifts EQ curves with vocal priority
+- **OptoComp/Finish**  -  Scales compressor gain with priority
+- **Subtract**  -  Adjusts noise subtraction aggressiveness
 
 ### Complex Adaptation (State Machine + Scaling)
 Effects with content-specific logic:
-- **Leveler** — 4-state machine (neutral, voiceLeading, guitarDominant, voiceBuried)
-- **Deverb** — Reverb tail threshold changes per mode
-- **Cleanup** — per-artifact-type coefficients (sibilance, breath, plosive, harsh)
-- **Denoiser** — Spectral floor multipliers + speech preservation blend
+- **Leveler**  -  4-state machine (neutral, voiceLeading, guitarDominant, voiceBuried)
+- **Deverb**  -  Reverb tail threshold changes per mode
+- **Cleanup**  -  per-artifact-type coefficients (sibilance, breath, plosive, harsh)
+- **Denoiser**  -  Spectral floor multipliers + speech preservation blend
 
 ---
 
@@ -422,13 +422,13 @@ Effects with content-specific logic:
 
 ### Don't Over-Engineer
 - ❌ Don't create independent voice/general paths if scaling works
-- ❌ Don't hardcode protection values — use ProcessOptions framework
+- ❌ Don't hardcode protection values  -  use ProcessOptions framework
 - ✅ Do copy vocal priority formula from existing similar effect
 - ✅ Do test with real vocal content to verify priority weighting
 
 ### Testing Strategy
-- **Tight vocal takes** — should preserve dynamics (voice mode)
-- **Buried vocals** — should enhance (high vocal priority in ProcessOptions)
-- **Breathy/sibilant voices** — should not over-suppress
-- **Instrumental music** — should be neutral (general mode uses 0.0f priority)
-- **Test signals** (pink noise, drums) — should bypass or be neutral
+- **Tight vocal takes**  -  should preserve dynamics (voice mode)
+- **Buried vocals**  -  should enhance (high vocal priority in ProcessOptions)
+- **Breathy/sibilant voices**  -  should not over-suppress
+- **Instrumental music**  -  should be neutral (general mode uses 0.0f priority)
+- **Test signals** (pink noise, drums)  -  should bypass or be neutral

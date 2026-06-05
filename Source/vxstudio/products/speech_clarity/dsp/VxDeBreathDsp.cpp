@@ -32,7 +32,7 @@ void DeBreathDsp::process(juce::AudioBuffer<float>& buffer, const Params& params
         float* buf = buffer.getWritePointer(ch);
 
         for (int i = 0; i < n; ++i) {
-            // Smooth toward target — close faster than it opens to be responsive to breaths
+            // Smooth toward target  -  close faster than it opens to be responsive to breaths
             c.currentGain = targetGain < c.currentGain
                 ? attCoeff * c.currentGain + (1.0f - attCoeff) * targetGain
                 : relCoeff * c.currentGain + (1.0f - relCoeff) * targetGain;

@@ -9,7 +9,7 @@ namespace speech_clarity {
 
 // Frequency-selective plosive gate: LP-filters the signal at 180 Hz (where plosive
 // bursts concentrate), tracks the LP-band envelope, and subtracts the gated LP
-// component from the original — leaving the rest of the spectrum untouched.
+// component from the original  -  leaving the rest of the spectrum untouched.
 // Fast attack (2 ms), medium release (40 ms). The gate depth is driven by
 // detectionIntensity from the external crest-factor detector.
 class DePolosiveDsp {

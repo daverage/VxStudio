@@ -10,10 +10,10 @@ namespace vxsuite::ProximityClassic {
  * Zero-latency close-mic model DSP.
  *
  * Four cascaded tonal stages per channel:
- *   1. Low-shelf    — simulates directional-mic proximity/body rise
- *   2. Mud bell     — compensates low-mid boom so the result stays usable
- *   3. Presence bell— adds close/direct articulation
- *   4. High-shelf   — adds capsule openness / air
+ *   1. Low-shelf     -  simulates directional-mic proximity/body rise
+ *   2. Mud bell      -  compensates low-mid boom so the result stays usable
+ *   3. Presence bell -  adds close/direct articulation
+ *   4. High-shelf    -  adds capsule openness / air
  *
  * The model is parameterised by two scalar amounts (0–1), a voice/general flag,
  * and optional vocal-focus evidence from the shared analysis layer.

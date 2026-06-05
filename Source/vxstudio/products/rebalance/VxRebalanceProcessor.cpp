@@ -212,7 +212,8 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     if (wasNeutral) {
-        // Ramp in over ~80 ms instead of hard reset to avoid audible discontinuity
+        // Reset DSP state (clears stale masks/gains), then ramp level in over ~80 ms to avoid click
+        dsp.reset();
         rebalanceRampGain = 0.0f;
         wasNeutral = false;
     }

@@ -13,9 +13,9 @@ namespace vxsuite::proximity {
  * - Distance-dependent bass boost (cardioid/supercardioid)
  * - Corner frequency determined by distance and mic polar pattern
  * - Three cascaded tonal stages per channel:
- *   1. Low-shelf    — physics-derived proximity bass rise
- *   2. Mud bell     — mild compensation to maintain usability
- *   3. High-shelf   — user-controlled capsule air
+ *   1. Low-shelf     -  physics-derived proximity bass rise
+ *   2. Mud bell      -  mild compensation to maintain usability
+ *   3. High-shelf    -  user-controlled capsule air
  *
  * The proximity parameter (0–1) maps logarithmically to physical distance:
  * - 0.0 = 50 cm (far, arm's length)

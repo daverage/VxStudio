@@ -4,10 +4,10 @@
 
 The VxStudio voice/general mode system is now **standardized** around the `ProcessOptions` framework, which provides:
 
-1. **Common baseline protection** — all effects apply voice-aware safety floors
-2. **Uniform vocal priority calculation** — consistent across effects  
-3. **Framework-managed scaling** — protection levels adapt to content
-4. **Effect-specific customization** — each effect tunes how aggressively it applies protection
+1. **Common baseline protection**  -  all effects apply voice-aware safety floors
+2. **Uniform vocal priority calculation**  -  consistent across effects  
+3. **Framework-managed scaling**  -  protection levels adapt to content
+4. **Effect-specific customization**  -  each effect tunes how aggressively it applies protection
 
 ---
 

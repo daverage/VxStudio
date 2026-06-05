@@ -41,7 +41,7 @@ public:
     bool isDeepFilterReady() const noexcept { return dfService.isRealtimeReady(); }
     bool isDeepFilterPrepared() const noexcept { return dfService.hasRealtimeBackend(); }
 
-    // Live display data — safe to poll from the UI thread.
+    // Live display data  -  safe to poll from the UI thread.
     void getDisplayBands(std::array<float, vxsuite::repair::RepairAnalyser::kDisplayBands>& out) const noexcept {
         analyser.getDisplayBands(out);
     }

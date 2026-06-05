@@ -1,6 +1,6 @@
 # VX Suite Framework
 
-An open-source C++ / JUCE framework for building professional VST3 plugins. It turns an "audio DSP class" into a shippable VST3 with almost no boilerplate — so you can focus on the sound, not the plumbing.
+An open-source C++ / JUCE framework for building professional VST3 plugins. It turns an "audio DSP class" into a shippable VST3 with almost no boilerplate  -  so you can focus on the sound, not the plumbing.
 
 The framework is used internally to build the VX Suite of audio plugins and is released openly so that anyone can use it as a foundation for their own JUCE-based effects. Whether you are writing a simple EQ, a dynamics processor, or an ML-backed noise reducer, the same base classes handle parameter registration, responsive UI layout, editor creation, listen routing, telemetry publication, and output safety for you.
 
@@ -10,7 +10,7 @@ The framework is used internally to build the VX Suite of audio plugins and is r
 
 Writing a JUCE plugin from scratch means subclassing `AudioProcessor`, writing parameter layouts, wiring up `AudioProcessorValueTreeState`, creating an editor, overriding `getName`, `hasEditor`, `createEditor`, `prepareToPlay`, `processBlock`, … most of which is identical across every product.
 
-The framework collapses that to **three pure-virtual methods plus one identity descriptor**. Everything else — parameter registration, editor creation, output safety, plugin name, listen/bypass, telemetry publishing, and per-block smoothing — is provided by the base classes.
+The framework collapses that to **three pure-virtual methods plus one identity descriptor**. Everything else  -  parameter registration, editor creation, output safety, plugin name, listen/bypass, telemetry publishing, and per-block smoothing  -  is provided by the base classes.
 
 ---
 
@@ -421,14 +421,14 @@ VXTone is a bass/treble shelf EQ plugin included in the suite. It demonstrates t
 
 ### What it does
 
-Two independent biquad IIR shelf filters — one low shelf (bass) and one high shelf (treble) — applied in series. The cutoff frequencies and gain range differ by mode:
+Two independent biquad IIR shelf filters  -  one low shelf (bass) and one high shelf (treble)  -  applied in series. The cutoff frequencies and gain range differ by mode:
 
 | Mode | Bass shelf | Treble shelf | Gain range |
 |---|---|---|---|
 | **Vocal** | 200 Hz | 6 000 Hz | ±5 dB |
 | **General** | 120 Hz | 8 000 Hz | ±6 dB |
 
-Vocal mode positions the shelves so the 200 Hz–6 kHz speech band is left completely untouched — you can boost the warmth below it or add air above it without affecting consonants or fundamentals.
+Vocal mode positions the shelves so the 200 Hz–6 kHz speech band is left completely untouched  -  you can boost the warmth below it or add air above it without affecting consonants or fundamentals.
 
 General mode widens both shelves and raises the headroom for non-vocal material.
 
@@ -490,24 +490,24 @@ When `|gainDb| < 0.01` the coefficients default to passthrough (`b0=1`, all othe
 ### Reading the processor source
 
 ```cpp
-// 1. Identity descriptor — drives the UI and parameter layout
+// 1. Identity descriptor  -  drives the UI and parameter layout
 vxstudio::ProductIdentity VXToneAudioProcessor::makeIdentity() { … }
 
-// 2. prepareSuite — allocate per-channel biquad state vectors and cache sample rate
+// 2. prepareSuite  -  allocate per-channel biquad state vectors and cache sample rate
 void VXToneAudioProcessor::prepareSuite(double sampleRate, int) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     bassState.assign(getTotalNumOutputChannels(), {});
     trebleState.assign(getTotalNumOutputChannels(), {});
 }
 
-// 3. resetSuite — initialize smoothing helpers
+// 3. resetSuite  -  initialize smoothing helpers
 void VXToneAudioProcessor::resetSuite() {
     for (auto& s : bassState)   s = BiquadState{};
     for (auto& s : trebleState) s = BiquadState{};
     controls.reset(0.5f, 0.5f);
 }
 
-// 4. processProduct — smooth → map to dB → compute coeffs → apply per channel
+// 4. processProduct  -  smooth → map to dB → compute coeffs → apply per channel
 void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buf, juce::MidiBuffer&) {
     const auto [smoothedBass, smoothedTreble] = controls.process(
         bassTarget, trebleTarget, currentSampleRateHz, buf.getNumSamples(), 0.060f, 0.060f);
@@ -518,20 +518,20 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buf, juce::M
 }
 ```
 
-The biquad filter state (`x1, x2, y1, y2`) is kept in `std::vector<BiquadState>` — one element per channel — so the plugin handles mono and stereo correctly without branching.
+The biquad filter state (`x1, x2, y1, y2`) is kept in `std::vector<BiquadState>`  -  one element per channel  -  so the plugin handles mono and stereo correctly without branching.
 
 ### Why this is a good DSP template
 
-- **No JUCE DSP module dependency** for the filter — the biquad is three structs and two static functions, easy to unit-test in isolation.
-- **Per-block coefficient compute** — not per sample, so it's cheap even at high sample rates.
-- **Mode switch is instant but ramp-free** — the smoothed knob values bridge any discontinuity when the mode changes.
+- **No JUCE DSP module dependency** for the filter  -  the biquad is three structs and two static functions, easy to unit-test in isolation.
+- **Per-block coefficient compute**  -  not per sample, so it's cheap even at high sample rates.
+- **Mode switch is instant but ramp-free**  -  the smoothed knob values bridge any discontinuity when the mode changes.
 - If your DSP needs extra local peak discipline, add a product-local `OutputTrimmer` before returning from `processProduct`. The framework already provides a final emergency safety trimmer in `ProcessorBase`.
 
 ---
 
 ## Parameter conventions
 
-All knob parameters are registered as `[0, 1]` floats. Your DSP maps `0.5` to neutral ("nothing happens") and the extremes to maximum effect. This gives the UI a consistent feel — the knob at 12 o'clock always means "off".
+All knob parameters are registered as `[0, 1]` floats. Your DSP maps `0.5` to neutral ("nothing happens") and the extremes to maximum effect. This gives the UI a consistent feel  -  the knob at 12 o'clock always means "off".
 
 The shared UI now presents standard percentage-style controls as `0%` to `100%` instead of raw `0.0` to `1.0`. Controls with a neutral midpoint should keep that midpoint semantically clear in both mapping and text, for example `50% .. 150%` with `100%` at centre for unity gain.
 
@@ -663,10 +663,10 @@ private:
 ```
 
 Key principles:
-- **One responsibility per member** — smoothing, DSP state, analysis
-- **Per-channel vectors** — handle mono/stereo without branching
-- **Cache, don't recompute** — sample rate in `prepareSuite()`, not `processBlock()`
-- **Use framework snapshots** — don't duplicate analysis (signal quality, voice analysis)
+- **One responsibility per member**  -  smoothing, DSP state, analysis
+- **Per-channel vectors**  -  handle mono/stereo without branching
+- **Cache, don't recompute**  -  sample rate in `prepareSuite()`, not `processBlock()`
+- **Use framework snapshots**  -  don't duplicate analysis (signal quality, voice analysis)
 
 ### Mode Switching Pattern
 
@@ -749,6 +749,6 @@ Example:
 
 ## Recommended Reading
 
-- [VX Suite Research](../docs/VX_SUITE_RESEARCH.md) — UI/UX patterns
-- [JUCE Plugin Architecture](https://docs.juce.com/master/classjuce_1_1AudioProcessor.html) — processor contract
-- [VST3 Processor/Controller](https://steinbergmedia.github.io/vst3_doc/vstsdk/) — plugin spec
+- [VX Suite Research](../docs/VX_SUITE_RESEARCH.md)  -  UI/UX patterns
+- [JUCE Plugin Architecture](https://docs.juce.com/master/classjuce_1_1AudioProcessor.html)  -  processor contract
+- [VST3 Processor/Controller](https://steinbergmedia.github.io/vst3_doc/vstsdk/)  -  plugin spec
