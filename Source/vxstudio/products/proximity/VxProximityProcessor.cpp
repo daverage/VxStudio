@@ -129,6 +129,13 @@ void VXProximityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& out
     renderAddedDeltaOutput(outputBuffer, inputBuffer);
 }
 
+vxsuite::MeteringSnapshot VXProximityAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    s.gainReductionDb = std::max(0.0f, -lastProximityGainDb);
+    s.compActivity    = outputTrimmer.getCurrentActivity01();
+    return s;
+}
+
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXProximityAudioProcessor();

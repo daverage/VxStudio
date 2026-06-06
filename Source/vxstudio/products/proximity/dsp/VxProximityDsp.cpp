@@ -1,5 +1,7 @@
 #include "VxProximityDsp.h"
 
+#include "../../../framework/VxStudioBlockSmoothing.h"
+
 #include <juce_core/juce_core.h>
 
 #include <algorithm>
@@ -202,13 +204,14 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
       + 0.08f * std::abs(mudCutDb) * (0.45f + 0.55f * midShare)
       + 0.10f * highGain * (0.50f + 0.50f * airEnergy));
 
-    // Smooth filter parameters frame-to-frame
-    auto smoothModelValue = [](float& current, const float target, const bool primed) noexcept {
+    // Smooth filter parameters frame-to-frame (SR/block-size normalised, τ ≈ 25 ms)
+    const float smoothAlpha = vxsuite::blockBlendAlpha(sr, numSamples, 0.025f);
+    auto smoothModelValue = [smoothAlpha](float& current, const float target, const bool primed) noexcept {
         if (!primed) {
             current = target;
             return current;
         }
-        current += 0.18f * (target - current);
+        current += smoothAlpha * (target - current);
         return current;
     };
 

@@ -115,6 +115,16 @@ std::string_view VXCleanupAudioProcessor::getActivityLightLabel(int index) const
     }
 }
 
+vxsuite::MeteringSnapshot VXCleanupAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    s.activeBandCount = 4;
+    s.bandActivity[0] = correctiveChain.getBreathActivity();
+    s.bandActivity[1] = correctiveChain.getDeEssActivity();
+    s.bandActivity[2] = correctiveChain.getPlosiveActivity();
+    s.bandActivity[3] = correctiveChain.getTroubleActivity();
+    return s;
+}
+
 bool VXCleanupAudioProcessor::hasSidechainActive() const noexcept {
     return sidechainActive.load(std::memory_order_relaxed);
 }

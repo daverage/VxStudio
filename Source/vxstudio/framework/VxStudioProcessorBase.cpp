@@ -57,6 +57,28 @@ void ProcessorBase::reset() {
     resetSuite();
 }
 
+void ProcessorBase::updateTrackProperties(const TrackProperties& props) {
+    // Store track info. Each setter also triggers an early registration so the
+    // analyser can find this stage before the audio engine starts (i.e. before
+    // prepareToPlay is called), which is important when transport is stopped.
+    if (props.channelUID.has_value())
+        stagePublisher.setChannelUID(*props.channelUID);
+    if (props.runtimeID.has_value())
+        stagePublisher.setTrackRuntimeID(*props.runtimeID);
+    if (props.name.has_value())
+        stagePublisher.setTrackName(*props.name);
+    if (props.colourARGB.has_value())
+        stagePublisher.setTrackColour(*props.colourARGB);
+
+    // Propagate the track scope key so domain binding can prefer the analyser on this track.
+    const juce::String channelUID = props.channelUID.has_value() ? *props.channelUID : juce::String();
+    const std::int64_t runtimeID  = props.runtimeID.has_value()  ? *props.runtimeID  : 0;
+    const juce::String name       = props.name.has_value()       ? *props.name       : juce::String();
+    const auto scopeKey = vxsuite::analysis::StageRegistry::buildTrackStableId(channelUID, runtimeID, name);
+    if (scopeKey != 0)
+        stagePublisher.setContextKeyHint(scopeKey);
+}
+
 void ProcessorBase::releaseResources() {
     voiceAnalysis.reset();
     voiceContext.reset();

@@ -312,6 +312,12 @@ bool testLiveChainStateTracking() {
         auto cleanup = std::make_unique<VXCleanupAudioProcessor>();
         cleanup->prepareToPlay(sr, blockSize);
 
+        // Give analyser and cleanup the same track identity so track-local filtering works.
+        juce::AudioProcessor::TrackProperties trackProps;
+        trackProps.channelUID = "test-track-uid";
+        analyser->updateTrackProperties(trackProps);
+        cleanup->updateTrackProperties(trackProps);
+
         auto signal = makeTestSignal(sr, 0.1f);
         juce::MidiBuffer midi;
 

@@ -28,6 +28,7 @@ public:
     float getActivityLight(int index) const noexcept override;
     std::string_view getActivityLightLabel(int index) const noexcept override;
     bool hasSidechainActive() const noexcept override;
+    vxsuite::MeteringSnapshot getMeteringSnapshot() const noexcept override;
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;

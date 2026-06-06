@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxStudioBlockSmoothing.h"
+#include "../../framework/VxStudioSilenceGuard.h"
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioModelAssets.h"
 #include "../../framework/VxStudioProcessorBase.h"
@@ -40,26 +41,20 @@ private:
 
     using ModelVariant = vxsuite::deepfilternet::DeepFilterService::ModelVariant;
 
-    void ensureAnalysisScratch(int channels, int samples);
-    float estimateArtifactRisk(const juce::AudioBuffer<float>& dry,
-                               const juce::AudioBuffer<float>& wet,
-                               int channels,
-                               int samples) const noexcept;
     void prepareEngineIfNeeded();
     ModelVariant selectedModelVariant() const noexcept;
     void timerCallback() override;
     void blendProcessedWithDry(juce::AudioBuffer<float>& buffer, float wetMix);
 
     vxsuite::deepfilternet::DeepFilterService engine;
+    vxsuite::SilenceGuard silenceGuard;
 
     double currentSampleRateHz = 48000.0;
     int currentBlockSize = 0;
     float smoothedClean = 0.0f;
     float smoothedGuard = 0.5f;
     float startupWetRamp = 0.0f;
-    float lastArtifactRisk = 0.0f;
     bool controlsPrimed = false;
-    juce::AudioBuffer<float> analysisScratch;
-    vxsuite::corrective::TonalAnalysisState tonalAnalysis;  // For ReadabilityGuard post-pass
+    vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     std::mutex enginePrepareMutex;
 };

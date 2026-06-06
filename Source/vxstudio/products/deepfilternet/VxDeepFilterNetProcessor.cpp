@@ -2,7 +2,6 @@
 #include "../../framework/VxStudioHelpContent.h"
 #include "VxStudioVersions.h"
 
-#include <cmath>
 
 namespace {
 
@@ -70,6 +69,7 @@ vxsuite::ProductIdentity VXDeepFilterNetAudioProcessor::makeIdentity() {
     identity.listenParamId = kListenParam;
     identity.primaryLabel = "Clean";
     identity.secondaryLabel = "Guard";
+    identity.secondaryDefaultValue = 0.0f;
     identity.primaryHint = "Voice-only ML denoise amount. Push higher for stronger DeepFilter cleanup.";
     identity.secondaryHint = "Speech protection. Backs the model off and, where safe, restores a little dry detail.";
     identity.dspVersion = vxsuite::versions::plugins::deepfilternet;
@@ -167,85 +167,21 @@ void VXDeepFilterNetAudioProcessor::setNonRealtime(const bool shouldProcessOffli
 void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
-    analysisScratch.setSize(std::max(1, getTotalNumOutputChannels()), currentBlockSize, false, false, true);
+    silenceGuard.prepare();
     resetSuite();
     prepareEngineIfNeeded();
 }
 
 void VXDeepFilterNetAudioProcessor::resetSuite() {
     engine.resetRealtime();
+    silenceGuard.reset();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
     startupWetRamp = 0.0f;
-    lastArtifactRisk = 0.0f;
     controlsPrimed = false;
     tonalAnalysis.reset();
 }
 
-void VXDeepFilterNetAudioProcessor::ensureAnalysisScratch(const int channels, const int samples) {
-    if (analysisScratch.getNumChannels() < channels || analysisScratch.getNumSamples() < samples)
-        analysisScratch.setSize(channels, samples, false, false, true);
-}
-
-float VXDeepFilterNetAudioProcessor::estimateArtifactRisk(const juce::AudioBuffer<float>& dry,
-                                                          const juce::AudioBuffer<float>& wet,
-                                                          const int channels,
-                                                          const int samples) const noexcept {
-    // Post-processing artifact detection: compares dry/wet difference to identify
-    // potential DeepFilterNet suppression artifacts. Used to scale Guard knob adaptively.
-    //
-    // Three metrics:
-    // 1. Suppression: how much signal was removed (dryRms - wetRms) / dryRms
-    // 2. DeltaDominance: is the delta (removed signal) dominant relative to output?
-    // 3. BrightBias: high-frequency artifacts detected via delta derivative
-    //
-    // Weighting: 34% suppression + 36% dominance + 30% bright bias (empirically tuned)
-    // This is a reactive detector  -  artifacts are measured after the fact.
-    // Better approach: predict artifacts using speech analysis (see framework snapshots).
-
-    double drySquares = 0.0;
-    double wetSquares = 0.0;
-    double deltaSquares = 0.0;
-    double brightDeltaSquares = 0.0;
-    int count = 0;
-
-    for (int ch = 0; ch < channels; ++ch) {
-        const float* dryData = dry.getReadPointer(ch);
-        const float* wetData = wet.getReadPointer(ch);
-        float previousDelta = 0.0f;
-        for (int i = 0; i < samples; ++i) {
-            const double drySample = static_cast<double>(dryData[i]);
-            const double wetSample = static_cast<double>(wetData[i]);
-            const float delta = wetData[i] - dryData[i];  // Removed signal
-            drySquares += drySample * drySample;
-            wetSquares += wetSample * wetSample;
-            deltaSquares += static_cast<double>(delta) * static_cast<double>(delta);
-            const float brightDelta = delta - previousDelta;  // Derivative (HF artifact indicator)
-            brightDeltaSquares += static_cast<double>(brightDelta) * static_cast<double>(brightDelta);
-            previousDelta = delta;
-        }
-        count += samples;
-    }
-
-    if (count <= 0)
-        return 0.0f;
-
-    const float dryRms = std::sqrt(static_cast<float>(drySquares / static_cast<double>(count)));
-    const float wetRms = std::sqrt(static_cast<float>(wetSquares / static_cast<double>(count)));
-    const float deltaRms = std::sqrt(static_cast<float>(deltaSquares / static_cast<double>(count)));
-    const float brightDeltaRms = std::sqrt(static_cast<float>(brightDeltaSquares / static_cast<double>(count)));
-
-    // Metric 1: How aggressively did the model suppress?
-    const float suppression = vxsuite::clamp01((dryRms - wetRms) / std::max(dryRms, 1.0e-6f));
-
-    // Metric 2: Is the removed signal dominant (signs of over-suppression)?
-    const float deltaDominance = vxsuite::clamp01(deltaRms / std::max(wetRms + 0.35f * dryRms, 1.0e-6f));
-
-    // Metric 3: High-frequency artifacts (ringing, phasiness)?
-    const float brightBias = vxsuite::clamp01(brightDeltaRms / std::max(deltaRms * 2.4f, 1.0e-6f));
-
-    return vxsuite::clamp01(0.34f * suppression + 0.36f * deltaDominance + 0.30f * brightBias);
-}
 
 VXDeepFilterNetAudioProcessor::ModelVariant VXDeepFilterNetAudioProcessor::selectedModelVariant() const noexcept {
     if (const auto* raw = parameters.getRawParameterValue(kModelParam.data()))
@@ -277,6 +213,8 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
+    if (silenceGuard.update(buffer)) return;
+
     const float cleanTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
 
@@ -291,24 +229,13 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
 
     const float effectiveClean = vxsuite::clamp01(smoothedClean);
 
-    // Capture dry for wet/dry blend and artifact detection
     ensureLatencyAlignedListenDry(numSamples);
-    ensureAnalysisScratch(numChannels, numSamples);
-    for (int ch = 0; ch < numChannels; ++ch)
-        analysisScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
-
     engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
 
-    // Artifact risk: scale Guard back when model over-suppresses
-    lastArtifactRisk = 0.85f * lastArtifactRisk
-                     + 0.15f * estimateArtifactRisk(analysisScratch, buffer, numChannels, numSamples);
-    const float artifactPenalty = vxsuite::clamp01(lastArtifactRisk * 0.50f);
-    const float effectiveGuard  = vxsuite::clamp01(smoothedGuard * (1.0f - artifactPenalty));
-
-    // Startup ramp: fade in over ~200 ms to prevent click on first process
+    // Guard=0 → full wet (full denoising); Guard=1 → fully dry (backed off).
     const float rampStep = static_cast<float>(numSamples) / (0.200f * static_cast<float>(currentSampleRateHz));
     startupWetRamp = std::min(1.0f, startupWetRamp + rampStep);
-    const float wetMix = effectiveGuard * startupWetRamp;
+    const float wetMix = (1.0f - vxsuite::clamp01(smoothedGuard)) * startupWetRamp;
 
     blendProcessedWithDry(buffer, wetMix);
 }

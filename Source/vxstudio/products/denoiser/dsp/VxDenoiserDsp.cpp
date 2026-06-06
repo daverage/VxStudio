@@ -28,6 +28,15 @@ float DenoiserDsp::safe(float x) noexcept {
 void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     sr = (sampleRate > 1000.0) ? sampleRate : 48000.0;
 
+    // SR-adaptive FFT size: target 21.3 ms window → 1024@44.1/48k, 2048@88.2/96k
+    static constexpr float kTargetWindowMs = 21.3f;
+    const int targetSamples = static_cast<int>(static_cast<float>(sr) * kTargetWindowMs / 1000.0f);
+    kFftOrder = 1;
+    while ((1 << kFftOrder) < targetSamples) ++kFftOrder;
+    kFftSize  = 1 << kFftOrder;
+    kHop      = kFftSize / 4;
+    kBins     = kFftSize / 2 + 1;
+
     // Martin sub-window params: L ≈ 40 ms, D × L ≈ 1.5 s
     const float hopSec = static_cast<float>(kHop) / static_cast<float>(sr);
     msL = std::max(2, static_cast<int>(std::round(0.040f / hopSec)));
@@ -165,6 +174,57 @@ void DenoiserDsp::reset() {
     prevFrameEnergy = kEps;
     signalPresence  = 0.5f;
     smoothedGrDb    = 0.0f;
+}
+
+bool DenoiserDsp::drain(juce::AudioBuffer<float>& buffer) noexcept {
+    if (!fifoLive)
+        return false;
+
+    const int numSmp = buffer.getNumSamples();
+    if (numSmp <= 0)
+        return false;
+
+    const int accSz = olaAccumSize;
+    if (accSz <= 0)
+        return false;
+
+    // Check if there is any non-zero content remaining in the OLA accumulator
+    bool hasContent = false;
+    for (int i = 0; i < std::min(accSz, latencySamples + numSmp); ++i) {
+        if (std::abs(olaAcc[static_cast<size_t>(i % accSz)]) > 1.0e-7f) {
+            hasContent = true;
+            break;
+        }
+    }
+
+    if (!hasContent) {
+        buffer.clear();
+        return false;
+    }
+
+    // Feed silence into the FIFO to flush remaining frames
+    for (int i = 0; i < numSmp; ++i) {
+        inFifo[static_cast<size_t>(inFifoWritePos)] = 0.0f;
+        inFifoWritePos = (inFifoWritePos + 1) % kFftSize;
+        if (++hopFillCount == kHop) {
+            hopFillCount = 0;
+            const ProcessOptions silenceOpts {};
+            processFrame(0.0f, silenceOpts);  // amount=0 → pass-through gain
+        }
+    }
+
+    // Read from OLA ring into buffer (mono only for drain — stereo tail handled upstream)
+    const int numCh = buffer.getNumChannels();
+    for (int i = 0; i < numSmp; ++i) {
+        const int idx = olaReadPos % accSz;
+        const float s = safe(olaAcc[static_cast<size_t>(idx)] * 0.5f);
+        olaAcc[static_cast<size_t>(idx)] = 0.0f;
+        ++olaReadPos;
+        for (int ch = 0; ch < numCh; ++ch)
+            buffer.getWritePointer(ch)[i] = s;
+    }
+
+    return true;
 }
 
 void DenoiserDsp::resetFifoState() {

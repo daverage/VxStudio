@@ -1095,6 +1095,28 @@ std::uint64_t DomainRegistry::registerAnalyserDomain(const std::string_view owne
     return 0;
 }
 
+bool DomainRegistry::updateDomainContextKey(const std::uint64_t analysisDomainId, const std::uint64_t contextKeyHash) noexcept {
+    const juce::ScopedLock threadScoped(registryMutex);
+    auto* state = domainState();
+    if (state == nullptr || analysisDomainId == 0)
+        return false;
+
+    juce::InterProcessLock::ScopedLockType scoped(domainRegion().processLock());
+    if (!scoped.isLocked())
+        return false;
+
+    for (auto& slot : state->slots) {
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if (slot.analysisDomainId != analysisDomainId)
+            continue;
+        slot.contextKeyHash = contextKeyHash;
+        domainGeneration.fetch_add(1, std::memory_order_release);
+        return true;
+    }
+    return false;
+}
+
 void DomainRegistry::unregisterAnalyserDomain(const std::uint64_t analysisDomainId) noexcept {
     const juce::ScopedLock threadScoped(registryMutex);
     auto* state = domainState();
@@ -1246,6 +1268,7 @@ StageRegistry& StageRegistry::instance() noexcept {
 
 int StageRegistry::registerStage(const ProductIdentity& identity,
                                  const std::uint64_t analysisDomainId,
+                                 const std::uint64_t ctorInstanceId,
                                  std::uint64_t& instanceIdOut,
                                  std::uint64_t& localOrderIdOut) noexcept {
     auto* state = analysisState();
@@ -1253,7 +1276,9 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
     const int domainIndex = domainIndexFor(analysisDomainId);
     auto allocateSharedSlot = [&](SharedStageSlot& slot) {
         analysisAtomicRef(slot.version).store(1u, std::memory_order_release);
-        instanceIdOut = state->nextInstanceId++;
+        // Use the caller's stable ctorInstanceId as the slot identity so we can
+        // find and evict exactly this instance's previous slot on re-registration.
+        instanceIdOut = (ctorInstanceId != 0) ? ctorInstanceId : state->nextInstanceId++;
         localOrderIdOut = state->nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
         slot.analysisDomainId = analysisDomainId;
         setStageIdentityFromProduct(slot.telemetry.identity, identity, instanceIdOut, localOrderIdOut);
@@ -1264,29 +1289,23 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         analysisAtomicRef(slot.active).store(1u, std::memory_order_release);
         analysisAtomicRef(slot.version).store(2u, std::memory_order_release);
     };
-    // Build a fixed-width stageId for comparison (mirrors setStageIdentityFromProduct)
-    std::array<char, 32> incomingStageId {};
-    copyFixedLabel(identity.stageId.empty() ? identity.productName : identity.stageId,
-                   incomingStageId.data(), incomingStageId.size());
-
     if (state != nullptr) {
         const juce::ScopedLock threadScoped(registryMutex);
         juce::InterProcessLock::ScopedLockType scoped(stageRegion().processLock());
         if (scoped.isLocked()) {
-            // Evict any orphaned slots with the same stageId in the same domain  - 
-            // these are left behind when a previous unregisterStage call lost the
-            // inter-process lock mid-flight. Without this sweep, the same plugin
-            // appears twice in the analyser stage chain.
-            for (auto& slot : state->slots) {
-                if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
-                    continue;
-                if (slot.analysisDomainId != analysisDomainId)
-                    continue;
-                if (slot.telemetry.identity.stageId != incomingStageId)
-                    continue;
-                analysisAtomicRef(slot.active).store(0u, std::memory_order_release);
-                slot.analysisDomainId = 0;
-                slot.telemetry = {};
+            // Evict only the previous slot owned by this exact plugin instance.
+            // Do NOT evict by stageId — multiple instances of the same plugin type
+            // on different tracks must coexist without evicting each other.
+            if (ctorInstanceId != 0) {
+                for (auto& slot : state->slots) {
+                    if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+                        continue;
+                    if (slot.telemetry.identity.instanceId != ctorInstanceId)
+                        continue;
+                    analysisAtomicRef(slot.active).store(0u, std::memory_order_release);
+                    slot.analysisDomainId = 0;
+                    slot.telemetry = {};
+                }
             }
 
             for (int slotIndex = 0; slotIndex < static_cast<int>(state->slots.size()); ++slotIndex) {
@@ -1313,13 +1332,13 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
 
     auto& localState = localStageRegistryState();
     const juce::ScopedLock localScoped(localState.lock);
-    // Evict orphaned local slots with the same stageId+domain before allocating a new one
-    for (auto& slot : localState.slots) {
-        if (!slot.active || slot.analysisDomainId != analysisDomainId)
-            continue;
-        if (slot.telemetry.identity.stageId != incomingStageId)
-            continue;
-        slot = {};
+    // Evict only this instance's previous local slot.
+    if (ctorInstanceId != 0) {
+        for (auto& slot : localState.slots) {
+            if (!slot.active || slot.telemetry.identity.instanceId != ctorInstanceId)
+                continue;
+            slot = {};
+        }
     }
     for (int slotIndex = 0; slotIndex < static_cast<int>(localState.slots.size()); ++slotIndex) {
         auto& slot = localState.slots[static_cast<std::size_t>(slotIndex)];
@@ -1493,6 +1512,9 @@ bool StageRegistry::findStageByDomainAndStageId(const std::uint64_t domainId,
 
 StagePublisher::StagePublisher(const ProductIdentity& identity)
     : identityDescriptor(identity),
+      ctorInstanceId(static_cast<std::uint64_t>(
+          juce::Random::getSystemRandom().nextInt64()) ^ // lower 63 bits random
+          (static_cast<std::uint64_t>(juce::Time::currentTimeMillis()) << 1)),
       inputAccumulator(std::make_unique<SummaryAccumulator>()),
       outputAccumulator(std::make_unique<SummaryAccumulator>()) {
     refreshDomainBinding(true);
@@ -1501,6 +1523,9 @@ StagePublisher::StagePublisher(const ProductIdentity& identity)
 
 StagePublisher::~StagePublisher() {
     StageRegistry::instance().unregisterStage(slotIndex, instanceIdValue);
+    if (instanceIdValue != 0)
+        StageRegistry::instance().clearTrackInfo(instanceIdValue);
+    registeredInstanceId.store(0, std::memory_order_relaxed);
 }
 
 void StagePublisher::prepare(const double sampleRate, const int maxBlockSize) noexcept {
@@ -1557,14 +1582,24 @@ void StagePublisher::publishBypassed(const juce::AudioBuffer<float>& buffer) noe
 }
 
 void StagePublisher::ensureRegistered() noexcept {
-    if (slotIndex >= 0)
+    if (slotIndex >= 0) {
+        // Already registered — retry flushing track info if it arrived late
+        // (e.g. REAPER's updateTrackProperties fires async on the message thread
+        // and the tryLock in the registration path may have lost the race).
+        if (trackInfoDirty) {
+            const juce::CriticalSection::ScopedTryLockType tryLock(trackNameLock);
+            if (tryLock.isLocked() && trackInfoDirty)
+                flushTrackInfoToRegistry();
+        }
         return;
+    }
     if (registrationAttempted)
         return;
     registrationAttempted = true;
 
     slotIndex = StageRegistry::instance().registerStage(identityDescriptor,
                                                         analysisDomainIdValue,
+                                                        ctorInstanceId,
                                                         instanceIdValue,
                                                         localOrderIdValue);
     if (slotIndex < 0 || instanceIdValue == 0) {
@@ -1572,6 +1607,18 @@ void StagePublisher::ensureRegistered() noexcept {
         instanceIdValue = 0;
         localOrderIdValue = 0;
         registrationAttempted = false;
+        return;
+    }
+
+    // Publish the instanceId atomically so message-thread setters can see it.
+    registeredInstanceId.store(instanceIdValue, std::memory_order_release);
+
+    // Flush any track info that arrived via updateTrackProperties before the
+    // first audio block (e.g. when transport is stopped).
+    {
+        const juce::CriticalSection::ScopedTryLockType tryLock(trackNameLock);
+        if (tryLock.isLocked() && trackInfoDirty)
+            flushTrackInfoToRegistry();
     }
 }
 
@@ -1589,8 +1636,14 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
 
     const auto pid = domainReg.currentProcessId();
 
+    // If we have a context key hint (track hash from updateTrackProperties), prefer domains
+    // whose contextKeyHash matches. Fall back to all-domain scan if none match.
     std::array<std::uint64_t, kMaxDomains> domainIds {};
-    const int domainCount = domainReg.allDomainsForProcess(pid, domainIds);
+    int domainCount = contextKeyHint != 0
+        ? domainReg.allDomainsForProcess(pid, domainIds, contextKeyHint)
+        : 0;
+    if (domainCount == 0)
+        domainCount = domainReg.allDomainsForProcess(pid, domainIds);
 
     std::uint64_t newDomainId = 0;
     std::array<char, 32> myStageId {};
@@ -1675,9 +1728,149 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     analysisDomainIdValue = newDomainId;
 }
 
+void StagePublisher::flushTrackInfoToRegistry() noexcept {
+    // Called under trackNameLock. Writes pending info to registry if we have an instanceId.
+    const std::uint64_t id = registeredInstanceId.load(std::memory_order_relaxed);
+    if (id == 0)
+        return;
+    publishedTrackName      = pendingTrackName;
+    publishedTrackColour    = pendingTrackColour;
+    publishedTrackRuntimeID = pendingTrackRuntimeID;
+    publishedChannelUID     = pendingChannelUID;
+    trackInfoDirty = false;
+    StageRegistry::TrackInfo info;
+    info.name       = juce::String::fromUTF8(publishedTrackName.data());
+    info.channelUID = juce::String::fromUTF8(publishedChannelUID.data());
+    info.colourARGB = publishedTrackColour;
+    info.runtimeID  = publishedTrackRuntimeID;
+    info.stableId   = StageRegistry::buildTrackStableId(info.channelUID, info.runtimeID, info.name);
+    info.isReliable = !info.channelUID.isEmpty() || info.runtimeID != 0;
+    StageRegistry::instance().setTrackInfo(id, info);
+}
+
+void StagePublisher::setTrackName(const juce::String& name) noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameLock);
+    copyFixedLabel(name.toStdString(), pendingTrackName.data(), pendingTrackName.size());
+    trackInfoDirty = true;
+    flushTrackInfoToRegistry();
+}
+
+void StagePublisher::setTrackColour(const std::uint32_t argb) noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameLock);
+    pendingTrackColour = argb;
+    trackInfoDirty = true;
+    flushTrackInfoToRegistry();
+}
+
+void StagePublisher::setTrackRuntimeID(const std::int64_t runtimeId) noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameLock);
+    pendingTrackRuntimeID = runtimeId;
+    trackInfoDirty = true;
+    flushTrackInfoToRegistry();
+}
+
+void StagePublisher::setContextKeyHint(const std::uint64_t hint) noexcept {
+    contextKeyHint = hint;
+    // Re-evaluate domain binding with the new hint so we bind to the right analyser track.
+    refreshDomainBinding(true);
+    ensureRegistered();
+}
+
+void StagePublisher::setChannelUID(const juce::String& uid) noexcept {
+    {
+        const juce::CriticalSection::ScopedLockType lock(trackNameLock);
+        copyFixedLabel(uid.toStdString(), pendingChannelUID.data(), pendingChannelUID.size());
+        trackInfoDirty = true;
+    }
+
+    // Early registration: fires at plugin load before prepareToPlay, so the
+    // analyser can discover this stage even when transport is stopped.
+    refreshDomainBinding(true);
+    ensureRegistered();
+    {
+        const juce::CriticalSection::ScopedTryLockType tryLock(trackNameLock);
+        if (tryLock.isLocked() && trackInfoDirty)
+            flushTrackInfoToRegistry();
+    }
+}
+
+std::uint64_t StageRegistry::buildTrackStableId(const juce::String& channelUID,
+                                                   const std::int64_t runtimeID,
+                                                   const juce::String& name) noexcept {
+    // Priority: channelUID (stable across sessions) > runtimeID (session-unique) >
+    //           name (weaker, session-local, not unique across duplicate names) > unknown (0).
+    // FNV-1a hash; bit 0 forced set so result is never zero.
+    constexpr std::uint64_t kFnvBasis = 14695981039346656037ULL;
+    constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
+
+    auto fnv = [&](const std::string& s, std::uint64_t seed = kFnvBasis) noexcept -> std::uint64_t {
+        std::uint64_t h = seed;
+        for (const char c : s) { h ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c)); h *= kFnvPrime; }
+        return h;
+    };
+
+    if (!channelUID.isEmpty())
+        return fnv(channelUID.toStdString()) | 1ULL;
+    if (runtimeID != 0)
+        return static_cast<std::uint64_t>(runtimeID) | 1ULL;
+    if (!name.isEmpty())
+        // Use a prefixed hash to avoid colliding with channelUID hashes.
+        return fnv(name.toStdString(), fnv("vx.track.name:")) | 1ULL;
+    return 0;
+}
+
+void StageRegistry::setTrackInfo(const std::uint64_t instanceId, const TrackInfo& info) noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameMutex);
+    trackInfos[instanceId] = info;
+}
+
+StageRegistry::TrackInfo StageRegistry::getTrackInfo(const std::uint64_t instanceId) const noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameMutex);
+    const auto it = trackInfos.find(instanceId);
+    return it != trackInfos.end() ? it->second : TrackInfo{};
+}
+
+void StageRegistry::clearTrackInfo(const std::uint64_t instanceId) noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameMutex);
+    trackInfos.erase(instanceId);
+}
+
+// Legacy wrappers.
+void StageRegistry::setTrackName(const std::uint64_t instanceId, const juce::String& name) noexcept {
+    const juce::CriticalSection::ScopedLockType lock(trackNameMutex);
+    trackInfos[instanceId].name = name;
+}
+
+juce::String StageRegistry::getTrackName(const std::uint64_t instanceId) const noexcept {
+    return getTrackInfo(instanceId).name;
+}
+
+void StageRegistry::clearTrackName(const std::uint64_t instanceId) noexcept {
+    clearTrackInfo(instanceId);
+}
+
 void StagePublisher::maybePublish(const bool bypassed, const int numChannels) noexcept {
     if (slotIndex < 0 || samplesUntilPublish > 0)
         return;
+
+    {
+        const juce::CriticalSection::ScopedTryLockType tryLock(trackNameLock);
+        if (tryLock.isLocked() && trackInfoDirty) {
+            publishedTrackName      = pendingTrackName;
+            publishedTrackColour    = pendingTrackColour;
+            publishedTrackRuntimeID = pendingTrackRuntimeID;
+            publishedChannelUID     = pendingChannelUID;
+            trackInfoDirty = false;
+            if (instanceIdValue != 0) {
+                StageRegistry::TrackInfo info;
+                info.name       = juce::String::fromUTF8(publishedTrackName.data());
+                info.channelUID = juce::String::fromUTF8(publishedChannelUID.data());
+                info.colourARGB = publishedTrackColour;
+                info.runtimeID  = publishedTrackRuntimeID;
+                StageRegistry::instance().setTrackInfo(instanceIdValue, info);
+            }
+        }
+    }
 
     StageTelemetry telemetry;
     setStageIdentityFromProduct(telemetry.identity, identityDescriptor, instanceIdValue, localOrderIdValue);

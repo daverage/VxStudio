@@ -119,9 +119,9 @@ inline float lerp(const float a, const float b, const float t) noexcept {
     return a + (b - a) * t;
 }
 
-inline float smoothingAlpha(const double sampleRate, const float milliseconds) noexcept {
+inline float smoothingAlpha(const double sampleRate, const float milliseconds, const int hopSize) noexcept {
     const float seconds = std::max(0.001f, milliseconds * 0.001f);
-    const float frameSeconds = static_cast<float>(Dsp::kHopSize) / static_cast<float>(std::max(1000.0, sampleRate));
+    const float frameSeconds = static_cast<float>(hopSize) / static_cast<float>(std::max(1000.0, sampleRate));
     return std::exp(-frameSeconds / seconds);
 }
 
@@ -131,15 +131,25 @@ void Dsp::prepare(const double sampleRate, const int maxBlockSize, const int num
     sampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     preparedChannels = juce::jlimit(1, 2, numChannels);
     maxBlockSizePrepared = std::max(1, maxBlockSize);
-    fft.prepare(kFftOrder);
-    vxsuite::spectral::prepareSqrtHannWindow(window, kFftSize);
+
+    // SR-adaptive FFT size: target 21.3 ms window → 1024@44.1/48k, 2048@88.2/96k
+    static constexpr float kTargetWindowMs = 21.3f;
+    const int targetSamples = static_cast<int>(static_cast<float>(sampleRateHz) * kTargetWindowMs / 1000.0f);
+    activeFftOrder = 1;
+    while ((1 << activeFftOrder) < targetSamples) ++activeFftOrder;
+    activeFftSize  = 1 << activeFftOrder;
+    activeHopSize  = activeFftSize / 4;
+    activeBins     = activeFftSize / 2 + 1;
+
+    fft.prepare(activeFftOrder);
+    vxsuite::spectral::prepareSqrtHannWindow(window, activeFftSize);
 
     channels.assign(static_cast<size_t>(preparedChannels), {});
     for (auto& channel : channels) {
-        channel.inputFifo.assign(static_cast<size_t>(kFftSize + maxBlockSizePrepared + kHopSize), 0.0f);
-        channel.outputFifo.assign(static_cast<size_t>(kFftSize + maxBlockSizePrepared + kHopSize), 0.0f);
-        channel.fftData.assign(static_cast<size_t>(kFftSize * 2), 0.0f);
-        channel.ola.assign(static_cast<size_t>(kFftSize * 2), 0.0f);
+        channel.inputFifo.assign(static_cast<size_t>(activeFftSize + maxBlockSizePrepared + activeHopSize), 0.0f);
+        channel.outputFifo.assign(static_cast<size_t>(activeFftSize + maxBlockSizePrepared + activeHopSize), 0.0f);
+        channel.fftData.assign(static_cast<size_t>(activeFftSize * 2), 0.0f);
+        channel.ola.assign(static_cast<size_t>(activeFftSize * 2), 0.0f);
     }
     for (int i = 0; i < kControlCount; ++i) {
         const double timeSeconds = i == kStrengthIndex ? 0.025 : 0.018;
@@ -212,12 +222,12 @@ void Dsp::reset() {
         std::fill(channel.ola.begin(), channel.ola.end(), 0.0f);
         channel.inputCount = 0;
         channel.inputWritePos = 0;
-        channel.outputCount = kFftSize;
+        channel.outputCount = activeFftSize;
         channel.outputReadPos = 0;
         channel.outputWritePos = 0;
         channel.olaWritePos = 0;
         std::fill(channel.outputFifo.begin(), channel.outputFifo.end(), 0.0f);
-        const int initialZeros = std::min(kFftSize, static_cast<int>(channel.outputFifo.size()));
+        const int initialZeros = std::min(activeFftSize, static_cast<int>(channel.outputFifo.size()));
         channel.outputCount = initialZeros;
         channel.outputWritePos = initialZeros % static_cast<int>(channel.outputFifo.size());
     }
@@ -290,7 +300,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer) {
             state.inputCount = std::min(state.inputCount + 1, static_cast<int>(state.inputFifo.size()));
         }
 
-        while (channels.front().inputCount >= kFftSize)
+        while (channels.front().inputCount >= activeFftSize)
             processFrame();
 
         for (int ch = 0; ch < numChannels; ++ch) {
@@ -316,15 +326,15 @@ void Dsp::processFrame() {
         std::fill(state.fftData.begin(), state.fftData.end(), 0.0f);
         const int fifoSize = static_cast<int>(state.inputFifo.size());
         const int frameStart = (state.inputWritePos - state.inputCount + fifoSize) % fifoSize;
-        for (int i = 0; i < kFftSize; ++i) {
+        for (int i = 0; i < activeFftSize; ++i) {
             const int srcIndex = (frameStart + i) % fifoSize;
             state.fftData[static_cast<size_t>(i)] = state.inputFifo[static_cast<size_t>(srcIndex)] * window[static_cast<size_t>(i)];
         }
         fft.performForward(state.fftData.data());
 
-        for (int k = 0; k < kBins; ++k) {
+        for (int k = 0; k < activeBins; ++k) {
             const float re = state.fftData[static_cast<size_t>(2 * k)];
-            const float im = (k == 0 || k == kBins - 1) ? 0.0f : state.fftData[static_cast<size_t>(2 * k + 1)];
+            const float im = (k == 0 || k == activeBins - 1) ? 0.0f : state.fftData[static_cast<size_t>(2 * k + 1)];
             analysisMag[static_cast<size_t>(k)] += std::sqrt(std::max(kEps, re * re + im * im));
         }
     }
@@ -335,11 +345,11 @@ void Dsp::processFrame() {
     if (preparedChannels >= 2) {
         auto& left = channels[0];
         auto& right = channels[1];
-        for (int k = 0; k < kBins; ++k) {
+        for (int k = 0; k < activeBins; ++k) {
             const float reL = left.fftData[static_cast<size_t>(2 * k)];
-            const float imL = (k == 0 || k == kBins - 1) ? 0.0f : left.fftData[static_cast<size_t>(2 * k + 1)];
+            const float imL = (k == 0 || k == activeBins - 1) ? 0.0f : left.fftData[static_cast<size_t>(2 * k + 1)];
             const float reR = right.fftData[static_cast<size_t>(2 * k)];
-            const float imR = (k == 0 || k == kBins - 1) ? 0.0f : right.fftData[static_cast<size_t>(2 * k + 1)];
+            const float imR = (k == 0 || k == activeBins - 1) ? 0.0f : right.fftData[static_cast<size_t>(2 * k + 1)];
             const float midRe = 0.5f * (reL + reR);
             const float midIm = 0.5f * (imL + imR);
             const float sideRe = 0.5f * (reL - reR);
@@ -351,7 +361,7 @@ void Dsp::processFrame() {
             sideWeight[static_cast<size_t>(k)] = juce::jlimit(0.0f, 1.0f, sideMag / total);
         }
     } else {
-        for (int k = 0; k < kBins; ++k) {
+        for (int k = 0; k < activeBins; ++k) {
             centerWeight[static_cast<size_t>(k)] = 1.0f;
             sideWeight[static_cast<size_t>(k)] = 0.0f;
         }
@@ -363,24 +373,24 @@ void Dsp::processFrame() {
 
     for (int ch = 0; ch < preparedChannels; ++ch) {
         auto& state = channels[static_cast<size_t>(ch)];
-        for (int k = 0; k < kBins; ++k) {
+        for (int k = 0; k < activeBins; ++k) {
             const float re = state.fftData[static_cast<size_t>(2 * k)];
-            const float im = (k == 0 || k == kBins - 1) ? 0.0f : state.fftData[static_cast<size_t>(2 * k + 1)];
+            const float im = (k == 0 || k == activeBins - 1) ? 0.0f : state.fftData[static_cast<size_t>(2 * k + 1)];
             const float gain = juce::jlimit(0.0f, 8.0f, compositeGain[static_cast<size_t>(k)]);
             const float ratio = gain;
             state.fftData[static_cast<size_t>(2 * k)] *= ratio;
-            if (k != 0 && k != kBins - 1)
+            if (k != 0 && k != activeBins - 1)
                 state.fftData[static_cast<size_t>(2 * k + 1)] *= ratio;
         }
 
         fft.performInverse(state.fftData.data());
         const int olaSize = static_cast<int>(state.ola.size());
-        for (int i = 0; i < kFftSize; ++i) {
+        for (int i = 0; i < activeFftSize; ++i) {
             const int olaIndex = (state.olaWritePos + i) % olaSize;
             state.ola[static_cast<size_t>(olaIndex)] += state.fftData[static_cast<size_t>(i)] * window[static_cast<size_t>(i)];
         }
 
-        for (int i = 0; i < kHopSize; ++i) {
+        for (int i = 0; i < activeHopSize; ++i) {
             if (state.outputCount < static_cast<int>(state.outputFifo.size()))
             {
                 const int olaIndex = (state.olaWritePos + i) % olaSize;
@@ -391,8 +401,8 @@ void Dsp::processFrame() {
             }
         }
 
-        state.olaWritePos = (state.olaWritePos + kHopSize) % olaSize;
-        state.inputCount -= kHopSize;
+        state.olaWritePos = (state.olaWritePos + activeHopSize) % olaSize;
+        state.inputCount -= activeHopSize;
     }
 }
 
@@ -417,13 +427,13 @@ Dsp::MaskFrameContext Dsp::buildMaskFrameContext(const std::array<float, kBins>&
 
     for (const float mag : analysisMag)
         context.meanMag += mag;
-    context.meanMag /= static_cast<float>(kBins);
+    context.meanMag /= static_cast<float>(activeBins);
 
     buildSpectralEnvelope(analysisMag);
 
     float fluxAccum = 0.0f;
     int fluxCount = 0;
-    for (int k = 0; k < kBins; ++k) {
+    for (int k = 0; k < activeBins; ++k) {
         const float hz = binToHz(k);
         if (hz > 4000.0f) {
             fluxAccum += std::abs(analysisMag[static_cast<size_t>(k)] - prevAnalysisMag[static_cast<size_t>(k)]);
@@ -455,8 +465,8 @@ Dsp::MaskFrameContext Dsp::buildMaskFrameContext(const std::array<float, kBins>&
         * lerp(1.0f, 0.45f, context.signalQuality.monoScore * (1.0f - context.modeProfile->stereoWidthTrust));
     context.bassContBonus = 1.0f + 0.18f * context.modeProfile->harmonicContinuityWeight
         * lerp(1.0f, 0.30f, context.signalQuality.tiltScore);
-    context.attackAlpha = smoothingAlpha(sampleRateHz, context.modeProfile->attackMs);
-    context.releaseAlpha = smoothingAlpha(sampleRateHz, context.modeProfile->releaseMs);
+    context.attackAlpha = smoothingAlpha(sampleRateHz, context.modeProfile->attackMs, activeHopSize);
+    context.releaseAlpha = smoothingAlpha(sampleRateHz, context.modeProfile->releaseMs, activeHopSize);
     const float confidenceRange = std::max(0.05f, 1.0f - context.modeProfile->confidenceFloor);
     context.usableConfidence = clamp01(
         (context.signalQuality.separationConfidence - context.modeProfile->confidenceFloor) / confidenceRange);
@@ -916,7 +926,7 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
     refreshObjectAnalysis(analysisMag, centerWeight, sideWeight, frameContext.transientPrior,
                           frameContext.steadyPriorScale);
 
-    for (int k = 0; k < kBins; ++k) {
+    for (int k = 0; k < activeBins; ++k) {
         const auto binContext = buildBinMaskContext(k, analysisMag, centerWeight, sideWeight, frameContext);
         const auto rawWeightsForBin = applyMidrangeArbitrationForBin(
             applyHarmonicClusterInfluenceForBin(
@@ -947,7 +957,7 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
     // Phase 2: Foreground/background rendering for object-based separation
     buildForegroundBackgroundRender();
 
-    for (int k = 0; k < kBins; ++k)
+    for (int k = 0; k < activeBins; ++k)
         prevAnalysisMag[static_cast<size_t>(k)] = analysisMag[static_cast<size_t>(k)];
 
     masksPrimed = true;
@@ -980,7 +990,7 @@ float Dsp::smoothBand(const float hz, const float lo, const float hi) const noex
 }
 
 float Dsp::binToHz(const int bin) const noexcept {
-    return static_cast<float>(bin) * static_cast<float>(sampleRateHz) / static_cast<float>(kFftSize);
+    return static_cast<float>(bin) * static_cast<float>(sampleRateHz) / static_cast<float>(activeFftSize);
 }
 
 float Dsp::gaussianPeak(const float x, const float centre, const float sigma) const noexcept {
@@ -1031,15 +1041,15 @@ float Dsp::getFrequencyDependentControlScale(int source, float hz) const noexcep
 
 void Dsp::buildSpectralEnvelope(const std::array<float, kBins>& analysisMag) {
     const int envelopeRadius = 8;
-    for (int k = 0; k < kBins; ++k) {
+    for (int k = 0; k < activeBins; ++k) {
         smoothedLogSpectrum[static_cast<size_t>(k)] = std::log(std::max(kEps, analysisMag[static_cast<size_t>(k)]));
     }
-    for (int k = 0; k < kBins; ++k) {
+    for (int k = 0; k < activeBins; ++k) {
         float sum = 0.0f;
         int count = 0;
         for (int r = -envelopeRadius; r <= envelopeRadius; ++r) {
             const int idx = k + r;
-            if (idx >= 0 && idx < kBins) {
+            if (idx >= 0 && idx < activeBins) {
                 sum += smoothedLogSpectrum[static_cast<size_t>(idx)];
                 ++count;
             }
@@ -1063,7 +1073,7 @@ void Dsp::detectSpectralPeaks(const std::array<float, kBins>& analysisMag) {
     std::array<Candidate, 48> candidates {};
     int candidateCount = 0;
 
-    for (int k = 1; k < kBins - 1; ++k) {
+    for (int k = 1; k < activeBins - 1; ++k) {
         const float hz = binToHz(k);
         if (hz < minHz || hz > maxHz)
             continue;
@@ -1079,7 +1089,7 @@ void Dsp::detectSpectralPeaks(const std::array<float, kBins>& analysisMag) {
         int localCount = 0;
         for (int r = -2; r <= 2; ++r) {
             const int idx = k + r;
-            if (idx >= 0 && idx < kBins) {
+            if (idx >= 0 && idx < activeBins) {
                 localSum += analysisMag[static_cast<size_t>(idx)];
                 ++localCount;
             }
@@ -1138,7 +1148,7 @@ void Dsp::buildHarmonicClusters(const std::array<float, kBins>& analysisMag) {
             int bestBin = -1;
             float bestMag = 0.0f;
 
-            for (int k = 0; k < kBins; ++k) {
+            for (int k = 0; k < activeBins; ++k) {
                 const float hz = binToHz(k);
                 if (std::abs(hz - targetHz) < tolerance) {
                     const float mag = analysisMag[static_cast<size_t>(k)];
@@ -1259,7 +1269,7 @@ float Dsp::guitarTonalSupport(float hz, float localMag, float envelopeMag,
 
 void Dsp::applySourcePersistence(std::array<std::array<float, kBins>, kSourceCount>& conditionedMasks, 
                                  const float transientPrior) noexcept {
-    for (int k = 0; k < kBins; ++k) {
+    for (int k = 0; k < activeBins; ++k) {
         float best = 0.0f, second = 0.0f;
         int winner = otherSource, runnerUp = otherSource;
 
@@ -1608,7 +1618,7 @@ void Dsp::detectTransientEvents(const std::array<float, kBins>& analysisMag,
                                  const float transientPrior) {
     // Compute spectral flux
     float fluxAccum = 0.0f;
-    for (int k = 0; k < kBins; ++k) {
+    for (int k = 0; k < activeBins; ++k) {
         const float delta = analysisMag[static_cast<size_t>(k)] - prevAnalysisMag[static_cast<size_t>(k)];
         spectralFlux[static_cast<size_t>(k)] = std::max(0.0f, delta);
         fluxAccum += spectralFlux[static_cast<size_t>(k)];
@@ -1625,7 +1635,7 @@ void Dsp::detectTransientEvents(const std::array<float, kBins>& analysisMag,
                 // Find peak flux bin
                 int peakBin = 0;
                 float peakFlux = 0.0f;
-                for (int k = 0; k < kBins; ++k) {
+                for (int k = 0; k < activeBins; ++k) {
                     if (spectralFlux[static_cast<size_t>(k)] > peakFlux) {
                         peakFlux = spectralFlux[static_cast<size_t>(k)];
                         peakBin = k;
@@ -1644,7 +1654,7 @@ void Dsp::detectTransientEvents(const std::array<float, kBins>& analysisMag,
                     // Compute bandwidth
                     float bandwidthAccum = 0.0f;
                     int bandwidthCount = 0;
-                    for (int k = 0; k < kBins; ++k) {
+                    for (int k = 0; k < activeBins; ++k) {
                         if (spectralFlux[static_cast<size_t>(k)] > fluxThreshold * 0.5f) {
                             bandwidthAccum += std::abs(binToHz(k) - event.peakHz);
                             ++bandwidthCount;
@@ -1858,7 +1868,7 @@ void Dsp::writeObjectOwnershipToBins() noexcept {
 
         for (int m = 0; m < tracked.lastMemberCount; ++m) {
             const int bin = tracked.lastMemberBins[static_cast<size_t>(m)];
-            if (bin >= 0 && bin < kBins) {
+            if (bin >= 0 && bin < activeBins) {
                 const int existingCluster = binOwningCluster[static_cast<size_t>(bin)];
 
                 // Take ownership if higher confidence
@@ -1875,7 +1885,7 @@ void Dsp::writeObjectOwnershipToBins() noexcept {
 void Dsp::applyObjectOwnershipToMasks(
     std::array<std::array<float, kBins>, kSourceCount>& masks) noexcept
 {
-    for (int k = 0; k < kBins; ++k)
+    for (int k = 0; k < activeBins; ++k)
     {
         const int clusterId = binOwningCluster[static_cast<size_t>(k)];
         const float confidence = binOwnershipConfidence[static_cast<size_t>(k)];
@@ -2212,7 +2222,7 @@ void Dsp::publishDebugFrameForBin(
     std::array<float, kSourceCount>& debugCoverage,
     float& debugConfidenceSum) const noexcept
 {
-    const int debugIndex = juce::jlimit(0, kDebugBins - 1, (bin * kDebugBins) / kBins);
+    const int debugIndex = juce::jlimit(0, kDebugBins - 1, (bin * kDebugBins) / activeBins);
     if (ownershipFrame.confidence >= debugBestConfidence[static_cast<size_t>(debugIndex)]) {
         debugBestConfidence[static_cast<size_t>(debugIndex)] = ownershipFrame.confidence;
         debugDominant[static_cast<size_t>(debugIndex)] = ownershipFrame.renderDominant;
@@ -2268,7 +2278,7 @@ void Dsp::buildForegroundBackgroundRender() noexcept
     for (auto& value : debugDominant)
         value = otherSource;
 
-    for (int k = 0; k < kBins; ++k)
+    for (int k = 0; k < activeBins; ++k)
     {
         const auto ownershipFrame =
             buildOwnershipFrameForBin(k, sourceContributions, allowHardIsolation, activeSourceIndex);
@@ -2303,7 +2313,7 @@ void Dsp::buildForegroundBackgroundRender() noexcept
         debugDominantCoverage[static_cast<size_t>(s)].store(
             debugCoverage[static_cast<size_t>(s)] / coverageSum, std::memory_order_relaxed);
     }
-    debugOverallConfidence.store(debugConfidenceSum / static_cast<float>(kBins), std::memory_order_relaxed);
+    debugOverallConfidence.store(debugConfidenceSum / static_cast<float>(activeBins), std::memory_order_relaxed);
     debugFrameCounter.store(currentFrameCount, std::memory_order_relaxed);
 }
 

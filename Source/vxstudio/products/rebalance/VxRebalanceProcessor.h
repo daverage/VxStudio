@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxStudioOutputTrimmer.h"
+#include "../../framework/VxStudioSilenceGuard.h"
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxRebalanceDsp.h"
 
@@ -28,6 +29,7 @@ private:
 
     vxsuite::rebalance::Dsp dsp;
     vxsuite::OutputTrimmer outputTrimmer;
+    vxsuite::SilenceGuard silenceGuard;
     double currentSampleRateHz = 48000.0;
     int currentBlockSize = 0;
     std::vector<std::vector<float>> dryDelayLines;

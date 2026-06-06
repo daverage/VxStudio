@@ -76,6 +76,15 @@ std::string_view VXSpeechClarityAudioProcessor::getActivityLightLabel(int index)
     }
 }
 
+vxsuite::MeteringSnapshot VXSpeechClarityAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    s.activeBandCount = 3;
+    s.bandActivity[0] = detectionState.sibilanceIntensity;
+    s.bandActivity[1] = detectionState.plosiveIntensity;
+    s.bandActivity[2] = detectionState.breathIntensity;
+    return s;
+}
+
 void VXSpeechClarityAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
 
@@ -120,43 +129,37 @@ void VXSpeechClarityAudioProcessor::resetSuite() {
 }
 
 void VXSpeechClarityAudioProcessor::performPreAnalysis(const juce::AudioBuffer<float>& buffer) {
-    // Scan buffer to establish adaptive thresholds
-    float maxSibilanceEnergy = 0.0f;
-    float maxPlosiveEnergy = 0.0f;
-    float maxBreathEnergy = 0.0f;
-
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
+    const int total = numChannels * numSamples;
+    if (total <= 0) {
+        needsPreAnalysis = false;
+        return;
+    }
+
+    double sibSum = 0.0, plosSum = 0.0, breathSum = 0.0;
 
     for (int ch = 0; ch < numChannels; ++ch) {
         const float* data = buffer.getReadPointer(ch);
-
         for (int i = 0; i < numSamples; ++i) {
             const float sample = data[i];
-
-            // Measure sibilance band energy
-            float sibFiltered = sibilanceBandFilter.process(sample);
-            float sibEnv = std::abs(sibFiltered);
-            maxSibilanceEnergy = std::max(maxSibilanceEnergy, sibEnv);
-
-            // Measure plosive band energy
-            float plosFiltered = plosiveBandFilter.process(sample);
-            float plosEnv = std::abs(plosFiltered);
-            maxPlosiveEnergy = std::max(maxPlosiveEnergy, plosEnv);
-
-            // Measure breath band energy
-            float breathFiltered = breathBandFilter.process(sample);
-            float breathEnv = std::abs(breathFiltered);
-            maxBreathEnergy = std::max(maxBreathEnergy, breathEnv);
+            sibSum    += std::abs(sibilanceBandFilter.process(sample));
+            plosSum   += std::abs(plosiveBandFilter.process(sample));
+            breathSum += std::abs(breathBandFilter.process(sample));
         }
     }
 
-    // Set adaptive thresholds at ~80% of max detected energy
-    preAnalysisMetrics.sibilanceThreshold = maxSibilanceEnergy * 0.80f;
-    preAnalysisMetrics.plosiveThreshold = maxPlosiveEnergy * 0.80f;
-    preAnalysisMetrics.breathThreshold = maxBreathEnergy * 0.80f;
+    // Threshold = mean × multiplier. Plosives/breath are sharp bursts well above
+    // the mean band energy — using max caused constant false-triggering because
+    // the peak is often within the normal signal range.
+    constexpr float kFloor = 1.0e-5f;
+    const float meanSib    = static_cast<float>(sibSum    / total);
+    const float meanPlos   = static_cast<float>(plosSum   / total);
+    const float meanBreath = static_cast<float>(breathSum / total);
+    preAnalysisMetrics.sibilanceThreshold = std::max(kFloor, meanSib    * 4.0f);
+    preAnalysisMetrics.plosiveThreshold   = std::max(kFloor, meanPlos   * 5.0f);
+    preAnalysisMetrics.breathThreshold    = std::max(kFloor, meanBreath * 4.0f);
     preAnalysisMetrics.isValid = true;
-
     needsPreAnalysis = false;
 }
 

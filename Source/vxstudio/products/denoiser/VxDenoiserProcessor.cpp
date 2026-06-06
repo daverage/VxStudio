@@ -68,12 +68,14 @@ void VXDenoiserAudioProcessor::prepareSuite(const double sampleRate,
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     denoiserDsp.prepare(currentSampleRateHz, samplesPerBlock);
     setReportedLatencySamples(denoiserDsp.getLatencySamples());
+    silenceGuard.prepare();
     resetSuite();
 }
 
 void VXDenoiserAudioProcessor::resetSuite() {
     denoiserDsp.reset();
     controls.reset(0.0f, 0.5f);
+    silenceGuard.reset();
     smoothedMakeupGain = 1.0f;
     prevPhraseActive = true;
 }
@@ -84,6 +86,8 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0) return;
+
+    if (silenceGuard.update(buffer)) return;
 
     const float cleanTarget = vxsuite::readNormalized(parameters, kCleanParam, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, kGuardParam, 0.5f);
@@ -159,6 +163,21 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         buffer.applyGain(smoothedMakeupGain);
 }
 
+
+void VXDenoiserAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                                                   const juce::AudioBuffer<float>&) {
+    // Output removed content (noise) using latency-aligned dry.
+    // ensureLatencyAlignedListenDry() was already called inside processProduct().
+    const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+    const int channels = std::min(outputBuffer.getNumChannels(), alignedDry.getNumChannels());
+    const int samples  = std::min(outputBuffer.getNumSamples(),  alignedDry.getNumSamples());
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* out = outputBuffer.getWritePointer(ch);
+        const auto* dry = alignedDry.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i)
+            out[i] = dry[i] - out[i];  // removed noise = dry − wet
+    }
+}
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {

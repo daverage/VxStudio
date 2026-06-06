@@ -14,6 +14,8 @@ public:
 
     juce::String getStatusText() const override;
     float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
+    vxsuite::MeteringSnapshot getMeteringSnapshot() const noexcept override;
+    void setLastProximityGainDb(float db) noexcept { lastProximityGainDb = db; }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -29,4 +31,5 @@ private:
     vxsuite::BlockSmoothedControlTriple controls;
     vxsuite::OutputTrimmer outputTrimmer;
     double currentSampleRateHz = 48000.0;
+    float lastProximityGainDb = 0.0f;
 };

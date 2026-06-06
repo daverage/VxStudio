@@ -5,8 +5,6 @@
 #include "../../framework/VxStudioSpectrumTelemetry.h"
 #include "VxStudioVersions.h"
 
-#include <limits>
-
 namespace {
 
 constexpr std::string_view kProductName = "VX Studio Analyser";
@@ -98,86 +96,31 @@ void VXStudioAnalyserAudioProcessor::reset() {
     publishSignalQualitySnapshot();
 }
 
-void VXStudioAnalyserAudioProcessor::analyzePublishedStages() noexcept {
-    using namespace vxsuite::analysis;
+void VXStudioAnalyserAudioProcessor::updateTrackProperties(const TrackProperties& properties) {
+    if (properties.name.has_value() && properties.name->isNotEmpty())
+        analyserTrackName = *properties.name;
 
-    auto& stageRegistry = StageRegistry::instance();
-    const int maxSlots = stageRegistry.maxSlots();
-    const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
-    constexpr std::uint64_t kStaleThresholdMs = 2000;  // Consider stages stale after 2 seconds
-    const auto analyserDomainId = analysisDomainId();
-    const auto fallbackDomainId = DomainRegistry::instance().fallbackDomainIdForCurrentProcess();
+    const juce::String channelUID = properties.channelUID.has_value() ? *properties.channelUID : juce::String();
+    const std::int64_t runtimeID  = properties.runtimeID.has_value()  ? *properties.runtimeID  : 0;
 
-    StageView firstStage {};
-    StageView lastStage {};
-    std::uint64_t lowestOrderId = std::numeric_limits<std::uint64_t>::max();
-    std::uint64_t highestOrderId = 0;
-    int stageCount = 0;
+    const auto id = vxsuite::analysis::StageRegistry::buildTrackStableId(channelUID, runtimeID, analyserTrackName);
+    analyserTrackStableId.store(id, std::memory_order_relaxed);
 
-    // Discover active, recent VXSuite stages (like the editor does)
-    for (int slotIndex = 0; slotIndex < maxSlots; ++slotIndex) {
-        StageView stage {};
-        if (!stageRegistry.readStage(slotIndex, stage))
-            continue;
-
-        // Must be active
-        if (!stage.active)
-            continue;
-        if (stage.telemetry.state.isBypassed || !stage.telemetry.state.isLive)
-            continue;
-
-        // Skip stale stages (help with stability in edge cases)
-        const auto stageAgeMs = nowMs - stage.telemetry.state.timestampMs;
-        if (stageAgeMs > kStaleThresholdMs)
-            continue;
-        if (stage.analysisDomainId != analyserDomainId
-            && stage.analysisDomainId != fallbackDomainId)
-            continue;
-
-        stageCount++;
-
-        // Track first and last stages by order ID
-        const auto orderId = stage.telemetry.identity.localOrderId;
-
-        if (stageCount == 1) {
-            firstStage = stage;
-            lastStage = stage;
-            lowestOrderId = orderId;
-            highestOrderId = orderId;
-        } else {
-            if (orderId <= lowestOrderId) {
-                firstStage = stage;
-                lowestOrderId = orderId;
-            }
-            if (orderId >= highestOrderId) {
-                lastStage = stage;
-                highestOrderId = orderId;
-            }
-        }
-    }
-
-    // Update analysis if we found any valid stages
-    if (stageCount > 0) {
-        signalQualityState.updateFromPublishedSummaries(
-            firstStage.telemetry.inputSummary,
-            lastStage.telemetry.outputSummary
-        );
-    }
+    // Stamp the analyser's registered domain with the track scope key so VX plugins
+    // on this track will prefer this domain during their next domain binding refresh.
+    if (id != 0)
+        vxsuite::analysis::DomainRegistry::instance().updateDomainContextKey(analysisDomainId(), id);
 }
 
 void VXStudioAnalyserAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
-    // Analyser is a pure passthrough that only analyzes signal quality
-    // Analyzes both the real-time audio buffer and published stage data from other effects
     signalQualityState.update(buffer, buffer.getNumSamples());
-    analyzePublishedStages();
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
-    juce::ignoreUnused(midi);
-    signalQualityState.update(buffer, buffer.getNumSamples());
-    analyzePublishedStages();
+    juce::ignoreUnused(buffer, midi);
+    signalQualityState.reset();
     publishSignalQualitySnapshot();
 }
 

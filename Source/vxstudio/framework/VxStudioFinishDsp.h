@@ -23,6 +23,10 @@ public:
     void reset();
     void process(juce::AudioBuffer<float>& buffer, const ProcessOptions& options = {});
 
+    // Zero latency: the limiter is a sample-by-sample feedback design with no lookahead.
+    // The opto compressor is also zero-latency. Processors using this DSP report 0 extra latency.
+    static constexpr int kLatencySamples = 0;
+
     float getCompActivity() const noexcept { return opto.getActivity01(); }
     float getGainReductionDb() const noexcept { return opto.getGainReductionDb(); }
     float getEnvelopeDb() const noexcept { return opto.getEnvelopeDb(); }

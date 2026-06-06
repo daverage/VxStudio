@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -251,6 +252,8 @@ public:
 
     std::uint64_t registerAnalyserDomain(std::string_view ownerStageId, std::uint64_t contextKeyHash = 0) noexcept;
     void unregisterAnalyserDomain(std::uint64_t analysisDomainId) noexcept;
+    // Updates the contextKeyHash of an already-registered domain (e.g. after updateTrackProperties fires).
+    bool updateDomainContextKey(std::uint64_t analysisDomainId, std::uint64_t contextKeyHash) noexcept;
     [[nodiscard]] bool latestDomainForProcess(std::uint64_t hostProcessId, DomainView& out, std::uint64_t contextKeyHash = 0) const noexcept;
     [[nodiscard]] bool latestActiveDomain(DomainView& out, std::uint64_t contextKeyHash = 0) const noexcept;
     [[nodiscard]] int allDomainsForProcess(std::uint64_t hostProcessId,
@@ -272,6 +275,7 @@ public:
 
     int registerStage(const ProductIdentity& identity,
                       std::uint64_t analysisDomainId,
+                      std::uint64_t ctorInstanceId,
                       std::uint64_t& instanceIdOut,
                       std::uint64_t& localOrderIdOut) noexcept;
     void unregisterStage(int slotIndex, std::uint64_t instanceId) noexcept;
@@ -286,9 +290,35 @@ public:
     [[nodiscard]] int maxSlots() const noexcept { return kMaxStageSlots; }
     [[nodiscard]] std::uint32_t getStageGeneration() const noexcept;
 
+    // In-process track info side-table. Not in shared memory — zero layout impact.
+    struct TrackInfo {
+        juce::String  name;
+        juce::String  channelUID;       // VST3 kChannelUIDKey — stable, unique per track
+        std::uint32_t colourARGB = 0;   // VST3 kChannelColorKey
+        std::int64_t  runtimeID  = 0;   // VST3 kChannelRuntimeIDKey — unique per session
+        // Computed grouping key: FNV(channelUID) > runtimeID cast > 0 (unknown).
+        // Never changes identity of a slot — display grouping only.
+        std::uint64_t stableId   = 0;
+        bool          isReliable = false; // true when channelUID or runtimeID was provided
+    };
+    void setTrackInfo(std::uint64_t instanceId, const TrackInfo& info) noexcept;
+    [[nodiscard]] TrackInfo getTrackInfo(std::uint64_t instanceId) const noexcept;
+    void clearTrackInfo(std::uint64_t instanceId) noexcept;
+    [[nodiscard]] static std::uint64_t buildTrackStableId(const juce::String& channelUID,
+                                                           std::int64_t runtimeID,
+                                                           const juce::String& name = {}) noexcept;
+
+    // Legacy name-only helpers kept for internal use.
+    void setTrackName(std::uint64_t instanceId, const juce::String& name) noexcept;
+    [[nodiscard]] juce::String getTrackName(std::uint64_t instanceId) const noexcept;
+    void clearTrackName(std::uint64_t instanceId) noexcept;
+
 private:
     mutable juce::CriticalSection registryMutex;
     std::atomic<std::uint32_t> stageGeneration { 0 };
+
+    mutable juce::CriticalSection trackNameMutex;
+    std::unordered_map<std::uint64_t, TrackInfo> trackInfos;
 };
 
 class StagePublisher {
@@ -308,15 +338,28 @@ public:
     [[nodiscard]] std::uint64_t localOrderId() const noexcept { return localOrderIdValue; }
     [[nodiscard]] bool isActive() const noexcept { return slotIndex >= 0; }
 
+    // Called on the message thread when the host reports track properties.
+    void setTrackName(const juce::String& name) noexcept;
+    void setTrackColour(std::uint32_t argb) noexcept;
+    void setTrackRuntimeID(std::int64_t runtimeId) noexcept;
+    void setChannelUID(const juce::String& uid) noexcept;
+    // Sets a hint used to prefer a domain whose contextKeyHash matches this value.
+    // Call with the track's stableId after updateTrackProperties is received.
+    void setContextKeyHint(std::uint64_t hint) noexcept;
+
 private:
     void ensureRegistered() noexcept;
     void refreshDomainBinding(bool force = false) noexcept;
     void maybePublish(bool bypassed, int numChannels) noexcept;
+    void flushTrackInfoToRegistry() noexcept;  // call under trackNameLock
     static void copyLabel(std::string_view source, char* dest, std::size_t destSize) noexcept;
 
     ProductIdentity identityDescriptor;
     int slotIndex = -1;
     std::uint64_t instanceIdValue = 0;
+    // Atomic mirror of instanceIdValue — safe to read from the message thread
+    // (e.g. in updateTrackProperties setters) without data race.
+    std::atomic<std::uint64_t> registeredInstanceId { 0 };
     std::uint64_t localOrderIdValue = 0;
     std::uint64_t analysisDomainIdValue = 0;
     double currentSampleRate = 48000.0;
@@ -327,6 +370,28 @@ private:
     std::unique_ptr<SummaryAccumulator> inputAccumulator;
     std::unique_ptr<SummaryAccumulator> outputAccumulator;
     bool registrationAttempted = false;
+
+    // Track info supplied by the host via updateTrackProperties (message thread).
+    // Read on the audio thread during publish — protected by trackNameLock.
+    mutable juce::CriticalSection trackNameLock;
+    std::array<char, 64> pendingTrackName {};
+    std::uint32_t pendingTrackColour = 0;
+    std::int64_t  pendingTrackRuntimeID = 0;
+    std::array<char, 64> pendingChannelUID {};
+    bool trackInfoDirty = false;
+    std::array<char, 64> publishedTrackName {};
+    std::uint32_t publishedTrackColour = 0;
+    std::int64_t  publishedTrackRuntimeID = 0;
+    std::array<char, 64> publishedChannelUID {};
+
+    // Stable identity for this plugin instance lifetime. Generated once in the
+    // constructor. Used to evict only THIS instance's previous slot when re-
+    // registering — never other instances of the same plugin type.
+    const std::uint64_t ctorInstanceId;
+
+    // Track hash supplied by the host via updateTrackProperties.
+    // Used by refreshDomainBinding to prefer a domain with a matching contextKeyHash.
+    std::uint64_t contextKeyHint = 0;
 };
 
 } // namespace vxsuite::analysis

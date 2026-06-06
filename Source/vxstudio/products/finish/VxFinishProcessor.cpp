@@ -80,12 +80,19 @@ std::string_view VXFinishAudioProcessor::getActivityLightLabel(int index) const 
 
 void VXFinishAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    finishChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
+    currentNumChannels = getTotalNumOutputChannels();
+    // 2x oversampling for the limiter stage (minimum phase, low latency)
+    oversamplingWrapper.prepare(currentSampleRateHz, samplesPerBlock, currentNumChannels,
+                                2, vxsuite::OversamplingWrapper::Mode::minPhase);
+    // Prepare DSP at the oversampled rate so filter coefficients are correct
+    finishChain.prepare(currentSampleRateHz * 2.0, samplesPerBlock * 2, currentNumChannels);
+    setReportedLatencySamples(oversamplingWrapper.addedLatencySamples());
     resetSuite();
 }
 
 void VXFinishAudioProcessor::resetSuite() {
     finishChain.reset();
+    oversamplingWrapper.reset();
     outputTrimmer.reset();
     controls.reset(0.0f, 0.5f, 0.5f);
 }
@@ -122,9 +129,11 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         policy,
         voiceContext);
 
-    // 5. PROCESS (Framework + Effect-specific)
+    // 5. PROCESS — opto at native rate, limiter via 2× oversampling wrapper
     finishChain.setParams(renderConfig.dspParams);
-    finishChain.process(buffer, renderConfig.options);
+    oversamplingWrapper.process(buffer, [&](juce::AudioBuffer<float>& upBuf) {
+        finishChain.process(upBuf, renderConfig.options);
+    });
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }
@@ -132,6 +141,14 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 void VXFinishAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                                 const juce::AudioBuffer<float>& inputBuffer) {
     renderAddedDeltaOutput(outputBuffer, inputBuffer);
+}
+
+vxsuite::MeteringSnapshot VXFinishAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    s.gainReductionDb  = finishChain.getGainReductionDb();
+    s.compActivity     = finishChain.getCompActivity();
+    s.limiterActivity  = finishChain.getLimiterActivity();
+    return s;
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)

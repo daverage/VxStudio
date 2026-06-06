@@ -63,10 +63,12 @@ public:
 
     static constexpr int kSourceCount = 5;
     static constexpr int kControlCount = 6;
-    static constexpr int kFftOrder = 10;
-    static constexpr int kFftSize = 1 << kFftOrder;
-    static constexpr int kHopSize = kFftSize / 4;
-    static constexpr int kBins = kFftSize / 2 + 1;
+    // Array sizing constants — sized for the 88.2/96 kHz maximum (2048-pt FFT).
+    // Processing uses activeBins/activeFftSize/activeHopSize computed in prepare().
+    static constexpr int kFftOrder = 11;
+    static constexpr int kFftSize  = 1 << kFftOrder;   // 2048
+    static constexpr int kHopSize  = kFftSize / 4;     // 512
+    static constexpr int kBins     = kFftSize / 2 + 1; // 1025
     static constexpr int kDebugBins = 96;
 
     // Harmonic grouping constants
@@ -168,7 +170,7 @@ public:
     void setRecordingType(RecordingType newType) noexcept;
     void process(juce::AudioBuffer<float>& buffer);
 
-    [[nodiscard]] int latencySamples() const noexcept { return kFftSize; }
+    [[nodiscard]] int latencySamples() const noexcept { return activeFftSize; }
     [[nodiscard]] DebugSnapshot getDebugSnapshot() const noexcept;
 
 private:
@@ -350,6 +352,12 @@ private:
                                                             float sliderNormalized,
                                                             float strength,
                                                             float signalTrust) const noexcept;
+
+    // Runtime FFT dimensions — set in prepare() from sample rate.
+    int activeFftOrder = 10;
+    int activeFftSize  = 1024;
+    int activeHopSize  = 256;
+    int activeBins     = 513;
 
     double sampleRateHz = 48000.0;
     int preparedChannels = 0;

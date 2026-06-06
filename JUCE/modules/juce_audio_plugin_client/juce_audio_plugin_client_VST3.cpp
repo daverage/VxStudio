@@ -1162,7 +1162,17 @@ public:
                         trackProperties.colourARGB.emplace ((uint32) colour);
                 }
 
+                {
+                    Steinberg::int64 runtimeId;
+                    if (list->getInt (Vst::ChannelContext::kChannelRuntimeIDKey, runtimeId) == kResultTrue)
+                        trackProperties.runtimeID.emplace ((int64) runtimeId);
+                }
 
+                {
+                    Vst::String128 uid;
+                    if (list->getString (Vst::ChannelContext::kChannelUIDKey, uid, sizeof (uid)) == kResultTrue)
+                        trackProperties.channelUID = std::make_optional (toString (uid));
+                }
 
                 if (MessageManager::getInstance()->isThisTheMessageThread())
                     instance->updateTrackProperties (trackProperties);

@@ -1,4 +1,5 @@
 #include "VxProximityClassicDsp.h"
+#include "../../../framework/VxStudioBlockSmoothing.h"
 #include "../../../framework/VxStudioDspCommon.h"
 
 #include <juce_core/juce_core.h>
@@ -228,12 +229,14 @@ void ProximityClassicDsp::processInPlace(juce::AudioBuffer<float>& buffer,
       + 0.20f * presenceDb * (0.48f + 0.82f * presenceShare)
       + 0.14f * highGain * (0.42f + 0.92f * airShare));
 
-    auto smoothModelValue = [](float& current, const float target, const bool primed) noexcept {
+    // SR/block-size normalised smoothing (τ ≈ 25 ms)
+    const float smoothAlpha = vxsuite::blockBlendAlpha(sr, numSamples, 0.025f);
+    auto smoothModelValue = [smoothAlpha](float& current, const float target, const bool primed) noexcept {
         if (!primed) {
             current = target;
             return current;
         }
-        current += 0.18f * (target - current);
+        current += smoothAlpha * (target - current);
         return current;
     };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VxStudioMeteringSnapshot.h"
 #include "VxStudioParameters.h"
 #include "VxStudioProcessCoordinator.h"
 #include "VxStudioOutputTrimmer.h"
@@ -51,6 +52,7 @@ public:
     virtual void requestModelDownload() {}
     virtual void declineModelDownloadPrompt() {}
     virtual bool hasSidechainActive() const noexcept { return false; }
+    virtual MeteringSnapshot getMeteringSnapshot() const noexcept { return {}; }
     float getOutputSafetyTrimReductionDb() const noexcept { return outputSafetyTrimmer.getCurrentReductionDb(); }
     float getOutputSafetyTrimMaxReductionDb() const noexcept { return outputSafetyTrimmer.getMaxObservedReductionDb(); }
     float getOutputSafetyTrimActivity() const noexcept { return outputSafetyTrimmer.getCurrentActivity01(); }
@@ -63,6 +65,7 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void reset() override;
     void releaseResources() override;
+    void updateTrackProperties(const TrackProperties& props) override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) final;
     void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     bool isBusesLayoutSupported(const BusesLayout& layouts) const override;

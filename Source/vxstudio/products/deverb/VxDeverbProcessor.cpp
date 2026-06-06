@@ -109,6 +109,7 @@ void VXDeverbAudioProcessor::prepareSuite(const double sampleRate, const int sam
     deverbProcessor.prepare(currentSampleRateHz, preparedBlockSize);
     setReportedLatencyFromStages(deverbProcessor);
     ensureScratchCapacity(getTotalNumOutputChannels(), preparedBlockSize);
+    silenceGuard.prepare();
     resetSuite();
 }
 
@@ -116,6 +117,7 @@ void VXDeverbAudioProcessor::resetSuite() {
     deverbProcessor.reset();
     wetScratch.clear();
     controls.reset(0.0f);
+    silenceGuard.reset();
     smoothedCompensationGain = 1.0f;
     smoothedBody = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     bodyShelfZ1.fill(0.0f);
@@ -172,6 +174,8 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         return;
     if (wetScratch.getNumChannels() < outputChannels || wetScratch.getNumSamples() < numSamples)
         return;
+
+    if (silenceGuard.update(buffer)) return;
 
     const float reduceTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
     const float bodyTarget   = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);

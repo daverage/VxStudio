@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxStudioBlockSmoothing.h"
+#include "../../framework/VxStudioSilenceGuard.h"
 #include "../../framework/VxStudioBlockSmoothedControl.h"
 #include "../../framework/VxStudioEditorBase.h"
 #include "../../framework/VxStudioProcessorBase.h"
@@ -16,7 +17,7 @@ public:
     juce::String getStatusText() const override;
     int getActivityLightCount() const noexcept override { return 1; }
     float getActivityLight(int) const noexcept override;
-    std::string_view getActivityLightLabel(int) const noexcept override { return "GR"; }
+    std::string_view getActivityLightLabel(int) const noexcept override { return "Rev"; }
     // Test/analysis control API  -  used by regression tests and development tools
     void setTestRt60PresetSeconds(float rt60Seconds);
     void clearTestRt60Preset();
@@ -53,6 +54,7 @@ private:
     // Per-channel DF2 biquad state for the body low-shelf (max 2 channels)
     std::array<float, 2> bodyShelfZ1 {};
     std::array<float, 2> bodyShelfZ2 {};
+    vxsuite::SilenceGuard silenceGuard;
     double currentSampleRateHz = 48000.0;
     int    preparedBlockSize   = 0;
     bool   firstBlockProcessed = false;

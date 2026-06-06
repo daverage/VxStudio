@@ -37,7 +37,11 @@ public:
     void getStateInformation(juce::MemoryBlock&) override {}
     void setStateInformation(const void*, int) override {}
 
+    void updateTrackProperties(const TrackProperties& properties) override;
+
     [[nodiscard]] std::uint64_t analysisDomainId() const noexcept { return analysisDomainIdValue; }
+    [[nodiscard]] std::uint64_t trackStableId()    const noexcept { return analyserTrackStableId.load(std::memory_order_relaxed); }
+    [[nodiscard]] juce::String  trackDisplayName() const          { return analyserTrackName; }
     [[nodiscard]] const vxsuite::ProductTheme& theme() const noexcept { return identity.theme; }
     [[nodiscard]] const vxsuite::ProductIdentity& getProductIdentity() const noexcept { return identity; }
     [[nodiscard]] juce::String stageIdString() const { return juce::String(identity.stageId.data(), static_cast<int>(identity.stageId.size())); }
@@ -47,13 +51,14 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
     void ensureAnalysisDomain() noexcept;
     void publishSignalQualitySnapshot() noexcept;
-    void analyzePublishedStages() noexcept;
 
     vxsuite::ProductIdentity identity;
     std::uint64_t analysisDomainIdValue = 0;
     vxsuite::SignalQualityState signalQualityState;
-    std::atomic<float> monoScore { 0.0f };
-    std::atomic<float> compressionScore { 0.0f };
-    std::atomic<float> tiltScore { 0.0f };
-    std::atomic<float> separationConfidence { 1.0f };
+    std::atomic<float>         monoScore             { 0.0f };
+    std::atomic<float>         compressionScore      { 0.0f };
+    std::atomic<float>         tiltScore             { 0.0f };
+    std::atomic<float>         separationConfidence  { 1.0f };
+    std::atomic<std::uint64_t> analyserTrackStableId { 0 };
+    juce::String analyserTrackName;  // message thread only
 };

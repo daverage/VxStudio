@@ -131,12 +131,14 @@ void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int 
                          std::vector<float>(static_cast<size_t>(std::max(1, dsp.latencySamples())), 0.0f));
     dryDelayWritePos = 0;
     setReportedLatencySamples(dsp.latencySamples());
+    silenceGuard.prepare();
     resetSuite();
 }
 
 void VXRebalanceAudioProcessor::resetSuite() {
     dsp.reset();
     outputTrimmer.reset();
+    silenceGuard.reset();
     smoothedOutputTrimDb = 0.0f;
     outputTrimPrimed = false;
     for (auto& channel : dryDelayLines)
@@ -170,6 +172,8 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0)
         return;
+
+    if (silenceGuard.update(buffer)) return;
 
     std::array<float, vxsuite::rebalance::Dsp::kControlCount> targets {
         vxsuite::readNormalized(parameters, kVocalsParam, 0.5f),

@@ -15,6 +15,7 @@ protected:
     int getActivityLightCount() const noexcept override { return 3; }
     float getActivityLight(int index) const noexcept override;
     std::string_view getActivityLightLabel(int index) const noexcept override;
+    vxsuite::MeteringSnapshot getMeteringSnapshot() const noexcept override;
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
     void processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override;

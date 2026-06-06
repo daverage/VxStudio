@@ -70,6 +70,15 @@ std::string_view VXToneRefineAudioProcessor::getActivityLightLabel(int index) co
     }
 }
 
+vxsuite::MeteringSnapshot VXToneRefineAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    s.activeBandCount = 3;
+    s.bandActivity[0] = mudDetectionIntensity;
+    s.bandActivity[1] = harshnessDetectionIntensity;
+    s.bandActivity[2] = roughnessDetectionIntensity;
+    return s;
+}
+
 void VXToneRefineAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
 

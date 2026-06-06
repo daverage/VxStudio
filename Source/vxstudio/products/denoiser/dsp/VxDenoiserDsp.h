@@ -53,6 +53,7 @@ public:
     bool processInPlace(juce::AudioBuffer<float>& buffer,
                         float                    amount,
                         const ProcessOptions&    options) override;
+    bool drain(juce::AudioBuffer<float>& buffer) noexcept override;
 
     float getSignalPresence() const noexcept { return signalPresence; }
     float getNoiseFloorDb() const noexcept { return noiseFloorDb; }
@@ -61,11 +62,11 @@ public:
 private:
     [[nodiscard]] bool hasValidProcessingState(int numChannels, int numSamples) const noexcept;
 
-    // ── STFT constants ────────────────────────────────────────────────────────
-    static constexpr int kFftOrder = 10;
-    static constexpr int kFftSize  = 1 << kFftOrder;    // 1024
-    static constexpr int kHop      = kFftSize / 4;      // 256 (75 % overlap)
-    static constexpr int kBins     = kFftSize / 2 + 1;  // 513
+    // ── STFT dimensions (computed in prepare() — 1024@44.1/48k, 2048@88.2/96k) ─
+    int kFftOrder = 10;
+    int kFftSize  = 1024;
+    int kHop      = 256;
+    int kBins     = 513;
 
     // ── Algorithm constants ───────────────────────────────────────────────────
     static constexpr float kEps      = 1.0e-12f;
@@ -76,7 +77,7 @@ private:
 
     // ── STFT infrastructure ───────────────────────────────────────────────────
     vxsuite::RealFft fft;
-    int    latencySamples = kFftSize - kHop;
+    int    latencySamples = 0;
     int    olaAccumSize   = 0;
     double sr             = 48000.0;
 

@@ -3,7 +3,9 @@
 #include "../../framework/VxStudioBlockSmoothing.h"
 #include "../../framework/VxStudioBlockSmoothedControl.h"
 #include "../../framework/VxStudioEditorBase.h"
+#include "../../framework/VxStudioMeteringSnapshot.h"
 #include "../../framework/VxStudioOutputTrimmer.h"
+#include "../../framework/VxStudioOversamplingWrapper.h"
 #include "../../framework/VxStudioProcessorBase.h"
 #include "../../framework/VxStudioFinishDsp.h"
 
@@ -29,7 +31,11 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::finish::Dsp finishChain;
+    vxsuite::OversamplingWrapper oversamplingWrapper;
     vxsuite::OutputTrimmer outputTrimmer;
     double currentSampleRateHz = 48000.0;
+    int currentNumChannels = 0;
     vxsuite::BlockSmoothedControlTriple controls;
+
+    vxsuite::MeteringSnapshot getMeteringSnapshot() const noexcept override;
 };
