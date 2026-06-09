@@ -18,6 +18,14 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Verify JUCE checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f JUCE/CMakeLists.txt
+          test -f JUCE/extras/Build/CMake/JUCEModuleSupport.cmake
+          ls -la JUCE/extras/Build/CMake | sed -n '1,20p'
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 

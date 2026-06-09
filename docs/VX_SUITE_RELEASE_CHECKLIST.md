@@ -25,7 +25,7 @@
 - Run `tools/release/sign_and_notarize_vst3.sh` with `APPLE_DEVELOPER_IDENTITY` set only for signed macOS release candidates.
 - If `APPLE_NOTARY_PROFILE` is also set, the script submits, staples, and validates each staged `.vst3` bundle.
 - Verify the staged DeepFilterNet bundle includes its model archives in `Contents/Resources/`.
-- If you have a Windows ZIP from a separate build job, pass it to `tools/release.sh --windows-zip <path>` so it gets uploaded and linked from the downloads page too.
+- If you need to make a local release tag manually, `tools/release.sh` now just creates and pushes the tag for GitHub Actions to consume.
 
 ## Unsigned macOS distribution
 - Unsigned or ad-hoc signed `.vst3` bundles are acceptable for this project when distributing directly instead of through an Apple Developer signing pipeline.
