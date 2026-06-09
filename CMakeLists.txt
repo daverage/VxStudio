@@ -167,10 +167,12 @@ if(NOT TARGET Eigen3::Eigen)
     GIT_TAG 3.4.0
     GIT_SHALLOW TRUE
   )
-  set(EIGEN_BUILD_DOC OFF CACHE BOOL "" FORCE)
-  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-  set(EIGEN_BUILD_PKGCONFIG OFF CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(Eigen3)
+  FetchContent_GetProperties(Eigen3)
+  if(NOT eigen3_POPULATED)
+    FetchContent_Populate(Eigen3)
+  endif()
+  add_library(Eigen3::Eigen INTERFACE IMPORTED GLOBAL)
+  target_include_directories(Eigen3::Eigen INTERFACE "${eigen3_SOURCE_DIR}")
 endif()
 
 find_program(CARGO_CMD cargo REQUIRED)
