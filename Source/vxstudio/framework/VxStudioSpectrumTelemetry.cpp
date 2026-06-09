@@ -1748,7 +1748,7 @@ std::uint64_t StageRegistry::buildTrackStableId(const juce::String& channelUID,
     constexpr std::uint64_t kFnvBasis = 14695981039346656037ULL;
     constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 
-    auto fnv = [&](const std::string& s, std::uint64_t seed = kFnvBasis) noexcept -> std::uint64_t {
+    auto fnv = [&](const std::string& s, std::uint64_t seed = 14695981039346656037ULL) noexcept -> std::uint64_t {
         std::uint64_t h = seed;
         for (const char c : s) { h ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c)); h *= kFnvPrime; }
         return h;
