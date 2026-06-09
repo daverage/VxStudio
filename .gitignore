@@ -11,6 +11,7 @@ Thumbs.db
 # Build
 build/
 dist/
+!JUCE/extras/Build/
 
 # Release artifacts and staged plugin bundles
 web/downloads/*.zip
