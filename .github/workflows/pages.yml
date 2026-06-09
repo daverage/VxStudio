@@ -9,7 +9,7 @@ on:
       - ".github/workflows/pages.yml"
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   pages: write
   id-token: write
@@ -37,9 +37,29 @@ jobs:
           cp -R web/. site/
 
       - name: Upload artifact
+        id: upload-pages
         uses: actions/upload-pages-artifact@v4
         with:
           path: site
+
+      - name: Remove stale Pages artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPLOADED_ARTIFACT_ID: ${{ steps.upload-pages.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          artifact_ids="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name == "github-pages") | .id'
+          )"
+
+          for artifact_id in $artifact_ids; do
+            if [[ "$artifact_id" == "$UPLOADED_ARTIFACT_ID" ]]; then
+              continue
+            fi
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+          done
 
       - name: Deploy to GitHub Pages
         id: deployment
