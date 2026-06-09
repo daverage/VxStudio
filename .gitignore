@@ -3,6 +3,19 @@
 *.DS_Store
 Thumbs.db
 
+# Local dev config
+.claude/memory/
+.claude/settings.local.json
+.claude/tool-failures.log
+.claude/hooks/
+
+# Internal working notes
+tasks/
+
+# Packaged downloads (served via GitHub Releases)
+web/downloads/*.zip
+web/downloads/vxstudio-complete.zip
+
 # Editor
 *.swp
 *.swo

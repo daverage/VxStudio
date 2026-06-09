@@ -26,6 +26,6 @@
 
 # VX Suite Standards
 - All new code in this repo must follow the VX Suite framework guidance.
-- Use [docs/VX_SUITE_FRAMEWORK.md](/Users/andrzejmarczewski/Documents/GitHub/VxCleaner/docs/VX_SUITE_FRAMEWORK.md), [docs/VX_SUITE_RESEARCH.md](/Users/andrzejmarczewski/Documents/GitHub/VxCleaner/docs/VX_SUITE_RESEARCH.md), and [docs/VX_SUITE_PRODUCT_TEMPLATE.md](/Users/andrzejmarczewski/Documents/GitHub/VxCleaner/docs/VX_SUITE_PRODUCT_TEMPLATE.md) as the standing reference for product shape, UI hierarchy, scaling/resizing, processor/editor separation, and realtime-safe implementation.
-- Prefer shared code in `Source/vxsuite/framework/` over one-off product scaffolding.
+- Use [docs/VX_SUITE_FRAMEWORK.md](docs/VX_SUITE_FRAMEWORK.md) and [docs/VX_SUITE_PRODUCT_TEMPLATE.md](docs/VX_SUITE_PRODUCT_TEMPLATE.md) as the standing reference for product shape, UI hierarchy, scaling/resizing, processor/editor separation, and realtime-safe implementation.
+- Prefer shared code in `Source/vxstudio/framework/` over one-off product scaffolding.
 - New suite plugins should aim for simple outcome-led UX, stable parameter/state contracts, and performance-first implementation by default.
