@@ -12,7 +12,7 @@
 #include <juce_core/juce_core.h>
 
 #if JUCE_WINDOWS
-#include <processthreadsapi.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
