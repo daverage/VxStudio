@@ -374,6 +374,7 @@ target_compile_definitions(VXClarity PRIVATE
 juce_generate_juce_header(VXClarity)
 target_sources(VXClarity PRIVATE
   Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
@@ -680,6 +681,7 @@ juce_generate_juce_header(VXStudioAnalyser)
 target_sources(VXStudioAnalyser PRIVATE
   Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
 )
 target_include_directories(VXStudioAnalyser PRIVATE Source)
 target_link_libraries(VXStudioAnalyser PRIVATE VxStudioFramework juce::juce_dsp)
@@ -709,6 +711,7 @@ target_sources(VXRepair PRIVATE
   Source/vxstudio/products/repair/VxRepairAnalysis.cpp
   Source/vxstudio/products/repair/VxRepairProcessor.cpp
   Source/vxstudio/products/repair/VxRepairEditor.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
@@ -861,6 +864,7 @@ add_executable(VXStudioPluginRegressionTests
   tests/VXStudioPluginRegressionTests.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
   Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
@@ -906,6 +910,7 @@ add_executable(VXStudioAnalyserTests
   tests/VXStudioAnalyserTests.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
   Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
   Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
   Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
@@ -922,6 +927,33 @@ target_link_libraries(VXStudioAnalyserTests PRIVATE
 )
 target_compile_definitions(VXStudioAnalyserTests PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXStudioAnalyserTests)
+
+add_executable(VXRepairPassthroughCheck
+  tests/VXRepairPassthroughCheck.cpp
+  Source/vxstudio/products/repair/VxRepairAnalysis.cpp
+  Source/vxstudio/products/repair/VxRepairProcessor.cpp
+  Source/vxstudio/products/repair/VxRepairEditor.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
+  Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
+  Source/vxstudio/products/deepfilternet/dsp/VxDeepFilterNetService.cpp
+)
+target_include_directories(VXRepairPassthroughCheck PRIVATE Source tests)
+target_link_libraries(VXRepairPassthroughCheck PRIVATE
+  VxStudioFramework
+  VxStudioDeepFilterRuntime
+  VxStudioDeepFilterRuntimeDfn2
+  ${VXSTUDIO_DF_SYSTEM_LIBS}
+  juce::juce_dsp
+  juce::juce_audio_processors
+)
+target_compile_definitions(VXRepairPassthroughCheck PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxstudio_add_executable_test(VXRepairPassthroughCheck)
 
 add_executable(VXStudioBatchAudioCheck
   tests/VXStudioBatchAudioCheck.cpp
@@ -962,6 +994,7 @@ target_link_libraries(VXStudioBatchAudioCheck PRIVATE
 )
 target_compile_definitions(VXStudioBatchAudioCheck PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXStudioBatchAudioCheck)
+
 
 add_executable(VXSuiteProfile
   tests/VXStudioProfile.cpp

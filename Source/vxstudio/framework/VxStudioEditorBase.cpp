@@ -20,8 +20,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
     const bool compactControlBank = hasControlBank && identity.compactControlBankLayout;
     const bool hasTertiary = identity.supportsTertiaryControl();
     const bool hasQuaternary = identity.supportsQuaternaryControl();
-    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : (hasQuaternary ? 920 : (hasTertiary ? 820 : 680)),
-                    hasControlBank ? (compactControlBank ? 640 : 720) : (hasQuaternary ? 700 : (hasTertiary ? 640 : 600)),
+    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : (hasQuaternary ? 720 : (hasTertiary ? 560 : 440)),
+                    hasControlBank ? (compactControlBank ? 640 : 720) : (hasQuaternary ? 560 : 520),
                     1280,
                     940);
     setSize(hasControlBank ? (compactControlBank ? 1020 : 1160) : (hasQuaternary ? 1100 : (hasTertiary ? 950 : 760)),
@@ -364,15 +364,15 @@ void EditorBase::resized() {
         && processor.getProductIdentity().compactControlBankLayout;
     const int modelDownloadRowHeight = processor.supportsModelDownloadUi() ? scaled(28) : 0;
     auto header = bounds.removeFromTop(processor.getProductIdentity().supportsLearnButton()
-        ? (compactControlBank ? scaled(146) : scaled(164)) + modelDownloadRowHeight
-        : (compactControlBank ? scaled(112) : scaled(132)) + modelDownloadRowHeight);
+        ? (compactControlBank ? scaled(136) : scaled(154)) + modelDownloadRowHeight
+        : (compactControlBank ? scaled(102) : scaled(122)) + modelDownloadRowHeight);
     auto body = bounds.reduced(0, scaled(10));
 
     suiteLabel.setBounds(header.removeFromTop(scaled(20)));
     productLabel.setBounds(header.removeFromTop(scaled(42)));
 
     header.removeFromTop(scaled(4));
-    auto modeRow = header.removeFromTop(scaled(40));
+    auto modeRow = header.removeFromTop(scaled(30));
     const auto& headerIdentity = processor.getProductIdentity();
     const bool expertEnabledForHeader = headerIdentity.supportsExpertMode()
         && vxsuite::readBool(processor.getValueTreeState(), headerIdentity.expertParamId, headerIdentity.expertDefaultValue);
@@ -381,16 +381,39 @@ void EditorBase::resized() {
         && (!headerIdentity.supportsModeSwitch()
             || !headerIdentity.auxSelectorFollowsGeneralMode
             || vxsuite::readMode(processor.getValueTreeState(), headerIdentity) != Mode::vocal);
-    if (processor.getProductIdentity().supportsModeSwitch()) {
+    // Right-priority items first so they are never pushed off-screen by left items.
+    if (processor.getProductIdentity().hasHelpContent()) {
+        helpButton.setBounds(modeRow.removeFromRight(scaled(92)).reduced(0, scaled(2)));
+        modeRow.removeFromRight(scaled(12));
+    }
+    sidechainBadgeBounds = modeRow.removeFromRight(scaled(48)).reduced(scaled(6), scaled(4));
+
+    // Calculate flexible combo-box widths so they shrink gracefully on narrow windows
+    // rather than overflowing and hiding the right-side items above.
+    const bool hasModeForRow = processor.getProductIdentity().supportsModeSwitch();
+    const bool hasAuxForRow  = showAuxSelectorInHeader;
+    int fixedLeftWidth = 0;
+    if (hasModeForRow)                                            fixedLeftWidth += scaled(96 + 8 + 16);
+    if (hasAuxForRow)                                             fixedLeftWidth += scaled(84 + 8 + 16);
+    if (processor.getProductIdentity().supportsExpertMode())      fixedLeftWidth += scaled(92 + 12);
+    if (processor.getProductIdentity().supportsListenMode())      fixedLeftWidth += scaled(116 + 12);
+    if (processor.getProductIdentity().supportsLearnButton())     fixedLeftWidth += scaled(110 + 12);
+    if (processor.supportsModelDownloadUi())                      fixedLeftWidth += scaled(156 + 12);
+    const int comboCount = (hasModeForRow ? 1 : 0) + (hasAuxForRow ? 1 : 0);
+    const int comboWidth  = comboCount > 0
+        ? juce::jmin(scaled(180), juce::jmax(scaled(80), (modeRow.getWidth() - fixedLeftWidth) / comboCount))
+        : 0;
+
+    if (hasModeForRow) {
         modeLabel.setBounds(modeRow.removeFromLeft(scaled(96)));
         modeRow.removeFromLeft(scaled(8));
-        modeBox.setBounds(modeRow.removeFromLeft(scaled(228)).reduced(0, scaled(2)));
+        modeBox.setBounds(modeRow.removeFromLeft(comboWidth).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
     }
-    if (showAuxSelectorInHeader) {
+    if (hasAuxForRow) {
         auxSelectorLabel.setBounds(modeRow.removeFromLeft(scaled(84)));
         modeRow.removeFromLeft(scaled(8));
-        auxSelectorBox.setBounds(modeRow.removeFromLeft(scaled(180)).reduced(0, scaled(2)));
+        auxSelectorBox.setBounds(modeRow.removeFromLeft(comboWidth).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
     }
     if (processor.getProductIdentity().supportsExpertMode()) {
@@ -409,12 +432,6 @@ void EditorBase::resized() {
         modelButton.setBounds(modeRow.removeFromLeft(scaled(156)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
-    if (processor.getProductIdentity().hasHelpContent()) {
-        helpButton.setBounds(modeRow.removeFromRight(scaled(92)).reduced(0, scaled(2)));
-        modeRow.removeFromRight(scaled(12));
-    }
-
-    sidechainBadgeBounds = modeRow.removeFromRight(scaled(48)).reduced(scaled(6), scaled(4));
 
     const auto& identity = processor.getProductIdentity();
     const bool expertEnabled = identity.supportsExpertMode()
@@ -445,7 +462,7 @@ void EditorBase::resized() {
         modelDownloadBar.setBounds(modelRow);
     }
 
-    const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 800 : 600));
+    const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 860 : 680));
     activityLightCount = processor.getActivityLightCount();
     activityStripBounds = {};
     traceViewBounds = {};
@@ -504,8 +521,10 @@ void EditorBase::resized() {
             auto& label = bankLabels[static_cast<size_t>(i)];
             auto& slider = bankSliders[static_cast<size_t>(i)];
             auto& hint = bankHints[static_cast<size_t>(i)];
+            label.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(compactControlBank ? 18 : 18))).withStyle("Bold"));
             label.setBounds(section.removeFromTop(compactControlBank ? scaled(24) : scaled(28)));
             section.removeFromTop(compactControlBank ? scaled(4) : scaled(8));
+            slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, scaled(84), scaled(24));
             auto sliderArea = section.removeFromTop(juce::jmax(compactControlBank ? scaled(170) : scaled(200),
                                                                section.getHeight() - scaled(compactControlBank ? 18 : 52)));
             slider.setBounds(sliderArea.withTrimmedLeft(sectionWidth / (compactControlBank ? 8 : 6))
@@ -514,6 +533,7 @@ void EditorBase::resized() {
                 hint.setBounds({});
                 hint.setVisible(false);
             } else {
+                hint.setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(12))));
                 section.removeFromTop(scaled(8));
                 hint.setBounds(section.removeFromTop(scaled(44)));
                 hint.setVisible(true);
@@ -523,29 +543,46 @@ void EditorBase::resized() {
     }
     if (stacked) {
         body.removeFromBottom(scaled(34));
-        const int rows = hasQuaternary ? 4 : (hasTertiary ? 3 : 2);
-        const int rowHeight = body.getHeight() / rows;
+
+        // dialSize is capped by available height per cell (not just width) so it never
+        // overflows its section and text boxes stay in correct positions.
         auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
             auto section = area.reduced(scaled(26), scaled(20));
-            const int dialSize = std::min(section.getWidth(), scaled(142));
+            const int availForDial = juce::jmax(scaled(40), section.getHeight() - scaled(42)); // 36 label + 6 gap
+            const int dialSize = std::min({ section.getWidth(), availForDial, scaled(142) });
             label.setBounds(section.removeFromTop(scaled(36)));
             section.removeFromTop(scaled(6));
             auto dialRow = section.removeFromTop(dialSize);
             slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
             section.removeFromTop(scaled(10));
-            hint.setBounds(section.removeFromTop(scaled(62)));
+            if (section.getHeight() >= scaled(20))
+                hint.setBounds(section.removeFromTop(juce::jmin(scaled(62), section.getHeight())));
+            else
+                hint.setBounds({});
         };
 
-        layoutKnob(body.removeFromTop(rowHeight), primarySlider, primaryLabel, primaryHint);
         if (hasQuaternary) {
-            layoutKnob(body.removeFromTop(rowHeight), secondarySlider, secondaryLabel, secondaryHint);
-            layoutKnob(body.removeFromTop(rowHeight), tertiarySlider, tertiaryLabel, tertiaryHint);
-            layoutKnob(body, quaternarySlider, quaternaryLabel, quaternaryHint);
+            // 2×2 grid: far better dial sizes than 4 vertical rows at narrow widths.
+            const int halfH = body.getHeight() / 2;
+            auto topHalf = body.removeFromTop(halfH);
+            const int topW = topHalf.getWidth() / 2;
+            layoutKnob(topHalf.removeFromLeft(topW), primarySlider,   primaryLabel,   primaryHint);
+            layoutKnob(topHalf,                       secondarySlider, secondaryLabel, secondaryHint);
+            const int botW = body.getWidth() / 2;
+            layoutKnob(body.removeFromLeft(botW),     tertiarySlider,  tertiaryLabel,  tertiaryHint);
+            layoutKnob(body,                          quaternarySlider, quaternaryLabel, quaternaryHint);
         } else if (hasTertiary) {
-            layoutKnob(body.removeFromTop(rowHeight), secondarySlider, secondaryLabel, secondaryHint);
-            layoutKnob(body, tertiarySlider, tertiaryLabel, tertiaryHint);
+            // 2+1 grid: primary/secondary side-by-side on top, tertiary full-width below.
+            const int halfH = body.getHeight() / 2;
+            auto topHalf = body.removeFromTop(halfH);
+            const int topW = topHalf.getWidth() / 2;
+            layoutKnob(topHalf.removeFromLeft(topW), primarySlider,   primaryLabel,   primaryHint);
+            layoutKnob(topHalf,                       secondarySlider, secondaryLabel, secondaryHint);
+            layoutKnob(body,                          tertiarySlider,  tertiaryLabel,  tertiaryHint);
         } else {
-            layoutKnob(body, secondarySlider, secondaryLabel, secondaryHint);
+            const int halfH = body.getHeight() / 2;
+            layoutKnob(body.removeFromTop(halfH), primarySlider,   primaryLabel,   primaryHint);
+            layoutKnob(body,                      secondarySlider, secondaryLabel, secondaryHint);
         }
         placeInlineShelfIcons(secondaryLabel.getBounds());
         applyTextFit();
@@ -553,26 +590,34 @@ void EditorBase::resized() {
     }
 
     body.removeFromBottom(scaled(34));
+
+    // Shared helper for non-stacked side-by-side columns — caps dialSize by height.
+    auto layoutKnobSideBySide = [&](juce::Rectangle<int> area, juce::Slider& slider,
+                                    juce::Label& label, juce::Label& hint,
+                                    int maxDial, int hintH) {
+        const int availForDial = juce::jmax(scaled(40), area.getHeight() - scaled(36) - scaled(8));
+        const int dialSize = std::min({ area.getWidth(), availForDial, maxDial });
+        label.setBounds(area.removeFromTop(scaled(36)));
+        area.removeFromTop(scaled(8));
+        auto dialRow = area.removeFromTop(dialSize);
+        slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
+        area.removeFromTop(scaled(12));
+        if (area.getHeight() >= scaled(20))
+            hint.setBounds(area.removeFromTop(juce::jmin(hintH, area.getHeight())));
+        else
+            hint.setBounds({});
+    };
+
     if (hasQuaternary) {
         auto c1 = body.removeFromLeft(body.getWidth() / 4).reduced(scaled(14), scaled(24));
         auto c2 = body.removeFromLeft(body.getWidth() / 3).reduced(scaled(14), scaled(24));
         auto c3 = body.removeFromLeft(body.getWidth() / 2).reduced(scaled(14), scaled(24));
         auto c4 = body.reduced(scaled(14), scaled(24));
-        const int dialSize = std::min({ c1.getWidth(), c2.getWidth(), c3.getWidth(), c4.getWidth(), scaled(132) });
-
-        auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
-            label.setBounds(area.removeFromTop(scaled(36)));
-            area.removeFromTop(scaled(8));
-            auto dialRow = area.removeFromTop(dialSize);
-            slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
-            area.removeFromTop(scaled(12));
-            hint.setBounds(area.removeFromTop(scaled(72)));
-        };
-
-        layoutKnob(c1, primarySlider, primaryLabel, primaryHint);
-        layoutKnob(c2, secondarySlider, secondaryLabel, secondaryHint);
-        layoutKnob(c3, tertiarySlider, tertiaryLabel, tertiaryHint);
-        layoutKnob(c4, quaternarySlider, quaternaryLabel, quaternaryHint);
+        const int maxDial = scaled(132);
+        layoutKnobSideBySide(c1, primarySlider,   primaryLabel,   primaryHint,   maxDial, scaled(72));
+        layoutKnobSideBySide(c2, secondarySlider, secondaryLabel, secondaryHint, maxDial, scaled(72));
+        layoutKnobSideBySide(c3, tertiarySlider,  tertiaryLabel,  tertiaryHint,  maxDial, scaled(72));
+        layoutKnobSideBySide(c4, quaternarySlider, quaternaryLabel, quaternaryHint, maxDial, scaled(72));
         placeInlineShelfIcons(secondaryLabel.getBounds());
         applyTextFit();
         return;
@@ -582,20 +627,10 @@ void EditorBase::resized() {
         auto left = body.removeFromLeft(body.getWidth() / 3).reduced(scaled(18), scaled(24));
         auto center = body.removeFromLeft(body.getWidth() / 2).reduced(scaled(18), scaled(24));
         auto right = body.reduced(scaled(18), scaled(24));
-        const int dialSize = std::min({ left.getWidth(), center.getWidth(), right.getWidth(), scaled(136) });
-
-        auto layoutKnob = [&](juce::Rectangle<int> area, juce::Slider& slider, juce::Label& label, juce::Label& hint) {
-            label.setBounds(area.removeFromTop(scaled(36)));
-            area.removeFromTop(scaled(8));
-            auto dialRow = area.removeFromTop(dialSize);
-            slider.setBounds(dialRow.withSizeKeepingCentre(dialSize, dialSize));
-            area.removeFromTop(scaled(12));
-            hint.setBounds(area.removeFromTop(scaled(62)));
-        };
-
-        layoutKnob(left, primarySlider, primaryLabel, primaryHint);
-        layoutKnob(center, secondarySlider, secondaryLabel, secondaryHint);
-        layoutKnob(right, tertiarySlider, tertiaryLabel, tertiaryHint);
+        const int maxDial = scaled(136);
+        layoutKnobSideBySide(left,   primarySlider,   primaryLabel,   primaryHint,   maxDial, scaled(62));
+        layoutKnobSideBySide(center, secondarySlider, secondaryLabel, secondaryHint, maxDial, scaled(62));
+        layoutKnobSideBySide(right,  tertiarySlider,  tertiaryLabel,  tertiaryHint,  maxDial, scaled(62));
         placeInlineShelfIcons(secondaryLabel.getBounds());
         applyTextFit();
         return;
@@ -603,21 +638,8 @@ void EditorBase::resized() {
 
     auto left = body.removeFromLeft(body.getWidth() / 2).reduced(scaled(26), scaled(24));
     auto right = body.reduced(scaled(26), scaled(24));
-    const int dialSize = std::min({ left.getWidth(), right.getWidth(), scaled(146) });
-
-    primaryLabel.setBounds(left.removeFromTop(scaled(36)));
-    left.removeFromTop(scaled(8));
-    auto leftDialRow = left.removeFromTop(dialSize);
-    primarySlider.setBounds(leftDialRow.withSizeKeepingCentre(dialSize, dialSize));
-    left.removeFromTop(scaled(12));
-    primaryHint.setBounds(left.removeFromTop(scaled(62)));
-
-    secondaryLabel.setBounds(right.removeFromTop(scaled(36)));
-    right.removeFromTop(scaled(8));
-    auto rightDialRow = right.removeFromTop(dialSize);
-    secondarySlider.setBounds(rightDialRow.withSizeKeepingCentre(dialSize, dialSize));
-    right.removeFromTop(scaled(12));
-    secondaryHint.setBounds(right.removeFromTop(scaled(62)));
+    layoutKnobSideBySide(left,  primarySlider,   primaryLabel,   primaryHint,   scaled(146), scaled(62));
+    layoutKnobSideBySide(right, secondarySlider, secondaryLabel, secondaryHint, scaled(146), scaled(62));
     placeInlineShelfIcons(secondaryLabel.getBounds());
     applyTextFit();
 }

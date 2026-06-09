@@ -313,6 +313,21 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     }
 }
 
+void VXDeverbAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                                                 const juce::AudioBuffer<float>&) {
+    // Output removed content (reverb tail) using the latency-aligned dry.
+    // ensureLatencyAlignedListenDry() is already called inside processProduct().
+    const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+    const int channels = std::min(outputBuffer.getNumChannels(), alignedDry.getNumChannels());
+    const int samples  = std::min(outputBuffer.getNumSamples(),  alignedDry.getNumSamples());
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* out = outputBuffer.getWritePointer(ch);
+        const auto* dry = alignedDry.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i)
+            out[i] = dry[i] - out[i];  // removed reverb = dry − wet
+    }
+}
+
 void VXDeverbAudioProcessor::ensureScratchCapacity(const int channels, const int samples) {
     const int safeChannels = std::max(1, channels);
     const int safeSamples = std::max(1, samples);

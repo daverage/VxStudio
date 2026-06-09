@@ -4,7 +4,7 @@
 namespace {
 
 constexpr int kEditorW = 760;
-constexpr int kEditorH = 580;
+constexpr int kEditorH = 660;
 
 constexpr int kHeaderH  = 60;
 constexpr int kStatusH  = 30;
@@ -96,13 +96,13 @@ VXRepairEditor::VXRepairEditor(VXRepairAudioProcessor& p)
     addChildComponent(phaseLabel);
 
     // Tool rows
-    const char* toolNames[3]      = { "Noise", "Speech Clarity", "Reverb" };
-    const char* strengthIds[3]    = { "noise_strength",   "clarity_strength", "reverb_strength"  };
-    const char* onIds[3]          = { "noise_on",         "clarity_on",       "reverb_on"        };
-    const char* listenIds[3]      = { "noise_listen",     "clarity_listen",   "reverb_listen"    };
+    const char* toolNames[4]      = { "Noise", "Speech Clarity", "Reverb", "Clicks & Pops" };
+    const char* strengthIds[4]    = { "noise_strength",   "clarity_strength", "reverb_strength",  "click_strength"  };
+    const char* onIds[4]          = { "noise_on",         "clarity_on",       "reverb_on",        "click_on"        };
+    const char* listenIds[4]      = { "noise_listen",     "clarity_listen",   "reverb_listen",    "click_listen"    };
     auto& apvts = p.getValueTreeState();
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         auto& row = rows[static_cast<size_t>(i)];
 
         row.nameLabel.setText(toolNames[i], juce::dontSendNotification);
@@ -271,6 +271,7 @@ void VXRepairEditor::timerCallback() {
         noiseActivityDisplay   = 0.80f * noiseActivityDisplay   + 0.20f * act.noise;
         clarityActivityDisplay = 0.80f * clarityActivityDisplay + 0.20f * act.clarity;
         reverbActivityDisplay  = 0.80f * reverbActivityDisplay  + 0.20f * act.reverb;
+        clickActivityDisplay   = 0.80f * clickActivityDisplay   + 0.20f * act.click;
         repaint();
     }
 }
@@ -299,13 +300,14 @@ void VXRepairEditor::showIdleState() {
 }
 
 void VXRepairEditor::buildRepairRows() {
-    const float scores[3] = { lastAssessment.noiseScore,
+    const float scores[4] = { lastAssessment.noiseScore,
                                lastAssessment.humMudScore,
-                               lastAssessment.reverbScore };
+                               lastAssessment.reverbScore,
+                               lastAssessment.clickScore };
     const auto& theme = repairProcessor.getProductIdentity().theme;
     const auto text = fromRgb(theme.textRgb);
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         auto& row = rows[static_cast<size_t>(i)];
         const float score = scores[i];
         const auto colour = scoreColour(score);
@@ -426,14 +428,16 @@ void VXRepairEditor::paintRepair(juce::Graphics& g) {
     const int rowW    = getWidth() - scaled(40);
     const int rowH    = scaled(kRowH);
 
-    const float scores[3]     = { lastAssessment.noiseScore,
+    const float scores[4]     = { lastAssessment.noiseScore,
                                    lastAssessment.humMudScore,
-                                   lastAssessment.reverbScore };
-    const float activities[3] = { noiseActivityDisplay,
+                                   lastAssessment.reverbScore,
+                                   lastAssessment.clickScore };
+    const float activities[4] = { noiseActivityDisplay,
                                    clarityActivityDisplay,
-                                   reverbActivityDisplay };
+                                   reverbActivityDisplay,
+                                   clickActivityDisplay };
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         const int   y     = bodyTop + i * scaled(kRowH + kRowPad);
         const float score = scores[i];
         const bool  active = score >= 0.10f;
@@ -530,7 +534,7 @@ void VXRepairEditor::resized() {
         const int rowX = scaled(20);
         const int rowW = getWidth() - scaled(40);
 
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 4; ++i) {
             auto& row = rows[static_cast<size_t>(i)];
             const int rowTop = bodyTop + i * scaled(kRowH + kRowPad);
             const int rowH   = scaled(kRowH);

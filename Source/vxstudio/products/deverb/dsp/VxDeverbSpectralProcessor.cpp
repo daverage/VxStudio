@@ -151,8 +151,10 @@ void SpectralProcessor::allocateAndResetChannel(ChannelState& ch) const {
 
     // K=5 taps: 4× less O(K²) RLS work vs K=10; speech-band bins only (~82 vs 513)
     // gives ~25× total WPE speedup with adequate quality for short vocal reverb.
+    // delta=3 frames (~16 ms at 48 kHz): skips one minimum-pitch period (~62 Hz)
+    // so the predictor cannot learn to cancel the direct voice signal.
     const int numSpeechBins = std::max(1, speechBinHi - speechBinLo + 1);
-    ch.wpeStage.prepare(numSpeechBins, 5);
+    ch.wpeStage.prepare(numSpeechBins, 5, 3);
 
     ch.inFifoWritePos = 0;
     ch.hopFillCount   = 0;

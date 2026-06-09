@@ -6,9 +6,10 @@ namespace {
 
 constexpr std::string_view kProductName = "VX Studio Speech Clarity";
 constexpr std::string_view kShortTag = "CLR";
+constexpr std::string_view kClickParam     = "click";
+constexpr std::string_view kPlosiveParam   = "plosive";
+constexpr std::string_view kBreathParam    = "breath";
 constexpr std::string_view kSibilanceParam = "sibilance";
-constexpr std::string_view kPlosiveParam = "plosive";
-constexpr std::string_view kBreathParam = "breath";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
 
@@ -21,21 +22,25 @@ vxsuite::ProductIdentity VXSpeechClarityAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
     identity.productName = kProductName;
     identity.shortTag = kShortTag;
-    identity.primaryParamId = kSibilanceParam;
-    identity.secondaryParamId = kPlosiveParam;
-    identity.tertiaryParamId = kBreathParam;
-    identity.modeParamId = kModeParam;
-    identity.listenParamId = kListenParam;
-    identity.defaultMode = vxsuite::Mode::vocal;
-    identity.primaryLabel = "Sibilance";
-    identity.secondaryLabel = "Plosive";
-    identity.tertiaryLabel = "Breath";
-    identity.primaryDefaultValue = 0.4f;   // Sibilance  -  light de-essing by default
-    identity.secondaryDefaultValue = 0.3f; // Plosive  -  light correction
-    identity.tertiaryDefaultValue = 0.2f;  // Breath  -  minimal
-    identity.primaryHint = "Reduce harsh sibilance (/s/ and /z/ sounds).";
-    identity.secondaryHint = "Reduce plosive bursts (/p/, /b/, /t/, /d/, /k/, /g/).";
-    identity.tertiaryHint = "Reduce breathing and wind noise.";
+    identity.primaryParamId    = kSibilanceParam;
+    identity.secondaryParamId  = kPlosiveParam;
+    identity.tertiaryParamId   = kBreathParam;
+    identity.quaternaryParamId = kClickParam;
+    identity.modeParamId       = kModeParam;
+    identity.listenParamId     = kListenParam;
+    identity.defaultMode       = vxsuite::Mode::vocal;
+    identity.primaryLabel    = "Sibilance";
+    identity.secondaryLabel  = "Plosive";
+    identity.tertiaryLabel   = "Breath";
+    identity.quaternaryLabel = "Click";
+    identity.primaryDefaultValue    = 0.40f;
+    identity.secondaryDefaultValue  = 0.45f;
+    identity.tertiaryDefaultValue   = 0.35f;
+    identity.quaternaryDefaultValue = 0.45f;
+    identity.primaryHint    = "Reduce harsh sibilance (/s/ and /z/ sounds).";
+    identity.secondaryHint  = "Reduce plosive bursts (/p/, /b/, /t/, /d/, /k/, /g/).";
+    identity.tertiaryHint   = "Reduce breathing and wind noise.";
+    identity.quaternaryHint = "Repair clicks, lip ticks, and mouth noise.";
     identity.dspVersion = vxsuite::versions::plugins::speech_clarity;
     identity.helpTitle = vxsuite::help::speech_clarity.title;
     identity.helpHtml = vxsuite::help::speech_clarity.html;
@@ -55,7 +60,7 @@ juce::String VXSpeechClarityAudioProcessor::getStatusText() const {
 }
 
 int VXSpeechClarityAudioProcessor::getActivityLightCount() const noexcept {
-    return 3;
+    return 4;
 }
 
 float VXSpeechClarityAudioProcessor::getActivityLight(int index) const noexcept {
@@ -63,6 +68,7 @@ float VXSpeechClarityAudioProcessor::getActivityLight(int index) const noexcept 
         case 0: return detectionState.sibilanceIntensity;
         case 1: return detectionState.plosiveIntensity;
         case 2: return detectionState.breathIntensity;
+        case 3: return detectionState.clickIntensity;
         default: return 0.0f;
     }
 }
@@ -72,16 +78,18 @@ std::string_view VXSpeechClarityAudioProcessor::getActivityLightLabel(int index)
         case 0: return "Sibl";
         case 1: return "Plos";
         case 2: return "Brth";
+        case 3: return "Clck";
         default: return {};
     }
 }
 
 vxsuite::MeteringSnapshot VXSpeechClarityAudioProcessor::getMeteringSnapshot() const noexcept {
     vxsuite::MeteringSnapshot s;
-    s.activeBandCount = 3;
+    s.activeBandCount = 4;
     s.bandActivity[0] = detectionState.sibilanceIntensity;
     s.bandActivity[1] = detectionState.plosiveIntensity;
     s.bandActivity[2] = detectionState.breathIntensity;
+    s.bandActivity[3] = detectionState.clickIntensity;
     return s;
 }
 
@@ -101,15 +109,18 @@ void VXSpeechClarityAudioProcessor::prepareSuite(const double sampleRate, const 
 
     breathEnvFollower.setSampleRate(currentSampleRateHz);
     breathEnvFollower.setTimings(10.0f, 200.0f);
-    breathBandFilter.setCoefficients(vxsuite::detectors::BiquadFilter::Type::LowPass,
-                                    500.0f, 0.7f, currentSampleRateHz);
+    breathBandFilter.setCoefficients(vxsuite::detectors::BiquadFilter::Type::HighPass,
+                                    900.0f, 0.7f, currentSampleRateHz);
 
     onsetDetector.setSampleRate(currentSampleRateHz);
 
     const int numChannels = getTotalNumOutputChannels();
-    deEsserDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
+    deClickDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
     dePlosiveDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
     deBreathDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
+    deEsserDsp.prepare(currentSampleRateHz, samplesPerBlock, numChannels);
+
+    setReportedLatencySamples(deClickDsp.getLatencySamples());
 
     resetSuite();
 }
@@ -123,9 +134,11 @@ void VXSpeechClarityAudioProcessor::resetSuite() {
     breathBandFilter.reset();
     detectionState = {};
     needsPreAnalysis = true;
-    deEsserDsp.reset();
+    lastMode = vxsuite::Mode::vocal;
+    deClickDsp.reset();
     dePlosiveDsp.reset();
     deBreathDsp.reset();
+    deEsserDsp.reset();
 }
 
 void VXSpeechClarityAudioProcessor::performPreAnalysis(const juce::AudioBuffer<float>& buffer) {
@@ -246,27 +259,45 @@ void VXSpeechClarityAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     }
 
     // 2. READ CONTROL DIALS
-    const float sibilanceStrength = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.0f);
-    const float plosiveStrength = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
-    const float breathStrength = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId, 0.0f);
+    const float sibilanceStrength = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,    0.0f);
+    const float plosiveStrength   = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId,  0.0f);
+    const float breathStrength    = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,   0.0f);
+    const float clickStrength     = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.0f);
 
-    // 3. DETECT ARTIFACTS
+    // 3. PROPAGATE MODE TO ALL DSPs (only when changed)
+    const vxsuite::Mode currentMode = vxsuite::readMode(parameters, productIdentity);
+    if (currentMode != lastMode) {
+        using CM = vxsuite::speech_clarity::CleanupMode;
+        const CM cm = (currentMode == vxsuite::Mode::vocal) ? CM::Speech : CM::General;
+        deClickDsp.setMode(cm);
+        dePlosiveDsp.setMode(cm);
+        deBreathDsp.setMode(cm);
+        deEsserDsp.setMode(cm);
+        setReportedLatencySamples(deClickDsp.getLatencySamples());
+        lastMode = currentMode;
+    }
+
+    // 4. DETECT ARTIFACTS
     detectionState.sibilanceIntensity = detectSibilance(buffer);
-    detectionState.plosiveIntensity = detectPlosive(buffer);
-    detectionState.breathIntensity = detectBreath(buffer);
+    detectionState.plosiveIntensity   = detectPlosive(buffer);
+    detectionState.breathIntensity    = detectBreath(buffer);
+    detectionState.clickIntensity = juce::jlimit(0.0f, 1.0f,
+        deClickDsp.getLastHardClickRepair() + deClickDsp.getLastMouthClickRepair());
 
-    // 4. APPLY PROCESSING
-    if (sibilanceStrength > 0.001f)
-        deEsserDsp.process(buffer, { sibilanceStrength, detectionState.sibilanceIntensity });
+    // 5. APPLY PROCESSING (order: click → plosive → breath → esser)
+    deClickDsp.process(buffer, { clickStrength, clickStrength });
     if (plosiveStrength > 0.001f)
         dePlosiveDsp.process(buffer, { plosiveStrength, detectionState.plosiveIntensity });
     if (breathStrength > 0.001f)
         deBreathDsp.process(buffer, { breathStrength, detectionState.breathIntensity });
+    if (sibilanceStrength > 0.001f)
+        deEsserDsp.process(buffer, { sibilanceStrength, detectionState.sibilanceIntensity });
 }
 
 void VXSpeechClarityAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
-                                                       const juce::AudioBuffer<float>& inputBuffer) {
-    renderAddedDeltaOutput(outputBuffer, inputBuffer);
+                                                       const juce::AudioBuffer<float>& /*inputBuffer*/) {
+    ensureLatencyAlignedListenDry(outputBuffer.getNumSamples());
+    renderAddedDeltaOutput(outputBuffer, getLatencyAlignedListenDryBuffer());
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)

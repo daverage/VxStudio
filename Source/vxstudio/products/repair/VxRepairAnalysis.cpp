@@ -25,6 +25,7 @@ void RepairAnalyser::prepare(double sampleRate, int /*maxBlockSize*/) {
 
     frameRms.reserve(static_cast<size_t>(targetFrames + 8));
     sibBandRatio.reserve(static_cast<size_t>(targetFrames + 8));
+    frameCrestDb.reserve(static_cast<size_t>(targetFrames + 8));
 
     reset();
 }
@@ -36,6 +37,7 @@ void RepairAnalyser::reset() {
 
     frameRms.clear();
     sibBandRatio.clear();
+    frameCrestDb.clear();
 
     collecting.store(false, std::memory_order_relaxed);
     progress.store(0.0f, std::memory_order_relaxed);
@@ -52,6 +54,7 @@ void RepairAnalyser::startCollection() {
 
     frameRms.clear();
     sibBandRatio.clear();
+    frameCrestDb.clear();
 
     complete.store(false, std::memory_order_relaxed);
     progress.store(0.0f, std::memory_order_relaxed);
@@ -128,11 +131,13 @@ void RepairAnalyser::processFrame() noexcept {
         }
     }
 
-    // RMS from time-domain (before windowing divides energy slightly)
+    // RMS and peak from time-domain (before windowing divides energy slightly)
     float sumSq = 0.0f;
+    float peak  = 0.0f;
     for (int i = 0; i < kFftSize; ++i) {
         const float s = inFifo[static_cast<size_t>((readStart + i) % kFftSize)];
         sumSq += s * s;
+        peak = std::max(peak, std::abs(s));
     }
     const float rms = std::sqrt(sumSq / static_cast<float>(kFftSize));
 
@@ -144,6 +149,37 @@ void RepairAnalyser::processFrame() noexcept {
         return;
 
     frameRms.push_back(rms);
+
+    // Click detection over the newest kHop (512) samples, NOT the full 2048-sample frame.
+    // A 5-sample click in 512 samples is diluted 4× less than in 2048, so subtle events
+    // actually register.  Two complementary signals are combined:
+    //   crestSig  – crest factor of the hop window (peak / hop-RMS), sensitive to amplitude spikes
+    //   diffSig   – largest sample-to-sample jump / hop-RMS, sensitive to waveform discontinuities
+    // Result is a per-hop click signature stored in frameCrestDb [0..1]; finalise() scores it.
+    {
+        constexpr int kHopBase = kFftSize - kHop;   // offset to newest hop in FIFO
+        float hopSumSq = 0.0f, hopPeak = 0.0f, maxDiff = 0.0f;
+        float prevS = inFifo[static_cast<size_t>((readStart + kHopBase) % kFftSize)];
+        for (int i = 0; i < kHop; ++i) {
+            const float s = inFifo[static_cast<size_t>((readStart + kHopBase + i) % kFftSize)];
+            hopSumSq += s * s;
+            hopPeak   = std::max(hopPeak, std::abs(s));
+            if (i > 0) { maxDiff = std::max(maxDiff, std::abs(s - prevS)); }
+            prevS = s;
+        }
+        const float hopRms = std::sqrt(hopSumSq / static_cast<float>(kHop));
+        float clickSig = 0.0f;
+        if (hopRms > 1.0e-7f) {
+            const float hopCrestDb = 20.0f * std::log10(std::max(hopPeak, hopRms) / hopRms);
+            const float diffRatio  = maxDiff / hopRms;
+            // Ranges start low deliberately — the P95/P50 gap check in finalise() filters
+            // out plosives and fricatives that raise many hops uniformly.
+            const float crestSig = juce::jlimit(0.0f, 1.0f, (hopCrestDb - 8.0f)  / 10.0f);
+            const float diffSig  = juce::jlimit(0.0f, 1.0f, (diffRatio  - 1.5f) /  5.0f);
+            clickSig = std::max(crestSig, diffSig);
+        }
+        frameCrestDb.push_back(clickSig);
+    }
 
     // Sibilance score: ratio of sibilance-band (4.5–9 kHz) to speech-band (1–4 kHz) energy.
     // Only meaningful on voiced frames (above silence floor)  -  quiet frames are skipped.
@@ -227,20 +263,46 @@ void RepairAnalyser::finalise() noexcept {
     }
     const float humMudScore = clarityScore;
 
+    // ── Click score ───────────────────────────────────────────────────────────
+    // frameCrestDb holds per-hop click signatures [0..1] from processFrame().
+    // Strategy: use the P95–P50 gap to find isolated outlier hops (clicks) without
+    // being fooled by plosives or fricatives that raise many consecutive hops uniformly.
+    // A pervasive-click recording (whole distribution shifted up) is caught by a high
+    // absolute P95.  Both signals are combined.
+    float clickScore = 0.0f;
+    if (!frameCrestDb.empty()) {
+        std::vector<float> sortedSig = frameCrestDb;
+        std::sort(sortedSig.begin(), sortedSig.end());
+        const int ns  = static_cast<int>(sortedSig.size());
+        const float p50 = sortedSig[static_cast<size_t>(ns / 2)];
+        const float p95 = sortedSig[static_cast<size_t>(std::min(ns - 1, static_cast<int>(0.95f * ns)))];
+
+        // P95−P50 gap: isolated spikes (clicks) push P95 way above the median.
+        // Normal speech / plosives → small gap even if the median is elevated.
+        const float gapScore = juce::jlimit(0.0f, 1.0f, (p95 - p50 - 0.12f) / 0.20f);
+        // Absolute P95: catches recordings where clicks are so frequent the whole
+        // distribution shifts upward and the gap alone underestimates severity.
+        const float absScore = juce::jlimit(0.0f, 1.0f, (p95 - 0.30f) / 0.30f);
+        clickScore = std::max(gapScore, absScore);
+    }
+
     // ── Build assessment ──────────────────────────────────────────────────────
     RepairAssessment a;
     a.noiseScore   = noiseScore;
     a.reverbScore  = reverbScore;
     a.humMudScore  = humMudScore;
+    a.clickScore   = clickScore;
     a.confidence   = juce::jlimit(0.0f, 1.0f, static_cast<float>(n) / static_cast<float>(std::max(1, targetFrames)));
 
     a.noiseActive   = noiseScore   >= kActiveThreshold;
     a.reverbActive  = reverbScore  >= kActiveThreshold;
     a.cleanupActive = humMudScore  >= kActiveThreshold;
+    a.clickActive   = clickScore   >= kActiveThreshold;
 
     a.suggestedNoiseStrength   = scoreToStrength(noiseScore);
     a.suggestedReverbStrength  = scoreToStrength(reverbScore);
     a.suggestedCleanupStrength = scoreToStrength(humMudScore);
+    a.suggestedClickStrength   = scoreToStrength(clickScore);
 
     {
         std::lock_guard<std::mutex> lock(assessmentMutex);

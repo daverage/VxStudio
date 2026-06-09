@@ -1,31 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VX Studio installation guide.">
-    <title>Installation - VX Studio</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand"><a href="../"><img src="../assets/images/logo.png" alt="VX Studio" class="logo"><span class="brand-text">VX Studio</span></a></div>
-        </div>
-    </nav>
-    <section class="docs-section">
-        <div class="container">
-            <div class="section-header">
-                <h2>Installation Guide</h2>
-                <p>Current build installation steps for the VX Studio plugin suite.</p>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="VX Studio installation guide." />
+        <title>Installation - VX Studio</title>
+        <link rel="stylesheet" href="../assets/css/style.css" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap"
+            rel="stylesheet"
+        />
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <a href="../">
+                        <img
+                            src="../assets/images/logo.png"
+                            alt="VX Studio"
+                            class="logo"
+                        />
+                        <span class="brand-text">VX Studio</span>
+                    </a>
+                </div>
+                <button
+                    class="menu-toggle"
+                    type="button"
+                    aria-expanded="false"
+                    aria-controls="site-menu"
+                    aria-label="Toggle navigation"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="nav-panel" id="site-menu">
+                    <ul class="nav-menu">
+                        <li><a href="../#products">Products</a></li>
+                        <li><a href="../#download">Download</a></li>
+                        <li><a href="./">Documentation</a></li>
+                        <li><a href="../support/">Support</a></li>
+                    </ul>
+                    <a href="../#download" class="btn btn-nav">Download Suite</a>
+                </div>
             </div>
-            <div class="doc-link">
-                <h3>macOS</h3>
-                <p>Download the archive from <a href="../downloads/">Downloads</a>, extract it, copy `.vst3` bundles into `/Library/Audio/Plug-Ins/VST3`, then rescan plugins in your DAW.</p>
-                <h3>Windows</h3>
-                <p>The Windows build is still in progress. The downloads page will be updated when the first supported package is ready.</p>
+        </nav>
+
+        <section class="docs-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Installation Guide</h2>
+                    <p>Current build installation steps for the VX Studio plugin suite.</p>
+                </div>
+                <div class="doc-link">
+                    <h3>macOS</h3>
+                    <p>Download the archive from <a href="../downloads/">Downloads</a>, extract it, copy `.vst3` bundles into `/Library/Audio/Plug-Ins/VST3`, then rescan plugins in your DAW.</p>
+                    <h3>Windows</h3>
+                    <p>The Windows build is still in progress. The downloads page will be updated when the first supported package is ready.</p>
+                </div>
+
+                <div class="section-header" style="margin-top: 4rem">
+                    <h2>What It Looks Like</h2>
+                    <p>Once the bundles are installed and rescanned, the suite opens into these familiar product panels.</p>
+                </div>
+
+                <div class="screens-grid">
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-tone.png"
+                            alt="VX Studio Tone interface"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Tone</h3>
+                            <p>A clean starting point for tonal shaping and vocal balancing.</p>
+                        </figcaption>
+                    </figure>
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-repair-analysis-results.png"
+                            alt="VX Studio Repair analysis results"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Repair</h3>
+                            <p>Guided analysis surfaces common cleanup targets before you dial in the stages.</p>
+                        </figcaption>
+                    </figure>
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-speech-clarity-compact.png"
+                            alt="VX Studio Speech Clarity compact layout"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Speech Clarity</h3>
+                            <p>The compact layout still keeps the core speech cleanup controls intact.</p>
+                        </figcaption>
+                    </figure>
+                </div>
             </div>
-        </div>
-    </section>
-</body>
+        </section>
+
+        <script src="../assets/js/script.js"></script>
+    </body>
 </html>

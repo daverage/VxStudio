@@ -121,6 +121,11 @@ VXRebalanceEditor::VXRebalanceEditor(VXRebalanceAudioProcessor& processorToUse)
     };
     addAndMakeVisible(diagnosticsToggleButton);
     addAndMakeVisible(*debugPanel);
+    setResizable(true, false);
+    setResizeLimits(juce::roundToInt(920.0f * kDefaultShellScale),
+                    juce::roundToInt(640.0f * kDefaultShellScale) + 32,
+                    juce::roundToInt(1280.0f * kDefaultShellScale),
+                    juce::roundToInt(940.0f * kDefaultShellScale) + 32 + 188);
     updateLayout();
     startTimerHz(kUiRefreshHz);
 }
@@ -143,15 +148,17 @@ void VXRebalanceEditor::resized() {
     const float shellScale = kDefaultShellScale * uiScale;
     const int toggleHeight = juce::roundToInt(32.0f * uiScale);
     const int panelHeight = diagnosticsExpanded ? juce::roundToInt(188.0f * uiScale) : 0;
-    const int width = getWidth();
-    const int baseWidth = mainEditor->getWidth();
-    const int baseHeight = mainEditor->getHeight();
-    const int mainHeight = juce::roundToInt(baseHeight * shellScale);
+    const int footerHeight = toggleHeight + panelHeight;
 
+    const int innerWidth  = juce::roundToInt(static_cast<float>(getWidth())  / shellScale);
+    const int innerHeight = juce::roundToInt(static_cast<float>(getHeight() - footerHeight) / shellScale);
+
+    mainEditor->setSize(innerWidth, innerHeight);
     mainEditor->setTransform(juce::AffineTransform::scale(shellScale));
-    mainEditor->setBounds(0, 0, baseWidth, baseHeight);
+    mainEditor->setBounds(0, 0, innerWidth, innerHeight);
 
-    auto footer = juce::Rectangle<int>(0, mainHeight, width, getHeight() - mainHeight).reduced(12, 8);
+    const int mainHeight = getHeight() - footerHeight;
+    auto footer = juce::Rectangle<int>(0, mainHeight, getWidth(), footerHeight).reduced(12, 8);
     diagnosticsToggleButton.setBounds(footer.removeFromTop(toggleHeight).removeFromRight(170));
     debugPanel->setVisible(diagnosticsExpanded);
     if (diagnosticsExpanded)

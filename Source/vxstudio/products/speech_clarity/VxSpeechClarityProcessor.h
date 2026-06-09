@@ -2,6 +2,7 @@
 
 #include "../../framework/VxStudioProcessorBase.h"
 #include "../../framework/VxStudioArtifactDetectors.h"
+#include "dsp/VxDeClickDsp.h"
 #include "dsp/VxDeEsserDsp.h"
 #include "dsp/VxDePolosiveDsp.h"
 #include "dsp/VxDeBreathDsp.h"
@@ -26,9 +27,10 @@ protected:
 private:
     // Detection state
     struct DetectionState {
+        float clickIntensity    = 0.0f;
         float sibilanceIntensity = 0.0f;
-        float plosiveIntensity = 0.0f;
-        float breathIntensity = 0.0f;
+        float plosiveIntensity  = 0.0f;
+        float breathIntensity   = 0.0f;
     };
 
     // Pre-analysis metrics for adaptive thresholds
@@ -44,10 +46,11 @@ private:
     float detectPlosive(const juce::AudioBuffer<float>& buffer);
     float detectBreath(const juce::AudioBuffer<float>& buffer);
 
-    // DSP processors
-    vxsuite::speech_clarity::DeEsserDsp   deEsserDsp;
+    // DSP processors (order matches processing chain: click → plosive → breath → esser)
+    vxsuite::speech_clarity::DeClickDsp   deClickDsp;
     vxsuite::speech_clarity::DePolosiveDsp dePlosiveDsp;
     vxsuite::speech_clarity::DeBreathDsp  deBreathDsp;
+    vxsuite::speech_clarity::DeEsserDsp   deEsserDsp;
 
     // Detection filter states
     vxsuite::detectors::EnvelopeFollower sibilanceEnvFollower;
@@ -64,6 +67,7 @@ private:
     DetectionState detectionState;
     PreAnalysisMetrics preAnalysisMetrics;
     bool needsPreAnalysis = true;
+    vxsuite::Mode lastMode = vxsuite::Mode::vocal;
 
     double currentSampleRateHz = 48000.0;
 };

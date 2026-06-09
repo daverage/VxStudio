@@ -48,7 +48,7 @@ private:
     juce::Label      collectingLabel;
     juce::Label      phaseLabel;
 
-    // ── Per-tool rows (3 tools) ───────────────────────────────────────────────
+    // ── Per-tool rows (4 tools) ───────────────────────────────────────────────
     struct ToolRow {
         juce::Label     nameLabel;
         juce::Label     confidenceLabel;
@@ -62,7 +62,7 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>  bypassAttach;
     };
 
-    std::array<ToolRow, 3> rows;
+    std::array<ToolRow, 4> rows;
 
     // ── Noise row DeepFilter toggle (row 0 only) ──────────────────────────────
     juce::ToggleButton deepFilterToggle;
@@ -85,5 +85,6 @@ private:
     std::array<float, 24> smoothedBands {};
     float noiseActivityDisplay   = 0.0f;
     float clarityActivityDisplay = 0.0f;
+    float clickActivityDisplay   = 0.0f;
     float reverbActivityDisplay  = 0.0f;
 };

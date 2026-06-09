@@ -1,8 +1,8 @@
-# VX Suite
+# VX Studio
 
 Focused, realtime-safe audio processors for voice, vocal production, and fast stereo-mix cleanup.
 
-VX Suite is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, compact control surfaces, and product-specific DSP. Each plugin is meant to do one job clearly instead of acting like a broad channel strip.
+VX Studio is an open-source collection of JUCE/VST3 audio effects built around a shared C++ framework, compact control surfaces, and product-specific DSP. Each plugin is meant to do one job clearly instead of acting like a broad channel strip.
 
 The shared framework lives in `Source/vxstudio/framework/`. It handles parameter registration, the default editor shell, smoothing, status/help UI, listen-mode plumbing, and output safety so each product can stay focused on its DSP contract. See `Source/vxstudio/framework/README.md` for framework-level guidance.
 
@@ -18,7 +18,7 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXDenoiser | Broadband denoise | `Clean`, `Guard` | Hiss, fan noise, HVAC, room tone |
 | VXSubtract | Profile-guided subtractive denoise | `Subtract`, `Protect`, `Learn` | Learnable noise beds, hum, machines |
 | VXDeverb | LRSV dereverberation with RT60 tracking | `Reduce`, `Blend` | Echoey rooms, distant speech, reverberant dialogue |
-| VXSpeechClarity | Focused speech-artifact cleanup | `Sibilance`, `Plosive`, `Breath` | De-essing, pop control, breath cleanup |
+| VXSpeechClarity | Focused speech-artifact cleanup | `Sibilance`, `Plosive`, `Breath`, `Click` | De-essing, pop control, breath cleanup, click repair |
 | VXProximity | Directional proximity model with adaptive filtering | `Closer`, `Air`, `Mud` | Intimacy, warmth, fullness, boom control after cleanup |
 | VXProximityClassic | Simplified two-control proximity simulator | `Closer`, `Air` | Warmth and intimacy without the full three-dial model |
 | VXTone | Bass, mid, and treble shaping | `Bass`, `Treble`, `Mid` | Warmth, presence, brightness, tonal balance |
@@ -27,7 +27,7 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXOptoComp | Professional LA2A-style opto levelling | `Peak Red.`, `Body`, `Gain`, `Pro`, `Behavior`, `Stereo Link` | Smooth riding, gentle limiting, opto character, engineer-facing control |
 | VXLeveler | Adaptive riding and programme levelling | `Level`, `Control` | Speech riding, long-form consistency |
 | VXRebalance | Confidence-driven source-family rebalance | `Vocals`, `Drums`, `Bass`, `Guitar`, `Other`, `Strength` | Broad mix moves without stems |
-| VXRepair | All-in-one guided voice repair | `Noise`, `Speech Clarity`, `Reverb` | Automatic problem detection and one-step correction |
+| VXRepair | All-in-one guided voice repair | `Noise`, `Speech Clarity`, `Clicks`, `Reverb` | Automatic problem detection and one-step correction |
 | VXStudioAnalyser | Chain-aware dry-vs-wet analyser | `Avg Time`, `Smoothing` | Inspecting stage impact and whole-chain tone |
 
 ---
@@ -38,7 +38,7 @@ Framework and plugin DSP versions are tracked independently.
 
 | Component | Version |
 |---|---|
-| VX Suite Framework | `0.2.1` |
+| VX Studio Framework | `0.2.1` |
 | VXDeepFilterNet | `0.2.1` |
 | VXDenoiser | `0.2.1` |
 | VXSubtract | `0.2.1` |
@@ -59,10 +59,10 @@ Framework and plugin DSP versions are tracked independently.
 
 ## Current status
 
-- `15` focused plugins are implemented and shipping in the shared VX Suite shell.
-- VXSpeechClarity and VXToneRefine (formerly VXClarity and VXRefine) are live  -  DSP is active for all three bands.
+- `15` focused plugins are implemented and shipping in the shared VX Studio shell.
+- VXSpeechClarity and VXToneRefine (formerly VXClarity and VXRefine) are live  -  Speech Clarity DSP is active across all four bands.
 - VXProximityClassic is a new two-control simplified proximity model.
-- VXRepair is a new all-in-one guided repair assistant combining noise, clarity, and deverb in a single analysed workflow.
+- VXRepair is a new all-in-one guided repair assistant combining noise, clicks, clarity, and deverb in a single analysed workflow.
 - VXCleanup has been archived  -  replaced by VXSpeechClarity (speech artifacts) and VXToneRefine (tonal refinement).
 - GR meters are now active on VXDenoiser and VXDeverb.
 - VXDeepFilterNet now has an active Guard control with artifact-aware blending.
@@ -72,7 +72,7 @@ Framework and plugin DSP versions are tracked independently.
 Latest verification:
 
 ```text
-cmake --build build --target VXStudioPluginRegressionTests -j$(nproc)
+cmake --build build --target VXStudioPluginRegressionTests --parallel
 ./build/VXStudioPluginRegressionTests
 ```
 
@@ -82,7 +82,7 @@ On the latest clean run, `VXStudioPluginRegressionTests` completed with exit cod
 
 ## Recommended signal chain
 
-VX Suite is designed around composability. When a recording has multiple problems, this order is usually the best starting point:
+VX Studio is designed around composability. When a recording has multiple problems, this order is usually the best starting point:
 
 ```text
 VXDeepFilterNet / VXDenoiser / VXSubtract -> VXDeverb -> VXSpeechClarity -> VXProximity -> VXTone / VXToneRefine -> VXFinish / VXOptoComp -> VXStudioAnalyser
@@ -98,7 +98,7 @@ Why this order:
 6. Finish or compress last.
 7. Put VXStudioAnalyser at the end when you want to inspect the whole chain or an individual VX stage.
 
-For a fully guided single-plugin workflow, use **VXRepair**  -  it analyses, selects, and applies noise, clarity, and reverb reduction automatically.
+For a fully guided single-plugin workflow, use **VXRepair**  -  it analyses, selects, and applies noise, clarity, click, and reverb reduction automatically.
 
 Example chains:
 
@@ -132,7 +132,7 @@ Denoiser choice:
 
 ### Selector behaviour
 
-Most VX Suite products use the shared `Vocal / General` selector when the DSP truly benefits from different tuning.
+Most VX Studio products use the shared `Vocal / General` selector when the DSP truly benefits from different tuning.
 
 - `Vocal` is speech-aware and more conservative around intelligibility.
 - `General` allows broader full-range cleanup or shaping.
@@ -257,23 +257,25 @@ Practical scenarios:
 
 ### VXSpeechClarity
 
-Targeted speech-artifact cleanup for sibilance, plosives, and breath noise. It is the focused corrective stage for speech mechanics rather than broad tonal shaping. All three DSP bands are active.
+Targeted speech-artifact cleanup for sibilance, plosives, breath noise, and clicks. It is the focused corrective stage for speech mechanics rather than broad tonal shaping. All four DSP bands are active.
 
 How to use it:
 
 - Raise `Sibilance` to soften harsh `/s/` and `/z/` bursts without dulling the whole take.
 - Raise `Plosive` to reduce low-frequency consonant thumps from close mics.
 - Raise `Breath` to pull back obvious inhalations and wind-like noise between phrases.
+- Raise `Click` to catch mouth clicks, lip smacks, and other short impulse artifacts.
 
 Example settings:
 
 - Light de-essing only: `Sibilance 35%`, `Plosive 0%`, `Breath 0%`
 - Close-mic spoken voice cleanup: `Sibilance 30%`, `Plosive 40%`, `Breath 25%`
 - Podcast artifact control: `Sibilance 45%`, `Plosive 35%`, `Breath 30%`
+- Impulse cleanup: `Click 30%`, with the other bands at `0%` unless needed
 
 Practical scenarios:
 
-- Speech tracks with sharp consonants and close-mic pops
+- Speech tracks with sharp consonants, close-mic pops, and mouth noise
 - Dialogue cleanup before tone shaping and final compression
 - Mechanical voice cleanup when `VXTone` or `VXFinish` would be too broad
 
@@ -463,18 +465,18 @@ Practical scenarios:
 
 ### VXRepair
 
-All-in-one guided voice repair assistant. Analyses the audio and automatically suggests which tools to enable and at what strength. Combines noise reduction, speech clarity cleanup, and dereverberation in a single workflow.
+All-in-one guided voice repair assistant. Analyses the audio and automatically suggests which tools to enable and at what strength. Combines noise reduction, speech clarity cleanup, click repair, and dereverberation in a single workflow.
 
 How to use it:
 
 - Insert VXRepair and let it analyse for a few seconds. It detects problems and pre-sets each tool.
 - Accept the suggestions, adjust each slider to taste, or toggle individual tools off.
-- Use the `Noise`, `Speech Clarity`, and `Reverb` sliders to scale each stage.
+- Use the `Noise`, `Speech Clarity`, `Clicks`, and `Reverb` sliders to scale each stage.
 
 Example settings:
 
-- Podcast with background hiss and slight room reverb: let Repair analyse and apply all three tools.
-- Phone or camera speech with strong interference: Repair handles all three stages together.
+- Podcast with background hiss and slight room reverb: let Repair analyse and apply the relevant stages.
+- Phone or camera speech with strong interference: Repair handles noise, clicks, clarity, and room reduction together.
 - Mostly clean voice: Repair will leave inactive tools off and only apply what is needed.
 
 Practical scenarios:
@@ -485,7 +487,7 @@ Practical scenarios:
 
 ### VXStudioAnalyser
 
-Chain-aware dry-vs-wet spectrum analyser for VX Suite. Insert it last to inspect either the whole chain or one specific VX stage at a time.
+Chain-aware dry-vs-wet spectrum analyser for VX Studio. Insert it last to inspect either the whole chain or one specific VX stage at a time.
 
 How to use it:
 
@@ -513,7 +515,7 @@ The repo includes a REAPER-facing preset pack under `assets/reaper/`.
 
 - `assets/reaper/RPL Files/` contains one `.RPL` library per VX effect.
 - `assets/reaper/FX Chains/` contains full `.RfxChain` starting chains for shared scenarios.
-- `tools/reaper/generate_vx_reaper_presets.lua` regenerates both from the current VX Suite plugins inside REAPER.
+- `tools/reaper/generate_vx_reaper_presets.lua` regenerates both from the current VX Studio plugins inside REAPER.
 
 Shared scenario names:
 
@@ -542,13 +544,13 @@ Prerequisites:
 git clone --recurse-submodules <repo-url>
 cd VxStudio
 cmake -S . -B build
-cmake --build build -j$(nproc)
+cmake --build build --parallel
 ```
 
 Build a single plugin:
 
 ```bash
-cmake --build build --target VXRebalancePlugin -j$(nproc)
+cmake --build build --target VXRebalancePlugin --parallel
 ```
 
 Built `.vst3` bundles are staged into `Source/vxstudio/vst/`.
@@ -567,7 +569,7 @@ Prerequisites:
 
 ```bat
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build -j$(nproc)
+cmake --build build --parallel
 ```
 
 ### Install built plugins

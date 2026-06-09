@@ -19,7 +19,6 @@ web/
 ├── docs/
 │   ├── index.html               # Documentation hub
 │   ├── installation.html        # Installation guide
-│   ├── framework.html           # Framework documentation
 │   └── user-guides/             # Individual plugin guides
 ├── support/
 │   ├── index.html               # Support & FAQ

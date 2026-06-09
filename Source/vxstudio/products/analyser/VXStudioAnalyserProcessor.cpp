@@ -83,16 +83,25 @@ void VXStudioAnalyserAudioProcessor::ensureAnalysisDomain() noexcept {
 void VXStudioAnalyserAudioProcessor::prepareToPlay(const double sampleRate, const int samplesPerBlock) {
     ensureAnalysisDomain();
     signalQualityState.prepare(sampleRate, samplesPerBlock);
+
+    if (!liveAccumulator)
+        liveAccumulator = std::make_unique<vxsuite::analysis::SummaryAccumulator>();
+    liveAccumulator->prepare(sampleRate, samplesPerBlock);
+
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::releaseResources() {
     signalQualityState.reset();
+    if (liveAccumulator) liveAccumulator->reset();
+    liveInputSnapshotValid.store(false, std::memory_order_relaxed);
     publishSignalQualitySnapshot();
 }
 
 void VXStudioAnalyserAudioProcessor::reset() {
     signalQualityState.reset();
+    if (liveAccumulator) liveAccumulator->reset();
+    liveInputSnapshotValid.store(false, std::memory_order_relaxed);
     publishSignalQualitySnapshot();
 }
 
@@ -114,13 +123,22 @@ void VXStudioAnalyserAudioProcessor::updateTrackProperties(const TrackProperties
 
 void VXStudioAnalyserAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
+    isBypassed.store(false, std::memory_order_relaxed);
     signalQualityState.update(buffer, buffer.getNumSamples());
     publishSignalQualitySnapshot();
+
+    if (liveAccumulator) {
+        liveAccumulator->update(buffer);
+        publishLiveInputSummary();
+    }
 }
 
 void VXStudioAnalyserAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(buffer, midi);
+    isBypassed.store(true, std::memory_order_relaxed);
     signalQualityState.reset();
+    if (liveAccumulator) liveAccumulator->reset();
+    liveInputSnapshotValid.store(false, std::memory_order_relaxed);
     publishSignalQualitySnapshot();
 }
 
@@ -128,6 +146,30 @@ bool VXStudioAnalyserAudioProcessor::isBusesLayoutSupported(const BusesLayout& l
     const auto input = layouts.getMainInputChannelSet();
     const auto output = layouts.getMainOutputChannelSet();
     return input == output && (input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo());
+}
+
+void VXStudioAnalyserAudioProcessor::publishLiveInputSummary() noexcept {
+    if (!liveAccumulator) return;
+    const auto snap = liveAccumulator->summary();
+    liveInputVersion.fetch_add(1, std::memory_order_acq_rel);  // version → odd (writing)
+    liveInputSnapshot = snap;
+    liveInputVersion.fetch_add(1, std::memory_order_release);  // version → even (done)
+    liveInputSnapshotValid.store(true, std::memory_order_release);
+}
+
+vxsuite::analysis::AnalysisSummary VXStudioAnalyserAudioProcessor::liveInputSummary() const noexcept {
+    vxsuite::analysis::AnalysisSummary snap;
+    uint32_t v;
+    do {
+        do { v = liveInputVersion.load(std::memory_order_acquire); } while (v & 1);
+        snap = liveInputSnapshot;
+        std::atomic_thread_fence(std::memory_order_acquire);
+    } while (liveInputVersion.load(std::memory_order_acquire) != v);
+    return snap;
+}
+
+bool VXStudioAnalyserAudioProcessor::liveInputSummaryValid() const noexcept {
+    return liveInputSnapshotValid.load(std::memory_order_acquire);
 }
 
 juce::AudioProcessorEditor* VXStudioAnalyserAudioProcessor::createEditor() {

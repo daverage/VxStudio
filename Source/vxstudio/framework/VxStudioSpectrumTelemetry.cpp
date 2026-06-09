@@ -1625,97 +1625,41 @@ void StagePublisher::ensureRegistered() noexcept {
 void StagePublisher::refreshDomainBinding(const bool force) noexcept {
     const auto& domainReg = DomainRegistry::instance();
     const auto currentGeneration = domainReg.getDomainGeneration();
-    const bool generationChanged = (currentGeneration != lastSeenDomainGeneration);
 
-    if (!force && !generationChanged && domainRefreshCountdown > 0)
+    if (!force && currentGeneration == lastSeenDomainGeneration && domainRefreshCountdown > 0)
         return;
 
     lastSeenDomainGeneration = currentGeneration;
-
     domainRefreshCountdown = kDomainRefreshSamples;
 
     const auto pid = domainReg.currentProcessId();
-
-    // If we have a context key hint (track hash from updateTrackProperties), prefer domains
-    // whose contextKeyHash matches. Fall back to all-domain scan if none match.
-    std::array<std::uint64_t, kMaxDomains> domainIds {};
-    int domainCount = contextKeyHint != 0
-        ? domainReg.allDomainsForProcess(pid, domainIds, contextKeyHint)
-        : 0;
-    if (domainCount == 0)
-        domainCount = domainReg.allDomainsForProcess(pid, domainIds);
-
     std::uint64_t newDomainId = 0;
-    std::array<char, 32> myStageId {};
-    copyFixedLabel(identityDescriptor.stageId.empty() ? identityDescriptor.productName : identityDescriptor.stageId,
-                   myStageId.data(),
-                   myStageId.size());
 
-    for (int i = 0; i < domainCount; ++i) {
-        std::array<char, 32> ownerStageId {};
-        const auto domId = domainIds[static_cast<std::size_t>(i)];
-        if (!domainReg.ownerStageIdForDomain(domId, ownerStageId))
-            continue;
-        if (ownerStageId == myStageId) {
-            newDomainId = domId;
-            break;
-        }
-    }
-
-    if (domainCount > 0) {
-        // If the current binding is still alive AND is the latest domain, keep it.
-        // Constantly rebinding to the "latest" domain causes stages to briefly disappear
-        // from the analyser UI every few seconds (the unregister/re-register gap),
-        // which looks like random flickering. Only move to a new domain when the
-        // current one disappears or is no longer the newest.
-        if (!force && analysisDomainIdValue != 0 && newDomainId == 0) {
-            // First check if the current domain still exists
-            bool currentDomainExists = false;
-            for (int i = 0; i < domainCount; ++i) {
-                if (domainIds[static_cast<std::size_t>(i)] == analysisDomainIdValue) {
-                    currentDomainExists = true;
-                    break;
-                }
-            }
-            // If it exists AND is the latest, keep it
-            if (currentDomainExists) {
-                DomainView latest {};
-                if (domainReg.latestDomainForProcess(pid, latest)
-                    && latest.analysisDomainId == analysisDomainIdValue)
-                    return;  // Already on the newest domain
-            }
-        }
-
-        // Current domain gone (or no existing binding): fall back to newest active
-        // process-local domain so non-analyser stages find a home automatically.
-        if (newDomainId == 0) {
-            DomainView latestProcessDomain {};
-            if (domainReg.latestDomainForProcess(pid, latestProcessDomain))
-                newDomainId = latestProcessDomain.analysisDomainId;
-        }
-
-        // Single domain: unambiguously bind to it.
-        if (newDomainId == 0 && domainCount == 1) {
+    if (contextKeyHint != 0) {
+        // We know our track: only bind to a domain whose context key matches.
+        // If no domain matches, we fall through to the process fallback — we must
+        // NOT bind to a domain stamped for a different track.
+        DomainView matched {};
+        if (domainReg.latestDomainForProcess(pid, matched, contextKeyHint))
+            newDomainId = matched.analysisDomainId;
+    } else {
+        // No track context from the host. Bind only when there is exactly one
+        // analyser on this process — unambiguous. With multiple analysers we
+        // cannot determine the right one, so we fall back to the process ID.
+        std::array<std::uint64_t, kMaxDomains> domainIds {};
+        if (domainReg.allDomainsForProcess(pid, domainIds) == 1)
             newDomainId = domainIds[0];
-        }
     }
 
     if (newDomainId == 0) {
         const auto fallbackId = domainReg.fallbackDomainIdForCurrentProcess();
-        // Don't abandon a working real domain due to a transient shared-memory read failure.
-        // If allDomainsForProcess returned 0 but we're already on a non-fallback domain, keep it.
+        // Preserve a working real binding on transient lookup failure (e.g. lock timeout).
         if (!force && analysisDomainIdValue != 0 && analysisDomainIdValue != fallbackId)
             return;
         newDomainId = fallbackId;
     }
 
-    // If the domain hasn't changed and we're already registered, nothing to do.
-    // Avoids unregister/re-register churn on every prepareToPlay, which causes
-    // plugins to briefly disappear from the analyser (visible as flicker).
-    if (newDomainId == analysisDomainIdValue && slotIndex >= 0)
-        return;
-
-    if (!force && newDomainId == analysisDomainIdValue)
+    if (newDomainId == analysisDomainIdValue)
         return;
 
     if (slotIndex >= 0)
@@ -1867,6 +1811,8 @@ void StagePublisher::maybePublish(const bool bypassed, const int numChannels) no
                 info.channelUID = juce::String::fromUTF8(publishedChannelUID.data());
                 info.colourARGB = publishedTrackColour;
                 info.runtimeID  = publishedTrackRuntimeID;
+                info.stableId   = StageRegistry::buildTrackStableId(info.channelUID, info.runtimeID, info.name);
+                info.isReliable = !info.channelUID.isEmpty() || info.runtimeID != 0;
                 StageRegistry::instance().setTrackInfo(instanceIdValue, info);
             }
         }

@@ -1,8 +1,8 @@
-# VX Suite Framework
+# VX Studio Framework
 
 An open-source C++ / JUCE framework for building professional VST3 plugins. It turns an "audio DSP class" into a shippable VST3 with almost no boilerplate  -  so you can focus on the sound, not the plumbing.
 
-The framework is used internally to build the VX Suite of audio plugins and is released openly so that anyone can use it as a foundation for their own JUCE-based effects. Whether you are writing a simple EQ, a dynamics processor, or an ML-backed noise reducer, the same base classes handle parameter registration, responsive UI layout, editor creation, listen routing, telemetry publication, and output safety for you.
+The framework is used internally to build the VX Studio of audio plugins and is released openly so that anyone can use it as a foundation for their own JUCE-based effects. Whether you are writing a simple EQ, a dynamics processor, or an ML-backed noise reducer, the same base classes handle parameter registration, responsive UI layout, editor creation, listen routing, telemetry publication, and output safety for you.
 
 ---
 
@@ -596,7 +596,7 @@ Source/vxstudio/
 
 ### Realtime Safety Contract
 
-All VX Suite products follow strict realtime audio rules:
+All VX Studio products follow strict realtime audio rules:
 
 **In `processBlock()` / `processProduct()`:**
 - ✅ Read from parameters via helpers (`readNormalized`, `readMode`)
@@ -749,6 +749,6 @@ Example:
 
 ## Recommended Reading
 
-- [VX Suite Research](../docs/VX_SUITE_RESEARCH.md)  -  UI/UX patterns
+- [VX Studio Research](../docs/VX_SUITE_RESEARCH.md)  -  UI/UX patterns
 - [JUCE Plugin Architecture](https://docs.juce.com/master/classjuce_1_1AudioProcessor.html)  -  processor contract
 - [VST3 Processor/Controller](https://steinbergmedia.github.io/vst3_doc/vstsdk/)  -  plugin spec

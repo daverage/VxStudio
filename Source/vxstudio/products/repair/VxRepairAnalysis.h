@@ -15,14 +15,17 @@ struct RepairAssessment {
     float noiseScore    = 0.0f;  // 0 = clean, 1 = heavy broadband noise
     float reverbScore   = 0.0f;  // 0 = dry,   1 = heavy reverb
     float humMudScore   = 0.0f;  // 0 = clean, 1 = strong hum / low-mid mud
+    float clickScore    = 0.0f;  // 0 = clean, 1 = frequent clicks / transient artifacts
 
     float suggestedNoiseStrength   = 0.0f;  // pre-set Denoiser knob value
     float suggestedReverbStrength  = 0.0f;  // pre-set Deverb knob value
     float suggestedCleanupStrength = 0.0f;  // pre-set Cleanup knob value
+    float suggestedClickStrength   = 0.0f;  // pre-set Click knob value
 
     bool noiseActive   = false;
     bool reverbActive  = false;
     bool cleanupActive = false;
+    bool clickActive   = false;
 
     float confidence = 0.0f;  // 0 = no audio seen, 1 = full 5-second analysis
 };
@@ -85,7 +88,8 @@ private:
 
     // Per-frame stats accumulated during collection
     std::vector<float> frameRms;
-    std::vector<float> sibBandRatio;  // sibilance-band / speech-band energy ratio per frame
+    std::vector<float> sibBandRatio;   // sibilance-band / speech-band energy ratio per frame
+    std::vector<float> frameCrestDb;   // 20*log10(peak/rms) per frame for click detection
     int framesCollected = 0;
 
     std::atomic<bool>  collecting { false };

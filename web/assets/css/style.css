@@ -534,7 +534,8 @@ a:hover {
 .features-section,
 .download-section,
 .tech-section,
-.docs-section {
+.docs-section,
+.screens-section {
     padding: 5rem 0;
 }
 
@@ -544,7 +545,8 @@ a:hover {
 
 .products-section::before,
 .download-section::before,
-.tech-section::before {
+.tech-section::before,
+.screens-section::before {
     content: "";
     display: block;
     width: min(1180px, calc(100% - 2.5rem));
@@ -787,11 +789,58 @@ a:hover {
     background: linear-gradient(180deg, #f3f7ff 0%, #fcfaf5 100%);
 }
 
+.screens-section {
+    background: linear-gradient(180deg, rgba(247, 250, 255, 0.88) 0%, rgba(255, 255, 255, 0.9) 100%);
+}
+
 .tech-grid,
 .docs-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
+}
+
+.screens-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.screen-card {
+    overflow: hidden;
+    border-radius: 1.5rem;
+    border: 1px solid rgba(16, 23, 35, 0.08);
+    background: rgba(255, 255, 255, 0.84);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.screen-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(26, 92, 255, 0.16);
+    box-shadow: var(--shadow-md);
+}
+
+.screen-card img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-bottom: 1px solid rgba(16, 23, 35, 0.08);
+    background: #111827;
+}
+
+.screen-card-body {
+    padding: 1rem 1rem 1.1rem;
+}
+
+.screen-card-body h3 {
+    margin-bottom: 0.4rem;
+    font-size: 1.05rem;
+}
+
+.screen-card-body p {
+    margin-bottom: 0;
+    font-size: 0.9rem;
 }
 
 .tech-item,
@@ -898,7 +947,8 @@ a:hover {
     }
 
     .tech-grid,
-    .docs-grid {
+    .docs-grid,
+    .screens-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -990,6 +1040,7 @@ a:hover {
     .requirements-grid,
     .tech-grid,
     .docs-grid,
+    .screens-grid,
     .footer-content {
         grid-template-columns: 1fr;
     }
@@ -1025,13 +1076,15 @@ a:hover {
     .features-section,
     .download-section,
     .tech-section,
-    .docs-section {
+    .docs-section,
+    .screens-section {
         padding: 3.4rem 0;
     }
 
     .products-section::before,
     .download-section::before,
-    .tech-section::before {
+    .tech-section::before,
+    .screens-section::before {
         margin-bottom: 3.4rem;
     }
 
@@ -1041,6 +1094,7 @@ a:hover {
     .notice-box,
     .tech-item,
     .doc-link,
+    .screen-card,
     .system-requirements {
         border-radius: 1.3rem;
     }

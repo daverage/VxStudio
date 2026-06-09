@@ -1,7 +1,7 @@
 # VXStudioAnalyser Thread Safety — Implementation Plan
 
 **Overall Status**: Phase 2 Complete ✅  
-**Remaining**: Phase 3-4 (optional hardening)
+**Remaining**: Phase 3-4 (optional hardening only)
 
 ### Phase Status
 - **Phase 1** ✅ COMPLETE — Mutex protection added to registries
@@ -25,12 +25,12 @@
 - `StageRegistry` — tracks all stage telemetry slots
 
 **Audio thread** writes to these registries via `StagePublisher::publish()`  
-**UI thread** reads from these registries via `VXStudioAnalyserEditor` (timer callbacks at 24-96 Hz)
+**UI thread** reads from these registries via `VXStudioAnalyserEditor` (timer callbacks at 24 Hz)
 
-**No mutex protection between threads** → undefined behavior:
-- UI reads while audio writes → partial struct copies → garbage data
-- Spectrum data is a 256-float array → high likelihood of mid-copy reads
-- Crashes possible on aggressive add/remove plugin chain operations
+**Current risk is no longer raw thread tearing**. The registries now use intra-process mutexes plus interprocess fencing:
+- UI reads and audio writes are serialized within a process
+- Shared-memory writes are still fenced with version fields / process locks
+- Remaining risk is discovery / matching logic, not struct tearing
 
 ---
 

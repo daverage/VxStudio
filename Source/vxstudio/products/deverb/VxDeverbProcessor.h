@@ -34,6 +34,8 @@ protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
     void processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                            const juce::AudioBuffer<float>&) override;
 
 private:
     static vxsuite::ProductIdentity makeIdentity();

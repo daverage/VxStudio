@@ -22,6 +22,9 @@ constexpr std::string_view kNoiseListen      = "noise_listen";
 constexpr std::string_view kReverbListen     = "reverb_listen";
 constexpr std::string_view kMakeupGain       = "makeup_gain";
 constexpr std::string_view kNoiseDeepFilter  = "noise_deepfilter";
+constexpr std::string_view kClickStrength    = "click_strength";
+constexpr std::string_view kClickOn          = "click_on";
+constexpr std::string_view kClickListen      = "click_listen";
 
 } // namespace
 
@@ -75,12 +78,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRepairAudioProcessor::make
     addStrength(kNoiseStrength,   "Noise",          0.5f);
     addStrength(kReverbStrength,  "Reverb",         0.5f);
     addStrength(kClarityStrength, "Speech Clarity", 0.0f);
+    addStrength(kClickStrength,   "Clicks",         0.5f);
     addBool    (kNoiseOn,         "Noise On",       false);
     addBool    (kReverbOn,        "Reverb On",      false);
     addBool    (kClarityOn,       "Clarity On",     false);
+    addBool    (kClickOn,         "Click On",       false);
     addBool    (kNoiseListen,     "Noise Listen",   false);
     addBool    (kReverbListen,    "Reverb Listen",  false);
     addBool    (kClarityListen,   "Clarity Listen", false);
+    addBool    (kClickListen,     "Click Listen",   false);
     addBool    (kNoiseDeepFilter, "Noise DeepFilter", false);
 
     // Makeup gain: 0 = −12 dB, 0.5 = 0 dB (unity), 1.0 = +12 dB
@@ -100,7 +106,8 @@ juce::String VXRepairAudioProcessor::getStatusText() const {
         return "Phase 2  -  detecting reverb & clarity";
     if (phase == AnalysisPhase::Done) {
         const auto a = analyser.getAssessment();
-        const int n = (a.cleanupActive ? 1 : 0) + (a.noiseActive ? 1 : 0) + (a.reverbActive ? 1 : 0);
+        const int n = (a.cleanupActive ? 1 : 0) + (a.noiseActive ? 1 : 0)
+                    + (a.reverbActive ? 1 : 0) + (a.clickActive ? 1 : 0);
         return n == 0 ? "No significant issues detected"
                       : juce::String(n) + " issue" + (n > 1 ? "s" : "") + " detected";
     }
@@ -168,9 +175,11 @@ void VXRepairAudioProcessor::applyAssessmentToParams() {
     setFloat(kNoiseStrength,   a.suggestedNoiseStrength);
     setFloat(kReverbStrength,  a.suggestedReverbStrength);
     setFloat(kClarityStrength, a.suggestedCleanupStrength);
+    setFloat(kClickStrength,   a.suggestedClickStrength);
     setBool (kNoiseOn,         a.noiseActive);
     setBool (kReverbOn,        a.reverbActive);
     setBool (kClarityOn,       a.cleanupActive);
+    setBool (kClickOn,         a.clickActive);
 }
 
 float VXRepairAudioProcessor::getAnalysisProgress() const noexcept {
@@ -194,6 +203,7 @@ void VXRepairAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock
     analyserDenoiserDsp.prepare(sampleRate, samplesPerBlock);
     deverbDsp.setChannelCount(channels);
     deverbDsp.prepare(sampleRate, samplesPerBlock);
+    deClickDsp.prepare(sampleRate, samplesPerBlock, channels);
     deEsserDsp.prepare(sampleRate, samplesPerBlock, channels);
     dePlosiveDsp.prepare(sampleRate, samplesPerBlock, channels);
     deBreathDsp.prepare(sampleRate, samplesPerBlock, channels);
@@ -207,19 +217,46 @@ void VXRepairAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock
 
     // Size dry-delay buffers to the larger of denoiser / deepfilter latency
     const int noiseLat  = std::max(denoiserDsp.getLatencySamples(), dfService.getLatencySamples());
+    const int clickLat  = deClickDsp.getLatencySamples();
     const int reverbLat = deverbDsp.getLatencySamples();
     const int ch        = getTotalNumOutputChannels();
 
     noiseDryDelay.setSize(ch, std::max(1, noiseLat),  false, true, true);
     reverbDryDelay.setSize(ch, std::max(1, reverbLat), false, true, true);
+    clickDryDelay.setSize(ch, std::max(1, clickLat),  false, true, true);
     noiseDryDelayPos  = 0;
     reverbDryDelayPos = 0;
+    clickDryDelayPos  = 0;
+
+    // Pre-allocate scratch buffers for advancing idle STFT state in listen mode.
+    stftStateScratch.setSize (ch, std::max(1, samplesPerBlock), false, true, true);
+    stftStateScratch2.setSize(ch, std::max(1, samplesPerBlock), false, true, true);
+
+    // Pre-allocate pass-through delay lines — each ring is sized to the corresponding
+    // stage latency so that when a stage is off the output is the latency-correct dry signal.
+    noisePassthroughDelay.setSize (ch, std::max(1, noiseLat),  false, true, true);
+    reverbPassthroughDelay.setSize(ch, std::max(1, reverbLat), false, true, true);
+    noisePassthroughPos  = 0;
+    reverbPassthroughPos = 0;
+
+    // All STFT stages + click lookahead always run (at 0 strength when disabled) so
+    // the total latency is constant.  Report it so the host compensates via PDC.
+    setReportedLatencySamples(noiseLat + clickLat + reverbLat);
 }
 
 void VXRepairAudioProcessor::resetSuite() {
+    stftStateScratch.clear();
+    stftStateScratch2.clear();
+    noisePassthroughDelay.clear();
+    reverbPassthroughDelay.clear();
+    noisePassthroughPos  = 0;
+    reverbPassthroughPos = 0;
+    clickDryDelay.clear();
+    clickDryDelayPos = 0;
     denoiserDsp.reset();
     analyserDenoiserDsp.reset();
     deverbDsp.reset();
+    deClickDsp.reset();
     deEsserDsp.reset();
     dePlosiveDsp.reset();
     deBreathDsp.reset();
@@ -276,9 +313,17 @@ void VXRepairAudioProcessor::detectClarityIntensities(const juce::AudioBuffer<fl
         ? juce::jlimit(0.0f, 1.0f, (0.35f - levelRel) / 0.20f)
         : 0.0f;
 
-    sibilanceIntensity.store(0.90f * sibilanceIntensity.load(std::memory_order_relaxed) + 0.10f * sib,  std::memory_order_relaxed);
-    plosiveIntensity.store  (0.90f * plosiveIntensity.load(std::memory_order_relaxed)   + 0.10f * plos, std::memory_order_relaxed);
-    breathIntensity.store   (0.90f * breathIntensity.load(std::memory_order_relaxed)    + 0.10f * brea, std::memory_order_relaxed);
+    // Click: very high crest factor (linear peak/rms > 8) indicates impulse artifact.
+    const float click = hasSig && crest > 8.0f
+        ? juce::jlimit(0.0f, 1.0f, (crest - 8.0f) / 12.0f)
+        : 0.0f;
+
+    // Faster smoothing for transient artifacts: 0.40 per block ≈ 2-block rise time.
+    // Sibilance/plosive benefit from fast response; breath needs fast onset too.
+    sibilanceIntensity.store(0.40f * sibilanceIntensity.load(std::memory_order_relaxed) + 0.60f * sib,   std::memory_order_relaxed);
+    plosiveIntensity.store  (0.40f * plosiveIntensity.load(std::memory_order_relaxed)   + 0.60f * plos,  std::memory_order_relaxed);
+    breathIntensity.store   (0.50f * breathIntensity.load(std::memory_order_relaxed)    + 0.50f * brea,  std::memory_order_relaxed);
+    clickIntensity.store    (0.30f * clickIntensity.load(std::memory_order_relaxed)     + 0.70f * click, std::memory_order_relaxed);
 }
 
 void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
@@ -342,12 +387,15 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float noiseStr   = vxsuite::readNormalized(parameters, kNoiseStrength,   0.5f);
     const float reverbStr  = vxsuite::readNormalized(parameters, kReverbStrength,  0.5f);
     const float clarityStr = vxsuite::readNormalized(parameters, kClarityStrength, 0.5f);
+    const float clickStr   = vxsuite::readNormalized(parameters, kClickStrength,   0.5f);
     const bool  noiseOn    = vxsuite::readBool(parameters, kNoiseOn,    false);
     const bool  reverbOn   = vxsuite::readBool(parameters, kReverbOn,   false);
     const bool  clarityOn  = vxsuite::readBool(parameters, kClarityOn,  false);
+    const bool  clickOn    = vxsuite::readBool(parameters, kClickOn,    false);
     const bool  noiseListen   = vxsuite::readBool(parameters, kNoiseListen,   false);
     const bool  reverbListen  = vxsuite::readBool(parameters, kReverbListen,  false);
     const bool  clarityListen = vxsuite::readBool(parameters, kClarityListen, false);
+    const bool  clickListen   = vxsuite::readBool(parameters, kClickListen,   false);
     const bool  useDeepFilter = vxsuite::readBool(parameters, kNoiseDeepFilter, false)
                                 && dfService.isRealtimeReady();
     const float makeupDb   = [&] {
@@ -355,15 +403,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         return p ? p->convertFrom0to1(p->getValue()) : 0.0f;
     }();
 
-    const bool anyListen = noiseListen || reverbListen || clarityListen;
-    const bool anyActive = noiseOn    || reverbOn    || clarityOn;
-
-    if (!anyActive && !anyListen) {
-        noiseActivity.store(noiseActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
-        clarityActivity.store(clarityActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
-        reverbActivity.store(reverbActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
-        return;
-    }
+    const bool anyListen = noiseListen || reverbListen || clarityListen || clickListen;
 
     auto bufRms = [](const juce::AudioBuffer<float>& b) -> float {
         double sum = 0.0;
@@ -405,12 +445,47 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     using vxsuite::speech_clarity::DeBreathDsp;
 
     detectClarityIntensities(buffer, numSamples);
-    const float sibI  = sibilanceIntensity.load(std::memory_order_relaxed);
-    const float plosI = plosiveIntensity.load(std::memory_order_relaxed);
-    const float breaI = breathIntensity.load(std::memory_order_relaxed);
+    const float sibI   = sibilanceIntensity.load(std::memory_order_relaxed);
+    const float plosI  = plosiveIntensity.load(std::memory_order_relaxed);
+    const float breaI  = breathIntensity.load(std::memory_order_relaxed);
+    const float clickI = clickIntensity.load(std::memory_order_relaxed);
+
+    // Advance noisePassthroughDelay with the raw input on every block.
+    // Reads the noiseLat-old signal into stftStateScratch for use in the
+    // !noiseOn non-listen path, giving latency-correct transparent pass-through.
+    {
+        const int nCh  = buffer.getNumChannels();
+        const int dLen = noisePassthroughDelay.getNumSamples();
+        if (noisePassthroughDelay.getNumChannels() >= nCh && dLen > 0
+            && stftStateScratch.getNumChannels() >= nCh
+            && stftStateScratch.getNumSamples() >= numSamples)
+        {
+            for (int ch = 0; ch < nCh; ++ch) {
+                int p = noisePassthroughPos;
+                const float* src  = buffer.getReadPointer(ch);
+                float*       ring = noisePassthroughDelay.getWritePointer(ch);
+                float*       out  = stftStateScratch.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i) {
+                    out[i]  = ring[p];
+                    ring[p] = src[i];
+                    p = (p + 1 == dLen) ? 0 : p + 1;
+                }
+            }
+            noisePassthroughPos = (noisePassthroughPos + numSamples) % dLen;
+        }
+    }
 
     if (anyListen) {
         const int numCh = buffer.getNumChannels();
+
+        // Copy input into scratch so idle STFT stages can advance their state
+        // without disturbing the main buffer.
+        if (stftStateScratch.getNumChannels() >= numCh
+            && stftStateScratch.getNumSamples() >= numSamples)
+        {
+            for (int ch = 0; ch < numCh; ++ch)
+                stftStateScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+        }
 
         auto pushDry = [&](juce::AudioBuffer<float>& delayBuf, int& pos) {
             const int delayLen  = delayBuf.getNumSamples();
@@ -434,6 +509,9 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         if (noiseListen) {
             auto delayed = pushDry(noiseDryDelay, noiseDryDelayPos);
             applyNoiseDsp(buffer, noiseStr);
+            // Advance deverb state using scratch so it stays in sync.
+            juce::AudioBuffer<float> scratchView(stftStateScratch.getArrayOfWritePointers(), numCh, numSamples);
+            deverbDsp.processInPlace(scratchView, 0.0f, reverbOpts);
             for (int ch = 0; ch < numCh; ++ch) {
                 auto* out = buffer.getWritePointer(ch);
                 const float* dry = delayed.getReadPointer(ch);
@@ -441,6 +519,9 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
             }
         } else if (reverbListen) {
             auto delayed = pushDry(reverbDryDelay, reverbDryDelayPos);
+            // Advance denoiser state using scratch so it stays in sync.
+            juce::AudioBuffer<float> scratchView(stftStateScratch.getArrayOfWritePointers(), numCh, numSamples);
+            denoiserDsp.processInPlace(scratchView, 0.0f, noiseOpts);
             const float reduce = std::pow(reverbStr, 0.76f);
             deverbDsp.processInPlace(buffer, reduce, reverbOpts);
             for (int ch = 0; ch < numCh; ++ch) {
@@ -449,6 +530,17 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                 for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
             }
         } else if (clarityListen) {
+            // Neither STFT stage is part of clarity listen — advance both for state.
+            // Use two separate scratch buffers (both pre-filled from input above) so
+            // denoiser output does not pollute the deverb state-advance pass.
+            juce::AudioBuffer<float> scratchView (stftStateScratch.getArrayOfWritePointers(),  numCh, numSamples);
+            juce::AudioBuffer<float> scratch2View(stftStateScratch2.getArrayOfWritePointers(), numCh, numSamples);
+            for (int ch = 0; ch < numCh; ++ch)
+                stftStateScratch2.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+            denoiserDsp.processInPlace(scratchView,  0.0f, noiseOpts);
+            deverbDsp.processInPlace  (scratch2View, 0.0f, reverbOpts);
+            // Advance click state at 0 strength so its ring buffer stays in sync.
+            deClickDsp.process(buffer, { 0.0f, 0.0f });
             juce::AudioBuffer<float> dryCopy;
             dryCopy.makeCopyOf(buffer);
             dePlosiveDsp.process(buffer, { clarityStr, plosI });
@@ -459,20 +551,67 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                 const float* dry = dryCopy.getReadPointer(ch);
                 for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
             }
+        } else if (clickListen) {
+            // Advance both STFT stages on scratch so they stay in sync.
+            juce::AudioBuffer<float> scratchView (stftStateScratch.getArrayOfWritePointers(),  numCh, numSamples);
+            juce::AudioBuffer<float> scratch2View(stftStateScratch2.getArrayOfWritePointers(), numCh, numSamples);
+            for (int ch = 0; ch < numCh; ++ch) {
+                stftStateScratch.copyFrom (ch, 0, buffer, ch, 0, numSamples);
+                stftStateScratch2.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+            }
+            denoiserDsp.processInPlace(scratchView,  0.0f, noiseOpts);
+            deverbDsp.processInPlace  (scratch2View, 0.0f, reverbOpts);
+            auto delayed = pushDry(clickDryDelay, clickDryDelayPos);
+            deClickDsp.process(buffer, { clickStr, clickI });
+            for (int ch = 0; ch < numCh; ++ch) {
+                auto* out = buffer.getWritePointer(ch);
+                const float* dry = delayed.getReadPointer(ch);
+                for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
+            }
         }
         return;
     }
 
     // ── Repair chain: Noise → Speech Clarity → Reverb ────────────────────────
+    // Denoiser and deverb STFT stages always run (at 0 strength when disabled)
+    // so the reported latency stays constant regardless of what is toggled on.
 
-    if (noiseOn) {
+    if (useDeepFilter && noiseOn) {
+        // DeepFilter replaces the denoiser STFT; its latency is handled separately.
         const float preRms = bufRms(buffer);
-        applyNoiseDsp(buffer, noiseStr);
+        dfService.processRealtime(buffer, currentSampleRate, noiseStr, 0);
         const float wetRms = bufRms(buffer);
         const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
         noiseActivity.store(0.88f * noiseActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);
     } else {
-        noiseActivity.store(noiseActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+        if (noiseOn) {
+            const float preRms = bufRms(buffer);
+            denoiserDsp.processInPlace(buffer, noiseStr, noiseOpts);
+            const float wetRms = bufRms(buffer);
+            const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
+            noiseActivity.store(0.88f * noiseActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);
+        } else {
+            // Advance STFT state; restore the correctly-delayed dry signal from
+            // noisePassthroughDelay (written to stftStateScratch above).
+            const int nCh = buffer.getNumChannels();
+            denoiserDsp.processInPlace(buffer, 0.0f, noiseOpts);
+            for (int ch = 0; ch < nCh; ++ch)
+                buffer.copyFrom(ch, 0, stftStateScratch, ch, 0, numSamples);
+            noiseActivity.store(noiseActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+        }
+    }
+
+    // Click repair (always runs to maintain constant lookahead latency)
+    if (clickOn) {
+        deClickDsp.process(buffer, { clickStr, clickI });
+        const float rep = juce::jlimit(0.0f, 1.0f,
+            deClickDsp.getLastHardClickRepair() + deClickDsp.getLastMouthClickRepair());
+        clickActivity.store(0.88f * clickActivity.load(std::memory_order_relaxed) + 0.12f * rep,
+                            std::memory_order_relaxed);
+    } else {
+        deClickDsp.process(buffer, { 0.0f, 0.0f });
+        clickActivity.store(clickActivity.load(std::memory_order_relaxed) * 0.92f,
+                            std::memory_order_relaxed);
     }
 
     if (clarityOn) {
@@ -487,27 +626,58 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         clarityActivity.store(clarityActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
     }
 
-    if (reverbOn) {
-        const float preRms = bufRms(buffer);
-        const float reduce = std::pow(reverbStr, 0.76f);
-        deverbDsp.processInPlace(buffer, reduce, reverbOpts);
-        const float wetRms = bufRms(buffer);
-
-        if (preRms > 1.0e-5f && wetRms > 1.0e-5f) {
-            const float targetGain = juce::jlimit(1.0f, 1.6f, (preRms * 0.92f) / wetRms);
-            smoothedReverbMakeup = 0.92f * smoothedReverbMakeup + 0.08f * targetGain;
-            buffer.applyGain(smoothedReverbMakeup);
+    // Advance reverbPassthroughDelay with the post-denoiser/post-click/post-clarity buffer.
+    // Reads the reverbLat-old signal into stftStateScratch for the !reverbOn path.
+    {
+        const int nCh  = buffer.getNumChannels();
+        const int dLen = reverbPassthroughDelay.getNumSamples();
+        if (reverbPassthroughDelay.getNumChannels() >= nCh && dLen > 0
+            && stftStateScratch.getNumChannels() >= nCh
+            && stftStateScratch.getNumSamples() >= numSamples)
+        {
+            for (int ch = 0; ch < nCh; ++ch) {
+                int p = reverbPassthroughPos;
+                const float* src  = buffer.getReadPointer(ch);
+                float*       ring = reverbPassthroughDelay.getWritePointer(ch);
+                float*       out  = stftStateScratch.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i) {
+                    out[i]  = ring[p];
+                    ring[p] = src[i];
+                    p = (p + 1 == dLen) ? 0 : p + 1;
+                }
+            }
+            reverbPassthroughPos = (reverbPassthroughPos + numSamples) % dLen;
         }
-
-        const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
-        reverbActivity.store(0.88f * reverbActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);
-    } else {
-        smoothedReverbMakeup = 0.92f * smoothedReverbMakeup + 0.08f * 1.0f;
-        reverbActivity.store(reverbActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
     }
 
+    {
+        if (reverbOn) {
+            const float preRms = bufRms(buffer);
+            const float reduce = std::pow(reverbStr, 0.76f);
+            deverbDsp.processInPlace(buffer, reduce, reverbOpts);
+            const float wetRms = bufRms(buffer);
+            if (preRms > 1.0e-5f && wetRms > 1.0e-5f) {
+                const float targetGain = juce::jlimit(1.0f, 1.6f, (preRms * 0.92f) / wetRms);
+                smoothedReverbMakeup = 0.92f * smoothedReverbMakeup + 0.08f * targetGain;
+                buffer.applyGain(smoothedReverbMakeup);
+            }
+            const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
+            reverbActivity.store(0.88f * reverbActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);
+        } else {
+            // Advance STFT state; restore the correctly-delayed post-denoiser signal
+            // from reverbPassthroughDelay (written to stftStateScratch above).
+            const int nCh = buffer.getNumChannels();
+            deverbDsp.processInPlace(buffer, 0.0f, reverbOpts);
+            for (int ch = 0; ch < nCh; ++ch)
+                buffer.copyFrom(ch, 0, stftStateScratch, ch, 0, numSamples);
+            smoothedReverbMakeup = 0.92f * smoothedReverbMakeup + 0.08f * 1.0f;
+            reverbActivity.store(reverbActivity.load(std::memory_order_relaxed) * 0.92f, std::memory_order_relaxed);
+        }
+    }
+
+    const bool anyActive = noiseOn || reverbOn || clarityOn || clickOn;
     const float makeupLinear = std::pow(10.0f, makeupDb / 20.0f);
-    if (std::abs(makeupLinear - 1.0f) > 0.001f)
+    if (anyActive && std::abs(makeupLinear - 1.0f) > 0.001f)
         buffer.applyGain(makeupLinear);
 }
 

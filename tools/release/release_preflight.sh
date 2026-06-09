@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STAGE_DIR="${1:-Source/vxsuite/vst}"
+STAGE_DIR="${1:-Source/vxstudio/vst}"
 PROFILE_NAME="${APPLE_NOTARY_PROFILE:-}"
 
 status=0

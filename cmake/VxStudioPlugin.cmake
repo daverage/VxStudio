@@ -14,6 +14,10 @@ function(vxstudio_add_framework target_name)
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioUiHelpers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioVoiceContext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp
   )
 
   target_include_directories(${target_name} PUBLIC

@@ -1,49 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VX Studio documentation hub.">
-    <title>Documentation - VX Studio</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand"><a href="../"><img src="../assets/images/logo.png" alt="VX Studio" class="logo"><span class="brand-text">VX Studio</span></a></div>
-            <ul class="nav-menu">
-                <li><a href="../#products">Products</a></li>
-                <li><a href="../downloads/">Download</a></li>
-                <li><a href="./">Documentation</a></li>
-                <li><a href="../support/">Support</a></li>
-            </ul>
-        </div>
-    </nav>
-    <section class="docs-section">
-        <div class="container">
-            <div class="section-header">
-                <h2>Documentation</h2>
-                <p>Quick access to setup notes, product guidance, and framework references.</p>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="VX Studio documentation hub." />
+        <title>Documentation - VX Studio</title>
+        <link rel="stylesheet" href="../assets/css/style.css" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap"
+            rel="stylesheet"
+        />
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <a href="../">
+                        <img
+                            src="../assets/images/logo.png"
+                            alt="VX Studio"
+                            class="logo"
+                        />
+                        <span class="brand-text">VX Studio</span>
+                    </a>
+                </div>
+                <button
+                    class="menu-toggle"
+                    type="button"
+                    aria-expanded="false"
+                    aria-controls="site-menu"
+                    aria-label="Toggle navigation"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="nav-panel" id="site-menu">
+                    <ul class="nav-menu">
+                        <li><a href="../#products">Products</a></li>
+                        <li><a href="../#download">Download</a></li>
+                        <li><a href="./">Documentation</a></li>
+                        <li><a href="../support/">Support</a></li>
+                    </ul>
+                    <a href="../#download" class="btn btn-nav">Download Suite</a>
+                </div>
             </div>
-            <div class="docs-grid">
-                <a href="installation.html" class="doc-link">
-                    <h3>⚙️ Installation</h3>
-                    <p>How to install the current VX Studio build on macOS, plus Windows readiness notes.</p>
-                </a>
-                <a href="framework.html" class="doc-link">
-                    <h3>👨‍💻 Framework</h3>
-                    <p>Shared framework overview and where product behavior lives in the codebase.</p>
-                </a>
-                <a href="https://github.com/daverage/VxStudio/blob/master/README.md" class="doc-link" target="_blank">
-                    <h3>📖 Suite Overview</h3>
-                    <p>The main repository README covers the current plugin set, signal-chain guidance, and verification status.</p>
-                </a>
-                <a href="../support/" class="doc-link">
-                    <h3>💬 Support</h3>
-                    <p>Troubleshooting, support guidance, and where to go when a plugin or host setup misbehaves.</p>
-                </a>
+        </nav>
+
+        <section class="docs-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Documentation</h2>
+                    <p>Quick access to setup notes, product guidance, and visual references.</p>
+                </div>
+                <div class="docs-grid">
+                    <a href="installation.html" class="doc-link">
+                        <h3>⚙️ Installation</h3>
+                        <p>How to install the current VX Studio build on macOS, plus Windows readiness notes.</p>
+                    </a>
+                    <a href="../#product-screens" class="doc-link">
+                        <h3>🖼️ Product Screens</h3>
+                        <p>A visual tour of the current suite UI, organized by product and workflow.</p>
+                    </a>
+                    <a
+                        href="https://github.com/daverage/VxStudio/blob/master/README.md"
+                        class="doc-link"
+                        target="_blank"
+                    >
+                        <h3>📖 Suite Overview</h3>
+                        <p>The main repository README covers the current plugin set, signal-chain guidance, and verification status.</p>
+                    </a>
+                    <a href="../support/" class="doc-link">
+                        <h3>💬 Support</h3>
+                        <p>Troubleshooting, support guidance, and where to go when a plugin or host setup misbehaves.</p>
+                    </a>
+                </div>
+
+                <div class="section-header" style="margin-top: 4rem">
+                    <h2>Visual References</h2>
+                    <p>Snapshots from the current build, so the doc hub feels connected to the suite itself.</p>
+                </div>
+
+                <div class="screens-grid">
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-tone.png"
+                            alt="VX Studio Tone interface"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Tone</h3>
+                            <p>Vocal profile tonal shaping with bass, mid, and treble controls.</p>
+                        </figcaption>
+                    </figure>
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-speech-clarity-desktop.png"
+                            alt="VX Studio Speech Clarity desktop layout"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Speech Clarity</h3>
+                            <p>Desktop layout for targeted speech cleanup bands.</p>
+                        </figcaption>
+                    </figure>
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-repair-analysis-results.png"
+                            alt="VX Studio Repair analysis results"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Repair</h3>
+                            <p>Multi-stage analysis that separates noise, clarity, reverb, and clicks.</p>
+                        </figcaption>
+                    </figure>
+                    <figure class="screen-card">
+                        <img
+                            src="../assets/screens/vx-studio-analyser.png"
+                            alt="VX Studio Analyser interface"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        <figcaption class="screen-card-body">
+                            <h3>Studio Analyser</h3>
+                            <p>Chain-aware spectrum view for the selected stage or full chain.</p>
+                        </figcaption>
+                    </figure>
+                </div>
             </div>
-        </div>
-    </section>
-</body>
+        </section>
+
+        <script src="../assets/js/script.js"></script>
+    </body>
 </html>

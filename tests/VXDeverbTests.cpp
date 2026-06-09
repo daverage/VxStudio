@@ -510,6 +510,91 @@ bool testResetAndSilenceRecovery() {
 
 } // namespace
 
+bool testListenDeltaCorrect() {
+    // Verify that listen mode outputs the removed reverb tail (dry − wet), not
+    // an inverted or raw-mismatched signal, using the fixed renderListenOutput override.
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    auto setParam = [](VXDeverbAudioProcessor& p, const char* id, float v) {
+        if (auto* param = p.getValueTreeState().getParameter(id))
+            param->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, v));
+    };
+
+    // Test A: listen with reduce=0.8 → non-trivial energy (real reverb tail output)
+    {
+        auto room = addRoomTail(makeSpeechLike(sr, 2.0f), sr);
+        VXDeverbAudioProcessor proc;
+        proc.prepareToPlay(sr, blockSize);
+        setParam(proc, "listen", 1.0f);
+        setParam(proc, "reduce", 0.8f);
+
+        // Warm up STFT (render one pass through the full signal to fill state)
+        const int warmupN = room.getNumSamples();
+        for (int start = 0; start < warmupN; start += blockSize) {
+            const int n = std::min(blockSize, warmupN - start);
+            juce::AudioBuffer<float> blk(room.getNumChannels(), n);
+            for (int ch = 0; ch < blk.getNumChannels(); ++ch)
+                blk.copyFrom(ch, 0, room, ch, start, n);
+            juce::MidiBuffer midi;
+            proc.processBlock(blk, midi);
+        }
+        // Measure second pass
+        juce::AudioBuffer<float> listenOut(room.getNumChannels(), warmupN);
+        for (int start = 0; start < warmupN; start += blockSize) {
+            const int n = std::min(blockSize, warmupN - start);
+            juce::AudioBuffer<float> blk(room.getNumChannels(), n);
+            for (int ch = 0; ch < blk.getNumChannels(); ++ch)
+                blk.copyFrom(ch, 0, room, ch, start, n);
+            juce::MidiBuffer midi;
+            proc.processBlock(blk, midi);
+            for (int ch = 0; ch < blk.getNumChannels(); ++ch)
+                listenOut.copyFrom(ch, start, blk, ch, 0, n);
+        }
+
+        const float rmsIn  = rms(room);
+        const float rmsOut = rms(listenOut);
+        const float ratio  = rmsIn > 1e-6f ? rmsOut / rmsIn : 1.0f;
+        if (ratio < 0.02f || ratio > 0.95f) {
+            std::cerr << "[VXDeverbTests] listenDelta str=0.8: expected 2%–95% of input, got ratio=" << ratio << "\n";
+            return false;
+        }
+    }
+
+    // Test B: listen with reduce=0 → near-zero (nothing removed = nothing to hear)
+    {
+        auto room = addRoomTail(makeSpeechLike(sr, 2.0f), sr);
+        VXDeverbAudioProcessor proc;
+        proc.prepareToPlay(sr, blockSize);
+        setParam(proc, "listen", 1.0f);
+        setParam(proc, "reduce", 0.0f);
+
+        const int n = room.getNumSamples();
+        juce::AudioBuffer<float> listenOut(room.getNumChannels(), n);
+        for (int start = 0; start < n; start += blockSize) {
+            const int bsz = std::min(blockSize, n - start);
+            juce::AudioBuffer<float> blk(room.getNumChannels(), bsz);
+            for (int ch = 0; ch < blk.getNumChannels(); ++ch)
+                blk.copyFrom(ch, 0, room, ch, start, bsz);
+            juce::MidiBuffer midi;
+            proc.processBlock(blk, midi);
+            for (int ch = 0; ch < blk.getNumChannels(); ++ch)
+                listenOut.copyFrom(ch, start, blk, ch, 0, bsz);
+        }
+
+        const float rmsIn  = rms(room);
+        const float rmsOut = rms(listenOut);
+        const float ratio  = rmsIn > 1e-6f ? rmsOut / rmsIn : 0.0f;
+        if (ratio > 0.05f) {
+            std::cerr << "[VXDeverbTests] listenDelta str=0: expected near-zero, got ratio=" << ratio << "\n";
+            return false;
+        }
+    }
+
+    std::cout << "[VXDeverbTests] testListenDeltaCorrect: PASS\n";
+    return true;
+}
+
 int main() {
     bool ok = true;
     ok &= testReduceZeroIsIdentity();
@@ -520,5 +605,6 @@ int main() {
     ok &= testResetAndSilenceRecovery();
     ok &= testRt60Estimator();
     ok &= testWpeVoiceMode();
+    ok &= testListenDeltaCorrect();
     return ok ? 0 : 1;
 }

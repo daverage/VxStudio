@@ -2,8 +2,10 @@
 
 #include "../../framework/VxStudioProduct.h"
 #include "../../framework/VxStudioSignalQuality.h"
+#include "../../framework/VxStudioSpectrumTelemetry.h"
 
 #include <atomic>
+#include <mutex>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 class VXStudioAnalyserAudioProcessor final : public juce::AudioProcessor {
@@ -47,10 +49,16 @@ public:
     [[nodiscard]] juce::String stageIdString() const { return juce::String(identity.stageId.data(), static_cast<int>(identity.stageId.size())); }
     [[nodiscard]] vxsuite::SignalQualitySnapshot getSignalQualitySnapshot() const noexcept;
 
+    // Live input summary: captured in processBlock from the analyser's own audio input.
+    [[nodiscard]] vxsuite::analysis::AnalysisSummary liveInputSummary() const noexcept;
+    [[nodiscard]] bool liveInputSummaryValid() const noexcept;
+    [[nodiscard]] bool isAnalyserActive() const noexcept { return !isBypassed.load(std::memory_order_relaxed); }
+
 private:
     static vxsuite::ProductIdentity makeIdentity();
     void ensureAnalysisDomain() noexcept;
     void publishSignalQualitySnapshot() noexcept;
+    void publishLiveInputSummary() noexcept;
 
     vxsuite::ProductIdentity identity;
     std::uint64_t analysisDomainIdValue = 0;
@@ -60,5 +68,13 @@ private:
     std::atomic<float>         tiltScore             { 0.0f };
     std::atomic<float>         separationConfidence  { 1.0f };
     std::atomic<std::uint64_t> analyserTrackStableId { 0 };
+    std::atomic<bool>          isBypassed            { false };
     juce::String analyserTrackName;  // message thread only
+
+    // Live input capture — accumulates spectrum/RMS on the audio thread.
+    // Snapshot protected by a seqlock (liveInputVersion odd = writing, even = done).
+    std::unique_ptr<vxsuite::analysis::SummaryAccumulator> liveAccumulator;
+    std::atomic<uint32_t> liveInputVersion        { 0 };
+    vxsuite::analysis::AnalysisSummary liveInputSnapshot;
+    std::atomic<bool>     liveInputSnapshotValid  { false };
 };

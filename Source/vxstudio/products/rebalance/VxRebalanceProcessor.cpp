@@ -62,7 +62,7 @@ vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
     id.productName = kProductName;
     id.shortTag = kShortTag;
     id.auxSelectorParamId = kRecordingTypeParam;
-    id.auxSelectorLabel = "Recording Type";
+    id.auxSelectorLabel = "Source";
     id.auxSelectorChoiceLabels = { "Studio", "Live", "Phone / Rough" };
     id.auxSelectorDefaultIndex = 0;
     id.auxSelectorFollowsGeneralMode = false;
