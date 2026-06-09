@@ -57,7 +57,7 @@ set(VXSTUDIO_VST3_INSTALL_DIR "/Library/Audio/Plug-Ins/VST3/VxStudio")
 option(VXSTUDIO_INSTALL_VST3_TO_SYSTEM "Copy staged VST3 bundles into the system VST3 folder" OFF)
 
 function(vxstudio_stage_vst3_bundle target_name bundle_name)
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   add_custom_command(TARGET ${target_name} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${VXSTUDIO_VST3_STAGE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3"
@@ -99,7 +99,7 @@ function(vxstudio_copy_vst3_resources target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   foreach(resource IN LISTS ARGN)
@@ -122,7 +122,7 @@ function(vxstudio_prune_vst3_resources target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   foreach(resource IN LISTS ARGN)
@@ -145,9 +145,9 @@ function(vxstudio_strip_vst3_binary target_name bundle_name)
     return()
   endif()
 
-  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
+  set(bundle_source_binary "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
   set(stage_bundle_binary "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3/Contents/MacOS/${bundle_name}")
-  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/VST3/${bundle_name}.vst3")
+  set(bundle_source_dir "${CMAKE_BINARY_DIR}/${bundle_name}_artefacts/$<CONFIG>/VST3/${bundle_name}.vst3")
   set(stage_bundle_dir "${VXSTUDIO_VST3_STAGE_DIR}/${bundle_name}.vst3")
 
   add_custom_command(TARGET ${target_name} POST_BUILD

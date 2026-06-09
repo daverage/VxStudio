@@ -91,13 +91,18 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure
-        shell: pwsh
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        shell: cmd
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        shell: pwsh
-        run: cmake --build build --config Release --parallel
+        shell: cmd
+        run: cmake --build build --parallel
 
       - name: Package
         shell: pwsh
