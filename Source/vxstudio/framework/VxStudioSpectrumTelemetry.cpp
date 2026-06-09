@@ -12,6 +12,7 @@
 #include <juce_core/juce_core.h>
 
 #if JUCE_WINDOWS
+#define NOMINMAX
 #include <windows.h>
 #else
 #include <unistd.h>
