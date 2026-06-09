@@ -1,0 +1,213 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Package
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          release_root="$GITHUB_WORKSPACE/dist/releases/$TAG"
+          package_root="$release_root/package/VXStudio-${version}-macos"
+          zip_path="$release_root/VXStudio-${version}-macos.zip"
+
+          rm -rf "$release_root"
+          mkdir -p "$package_root"
+
+          while IFS= read -r bundle; do
+            [[ -n "$bundle" ]] || continue
+            cp -R "$bundle" "$package_root/"
+          done < <(find "$GITHUB_WORKSPACE/Source/vxstudio/vst" -maxdepth 1 -type d -name '*.vst3' | sort)
+
+          cat > "$package_root/INSTALL.txt" <<EOF
+          VX Studio ${version}
+
+          macOS install
+          1. Copy the .vst3 bundles in this archive into /Library/Audio/Plug-Ins/VST3
+             for all users, or ~/Library/Audio/Plug-Ins/VST3 for the current user.
+          2. Restart or rescan your DAW.
+          EOF
+
+          cat > "$package_root/README.txt" <<EOF
+          VX Studio ${version}
+
+          This archive contains the macOS VST3 bundles staged from Source/vxstudio/vst.
+          See the GitHub release notes for the changelog and checksums.
+          EOF
+
+          (cd "$release_root" && ditto -c -k --keepParent "package/VXStudio-${version}-macos" "$(basename "$zip_path")")
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: dist/releases/${{ github.ref_name }}/VXStudio-*-macos.zip
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $Version = $env:TAG.TrimStart('v')
+          $ReleaseRoot = Join-Path $env:GITHUB_WORKSPACE "dist/releases/$env:TAG"
+          $PackageRoot = Join-Path $ReleaseRoot "package/VXStudio-$Version-windows"
+          $ZipPath = Join-Path $ReleaseRoot "VXStudio-$Version-windows.zip"
+
+          if (Test-Path $ReleaseRoot) {
+            Remove-Item -Recurse -Force $ReleaseRoot
+          }
+          New-Item -ItemType Directory -Force -Path $PackageRoot | Out-Null
+
+          Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE 'Source/vxstudio/vst') -Filter '*.vst3' | Sort-Object Name | ForEach-Object {
+            Copy-Item -Recurse -Force $_.FullName $PackageRoot
+          }
+
+          @"
+          VX Studio $Version
+
+          Windows install
+          1. Copy the .vst3 bundles in this archive into C:\Program Files\Common Files\VST3
+          2. Restart or rescan your DAW.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $PackageRoot 'INSTALL.txt')
+
+          @"
+          VX Studio $Version
+
+          This archive contains the Windows VST3 bundles staged from Source/vxstudio/vst.
+          See the GitHub release notes for the changelog and checksums.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $PackageRoot 'README.txt')
+
+          if (Test-Path $ZipPath) {
+            Remove-Item -Force $ZipPath
+          }
+          $PackageFolder = Join-Path $ReleaseRoot "package/VXStudio-$Version-windows"
+          Compress-Archive -Path $PackageFolder -DestinationPath $ZipPath -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: dist/releases/${{ github.ref_name }}/VXStudio-*-windows.zip
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - build-macos
+      - build-windows
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: release/macos
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release/windows
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          publish_root="$GITHUB_WORKSPACE/release/publish"
+          mkdir -p "$publish_root"
+
+          mac_zip="$(find "$GITHUB_WORKSPACE/release/macos" -name 'VXStudio-*-macos.zip' | head -n 1)"
+          windows_zip="$(find "$GITHUB_WORKSPACE/release/windows" -name 'VXStudio-*-windows.zip' | head -n 1)"
+          [[ -f "$mac_zip" ]] || { echo "missing macOS artifact" >&2; exit 1; }
+          [[ -f "$windows_zip" ]] || { echo "missing Windows artifact" >&2; exit 1; }
+
+          cp "$mac_zip" "$publish_root/VXStudio-macos.zip"
+          cp "$windows_zip" "$publish_root/VXStudio-windows.zip"
+
+          if command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "$publish_root/VXStudio-macos.zip" "$publish_root/VXStudio-windows.zip" \
+              | awk '{print $1 "  " $2}' > "$publish_root/checksums.txt"
+          else
+            sha256sum "$publish_root/VXStudio-macos.zip" "$publish_root/VXStudio-windows.zip" \
+              | awk '{print $1 "  " $2}' > "$publish_root/checksums.txt"
+          fi
+
+          cat > "$publish_root/release-notes.md" <<EOF
+          # VX Studio ${version}
+
+          Artifacts
+          - VXStudio-macos.zip
+          - VXStudio-windows.zip
+          - checksums.txt
+
+          The latest release assets are published with stable download names so the website can link to
+          latest GitHub download URLs without needing a platform-specific release machine.
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "VX Studio ${TAG}" --notes-file "$publish_root/release-notes.md"
+            gh release upload "$TAG" \
+              "$publish_root/VXStudio-macos.zip#VXStudio-macos.zip" \
+              "$publish_root/VXStudio-windows.zip#VXStudio-windows.zip" \
+              "$publish_root/checksums.txt#checksums.txt" \
+              --clobber
+          else
+            gh release create "$TAG" \
+              "$publish_root/VXStudio-macos.zip#VXStudio-macos.zip" \
+              "$publish_root/VXStudio-windows.zip#VXStudio-windows.zip" \
+              "$publish_root/checksums.txt#checksums.txt" \
+              --title "VX Studio ${TAG}" \
+              --notes-file "$publish_root/release-notes.md"
+          fi

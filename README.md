@@ -559,7 +559,7 @@ VXDeepFilterNet also requires model files in `assets/deepfilternet/models/`. Wit
 
 ### Windows
 
-Windows support is wired up but still needs broader host validation.
+Windows support is wired up and the GitHub Actions release workflow now builds and publishes Windows assets on hosted runners, but broader host validation is still pending.
 
 Prerequisites:
 
@@ -641,7 +641,7 @@ tasks/                Working plans, reports, and lessons
 ## Status
 
 - macOS VST3 builds are confirmed and staged.
-- Windows build generation is present but needs broader end-to-end host validation.
+- Windows build generation is present and the release workflow can publish Windows assets without a local Windows machine, but broader end-to-end host validation is still pending.
 - All 15 plugins build on macOS from the current tree.
 - VXDeepFilterNet is the only plugin with extra runtime model dependencies.
 - VXRepair embeds DSP from VXDenoiser, VXDeverb, and VXSpeechClarity  -  modifying those DSP files requires re-testing VXRepair.

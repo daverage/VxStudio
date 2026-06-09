@@ -19,11 +19,13 @@
 - Test offline bounce versus realtime playback.
 
 ## Packaging and release
+- Preferred release path: push a `v*` tag and let [`.github/workflows/release.yml`](../.github/workflows/release.yml) build and publish the macOS and Windows assets on GitHub-hosted runners.
 - Run `tools/release/release_preflight.sh` before release signing; it checks `pluginval`, signing identities, notary profile access, and DeepFilterNet bundle resources.
 - If you want signed/notarized macOS builds, create a notary keychain profile with `tools/release/store_notary_profile.sh <profile-name>` and export `APPLE_NOTARY_PROFILE=<profile-name>`.
 - Run `tools/release/sign_and_notarize_vst3.sh` with `APPLE_DEVELOPER_IDENTITY` set only for signed macOS release candidates.
 - If `APPLE_NOTARY_PROFILE` is also set, the script submits, staples, and validates each staged `.vst3` bundle.
 - Verify the staged DeepFilterNet bundle includes its model archives in `Contents/Resources/`.
+- If you have a Windows ZIP from a separate build job, pass it to `tools/release.sh --windows-zip <path>` so it gets uploaded and linked from the downloads page too.
 
 ## Unsigned macOS distribution
 - Unsigned or ad-hoc signed `.vst3` bundles are acceptable for this project when distributing directly instead of through an Apple Developer signing pipeline.

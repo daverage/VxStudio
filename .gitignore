@@ -10,6 +10,12 @@ Thumbs.db
 
 # Build
 build/
+dist/
+
+# Release artifacts and staged plugin bundles
+web/downloads/*.zip
+web/downloads/checksums.txt
+Source/vxstudio/vst/
 
 # Audio and media — never commit binary audio to this repo
 *.wav

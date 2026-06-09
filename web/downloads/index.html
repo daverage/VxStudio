@@ -152,7 +152,7 @@
     <section class="download-hero">
         <div class="container">
             <h1>Download VX Studio</h1>
-            <p style="font-size: 1.125rem; margin-bottom: 2rem;">VX Studio v1.0.1  -  15 plugins, regression-verified. Choose your platform below.</p>
+            <p style="font-size: 1.125rem; margin-bottom: 2rem;">Latest verified builds are published through GitHub Releases. Choose your platform below.</p>
         </div>
     </section>
 
@@ -166,19 +166,23 @@
                         🍎 macOS
                         <span class="status-badge status-available">Available</span>
                     </h3>
-                    <p class="version">VX Studio v1.0.1 (Current Verified Build)</p>
-                    <p class="file-size">📦 21 KB</p>
+                    <p class="version">Latest verified build</p>
+                    <p class="file-size">📦 Published via GitHub Releases</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
                         <strong>Compatible with:</strong><br>
                         macOS 11+<br>
                         Intel & Apple Silicon<br>
                         VST3 Format
                     </p>
-                    <a href="vxstudio-complete.zip" download class="btn btn-primary" onclick="trackDownload('macos')">
+                    <a href="https://github.com/daverage/VxStudio/releases/latest/download/VXStudio-macos.zip" class="btn btn-primary" onclick="trackDownload('macos')">
                         Download for macOS
                     </a>
                     <p style="font-size: 0.75rem; color: var(--text-light); margin-top: var(--spacing-md);">
-                        SHA256: <code style="font-family: monospace; font-size: 0.65rem;">c1557955...fcfe7fc4</code>
+                        SHA256: available in <a href="https://github.com/daverage/VxStudio/releases/latest/download/checksums.txt">checksums.txt</a>
+                    </p>
+                    <p style="font-size: 0.8rem; color: var(--text-light); margin-top: var(--spacing-sm);">
+                        <a href="https://github.com/daverage/VxStudio/releases/latest">View release notes on GitHub</a> ·
+                        <a href="https://github.com/daverage/VxStudio/releases/latest/download/checksums.txt">Download checksums</a>
                     </p>
                 </div>
 
@@ -186,38 +190,39 @@
                 <div class="download-option">
                     <h3>
                         🪟 Windows
-                        <span class="status-badge status-coming">Coming Soon</span>
+                        <span class="status-badge status-available">Available</span>
                     </h3>
-                    <p class="version">VX Studio for Windows (In Development)</p>
-                    <p class="file-size">📦 ~480 MB (estimated)</p>
+                    <p class="version">Latest verified build</p>
+                    <p class="file-size">📦 Published via GitHub Releases</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
                         <strong>Will support:</strong><br>
                         Windows 10 1909+<br>
                         Windows 11<br>
                         VST3 (64-bit)
                     </p>
-                    <button disabled class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">
-                        Windows Version Coming Soon
-                    </button>
-                    <p style="font-size: 0.85rem; color: var(--text-light); margin-top: var(--spacing-md);">
-                        Join our <a href="/support/">mailing list</a> for notifications.
+                    <a href="https://github.com/daverage/VxStudio/releases/latest/download/VXStudio-windows.zip" class="btn btn-primary" onclick="trackDownload('windows')">
+                        Download for Windows
+                    </a>
+                    <p style="font-size: 0.75rem; color: var(--text-light); margin-top: var(--spacing-md);">
+                        SHA256: available in <a href="https://github.com/daverage/VxStudio/releases/latest/download/checksums.txt">checksums.txt</a>
+                    </p>
+                    <p style="font-size: 0.8rem; color: var(--text-light); margin-top: var(--spacing-sm);">
+                        <a href="https://github.com/daverage/VxStudio/releases/latest">View release notes on GitHub</a> ·
+                        <a href="https://github.com/daverage/VxStudio/releases/latest/download/checksums.txt">Download checksums</a>
                     </p>
                 </div>
             </div>
 
             <!-- Release Notes -->
             <div class="release-notes">
-                <h3>✨ Current Build Highlights  -  v1.0.1</h3>
-                <ul>
-                    <li><strong>3 new plugins:</strong> VXProximityClassic (simplified two-control proximity), VXRepair (all-in-one guided repair), and VXToneRefine (automatic mud/harshness correction).</li>
-                    <li><strong>VXSpeechClarity DSP now active:</strong> all three bands (de-esser, plosive, breath) process audio  -  no longer placeholder.</li>
-                    <li><strong>GR meters:</strong> VXDenoiser and VXDeverb now show live gain-reduction activity lights.</li>
-                    <li><strong>VXDeepFilterNet Guard control active:</strong> artifact-aware blending with startup ramp prevents clicks on load.</li>
-                    <li><strong>VXSubtract stale-profile warning:</strong> status bar alerts when a learned profile is older than 20 minutes.</li>
-                    <li><strong>VXRebalance transition fix:</strong> neutral→active transition now resets DSP state before ramp-in, preventing spectral smearing.</li>
-                    <li><strong>VXCleanup archived:</strong> replaced by VXSpeechClarity and VXToneRefine.</li>
-                    <li><strong>Verification:</strong> the full regression harness completes successfully on the current build.</li>
-                </ul>
+                <h3>✨ Release Notes</h3>
+                <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                    The latest changelog lives on GitHub Releases, where each published build includes the release notes,
+                    checksums, and the downloadable macOS and Windows ZIPs.
+                </p>
+                <a href="https://github.com/daverage/VxStudio/releases/latest" class="btn btn-secondary">
+                    View latest release notes
+                </a>
             </div>
 
             <!-- Installation Instructions -->
@@ -227,22 +232,19 @@
                     <div>
                         <h4 style="color: var(--primary); margin-bottom: var(--spacing-sm);">macOS</h4>
                         <ol style="color: var(--text-secondary); margin-left: var(--spacing-lg);">
-                            <li>Download the .zip file</li>
+                            <li>Download the macOS ZIP</li>
                             <li>Extract the archive</li>
-                            <li>Copy .vst3 bundles to <code style="font-family: monospace; background: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">/Library/Audio/Plug-Ins/VST3</code></li>
-                            <li>Restart your DAW</li>
-                            <li>Rescan plugins in your DAW settings</li>
+                            <li>Copy the .vst3 bundles to <code style="font-family: monospace; background: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">/Library/Audio/Plug-Ins/VST3</code></li>
+                            <li>Restart or rescan your DAW</li>
                         </ol>
                     </div>
                     <div>
-                        <h4 style="color: var(--primary); margin-bottom: var(--spacing-sm);">Windows (When Available)</h4>
+                        <h4 style="color: var(--primary); margin-bottom: var(--spacing-sm);">Windows</h4>
                         <ol style="color: var(--text-secondary); margin-left: var(--spacing-lg);">
-                            <li>Download the .zip file</li>
-                            <li>Extract to a temporary folder</li>
-                            <li>Run the installer executable</li>
-                            <li>Choose VST3 plugin directory</li>
-                            <li>Restart your DAW</li>
-                            <li>Rescan plugins in your DAW settings</li>
+                            <li>Download the Windows ZIP</li>
+                            <li>Extract the archive</li>
+                            <li>Copy the .vst3 bundles to <code style="font-family: monospace; background: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">C:\Program Files\Common Files\VST3</code></li>
+                            <li>Restart or rescan your DAW</li>
                         </ol>
                     </div>
                 </div>
@@ -254,30 +256,13 @@
             <!-- Version History -->
             <div class="version-history">
                 <h2 style="margin-bottom: var(--spacing-xl);">Version History</h2>
-
-                <div class="version-item">
-                    <h4>v1.0.1 - Current Verified Build</h4>
-                    <p class="date">June 2026</p>
-                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">3 new plugins, active DSP for VXSpeechClarity and VXToneRefine, GR meters on Denoiser and Deverb, Guard control active on DeepFilterNet, stale-profile warning on Subtract, and Rebalance transition fix.</p>
-                    <div style="font-size: 0.9rem; margin-top: var(--spacing-sm);">
-                        <strong>Changes:</strong>
-                        <ul style="list-style: none; padding-left: 0; margin-top: 0.5rem;">
-                            <li>✓ Added VXProximityClassic, VXRepair, VXToneRefine</li>
-                            <li>✓ VXSpeechClarity DSP active (all three bands)</li>
-                            <li>✓ VXDeepFilterNet Guard control active</li>
-                            <li>✓ GR meters on VXDenoiser and VXDeverb</li>
-                            <li>✓ VXSubtract stale-profile warning</li>
-                            <li>✓ VXRebalance neutral→active transition fix</li>
-                            <li>✓ VXCleanup archived (replaced by VXSpeechClarity + VXToneRefine)</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="version-item">
-                    <h4>v1.0.0 - Initial Release</h4>
-                    <p class="date">April 2026</p>
-                    <p style="color: var(--text-secondary); margin: var(--spacing-sm) 0;">12 plugins in the initial suite pass. Full regression verification completing successfully.</p>
-                </div>
+                <p style="color: var(--text-secondary);">
+                    Release history is maintained in GitHub Releases, so you can review every published build,
+                    its changelog, and its checksums from the latest release page.
+                </p>
+                <a href="https://github.com/daverage/VxStudio/releases" class="btn btn-secondary">
+                    Browse all releases
+                </a>
             </div>
 
             <!-- System Requirements -->
