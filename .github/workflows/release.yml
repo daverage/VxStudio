@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f JUCE/CMakeLists.txt
+          test -d JUCE/extras/Build/CMake
           test -f JUCE/extras/Build/CMake/JUCEModuleSupport.cmake
           ls -la JUCE/extras/Build/CMake | sed -n '1,20p'
 
