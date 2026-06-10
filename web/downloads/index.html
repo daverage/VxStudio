@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Download VX Studio - Professional audio processing plugins for macOS and Windows.">
     <title>Downloads - VX Studio</title>
+    <link rel="icon" type="image/svg+xml" href="../assets/images/logo-icon.svg">
     <link rel="icon" type="image/x-icon" href="../favicon.ico">
     <link rel="icon" type="image/png" sizes="192x192" href="../assets/images/favicon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="../assets/images/favicon-512.png">
@@ -12,7 +13,9 @@
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         .breadcrumb {
             padding: 1rem var(--spacing-lg);
@@ -127,24 +130,38 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <a href="/">
-                    <img src="../assets/images/logo.png" alt="VX Studio" class="logo">
+                <a href="../">
+                    <img src="../assets/images/logo-mark.svg" alt="" class="logo" aria-hidden="true">
                     <span class="brand-text">VX Studio</span>
                 </a>
             </div>
-            <ul class="nav-menu">
-                <li><a href="/#products">Products</a></li>
-                <li><a href="/downloads/">Download</a></li>
-                <li><a href="/docs/">Documentation</a></li>
-                <li><a href="/support/">Support</a></li>
-            </ul>
+            <button
+                class="menu-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="site-menu"
+                aria-label="Toggle navigation"
+            >
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <div class="nav-panel" id="site-menu">
+                <ul class="nav-menu">
+                    <li><a href="../#products">Products</a></li>
+                    <li><a href="./">Download</a></li>
+                    <li><a href="../docs/">Documentation</a></li>
+                    <li><a href="../support/">Support</a></li>
+                </ul>
+                <a href="./" class="btn btn-nav">Download Suite</a>
+            </div>
         </div>
     </nav>
 
     <!-- Breadcrumb -->
     <div class="breadcrumb">
         <div class="container">
-            <a href="/">Home</a> / <span>Downloads</span>
+            <a href="../">Home</a> / <span>Downloads</span>
         </div>
     </div>
 
@@ -166,11 +183,11 @@
                         🍎 macOS
                         <span class="status-badge status-available">Available</span>
                     </h3>
-                    <p class="version">Latest verified build</p>
+                    <p class="version">v0.1.0 — latest verified build</p>
                     <p class="file-size">📦 Published via GitHub Releases</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
                         <strong>Compatible with:</strong><br>
-                        macOS 11+<br>
+                        macOS 11 Big Sur+<br>
                         Intel & Apple Silicon<br>
                         VST3 Format
                     </p>
@@ -192,10 +209,10 @@
                         🪟 Windows
                         <span class="status-badge status-available">Available</span>
                     </h3>
-                    <p class="version">Latest verified build</p>
+                    <p class="version">v0.1.0 — latest verified build</p>
                     <p class="file-size">📦 Published via GitHub Releases</p>
                     <p style="font-size: 0.9rem; margin-bottom: var(--spacing-lg); color: var(--text-secondary);">
-                        <strong>Will support:</strong><br>
+                        <strong>Compatible with:</strong><br>
                         Windows 10 1909+<br>
                         Windows 11<br>
                         VST3 (64-bit)
@@ -249,7 +266,7 @@
                     </div>
                 </div>
                 <p style="margin-top: var(--spacing-lg); font-size: 0.9rem;">
-                    <strong>Need help?</strong> See <a href="/docs/installation.html">detailed installation guide</a> or <a href="/support/">contact support</a>.
+                    <strong>Need help?</strong> See <a href="../docs/installation.html">detailed installation guide</a> or <a href="../support/">contact support</a>.
                 </p>
             </div>
 
@@ -272,7 +289,7 @@
                     <div>
                         <h4 style="color: var(--primary); margin-bottom: var(--spacing-md);">Minimum (macOS)</h4>
                         <ul style="color: var(--text-secondary); list-style: none;">
-                            <li>✓ macOS 11 Monterey</li>
+                            <li>✓ macOS 11 Big Sur or later</li>
                             <li>✓ Intel 6th gen or later</li>
                             <li>✓ 8 GB RAM</li>
                             <li>✓ VST3-compatible DAW</li>
@@ -303,16 +320,16 @@
                 <div class="footer-section">
                     <h4>Resources</h4>
                     <ul>
-                        <li><a href="/docs/">Documentation</a></li>
-                        <li><a href="/support/">Support</a></li>
+                        <li><a href="../docs/">Documentation</a></li>
+                        <li><a href="../support/">Support</a></li>
                         <li><a href="https://github.com/daverage/VxStudio" target="_blank">Source Code</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">
                     <h4>Legal</h4>
                     <ul>
-                        <li><a href="/legal/license.html">License (MIT)</a></li>
-                        <li><a href="/legal/privacy.html">Privacy</a></li>
+                        <li><a href="../legal/license.html">License (MIT)</a></li>
+                        <li><a href="../legal/privacy.html">Privacy</a></li>
                     </ul>
                 </div>
             </div>
@@ -322,6 +339,7 @@
         </div>
     </footer>
 
+    <script src="../assets/js/script.js"></script>
     <script>
         function trackDownload(platform) {
             console.log(`Download initiated for ${platform}`);

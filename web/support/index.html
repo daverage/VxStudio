@@ -5,18 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="VX Studio support and troubleshooting.">
     <title>Support - VX Studio</title>
+    <link rel="icon" type="image/svg+xml" href="../assets/images/logo-icon.svg">
+    <link rel="icon" type="image/x-icon" href="../favicon.ico">
+    <link rel="apple-touch-icon" sizes="192x192" href="../assets/images/favicon-192.png">
     <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <div class="nav-brand"><a href="../"><img src="../assets/images/logo.png" alt="VX Studio" class="logo"><span class="brand-text">VX Studio</span></a></div>
-            <ul class="nav-menu">
-                <li><a href="../#products">Products</a></li>
-                <li><a href="../downloads/">Download</a></li>
-                <li><a href="../docs/">Documentation</a></li>
-                <li><a href="./">Support</a></li>
-            </ul>
+            <div class="nav-brand">
+                <a href="../">
+                    <img src="../assets/images/logo-mark.svg" alt="" class="logo" aria-hidden="true" />
+                    <span class="brand-text">VX Studio</span>
+                </a>
+            </div>
+            <button
+                class="menu-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="site-menu"
+                aria-label="Toggle navigation"
+            >
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <div class="nav-panel" id="site-menu">
+                <ul class="nav-menu">
+                    <li><a href="../#products">Products</a></li>
+                    <li><a href="../downloads/">Download</a></li>
+                    <li><a href="../docs/">Documentation</a></li>
+                    <li><a href="./">Support</a></li>
+                </ul>
+                <a href="../downloads/" class="btn btn-nav">Download Suite</a>
+            </div>
         </div>
     </nav>
     <section class="docs-section">
@@ -28,18 +50,54 @@
             <div class="docs-grid">
                 <div class="doc-link">
                     <h3>Plugin not showing up</h3>
-                    <p>Rescan VST3 plugins in your DAW and confirm the bundles are installed in the expected plugin directory.</p>
+                    <p>Rescan VST3 plugins in your DAW and confirm the <code>.vst3</code> bundles are in <code>/Library/Audio/Plug-Ins/VST3</code> (macOS) or <code>C:\Program Files\Common Files\VST3</code> (Windows). See the <a href="../docs/installation.html">installation guide</a> for step-by-step instructions.</p>
                 </div>
                 <div class="doc-link">
                     <h3>Need product guidance</h3>
-                    <p>Start from the homepage product detail section or the repository README for the current role of each plugin.</p>
+                    <p>The <a href="../#product-details">product detail section</a> and <a href="../#signal-chain">signal chain guide</a> on the homepage explain each plugin's role. The <a href="https://github.com/daverage/VxStudio/blob/master/README.md" target="_blank">repository README</a> has full usage notes and example settings for every plugin.</p>
+                </div>
+                <div class="doc-link">
+                    <h3>Bug reports</h3>
+                    <p>Open an issue on <a href="https://github.com/daverage/VxStudio/issues" target="_blank">GitHub Issues</a>. Include your DAW, OS version, and what you were doing. Regression test failures should include the failing test name and the build hash.</p>
                 </div>
                 <div class="doc-link">
                     <h3>Build / source questions</h3>
-                    <p>Use the linked framework docs and source repository for the current implementation and verification state.</p>
+                    <p>Build instructions are in the <a href="https://github.com/daverage/VxStudio/blob/master/README.md" target="_blank">README</a>. The REAPER preset pack lives under <code>assets/reaper/</code> — one <code>.RPL</code> library per effect plus scenario-based <code>.RfxChain</code> starting chains.</p>
                 </div>
             </div>
         </div>
     </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>VX Studio</h4>
+                    <p>Professional audio processing plugins for realtime production.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="../docs/">Documentation</a></li>
+                        <li><a href="./">Support</a></li>
+                        <li><a href="https://github.com/daverage/VxStudio" target="_blank">Source Code</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="../legal/license.html">License (MIT)</a></li>
+                        <li><a href="../legal/privacy.html">Privacy</a></li>
+                        <li><a href="../legal/terms.html">Terms</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 VX Studio. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../assets/js/script.js"></script>
 </body>
 </html>

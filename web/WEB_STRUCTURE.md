@@ -51,7 +51,7 @@ The website's `downloads/` folder structure should contain the built plugin bina
 ```
 web/downloads/
 ├── vxstudio-complete.zip                    # Main distribution for macOS
-├── vxsuite-1.0.0-windows-x64.zip           # Main distribution for Windows (future)
+├── vxsuite-0.1.0-windows-x64.zip           # Main distribution for Windows (future)
 ├── older-versions/                         # Archive of previous releases
 │   └── vxsuite-0.9.0-beta-macos.zip
 └── checksums.txt                           # SHA256 checksums for verification
@@ -69,7 +69,7 @@ Contains: 12 .vst3 bundles + 12 .component (Audio Units)
 **Windows:**
 ```
 vxsuite-{VERSION}-windows-x64.zip
-Example: vxsuite-1.0.0-windows-x64.zip
+Example: vxsuite-0.1.0-windows-x64.zip
 Contains: VST3 installer + 12 .vst3 plugin files
 ```
 
@@ -93,7 +93,7 @@ vxstudio-complete/
 
 **Windows ZIP structure:**
 ```
-vxsuite-1.0.0-windows-x64/
+vxsuite-0.1.0-windows-x64/
 ├── installer.exe              # Optional: Windows installer
 ├── VST3/
 │   ├── VXTone.vst3

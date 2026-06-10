@@ -8,21 +8,21 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  tools/release.sh v1.0.1 [options]
+  tools/release.sh v0.1.0 [options]
 
 Create a release tag and push it to GitHub.
 The GitHub Actions release workflow then builds macOS and Windows artifacts,
 packages them, and publishes the GitHub Release.
 
 Options:
-  --message TEXT    Tag annotation message (default: VX Studio v1.0.1)
+  --message TEXT    Tag annotation message (default: VX Studio v0.1.0)
   --no-push         Create the tag locally only
   --remote NAME     Git remote to push to (default: origin)
   --help            Show this message
 
 Examples:
-  tools/release.sh v1.0.1
-  tools/release.sh v1.0.1 --message "VX Studio v1.0.1"
+  tools/release.sh v0.1.0
+  tools/release.sh v0.1.0 --message "VX Studio v0.1.0"
 EOF
 }
 
@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$version" ]] || die "you must supply a version, for example: tools/release.sh v1.0.1"
+[[ -n "$version" ]] || die "you must supply a version, for example: tools/release.sh v0.1.0"
 version="${version#v}"
 tag="v${version}"
 

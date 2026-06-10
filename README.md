@@ -43,11 +43,11 @@ Framework and plugin DSP versions are tracked independently.
 | VXDenoiser | `0.2.1` |
 | VXSubtract | `0.2.1` |
 | VXDeverb | `0.2.1` |
-| VXSpeechClarity | `1.0.0` |
+| VXSpeechClarity | `0.1.0` |
 | VXProximity | `0.2.1` |
 | VXProximityClassic | `0.1.0` |
 | VXTone | `0.2.0` |
-| VXToneRefine | `1.0.0` |
+| VXToneRefine | `0.1.0` |
 | VXFinish | `0.3.0` |
 | VXOptoComp | `0.3.0` |
 | VXLeveler | `0.2.0` |

@@ -80,7 +80,7 @@ web/downloads/
 Example: `vxstudio-complete.zip`
 
 **Windows (Future):** `vxsuite-{VERSION}-windows-x64.zip`
-Example: `vxsuite-1.0.0-windows-x64.zip`
+Example: `vxsuite-0.1.0-windows-x64.zip`
 
 ### What to Include in the ZIP
 
@@ -320,7 +320,7 @@ Edit `web/downloads/index.html`:
 </a>
 
 <!-- Update version, file size, checksum -->
-<p class="version">VX Studio v1.0.0 (Gold Release)</p>
+<p class="version">VX Studio v0.1.0 (Gold Release)</p>
 <p class="file-size">📦 512 MB</p>
 ```
 

@@ -7,11 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag name to use for packaging (e.g. v1.0.5)"
+        description: "Tag name to use for packaging (e.g. v0.1.0)"
         required: true
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   build-macos:
@@ -62,7 +65,7 @@ jobs:
       - name: Package
         shell: bash
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
@@ -100,7 +103,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: macos-release
-          path: dist/releases/${{ github.ref_name }}/VXStudio-*-macos.zip
+          path: dist/releases/${{ env.RELEASE_TAG }}/VXStudio-*-macos.zip
           if-no-files-found: error
 
   build-windows:
@@ -150,7 +153,7 @@ jobs:
       - name: Package
         shell: pwsh
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           $ErrorActionPreference = 'Stop'
           $Version = $env:TAG.TrimStart('v')
@@ -192,7 +195,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: windows-release
-          path: dist/releases/${{ github.ref_name }}/VXStudio-*-windows.zip
+          path: dist/releases/${{ env.RELEASE_TAG }}/VXStudio-*-windows.zip
           if-no-files-found: error
 
   release:
@@ -217,7 +220,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           version="${TAG#v}"

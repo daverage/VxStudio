@@ -365,8 +365,8 @@ vxstudio_stage_vst3_bundle(VXProximityClassic_VST3 "VXProximityClassic")
 # juce_add_plugin(VXCleanup ...)
 
 juce_add_plugin(VXClarity
-  VERSION 1.0.0
-  BUILD_VERSION 1.0.0
+  VERSION 0.1.0
+  BUILD_VERSION 0.1.0
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxstudio.vxclarity"
@@ -578,8 +578,8 @@ add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxstudio_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
 juce_add_plugin(VXRefine
-  VERSION 1.0.0
-  BUILD_VERSION 1.0.0
+  VERSION 0.1.0
+  BUILD_VERSION 0.1.0
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxstudio.vxrefine"

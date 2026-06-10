@@ -884,6 +884,24 @@ a:hover {
     margin-bottom: 2rem;
 }
 
+.footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.85rem;
+}
+
+.footer-brand h4 {
+    margin-bottom: 0;
+}
+
+.footer-logo {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    flex-shrink: 0;
+}
+
 .footer-section h4 {
     margin-bottom: 0.85rem;
     color: white;
