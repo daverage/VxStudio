@@ -740,6 +740,7 @@ target_link_libraries(VXRepair PRIVATE
   juce::juce_dsp
   VxStudioDeepFilterRuntime
   VxStudioDeepFilterRuntimeDfn2
+  ${VXSTUDIO_DF_SYSTEM_LIBS}
 )
 add_custom_target(VXRepairPlugin ALL DEPENDS VXRepair_VST3)
 vxstudio_stage_vst3_bundle(VXRepair_VST3 "VXRepair")
