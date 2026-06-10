@@ -225,6 +225,7 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           publish_root="$GITHUB_WORKSPACE/release/publish"
+          repo="$GITHUB_REPOSITORY"
           mkdir -p "$publish_root"
 
           mac_zip="$(find "$GITHUB_WORKSPACE/release/macos" -name 'VXStudio-*-macos.zip' | head -n 1)"
@@ -255,15 +256,15 @@ jobs:
           latest GitHub download URLs without needing a platform-specific release machine.
           EOF
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "VX Studio ${TAG}" --notes-file "$publish_root/release-notes.md"
-            gh release upload "$TAG" \
+          if gh release view "$TAG" --repo "$repo" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$repo" --title "VX Studio ${TAG}" --notes-file "$publish_root/release-notes.md"
+            gh release upload "$TAG" --repo "$repo" \
               "$publish_root/VXStudio-macos.zip#VXStudio-macos.zip" \
               "$publish_root/VXStudio-windows.zip#VXStudio-windows.zip" \
               "$publish_root/checksums.txt#checksums.txt" \
               --clobber
           else
-            gh release create "$TAG" \
+            gh release create "$TAG" --repo "$repo" \
               "$publish_root/VXStudio-macos.zip#VXStudio-macos.zip" \
               "$publish_root/VXStudio-windows.zip#VXStudio-windows.zip" \
               "$publish_root/checksums.txt#checksums.txt" \
