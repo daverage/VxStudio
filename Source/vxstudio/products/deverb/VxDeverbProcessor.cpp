@@ -93,7 +93,7 @@ vxsuite::ProductIdentity VXDeverbAudioProcessor::makeIdentity() {
 }
 
 float VXDeverbAudioProcessor::getActivityLight(int) const noexcept {
-    return vxsuite::clamp01(deverbProcessor.getGainReductionDb() / -20.0f);
+    return smoothedDrActivity;
 }
 
 juce::String VXDeverbAudioProcessor::getStatusText() const {
@@ -119,6 +119,7 @@ void VXDeverbAudioProcessor::resetSuite() {
     controls.reset(0.0f);
     silenceGuard.reset();
     smoothedCompensationGain = 1.0f;
+    smoothedDrActivity = 0.0f;
     smoothedBody = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     bodyShelfZ1.fill(0.0f);
     bodyShelfZ2.fill(0.0f);
@@ -236,6 +237,7 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
         for (int ch = 0; ch < channels; ++ch)
             buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        smoothedDrActivity *= 0.85f;
         return;
     }
 
@@ -272,6 +274,15 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
         buffer.copyFrom(ch, 0, wetScratch, ch, 0, numSamples);
 
     const auto finalWetStats = computeBufferStats(buffer);
+
+    // DR activity: fraction of energy removed by dereverberation, smoothed for display.
+    {
+        const float removed = dryRms > 1.0e-5f
+            ? vxsuite::clamp01((dryRms - finalWetStats.rms) / dryRms)
+            : 0.0f;
+        smoothedDrActivity = 0.85f * smoothedDrActivity + 0.15f * removed;
+    }
+
     applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock, finalWetStats.rms, finalWetStats.peak);
 
     // Body: post-deverb low shelf to restore low-end weight lost to subtraction.

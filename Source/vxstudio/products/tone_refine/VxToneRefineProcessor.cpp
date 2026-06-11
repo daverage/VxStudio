@@ -10,6 +10,8 @@ constexpr std::string_view kHarshnessParam = "harshness";
 constexpr std::string_view kSmoothParam = "smooth";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kListenParam = "listen";
+constexpr std::string_view kHpfOnParam = "hpf_on";
+constexpr std::string_view kHiShelfOnParam = "hishelf_on";
 } // namespace
 
 VXToneRefineAudioProcessor::VXToneRefineAudioProcessor()
@@ -34,6 +36,12 @@ vxsuite::ProductIdentity VXToneRefineAudioProcessor::makeIdentity() {
     identity.primaryHint = "Remove low-mid buildup (boxiness, muddiness).";
     identity.secondaryHint = "Reduce presence peak harshness (2-5 kHz brittleness).";
     identity.tertiaryHint = "Apply transparent tonal smoothing.";
+    identity.showLowShelfIcon  = true;
+    identity.showHighShelfIcon = true;
+    identity.lowShelfParamId   = kHpfOnParam;
+    identity.highShelfParamId  = kHiShelfOnParam;
+    identity.defaultLowShelf   = false;
+    identity.defaultHighShelf  = false;
     identity.dspVersion = vxsuite::versions::plugins::tone_refine;
     identity.helpTitle = vxsuite::help::tone_refine.title;
     identity.helpHtml = vxsuite::help::tone_refine.html;
@@ -79,6 +87,52 @@ vxsuite::MeteringSnapshot VXToneRefineAudioProcessor::getMeteringSnapshot() cons
     return s;
 }
 
+void VXToneRefineAudioProcessor::rebuildFilters(const bool hpfOn, const bool hiShelfOn, const bool voiceMode) {
+    using namespace vxsuite::corrective::detail;
+    const int numCh = std::max(1, getTotalNumOutputChannels());
+
+    // HPF: 2nd-order Butterworth. Vocal: 80 Hz, General: 40 Hz.
+    {
+        const float fc = voiceMode ? 80.0f : 40.0f;
+        const float K  = std::tan(juce::MathConstants<float>::pi * fc / static_cast<float>(currentSampleRateHz));
+        const float K2 = K * K;
+        const float norm = 1.0f / (1.0f + juce::MathConstants<float>::sqrt2 * K + K2);
+        hpfB0 =  norm;
+        hpfB1 = -2.0f * norm;
+        hpfB2 =  norm;
+        hpfA1 =  2.0f * (K2 - 1.0f) * norm;
+        hpfA2 = (1.0f - juce::MathConstants<float>::sqrt2 * K + K2) * norm;
+
+        const bool toggled = hpfOn != lastHpfOn;
+        if (hpfZ1.size() != static_cast<size_t>(numCh)) {
+            hpfZ1.assign(static_cast<size_t>(numCh), 0.0f);
+            hpfZ2.assign(static_cast<size_t>(numCh), 0.0f);
+        } else if (toggled) {
+            std::fill(hpfZ1.begin(), hpfZ1.end(), 0.0f);
+            std::fill(hpfZ2.begin(), hpfZ2.end(), 0.0f);
+        }
+    }
+
+    // Hi-Shelf: gentle air cut. Vocal: -3 dB @ 8 kHz, General: -4 dB @ 10 kHz.
+    {
+        const float fc     = voiceMode ? 8000.0f : 10000.0f;
+        const float gainDb = voiceMode ? -3.0f   : -4.0f;
+        hiShelfCoeffs = makeHighShelf(currentSampleRateHz, fc, 0.7f, gainDb);
+
+        const bool toggled = hiShelfOn != lastHiShelfOn;
+        if (hiShelfZ1.size() != static_cast<size_t>(numCh)) {
+            hiShelfZ1.assign(static_cast<size_t>(numCh), 0.0f);
+            hiShelfZ2.assign(static_cast<size_t>(numCh), 0.0f);
+        } else if (toggled) {
+            std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+            std::fill(hiShelfZ2.begin(), hiShelfZ2.end(), 0.0f);
+        }
+    }
+
+    lastHpfOn      = hpfOn;
+    lastHiShelfOn  = hiShelfOn;
+}
+
 void VXToneRefineAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
 
@@ -103,6 +157,14 @@ void VXToneRefineAudioProcessor::resetSuite() {
     deMudDsp.reset();
     deHarshnessDsp.reset();
     intelligentSmoothDsp.reset();
+
+    // Reset filter state
+    std::fill(hpfZ1.begin(), hpfZ1.end(), 0.0f);
+    std::fill(hpfZ2.begin(), hpfZ2.end(), 0.0f);
+    std::fill(hiShelfZ1.begin(), hiShelfZ1.end(), 0.0f);
+    std::fill(hiShelfZ2.begin(), hiShelfZ2.end(), 0.0f);
+    lastHpfOn     = false;
+    lastHiShelfOn = false;
 }
 
 void VXToneRefineAudioProcessor::performPreAnalysis(const juce::AudioBuffer<float>& buffer) {
@@ -230,6 +292,38 @@ void VXToneRefineAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer
             roughnessDetectionIntensity
         };
         intelligentSmoothDsp.process(buffer, smoothParams);
+    }
+
+    // 5. APPLY HP / HI-SHELF FILTERS
+    const bool hpfOn     = vxsuite::readBool(parameters, kHpfOnParam,     false);
+    const bool hiShelfOn = vxsuite::readBool(parameters, kHiShelfOnParam, false);
+    const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;
+
+    if (hpfOn != lastHpfOn || hiShelfOn != lastHiShelfOn)
+        rebuildFilters(hpfOn, hiShelfOn, voiceMode);
+
+    if (hpfOn) {
+        const int numCh = buffer.getNumChannels();
+        for (int ch = 0; ch < numCh && ch < static_cast<int>(hpfZ1.size()); ++ch) {
+            float* buf = buffer.getWritePointer(ch);
+            float& z1  = hpfZ1[static_cast<size_t>(ch)];
+            float& z2  = hpfZ2[static_cast<size_t>(ch)];
+            for (int i = 0; i < numSamples; ++i)
+                buf[i] = vxsuite::corrective::detail::processBiquadDf2(
+                    buf[i], hpfB0, hpfB1, hpfB2, hpfA1, hpfA2, z1, z2);
+        }
+    }
+
+    if (hiShelfOn) {
+        const int numCh = buffer.getNumChannels();
+        for (int ch = 0; ch < numCh && ch < static_cast<int>(hiShelfZ1.size()); ++ch) {
+            float* buf = buffer.getWritePointer(ch);
+            float& z1  = hiShelfZ1[static_cast<size_t>(ch)];
+            float& z2  = hiShelfZ2[static_cast<size_t>(ch)];
+            for (int i = 0; i < numSamples; ++i)
+                buf[i] = vxsuite::corrective::detail::processBiquadDf2(
+                    buf[i], hiShelfCoeffs, z1, z2);
+        }
     }
 }
 

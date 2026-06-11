@@ -50,8 +50,7 @@ vxsuite::ProductIdentity VXDenoiserAudioProcessor::makeIdentity() {
 }
 
 float VXDenoiserAudioProcessor::getActivityLight(int) const noexcept {
-    // GR in dB is negative; normalise to 0-1 display range over 0–20 dB reduction
-    return vxsuite::clamp01(denoiserDsp.getGainReductionDb() / -20.0f);
+    return smoothedNrActivity;
 }
 
 juce::String VXDenoiserAudioProcessor::getStatusText() const {
@@ -77,6 +76,7 @@ void VXDenoiserAudioProcessor::resetSuite() {
     controls.reset(0.0f, 0.5f);
     silenceGuard.reset();
     smoothedMakeupGain = 1.0f;
+    smoothedNrActivity = 0.0f;
     prevPhraseActive = true;
 }
 
@@ -92,12 +92,8 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float cleanTarget = vxsuite::readNormalized(parameters, kCleanParam, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, kGuardParam, 0.5f);
 
-    // Detect phrase boundaries: reset STFT FIFO on phrase end
     const auto voiceContext = getVoiceContextSnapshot();
     const bool currentPhraseActive = voiceContext.phraseActivity > 0.15f;
-    if (prevPhraseActive && !currentPhraseActive) {
-        denoiserDsp.resetFifoState();
-    }
     prevPhraseActive = currentPhraseActive;
 
     const auto [smoothedClean, smoothedGuard] = controls.process(
@@ -135,6 +131,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
         for (int ch = 0; ch < channels; ++ch)
             buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        smoothedNrActivity *= 0.85f;
         return;
     }
 
@@ -144,6 +141,15 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     // Makeup gain: compensate for level loss from noise suppression
     const float wetRms = vxsuite::analysis::rms(buffer);
+
+    // NR activity: fraction of energy removed, smoothed for display.
+    // Zero when clean (dry ≈ wet), bright when the denoiser is suppressing heavily.
+    {
+        const float removed = dryRms > 1.0e-5f
+            ? vxsuite::clamp01((dryRms - wetRms) / dryRms)
+            : 0.0f;
+        smoothedNrActivity = 0.85f * smoothedNrActivity + 0.15f * removed;
+    }
     const float speechPresence = juce::jlimit(0.0f, 1.0f, denoiserDsp.getSignalPresence());
     float compensationTarget = 1.0f;
 

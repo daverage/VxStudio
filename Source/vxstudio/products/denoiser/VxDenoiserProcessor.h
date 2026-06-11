@@ -13,7 +13,7 @@ public:
     juce::String getStatusText() const override;
     int getActivityLightCount() const noexcept override { return 1; }
     float getActivityLight(int) const noexcept override;
-    std::string_view getActivityLightLabel(int) const noexcept override { return "GR"; }
+    std::string_view getActivityLightLabel(int) const noexcept override { return "NR"; }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -30,5 +30,6 @@ private:
     vxsuite::BlockSmoothedControlPair controls;
     vxsuite::SilenceGuard silenceGuard;
     float  smoothedMakeupGain  = 1.0f;
+    float  smoothedNrActivity  = 0.0f;
     bool prevPhraseActive = true;
 };

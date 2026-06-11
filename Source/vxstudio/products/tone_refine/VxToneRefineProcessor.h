@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../framework/VxStudioProcessorBase.h"
+#include "../../framework/VxStudioDspCommon.h"
 #include "dsp/VxDeMudDsp.h"
 #include "dsp/VxDeHarshnessDsp.h"
 #include "dsp/VxIntelligentSmoothDsp.h"
@@ -45,6 +46,19 @@ private:
     vxsuite::tone_refine::DeMudDsp deMudDsp;
     vxsuite::tone_refine::DeHarshnessDsp deHarshnessDsp;
     vxsuite::tone_refine::IntelligentSmoothDsp intelligentSmoothDsp;
+
+    // HPF state (2nd-order Butterworth, coefficients recomputed on mode/toggle change)
+    float hpfB0 = 1.0f, hpfB1 = 0.0f, hpfB2 = 0.0f, hpfA1 = 0.0f, hpfA2 = 0.0f;
+    std::vector<float> hpfZ1, hpfZ2;
+
+    // Hi-shelf state (gentle air cut)
+    vxsuite::corrective::detail::BiquadCoeffs hiShelfCoeffs;
+    std::vector<float> hiShelfZ1, hiShelfZ2;
+
+    bool lastHpfOn = false;
+    bool lastHiShelfOn = false;
+
+    void rebuildFilters(bool hpfOn, bool hiShelfOn, bool voiceMode);
 
     // Detection implementation
     void performPreAnalysis(const juce::AudioBuffer<float>& buffer);

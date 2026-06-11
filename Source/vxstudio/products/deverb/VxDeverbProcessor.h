@@ -52,6 +52,7 @@ private:
     juce::AudioBuffer<float> wetScratch;
     vxsuite::BlockSmoothedControl controls;
     float smoothedCompensationGain = 1.0f;
+    float smoothedDrActivity       = 0.0f;
     float smoothedBody = 0.0f;
     // Per-channel DF2 biquad state for the body low-shelf (max 2 channels)
     std::array<float, 2> bodyShelfZ1 {};

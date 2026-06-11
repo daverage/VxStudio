@@ -114,11 +114,13 @@ void DeClickDsp::repairRegion(ChannelState& c, int64_t start, int64_t end,
 
         const float repaired = cubicInterp(y0, y1, y2, y3, tLinear);
 
-        float blend = amount;
-        if (longBlend) {
-            // sin(pi*t): zero at edges, peak at centre.
-            blend = amount * std::sin(tLinear * juce::MathConstants<float>::pi);
-        }
+        // Edge blend: 1.0 at both endpoints (cubic matches surrounding samples →
+        // continuous transition), tapering to `amount` at the centre.  This avoids
+        // the clicks that a constant or sin-windowed blend introduces when the click
+        // region boundary doesn't match the surrounding audio level.
+        (void)longBlend;  // unified formula handles both short and long regions
+        const float edgeWeight = std::sin(tLinear * juce::MathConstants<float>::pi);
+        const float blend = 1.0f - (1.0f - amount) * edgeWeight;
 
         const float original = getRingSample(c, start + i);
         setRingSample(c, start + i, original * (1.0f - blend) + repaired * blend);

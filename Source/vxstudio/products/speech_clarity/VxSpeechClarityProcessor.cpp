@@ -165,15 +165,31 @@ void VXSpeechClarityAudioProcessor::performPreAnalysis(const juce::AudioBuffer<f
     // Threshold = mean × multiplier. Plosives/breath are sharp bursts well above
     // the mean band energy — using max caused constant false-triggering because
     // the peak is often within the normal signal range.
-    constexpr float kFloor = 1.0e-5f;
+    //
+    // If all band means are near-silent (e.g. plugin initialised into silence),
+    // defer pre-analysis until there is actual content; setting near-zero thresholds
+    // causes every real signal to exceed them and keeps the LEDs permanently lit.
+    constexpr float kMinMeanEnergy = 1.0e-3f;
     const float meanSib    = static_cast<float>(sibSum    / total);
     const float meanPlos   = static_cast<float>(plosSum   / total);
     const float meanBreath = static_cast<float>(breathSum / total);
-    preAnalysisMetrics.sibilanceThreshold = std::max(kFloor, meanSib    * 4.0f);
-    preAnalysisMetrics.plosiveThreshold   = std::max(kFloor, meanPlos   * 5.0f);
-    preAnalysisMetrics.breathThreshold    = std::max(kFloor, meanBreath * 4.0f);
+    if (meanSib < kMinMeanEnergy && meanPlos < kMinMeanEnergy && meanBreath < kMinMeanEnergy)
+        return; // keep needsPreAnalysis = true; retry on next buffer
+
+    preAnalysisMetrics.sibilanceThreshold = meanSib    * 4.0f;
+    preAnalysisMetrics.plosiveThreshold   = meanPlos   * 5.0f;
+    preAnalysisMetrics.breathThreshold    = meanBreath * 4.0f;
     preAnalysisMetrics.isValid = true;
     needsPreAnalysis = false;
+
+    // Reset filters so the detect phase runs from a clean state on the next buffer
+    // rather than inheriting the warmed state from this pre-analysis pass.
+    sibilanceBandFilter.reset();
+    plosiveBandFilter.reset();
+    breathBandFilter.reset();
+    sibilanceEnvFollower.reset();
+    plosiveEnvFollower.reset();
+    breathEnvFollower.reset();
 }
 
 float VXSpeechClarityAudioProcessor::detectSibilance(const juce::AudioBuffer<float>& buffer) {
@@ -254,8 +270,11 @@ void VXSpeechClarityAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
         return;
 
     // 1. PRE-ANALYSIS (first call or on reset)
+    // Skip detection on the pre-analysis frame — filters are reset at the end of
+    // performPreAnalysis so the detect phase must run on the following buffer.
     if (needsPreAnalysis) {
         performPreAnalysis(buffer);
+        return;
     }
 
     // 2. READ CONTROL DIALS
