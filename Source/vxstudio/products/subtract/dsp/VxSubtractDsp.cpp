@@ -174,7 +174,8 @@ void SubtractDsp::clearStreamingState() {
     }
 
     prevFrameEnergy = 1.0e-8f;
-    suppressionRamp = 0.0f;
+    suppressionRamp = 1.0f;
+    suppressionActivePrev = false;
 
     updateSmoothingCoeffs();
 
@@ -421,11 +422,39 @@ void SubtractDsp::computeGainTargets(const FrameCtx& ctx,
         if (!ctx.labRaw && binInTransient)
             g = lerp(g, 1.0f, 0.40f);
 
+        const float hz = static_cast<float>(k) * static_cast<float>(sr)
+                       / static_cast<float>(fftSize);
+        const float sBandRise = vxsuite::clamp01((hz - 120.0f) / 320.0f);
+        const float sBandFall = vxsuite::clamp01((4600.0f - hz) / 1400.0f);
+        const float sBandW    = sBandRise * sBandFall;
+        const float steadyV   = binInTransient ? 0.0f : 1.0f;
+        const float rawProtectMask = 0.52f * presenceProb[k]
+                                   + 0.28f * tonalnessByBin[k]
+                                   + 0.20f * (binInTransient ? 1.0f : 0.0f);
+        const float protectMask = juce::jlimit(0.0f, 1.0f,
+            ctx.guardStrictness * rawProtectMask * (ctx.voiceMode ? 1.0f : 0.55f));
+        const float speechProt = ctx.voiceMode
+            ? juce::jlimit(0.0f, 1.0f,
+                  ctx.sourceProtect * sBandW * steadyV
+                * std::pow(vxsuite::clamp01(presenceProb[k]), 1.35f)
+                * (0.35f + 0.65f * tonalnessByBin[k])
+                * (0.55f + 0.45f * ctx.speechFocus))
+            : 0.0f;
+        if (!ctx.labRaw) {
+            const float blindProtect = juce::jlimit(0.0f, ctx.voiceMode ? 0.72f : 0.34f,
+                (ctx.voiceMode ? 0.44f : 0.24f) * protectMask
+              + (ctx.voiceMode ? 0.34f : 0.0f) * speechProt);
+            g = lerp(g, 1.0f, blindProtect);
+        }
+
         const float maskHead = vxsuite::clamp01(std::log10(std::max(1.0f, Gamma)) / 3.5f);
         const float minGain  = ctx.labRaw
             ? juce::jlimit(1.0e-4f, 0.10f, lerp(1.0e-3f, 0.05f, maskHead))
             : juce::jlimit(0.015f, 0.18f,  lerp(0.03f, 0.11f, maskHead) * 0.85f);
-        const float binFloor = ctx.globalFloor * erbFloor[k];
+        const float protectFloor = ctx.voiceMode
+            ? lerp(0.0f, 0.12f, speechProt)
+            : lerp(0.0f, 0.04f, protectMask);
+        const float binFloor = std::max(ctx.globalFloor * erbFloor[k], protectFloor);
         g = std::max(std::max(minGain, binFloor), vxsuite::clamp01(g));
 
         if (g <= minGain + 0.05f)
@@ -441,24 +470,6 @@ void SubtractDsp::computeGainTargets(const FrameCtx& ctx,
         if (ctx.subtractEnabled) {
             const float mag       = std::sqrt(std::max(kEps, p));
             const float noiseMag  = std::sqrt(std::max(kEps, learnedSubtractNoise(k)));
-            const float hz        = static_cast<float>(k) * static_cast<float>(sr)
-                                  / static_cast<float>(fftSize);
-            const float sBandRise = vxsuite::clamp01((hz - 120.0f) / 320.0f);
-            const float sBandFall = vxsuite::clamp01((4600.0f - hz) / 1400.0f);
-            const float sBandW    = sBandRise * sBandFall;
-            const float steadyV   = binInTransient ? 0.0f : 1.0f;
-            const float speechProt = ctx.voiceMode
-                ? juce::jlimit(0.0f, 1.0f,
-                      ctx.sourceProtect * sBandW * steadyV
-                    * std::pow(vxsuite::clamp01(presenceProb[k]), 1.35f)
-                    * (0.35f + 0.65f * tonalnessByBin[k])
-                    * (0.55f + 0.45f * ctx.speechFocus))
-                : 0.0f;
-            const float rawMask = 0.52f * presenceProb[k]
-                                + 0.28f * tonalnessByBin[k]
-                                + 0.20f * (binInTransient ? 1.0f : 0.0f);
-            const float protectMask = juce::jlimit(0.0f, 1.0f,
-                ctx.guardStrictness * rawMask * (ctx.voiceMode ? 1.0f : 0.55f));
             const float effAlpha = ctx.subtractAlpha
                 * (1.0f - (ctx.voiceMode ? 0.48f : 0.32f) * protectMask
                         - (ctx.voiceMode ? 0.34f : 0.0f) * speechProt);
@@ -545,6 +556,15 @@ void SubtractDsp::smoothGains(bool subtractEnabled, float wetCore) {
     }
     for (size_t k = 0; k < bins; ++k)
         gainSmoothedFreq[k] = std::max(gainSmoothedFreq[k], harmonicFloor[k]);
+
+    const bool suppressionActive = subtractEnabled || wetCore > 1.0e-5f;
+    if (suppressionActive && !suppressionActivePrev) {
+        gainSmooth = gainSmoothedFreq;
+        suppressionActivePrev = true;
+        return;
+    }
+    if (!suppressionActive)
+        suppressionActivePrev = false;
 
     // Temporal smoothing with low-frequency stability guard
     for (size_t k = 0; k < bins; ++k) {
@@ -859,10 +879,6 @@ bool SubtractDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
             computeGainTargets(ctx, energyRatio, learnFrameHasSignal);
             smoothGains(subtractEnabled, wetCore);
-
-            suppressionRamp = std::min(1.0f, suppressionRamp
-                + static_cast<float>(hop) / std::max(1000.0f, static_cast<float>(sr)) / 0.70f);
-
 
             applyGainAndOLA();
 

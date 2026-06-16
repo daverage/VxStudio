@@ -137,6 +137,7 @@ private:
     float attackCoeff  = 0.80f;
     float releaseCoeff = 0.97f;
     float suppressionRamp = 0.0f;
+    bool  suppressionActivePrev = false;
 
     // Ring FIFO helpers
     void pushInputSample (float x);

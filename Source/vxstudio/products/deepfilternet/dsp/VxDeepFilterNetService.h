@@ -46,6 +46,7 @@ public:
                          double sampleRate,
                          float strength,
                          uint64_t key);
+    bool isInStartupBypass() const noexcept { return startupBypassActive.load(std::memory_order_acquire); }
 
     int getLatencySamples() const noexcept { return latencySamples; }
     float lastTailPrior() const noexcept { return tailPrior; }
@@ -103,6 +104,7 @@ private:
         std::vector<float> frameOut;
         std::vector<float> resampleIn;
         std::vector<float> resampleOut;
+        int startupSamplesRemaining = 0;
     };
 
     struct RuntimeBundle {
@@ -149,6 +151,7 @@ private:
     RealtimeCapability rtCapability = RealtimeCapability::unavailable;
     RealtimeBackend rtBackend = RealtimeBackend::none;
     std::atomic<bool> resetRequested { false };
+    std::atomic<bool> startupBypassActive { false };
     std::atomic<StatusCode> statusCode { StatusCode::idle };
     ModelVariant rtPreparedVariant = ModelVariant::dfn3;
 };

@@ -91,7 +91,9 @@ float VXOptoCompAudioProcessor::getActivityLight(int index) const noexcept {
         case 0: return optoDsp.getCompActivity();
         case 1: return juce::jlimit(0.0f, 1.0f, optoDsp.getGainReductionDb() / 20.0f);
         case 2: return optoDsp.getLimiterActivity();
-        case 3: return juce::jlimit(0.0f, 1.0f, (optoDsp.getEnvelopeDb() + 60.0f) / 60.0f);
+        case 3: return optoDsp.getGainReductionDb() > 0.1f
+                    ? juce::jlimit(0.0f, 1.0f, (optoDsp.getEnvelopeDb() + 60.0f) / 60.0f)
+                    : 0.0f;
         default: return 0.0f;
     }
 }
@@ -162,6 +164,14 @@ void VXOptoCompAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     optoDsp.process(buffer, renderConfig.options);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
+}
+
+vxsuite::MeteringSnapshot VXOptoCompAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    s.gainReductionDb = optoDsp.getGainReductionDb();
+    s.compActivity    = optoDsp.getCompActivity();
+    s.limiterActivity = optoDsp.getLimiterActivity();
+    return s;
 }
 
 void VXOptoCompAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,

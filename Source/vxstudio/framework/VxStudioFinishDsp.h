@@ -44,6 +44,7 @@ private:
     float limitEnv = 0.0f;
     float limitGain = 1.0f;
     float limiterActivity = 0.0f;
+    bool primed = false;
     OptoCompressorLA2A opto;
 };
 

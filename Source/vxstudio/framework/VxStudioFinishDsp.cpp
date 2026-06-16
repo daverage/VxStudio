@@ -74,6 +74,7 @@ void Dsp::reset() {
     limitEnv = 0.0f;
     limitGain = 1.0f;
     limiterActivity = 0.0f;
+    primed = false;
 }
 
 void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& options) {
@@ -100,11 +101,18 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& option
 
     const float autoMakeupMaxDb = 18.0f;
     const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, voiceMode ? 0.40f : 0.43f);
-    if (!finishStageEnabled)
+    if (!finishStageEnabled) {
         smoothedAutoMakeupDb = 0.0f;
-    else
+    } else if (!primed) {
+        // Snap makeup gain on the first block so there is no audible ramp-up from 0.
+        // Without this, the compressor's output level fades in over ~180ms and the limiter
+        // can be driven unexpectedly as the makeup catches up, causing a crackle.
+        smoothedAutoMakeupDb = autoMakeupFromKnobDb;
+    } else {
         smoothedAutoMakeupDb += vxsuite::blockBlendAlpha(sr, numSamples, 0.18f)
             * (autoMakeupFromKnobDb - smoothedAutoMakeupDb);
+    }
+    primed = true;
 
     updateOptoParams(smoothedAutoMakeupDb + params.outputGainDb);
     opto.process(buffer);

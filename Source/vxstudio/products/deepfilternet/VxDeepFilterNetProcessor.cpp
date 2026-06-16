@@ -177,8 +177,9 @@ void VXDeepFilterNetAudioProcessor::resetSuite() {
     silenceGuard.reset();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
-    startupWetRamp = 0.0f;
+    prevWetMix = 0.0f;
     controlsPrimed = false;
+    holdbackActive = true;
     tonalAnalysis.reset();
 }
 
@@ -213,11 +214,12 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
-    if (silenceGuard.update(buffer)) return;
+    silenceGuard.update(buffer);
 
     const float cleanTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.5f);
 
+    const bool firstControlBlock = !controlsPrimed;
     if (!controlsPrimed) {
         smoothedClean = cleanTarget;
         smoothedGuard = guardTarget;
@@ -230,26 +232,42 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     const float effectiveClean = vxsuite::clamp01(smoothedClean);
 
     ensureLatencyAlignedListenDry(numSamples);
+    const bool wasHolding = holdbackActive;
     engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
+    holdbackActive = engine.isInStartupBypass();
+
+    // DFN has STFT/model lookahead: output is invalid until enough context has been fed.
+    // During holdback the engine already zeros its output internally. We output silence here
+    // so the host's latency compensation hides the delay — the listener never hears warmup
+    // or dry passthrough. prevWetMix is pre-armed to the target so the first Running block
+    // starts at full strength without any ramp.
+    if (wasHolding) {
+        buffer.clear();
+        prevWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+        return;
+    }
 
     // Guard=0 → full wet (full denoising); Guard=1 → fully dry (backed off).
-    const float rampStep = static_cast<float>(numSamples) / (0.200f * static_cast<float>(currentSampleRateHz));
-    startupWetRamp = std::min(1.0f, startupWetRamp + rampStep);
-    const float wetMix = (1.0f - vxsuite::clamp01(smoothedGuard)) * startupWetRamp;
+    const float wetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+    if (firstControlBlock)
+        prevWetMix = wetMix;
 
-    blendProcessedWithDry(buffer, wetMix);
+    blendProcessedWithDry(buffer, prevWetMix, wetMix);
+    prevWetMix = wetMix;
 }
 
-void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<float>& buffer, const float wetMix) {
+void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<float>& buffer, const float prevWetMix, const float wetMix) {
     const auto& alignedDryScratch = getLatencyAlignedListenDryBuffer();
     const int channels = std::min(buffer.getNumChannels(), alignedDryScratch.getNumChannels());
     const int samples = std::min(buffer.getNumSamples(), alignedDryScratch.getNumSamples());
-    const float wet = vxsuite::clamp01(wetMix);
     for (int ch = 0; ch < channels; ++ch) {
         auto* processed = buffer.getWritePointer(ch);
         const auto* dry = alignedDryScratch.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
+        for (int i = 0; i < samples; ++i) {
+            const float t = samples > 1 ? static_cast<float>(i) / static_cast<float>(samples - 1) : 1.0f;
+            const float wet = vxsuite::clamp01(prevWetMix + (wetMix - prevWetMix) * t);
             processed[i] = dry[i] + (processed[i] - dry[i]) * wet;
+        }
     }
 }
 

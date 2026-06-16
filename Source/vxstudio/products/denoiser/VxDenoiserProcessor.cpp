@@ -87,7 +87,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0) return;
 
-    if (silenceGuard.update(buffer)) return;
+    const bool inputIsSilent = silenceGuard.update(buffer);
 
     const float cleanTarget = vxsuite::readNormalized(parameters, kCleanParam, 0.5f);
     const float guardTarget = vxsuite::readNormalized(parameters, kGuardParam, 0.5f);
@@ -128,6 +128,9 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     if (effectiveClean <= 1.0e-4f) {
         ensureLatencyAlignedListenDry(numSamples);
         const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        // Keep STFT accumulator warm; cold OLA on the first active frame creates a pop.
+        // processInPlace output is discarded; aligned dry replaces it.
+        denoiserDsp.processInPlace(buffer, 0.0f, opts);
         const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
         for (int ch = 0; ch < channels; ++ch)
             buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
@@ -139,7 +142,7 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float dryRms = vxsuite::analysis::rms(buffer);
     denoiserDsp.processInPlace(buffer, effectiveClean, opts);
 
-    // Makeup gain: compensate for level loss from noise suppression
+    // Wet level is tracked for activity display only. Avoid automatic make-up gain.
     const float wetRms = vxsuite::analysis::rms(buffer);
 
     // NR activity: fraction of energy removed, smoothed for display.
@@ -149,24 +152,21 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
             ? vxsuite::clamp01((dryRms - wetRms) / dryRms)
             : 0.0f;
         smoothedNrActivity = 0.85f * smoothedNrActivity + 0.15f * removed;
+        if (inputIsSilent)
+            smoothedNrActivity *= 0.75f;
     }
-    const float speechPresence = juce::jlimit(0.0f, 1.0f, denoiserDsp.getSignalPresence());
-    float compensationTarget = 1.0f;
-
-    if (dryRms > 1.0e-5f && wetRms > 1.0e-5f && speechPresence > 0.35f) {
-        const float speechWeight = juce::jlimit(0.0f, 1.0f, (speechPresence - 0.35f) / 0.45f);
-        const float maxCompensation = juce::Decibels::decibelsToGain(isVoice ? 2.4f : 1.8f);
-        const float targetRms = dryRms * juce::jlimit(0.46f, 0.64f, 0.50f + 0.04f * smoothedGuard);
-        compensationTarget = juce::jlimit(1.0f, maxCompensation, targetRms / std::max(wetRms, 1.0e-6f)) * speechWeight;
-    }
-
+    // Do not apply automatic make-up gain after noise reduction. The changing
+    // speech-presence estimate can otherwise turn suppression changes into
+    // low-frequency thumps, and denoising should not make transient faults louder.
+    const float compensationTarget = 1.0f;
+    const float prevMakeupGain = smoothedMakeupGain;
     smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain,
                                                    compensationTarget,
                                                    currentSampleRateHz,
                                                    numSamples,
                                                    compensationTarget > 1.0f ? 0.180f : 0.120f);
-    if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f)
-        buffer.applyGain(smoothedMakeupGain);
+    if (std::abs(smoothedMakeupGain - 1.0f) > 1.0e-4f || std::abs(prevMakeupGain - 1.0f) > 1.0e-4f)
+        buffer.applyGainRamp(0, numSamples, prevMakeupGain, smoothedMakeupGain);
 }
 
 
@@ -177,11 +177,23 @@ void VXDenoiserAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outp
     const auto& alignedDry = getLatencyAlignedListenDryBuffer();
     const int channels = std::min(outputBuffer.getNumChannels(), alignedDry.getNumChannels());
     const int samples  = std::min(outputBuffer.getNumSamples(),  alignedDry.getNumSamples());
+    double deltaEnergy = 0.0;
+    int count = 0;
     for (int ch = 0; ch < channels; ++ch) {
         auto* out = outputBuffer.getWritePointer(ch);
         const auto* dry = alignedDry.getReadPointer(ch);
-        for (int i = 0; i < samples; ++i)
-            out[i] = dry[i] - out[i];  // removed noise = dry − wet
+        for (int i = 0; i < samples; ++i) {
+            out[i] = dry[i] - out[i];  // removed noise = dry - wet
+            deltaEnergy += static_cast<double>(out[i]) * out[i];
+            ++count;
+        }
+    }
+    const float deltaRms = count > 0
+        ? static_cast<float>(std::sqrt(deltaEnergy / static_cast<double>(count)))
+        : 0.0f;
+    if (deltaRms < 1.0e-5f) {
+        outputBuffer.clear();
+        return;
     }
 }
 

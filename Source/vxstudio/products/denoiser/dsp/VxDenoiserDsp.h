@@ -156,6 +156,7 @@ private:
     float smoothedGrDb    = 0.0f;
     bool  phaseReady      = false;
     bool  fifoLive        = false; // false after reset() or early-exit; reset STFT on next active call
+    bool  suppressionActivePrev = false;
     float prevFrameEnergy = kEps;
     float attackCoeff     = 0.80f;
     float releaseCoeff    = 0.97f;

@@ -675,12 +675,14 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         makeupTarget = juce::jlimit(1.0f, juce::Decibels::decibelsToGain(2.0f),
             (dryRms / std::max(wetRms, 1.0e-6f))
           * juce::jlimit(0.48f, 1.0f, 1.0f - 0.26f * cleanupStrength - 0.14f * densityPressure));
+    const float prevMakeupGain = smoothedMakeupGain;
     smoothedMakeupGain = vxsuite::smoothBlockValue(smoothedMakeupGain, makeupTarget, currentSampleRateHz, numSamples, 0.120f);
 
     // Safety: never push above the original dry peak.
-    const float safeGain = wetPeak > 1.0e-6f ? std::min(smoothedMakeupGain, dryPeak / wetPeak) : smoothedMakeupGain;
-    if (std::abs(safeGain - 1.0f) > 1.0e-4f)
-        buffer.applyGain(safeGain);
+    const float safeGain  = wetPeak > 1.0e-6f ? std::min(smoothedMakeupGain, dryPeak / wetPeak) : smoothedMakeupGain;
+    const float startGain = wetPeak > 1.0e-6f ? std::min(prevMakeupGain,     dryPeak / wetPeak) : prevMakeupGain;
+    if (std::abs(safeGain - 1.0f) > 1.0e-4f || std::abs(startGain - 1.0f) > 1.0e-4f)
+        buffer.applyGainRamp(0, numSamples, startGain, safeGain);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

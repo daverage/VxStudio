@@ -270,10 +270,12 @@ void VXSpeechClarityAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
         return;
 
     // 1. PRE-ANALYSIS (first call or on reset)
-    // Skip detection on the pre-analysis frame — filters are reset at the end of
-    // performPreAnalysis so the detect phase must run on the following buffer.
+    // Always advance deClickDsp even on the pre-analysis frame — its ring buffer
+    // is always active (no strength guard), so skipping it shifts all future output
+    // by lookaheadSamples and creates a hard click at the transition.
     if (needsPreAnalysis) {
         performPreAnalysis(buffer);
+        deClickDsp.process(buffer, { 0.0f, 0.0f });
         return;
     }
 

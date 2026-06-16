@@ -231,11 +231,13 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     const BiquadCoeffs midC    = peakingEqCoeffs(currentSampleRateHz, midGainDb,    midFreqHz, midQ);
     const BiquadCoeffs trebleC = highShelfCoeffs(currentSampleRateHz, trebleGainDb, trebleFreqHz);
 
+    const float prevOutputTrimDb = smoothedOutputTrimDb;
     smoothedOutputTrimDb = vxsuite::smoothBlockValue(smoothedOutputTrimDb,
                                                      outputTrimTargetDb,
                                                      currentSampleRateHz,
                                                      numSamples,
                                                      0.120f);
+    const float prevOutputTrim = juce::Decibels::decibelsToGain(prevOutputTrimDb);
     const float outputTrim = juce::Decibels::decibelsToGain(smoothedOutputTrimDb);
 
     for (int ch = 0; ch < numChannels; ++ch) {
@@ -245,9 +247,9 @@ void VXToneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
         applyBiquad(data, numSamples, bassC,   bassState[static_cast<size_t>(ch)]);
         applyBiquad(data, numSamples, midC,    midState[static_cast<size_t>(ch)]);
         applyBiquad(data, numSamples, trebleC, trebleState[static_cast<size_t>(ch)]);
-        if (std::abs(outputTrim - 1.0f) > 1.0e-4f)
-            juce::FloatVectorOperations::multiply(data, outputTrim, numSamples);
     }
+    if (std::abs(outputTrim - 1.0f) > 1.0e-4f || std::abs(prevOutputTrim - 1.0f) > 1.0e-4f)
+        buffer.applyGainRamp(0, numSamples, prevOutputTrim, outputTrim);
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

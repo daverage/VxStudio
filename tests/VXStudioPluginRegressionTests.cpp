@@ -8,6 +8,7 @@
 #include "../Source/vxstudio/products/finish/VxFinishProcessor.h"
 #include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxstudio/products/rebalance/VxRebalanceProcessor.h"
+#include "../Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.h"
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
@@ -817,6 +818,60 @@ bool testSubtractLearnedProfileSurvivesResetAndStillActs() {
     return true;
 }
 
+bool testSubtractActsAtStartOfRenderedAudio() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, blockSize);
+    if (!primeSubtractLearn(processor, sr, blockSize))
+        return false;
+
+    auto speech = makeSpeechLike(sr, 1.0f);
+    auto noise = makeNoise(sr, 1.0f, 0.10f);
+    auto noisy = addBuffers(speech, noise);
+
+    processor.reset();
+    setParamNormalized(processor, "mode", 1.0f);
+    setParamNormalized(processor, "subtract", 1.0f);
+    setParamNormalized(processor, "protect", 0.20f);
+    const auto out = render(processor, noisy, blockSize);
+
+    const auto windowRmsDiff = [](const juce::AudioBuffer<float>& a,
+                                  const juce::AudioBuffer<float>& b,
+                                  const int startSample,
+                                  const int endSample) {
+        const int channels = std::min(a.getNumChannels(), b.getNumChannels());
+        const int start = juce::jlimit(0, std::min(a.getNumSamples(), b.getNumSamples()), startSample);
+        const int end = juce::jlimit(start, std::min(a.getNumSamples(), b.getNumSamples()), endSample);
+        double energy = 0.0;
+        int count = 0;
+        for (int ch = 0; ch < channels; ++ch) {
+            const auto* aa = a.getReadPointer(ch);
+            const auto* bb = b.getReadPointer(ch);
+            for (int i = start; i < end; ++i) {
+                const double d = static_cast<double>(aa[i] - bb[i]);
+                energy += d * d;
+                ++count;
+            }
+        }
+        return count > 0 ? static_cast<float>(std::sqrt(energy / static_cast<double>(count))) : 0.0f;
+    };
+
+    const int earlyStart = static_cast<int>(0.04 * sr);
+    const int earlyEnd = static_cast<int>(0.20 * sr);
+    const int lateStart = static_cast<int>(0.55 * sr);
+    const int lateEnd = static_cast<int>(0.75 * sr);
+    const float earlyDiff = windowRmsDiff(noisy, out, earlyStart, earlyEnd);
+    const float lateDiff = windowRmsDiff(noisy, out, lateStart, lateEnd);
+
+    if (earlyDiff < 0.55f * lateDiff || earlyDiff < 1.0e-3f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract did not act strongly enough at render start: earlyDiff="
+                  << earlyDiff << " lateDiff=" << lateDiff << "\n";
+        return false;
+    }
+    return true;
+}
+
 bool testSubtractGeneralModeStaysUsefulAndNonSilent() {
     constexpr double sr = 48000.0;
     VXSubtractAudioProcessor processor;
@@ -845,6 +900,90 @@ bool testSubtractGeneralModeStaysUsefulAndNonSilent() {
     if (residual > 0.97f || diff < 0.01f) {
         std::cerr << "[VXSuitePluginRegression] Subtract general mode no longer does enough useful work: residual="
                   << residual << " diff=" << diff << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractBlindProtectAndModeAreAudible() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    auto noisy = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.08f));
+
+    VXSubtractAudioProcessor vocalLowProtect;
+    vocalLowProtect.prepareToPlay(sr, blockSize);
+    setParamNormalized(vocalLowProtect, "mode", 0.0f);
+    setParamNormalized(vocalLowProtect, "subtract", 1.0f);
+    setParamNormalized(vocalLowProtect, "protect", 0.0f);
+    const auto vocalLow = render(vocalLowProtect, noisy, blockSize);
+
+    VXSubtractAudioProcessor vocalHighProtect;
+    vocalHighProtect.prepareToPlay(sr, blockSize);
+    setParamNormalized(vocalHighProtect, "mode", 0.0f);
+    setParamNormalized(vocalHighProtect, "subtract", 1.0f);
+    setParamNormalized(vocalHighProtect, "protect", 1.0f);
+    const auto vocalHigh = render(vocalHighProtect, noisy, blockSize);
+
+    VXSubtractAudioProcessor general;
+    general.prepareToPlay(sr, blockSize);
+    setParamNormalized(general, "mode", 1.0f);
+    setParamNormalized(general, "subtract", 1.0f);
+    setParamNormalized(general, "protect", 0.0f);
+    const auto generalOut = render(general, noisy, blockSize);
+
+    const auto diffRmsSkip = [](const juce::AudioBuffer<float>& a,
+                                const juce::AudioBuffer<float>& b,
+                                const int skipSamples) {
+        double energy = 0.0;
+        int count = 0;
+        const int channels = std::min(a.getNumChannels(), b.getNumChannels());
+        const int samples = std::min(a.getNumSamples(), b.getNumSamples());
+        const int start = juce::jlimit(0, samples, skipSamples);
+        for (int ch = 0; ch < channels; ++ch) {
+            const auto* aa = a.getReadPointer(ch);
+            const auto* bb = b.getReadPointer(ch);
+            for (int i = start; i < samples; ++i) {
+                const double d = static_cast<double>(aa[i] - bb[i]);
+                energy += d * d;
+                ++count;
+            }
+        }
+        return count > 0 ? static_cast<float>(std::sqrt(energy / static_cast<double>(count))) : 0.0f;
+    };
+
+    const float lowProtectDelta = diffRmsSkip(noisy, vocalLow, 4096);
+    const float highProtectDelta = diffRmsSkip(noisy, vocalHigh, 4096);
+    const float modeDiff = maxAbsDiffSkip(vocalLow, generalOut, 4096);
+
+    if (!(highProtectDelta < lowProtectDelta * 0.82f)) {
+        std::cerr << "[VXSuitePluginRegression] Subtract blind Protect did not reduce removal enough: low="
+                  << lowProtectDelta << " high=" << highProtectDelta << "\n";
+        return false;
+    }
+    if (modeDiff < 0.006f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract blind Vocal/General modes are still too similar: diff="
+                  << modeDiff << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testSubtractListenIsSilentWhenNoRemoval() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    auto noisy = addBuffers(makeSpeechLike(sr, 0.6f), makeNoise(sr, 0.6f, 0.05f));
+
+    VXSubtractAudioProcessor processor;
+    processor.prepareToPlay(sr, blockSize);
+    setParamNormalized(processor, "subtract", 0.0f);
+    setParamNormalized(processor, "protect", 0.5f);
+    setParamNormalized(processor, "listen", 1.0f);
+    const auto listen = render(processor, noisy, blockSize);
+
+    const float listenLevel = rmsSkip(listen, 4096);
+    if (listenLevel > 1.0e-5f) {
+        std::cerr << "[VXSuitePluginRegression] Subtract Listen leaked audio when no removal happened: rms="
+                  << listenLevel << "\n";
         return false;
     }
     return true;
@@ -1556,6 +1695,44 @@ bool testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial() {
         return false;
     }
 
+    return true;
+}
+
+bool testSpeechClarityDeclickDoesNotAmplifyClicks() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    auto input = makeSpeechLike(sr, 0.9f);
+    const int clickSample = static_cast<int>(0.36 * sr);
+    for (int ch = 0; ch < input.getNumChannels(); ++ch) {
+        input.setSample(ch, clickSample - 1, -0.20f);
+        input.setSample(ch, clickSample, 0.55f);
+        input.setSample(ch, clickSample + 1, -0.18f);
+    }
+    const auto original = input;
+
+    const auto windowPeak = [](const juce::AudioBuffer<float>& buffer, const int center, const int radius) {
+        float peak = 0.0f;
+        const int start = juce::jlimit(0, buffer.getNumSamples(), center - radius);
+        const int end = juce::jlimit(start, buffer.getNumSamples(), center + radius + 1);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+            const auto* data = buffer.getReadPointer(ch);
+            for (int i = start; i < end; ++i)
+                peak = std::max(peak, std::abs(data[i]));
+        }
+        return peak;
+    };
+
+    vxsuite::speech_clarity::DeClickDsp declick;
+    declick.prepare(sr, input.getNumSamples(), input.getNumChannels());
+    declick.process(input, { 1.0f, 1.0f });
+
+    const float inPeak = windowPeak(original, clickSample, 12);
+    const float outPeak = windowPeak(input, clickSample + declick.getLatencySamples(), 16);
+    if (outPeak > inPeak * 1.02f) {
+        std::cerr << "[VXSuitePluginRegression] Speech Clarity declick amplified a click: inPeak="
+                  << inPeak << " outPeak=" << outPeak << "\n";
+        return false;
+    }
     return true;
 }
 
@@ -2410,6 +2587,47 @@ bool testDenoiserStrongSettingStaysCoherentAndBounded() {
     if (corr < 0.40f) {
         std::cerr << "[VXSuitePluginRegression] Denoiser strong setting damaged speech coherence too much: |corr|="
                   << corr << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool testDenoiserDoesNotAmplifyImpulsesOrLeakListenBuzz() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    auto input = addBuffers(makeSpeechLike(sr, 0.8f), makeNoise(sr, 0.8f, 0.025f));
+    const int clickSample = static_cast<int>(0.32 * sr);
+    for (int ch = 0; ch < input.getNumChannels(); ++ch) {
+        input.setSample(ch, clickSample - 1, -0.18f);
+        input.setSample(ch, clickSample, 0.42f);
+        input.setSample(ch, clickSample + 1, -0.16f);
+    }
+    const float inputPeak = peakAbs(input);
+
+    VXDenoiserAudioProcessor denoiser;
+    denoiser.prepareToPlay(sr, blockSize);
+    setParamNormalized(denoiser, "clean", 0.95f);
+    setParamNormalized(denoiser, "guard", 0.85f);
+    setParamNormalized(denoiser, "mode", 0.0f);
+    const auto out = render(denoiser, input, blockSize);
+    const float outputPeak = peakAbs(out);
+    if (outputPeak > inputPeak * 1.04f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser amplified an impulse: inPeak="
+                  << inputPeak << " outPeak=" << outputPeak << "\n";
+        return false;
+    }
+
+    juce::AudioBuffer<float> silence(2, static_cast<int>(0.35 * sr));
+    silence.clear();
+    VXDenoiserAudioProcessor listenDenoiser;
+    listenDenoiser.prepareToPlay(sr, blockSize);
+    setParamNormalized(listenDenoiser, "clean", 0.95f);
+    setParamNormalized(listenDenoiser, "guard", 0.85f);
+    setParamNormalized(listenDenoiser, "listen", 1.0f);
+    const auto listen = render(listenDenoiser, silence, blockSize);
+    if (rms(listen) > 1.0e-5f || peakAbs(listen) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] Denoiser Listen leaked buzz on silence: rms="
+                  << rms(listen) << " peak=" << peakAbs(listen) << "\n";
         return false;
     }
     return true;
@@ -3523,7 +3741,10 @@ int main() {
     run("testSubtractLearnLifecycleMakesSense", testSubtractLearnLifecycleMakesSense);
     run("testSubtractListenOutputsMeaningfulRemovedDelta", testSubtractListenOutputsMeaningfulRemovedDelta);
     run("testSubtractLearnedProfileSurvivesResetAndStillActs", testSubtractLearnedProfileSurvivesResetAndStillActs);
+    run("testSubtractActsAtStartOfRenderedAudio", testSubtractActsAtStartOfRenderedAudio);
     run("testSubtractGeneralModeStaysUsefulAndNonSilent", testSubtractGeneralModeStaysUsefulAndNonSilent);
+    run("testSubtractBlindProtectAndModeAreAudible", testSubtractBlindProtectAndModeAreAudible);
+    run("testSubtractListenIsSilentWhenNoRemoval", testSubtractListenIsSilentWhenNoRemoval);
     run("testSubtractStaleLearnedProfileBacksOffOnMismatch", testSubtractStaleLearnedProfileBacksOffOnMismatch);
     run("testRebalanceInstancesStayTrackLocal", testRebalanceInstancesStayTrackLocal);
     run("testRebalanceBacksOffOnLowConfidenceMaterial", testRebalanceBacksOffOnLowConfidenceMaterial);
@@ -3543,6 +3764,7 @@ int main() {
     run("testCleanupVoicedEdgeCaseStaysClean", testCleanupVoicedEdgeCaseStaysClean);
     run("testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase", testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase);
     run("testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial", testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial);
+    run("testSpeechClarityDeclickDoesNotAmplifyClicks", testSpeechClarityDeclickDoesNotAmplifyClicks);
     run("testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge", testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge);
     run("testFinishStrongSettingsAreAudibleButBounded", testFinishStrongSettingsAreAudibleButBounded);
     run("testFinishGainIsBipolarAroundCenter", testFinishGainIsBipolarAroundCenter);
@@ -3566,6 +3788,7 @@ int main() {
     run("testProximityVoiceVsGeneralPatternFactorIsEvident", testProximityVoiceVsGeneralPatternFactorIsEvident);
     run("testToneAndProximityModesAreClearlyDifferentAtExtremes", testToneAndProximityModesAreClearlyDifferentAtExtremes);
     run("testDenoiserStrongSettingStaysCoherentAndBounded", testDenoiserStrongSettingStaysCoherentAndBounded);
+    run("testDenoiserDoesNotAmplifyImpulsesOrLeakListenBuzz", testDenoiserDoesNotAmplifyImpulsesOrLeakListenBuzz);
     run("testDenoiserStrongSettingRetainsUsefulLevelInBothModes", testDenoiserStrongSettingRetainsUsefulLevelInBothModes);
     run("testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes", testDenoiserNoiseOnlyInputStillReducesNoiseInBothModes);
     run("testDenoiserHybridCleanupPrefersHarshResidualOverVoicedTone", testDenoiserHybridCleanupPrefersHarshResidualOverVoicedTone);

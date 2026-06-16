@@ -17,6 +17,7 @@ constexpr int kDefaultFrameLength = 480;
 constexpr int kFifoCapacity48k = 48000;
 constexpr int kDfn3Latency48k = 1920;
 constexpr int kDfn2LowLatency48k = 480;
+constexpr int kModelWarmupFrames = 8;
 
 vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
     if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
@@ -138,6 +139,7 @@ void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
         channel.outputFifo.clear();
         std::fill(channel.frameIn.begin(), channel.frameIn.end(), 0.0f);
         std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
+        channel.startupSamplesRemaining = 0;
     }
     bundle.modelFile = juce::File();
     bundle.ready = false;
@@ -321,6 +323,17 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     const auto maxResampledSize = std::max(safeFrameLength, static_cast<int>(std::ceil(bundle.blockSize * maxRatio)) + 128);
     channel.resampleIn.assign(static_cast<size_t>(maxResampledSize), 0.0f);
     channel.resampleOut.assign(static_cast<size_t>(maxResampledSize), 0.0f);
+
+    // Prime model GRU state with silent frames before the startup bypass period.
+    // DFN3 has 4-frame look-ahead: frames 1-4 of real audio produce invalid output
+    // regardless of GRU state. DFN2 has a cold-state transient even without look-ahead.
+    // The startup bypass (startupSamplesRemaining below) mutes those invalid frames;
+    // priming makes the transition at bypass end clean rather than buzzy.
+    for (int i = 0; i < kModelWarmupFrames; ++i)
+        processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
+    std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
+
+    channel.startupSamplesRemaining = bundle.latencySamples;
     return true;
 }
 
@@ -419,6 +432,7 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
 
     bundleReaders[static_cast<size_t>(activeIndex)].fetch_add(1, std::memory_order_acq_rel);
     const auto attenuationLimitDb = attenuationLimitForStrength(strength);
+    bool anyStartupBypass = false;
 
     for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
         auto& channel = bundle.channels[static_cast<size_t>(channelIndex)];
@@ -442,22 +456,30 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                 auto* input48k = inputBuffers[0];
                 auto* output48k = outputBuffers[0];
 
-                    channel.inputFifo.push(input48k, sampleCount48k);
+                channel.inputFifo.push(input48k, sampleCount48k);
 
-                    while (channel.inputFifo.available >= bundle.frameLength) {
-                        channel.inputFifo.pop(channel.frameIn.data(), bundle.frameLength);
-                        processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
-                        channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
-                    }
+                while (channel.inputFifo.available >= bundle.frameLength) {
+                    channel.inputFifo.pop(channel.frameIn.data(), bundle.frameLength);
+                    processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
+                    channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
+                }
 
                 const int outputCount = std::min(channel.outputFifo.available, sampleCount48k);
                 channel.outputFifo.pop(output48k, outputCount);
                 if (outputCount < sampleCount48k)
                     juce::FloatVectorOperations::clear(output48k + outputCount, sampleCount48k - outputCount);
+
+                if (channel.startupSamplesRemaining > 0) {
+                    const int bypassCount = std::min(channel.startupSamplesRemaining, sampleCount48k);
+                    juce::FloatVectorOperations::clear(output48k, bypassCount);
+                    channel.startupSamplesRemaining -= bypassCount;
+                    anyStartupBypass = true;
+                }
                 });
     }
 
     tailPrior = 0.92f * tailPrior + 0.08f * vxsuite::clamp01(strength);
+    startupBypassActive.store(anyStartupBypass, std::memory_order_release);
     bundleReaders[static_cast<size_t>(activeIndex)].fetch_sub(1, std::memory_order_acq_rel);
     setStatus(StatusCode::rtReady);
     return true;

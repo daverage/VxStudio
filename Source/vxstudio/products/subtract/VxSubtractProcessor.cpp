@@ -210,8 +210,7 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
         subtractDspLeft.finalizeLearnedProfile();
         subtractDspRight.finalizeLearnedProfile();
 
-        // Reset streaming state so suppressionRamp starts at 0 (gradual onset),
-        // preserving noisePowFrozen (the learned profile).
+        // Reset streaming state while preserving noisePowFrozen (the learned profile).
         subtractDspMono.resetStreamingState();
         subtractDspLeft.resetStreamingState();
         subtractDspRight.resetStreamingState();
@@ -229,6 +228,34 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     const auto publishLearnStateAndLatch = [&] {
         updateLearnTelemetry(numChannels);
         learnToggleLatched = learnRequested;
+    };
+    const auto publishMeasuredRemoval = [&](const juce::AudioBuffer<float>& dry) {
+        const int channels = std::min(buffer.getNumChannels(), dry.getNumChannels());
+        if (channels <= 0 || numSamples <= 0) {
+            subtractDisplayLevel.store(0.0f, std::memory_order_relaxed);
+            return;
+        }
+
+        double deltaEnergy = 0.0;
+        double dryEnergy = 0.0;
+        int count = 0;
+        for (int ch = 0; ch < channels; ++ch) {
+            const auto* out = buffer.getReadPointer(ch);
+            const auto* in = dry.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                const double d = static_cast<double>(in[i]) - out[i];
+                deltaEnergy += d * d;
+                dryEnergy += static_cast<double>(in[i]) * in[i];
+                ++count;
+            }
+        }
+
+        const double deltaRms = count > 0 ? std::sqrt(deltaEnergy / static_cast<double>(count)) : 0.0;
+        const double dryRms = count > 0 ? std::sqrt(dryEnergy / static_cast<double>(count)) : 0.0;
+        const float relative = static_cast<float>(deltaRms / std::max(1.0e-5, dryRms));
+        const float absolute = static_cast<float>(deltaRms * 18.0);
+        const float displayed = vxsuite::clamp01(std::max(absolute, relative * 1.8f));
+        subtractDisplayLevel.store(displayed < 0.01f ? 0.0f : displayed, std::memory_order_relaxed);
     };
 
     const bool stereo = numChannels >= 2;
@@ -268,14 +295,13 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     if (learningActiveNow)
         options.subtract = 0.0f;
 
+    const float blindBase = isVoice
+        ? juce::jmap(protectStrength, 0.34f, 0.04f)
+        : juce::jmap(protectStrength, 0.56f, 0.24f);
     const float blindAmount = learningActiveNow ? 0.0f
                                                 : (learnedReady ? 0.0f
-                                                                : vxsuite::clamp01((isVoice ? 0.38f : 0.28f)
-                                                                          * subtractStrength));
-    // Update display level: profile subtract strength or blind amount
-    subtractDisplayLevel.store(
-        learnedReady ? subtractStrength : blindAmount,
-        std::memory_order_relaxed);
+                                                                : vxsuite::clamp01(blindBase * subtractStrength));
+    subtractDisplayLevel.store(0.0f, std::memory_order_relaxed);
     if (learningActiveNow) {
         const auto channelHasLearnSignal = [&](const int channel) {
             if (channel < 0 || channel >= buffer.getNumChannels())
@@ -313,9 +339,23 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     if (!learningActiveNow && subtractStrength <= 1.0e-4f) {
         ensureLatencyAlignedListenDry(numSamples);
         const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        // Keep STFT warm — cold OLA on first active frame creates a pop.
+        if (stereo) {
+            if (leftScratch.getNumSamples() < numSamples || leftScratch.getNumChannels() != 1)
+                leftScratch.setSize(1, numSamples, false, false, true);
+            if (rightScratch.getNumSamples() < numSamples || rightScratch.getNumChannels() != 1)
+                rightScratch.setSize(1, numSamples, false, false, true);
+            leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
+            rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
+            subtractDspLeft.processInPlace(leftScratch, 0.0f, options);
+            subtractDspRight.processInPlace(rightScratch, 0.0f, options);
+        } else {
+            subtractDspMono.processInPlace(buffer, 0.0f, options);
+        }
         const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
         for (int ch = 0; ch < channels; ++ch)
             buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
+        publishMeasuredRemoval(alignedDry);
         finalizeLearnStopTransition();
         publishLearnStateAndLatch();
         return;
@@ -336,7 +376,21 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
     if (liveInputRms > 1.0e-5f)
         activeTailSamplesRemaining = std::max(activeTailSamplesRemaining, getLatencySamples() + numSamples);
     else if (!learnStopEdge && activeTailSamplesRemaining <= 0) {
+        // Keep STFT warm — same pattern as zero-subtract path.
+        if (stereo) {
+            if (leftScratch.getNumSamples() < numSamples || leftScratch.getNumChannels() != 1)
+                leftScratch.setSize(1, numSamples, false, false, true);
+            if (rightScratch.getNumSamples() < numSamples || rightScratch.getNumChannels() != 1)
+                rightScratch.setSize(1, numSamples, false, false, true);
+            leftScratch.copyFrom(0, 0, buffer, 0, 0, numSamples);
+            rightScratch.copyFrom(0, 0, buffer, 1, 0, numSamples);
+            subtractDspLeft.processInPlace(leftScratch, 0.0f, options);
+            subtractDspRight.processInPlace(rightScratch, 0.0f, options);
+        } else {
+            subtractDspMono.processInPlace(buffer, 0.0f, options);
+        }
         buffer.clear();
+        publishMeasuredRemoval(alignedDry);
         finalizeLearnStopTransition();
         publishLearnStateAndLatch();
         return;
@@ -363,12 +417,14 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
             subtractDspLeft.processInPlace(leftScratch, leftProcessAmount, leftOptions);
             buffer.copyFrom(0, 0, leftScratch, 0, 0, numSamples);
         } else {
+            subtractDspLeft.processInPlace(leftScratch, 0.0f, leftOptions);
             buffer.copyFrom(0, 0, alignedDry, 0, 0, numSamples);
         }
         if (learningActiveNow || rightReady || rightProcessAmount > 1.0e-5f) {
             subtractDspRight.processInPlace(rightScratch, rightProcessAmount, rightOptions);
             buffer.copyFrom(1, 0, rightScratch, 0, 0, numSamples);
         } else {
+            subtractDspRight.processInPlace(rightScratch, 0.0f, rightOptions);
             buffer.copyFrom(1, 0, alignedDry, 1, 0, numSamples);
         }
     } else {
@@ -376,10 +432,23 @@ void VXSubtractAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, 
             : (learnedReady ? subtractStrength : blindAmount);
         subtractDspMono.processInPlace(buffer, monoProcessAmount, options);
     }
+    if (!learnedReady) {
+        const float blindWet = isVoice
+            ? juce::jlimit(0.08f, 1.0f, 1.0f - 0.92f * protectStrength)
+            : juce::jlimit(0.28f, 1.0f, 1.0f - 0.62f * protectStrength);
+        const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
+        for (int ch = 0; ch < channels; ++ch) {
+            auto* out = buffer.getWritePointer(ch);
+            const auto* dry = alignedDry.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                out[i] = dry[i] + (out[i] - dry[i]) * blindWet;
+        }
+    }
 
     if (liveInputRms <= 1.0e-5f)
         activeTailSamplesRemaining = std::max(0, activeTailSamplesRemaining - numSamples);
 
+    publishMeasuredRemoval(alignedDry);
     finalizeLearnStopTransition();
     publishLearnStateAndLatch();
 }
@@ -544,6 +613,12 @@ void VXSubtractAudioProcessor::applySavedProfiles() {
 
 void VXSubtractAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
                                                    const juce::AudioBuffer<float>& inputBuffer) {
+    juce::ignoreUnused(inputBuffer);
+    if (subtractDisplayLevel.load(std::memory_order_relaxed) <= 0.0f) {
+        outputBuffer.clear();
+        return;
+    }
+
     ensureLatencyAlignedListenDry(outputBuffer.getNumSamples());
     const auto& alignedDry = getLatencyAlignedListenDryBuffer();
     const int channels = std::min(outputBuffer.getNumChannels(), alignedDry.getNumChannels());

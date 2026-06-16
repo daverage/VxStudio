@@ -206,12 +206,11 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const float meterDivisor = static_cast<float>(std::max(1, (p.stereoLink ? numSamples : numSamples * numChannels)));
   const float grAvgDb = grAcc / meterDivisor;
   detectorDb = detectorAcc / meterDivisor;
-  grDbSmoothed = grAvgDb;
-  // Gate on input signal presence: the slow opto release (up to 25 s) keeps
-  // grDbSmoothed > 0 long after audio stops, causing spurious LED activity.
-  // detectorDb reflects the actual input level this block, so when it's below
-  // the silence floor the indicator resets immediately rather than trailing off.
+  // Gate metering display on compressionEnabled: when Peak Reduction = 0, the slow
+  // LA2A release (up to 5 s) would otherwise keep grDbSmoothed > 0 for seconds after
+  // the knob is turned down, making the GR LED appear "always lit."
   const bool inputPresent = detectorDb > -60.0f;
+  grDbSmoothed = (compressionEnabled && inputPresent) ? grAvgDb : 0.0f;
   activity01 = (compressionEnabled && inputPresent) ? clamp01(grAvgDb / 12.0f) : 0.0f;
 
   applyBodyShelf(buffer);

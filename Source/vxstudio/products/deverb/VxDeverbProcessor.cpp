@@ -234,6 +234,9 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     if (reduce <= 1.0e-4f) {
         ensureLatencyAlignedListenDry(numSamples);
         const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        // Keep STFT accumulator warm — same pattern as VxRepair and VxDenoiser.
+        // Cold OLA on the first active frame produces a pop when Reduce is turned up.
+        deverbProcessor.processInPlace(buffer, 0.0f, options);
         const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
         for (int ch = 0; ch < channels; ++ch)
             buffer.copyFrom(ch, 0, alignedDry, ch, 0, numSamples);
@@ -365,6 +368,7 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     const float compensationDb = std::min(8.0f, lostDb * compensationScale);
     const float targetGain = juce::Decibels::decibelsToGain(compensationDb);
 
+    const float prevGain = smoothedCompensationGain;
     if (isFirstBlock) {
         smoothedCompensationGain = targetGain;
     } else {
@@ -377,7 +381,8 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
 
     const float peakSafeGain = wetPeak > 1.0e-6f ? std::min(1.0f / wetPeak, 1.55f) : 1.0f;
     const float appliedGain = std::min(smoothedCompensationGain, peakSafeGain);
-    wetBuffer.applyGain(appliedGain);
+    const float startGain   = std::min(prevGain, peakSafeGain);
+    wetBuffer.applyGainRamp(0, wetBuffer.getNumSamples(), startGain, appliedGain);
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)

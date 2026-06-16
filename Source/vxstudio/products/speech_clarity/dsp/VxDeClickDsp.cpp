@@ -59,13 +59,11 @@ float DeClickDsp::processBiquad(float x, BiquadState& s) noexcept {
     return y;
 }
 
-float DeClickDsp::cubicInterp(float y0, float y1, float y2, float y3, float t) noexcept {
-    // Catmull-Rom
-    const float a0 = -0.5f * y0 + 1.5f * y1 - 1.5f * y2 + 0.5f * y3;
-    const float a1 =  y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
-    const float a2 = -0.5f * y0 + 0.5f * y2;
-    const float a3 =  y1;
-    return ((a0 * t + a1) * t + a2) * t + a3;
+float DeClickDsp::boundedRepairInterp(float y0, float y1, float y2, float y3, float t) noexcept {
+    juce::ignoreUnused(y0, y3);
+    const float linear = y1 + (y2 - y1) * clamp01(t);
+    const float limit = std::max({ std::abs(y0), std::abs(y1), std::abs(y2), std::abs(y3), 1.0e-5f });
+    return juce::jlimit(-limit, limit, linear);
 }
 
 float DeClickDsp::median9(std::array<float, 9>& v) noexcept {
@@ -96,9 +94,10 @@ void DeClickDsp::setRingSample(ChannelState& c, int64_t idx, float value) noexce
 
 // ─── Repair ──────────────────────────────────────────────────────────────────
 
-void DeClickDsp::repairRegion(ChannelState& c, int64_t start, int64_t end,
+bool DeClickDsp::repairRegion(ChannelState& c, int64_t start, int64_t end,
                                float amount, bool longBlend) noexcept {
-    if (end <= start || amount < 0.001f) return;
+    if (end < start || amount < 0.001f) return false;
+    if (start < 8) return false;
 
     const float y0 = getRingSample(c, start - 2);
     const float y1 = getRingSample(c, start - 1);
@@ -106,25 +105,92 @@ void DeClickDsp::repairRegion(ChannelState& c, int64_t start, int64_t end,
     const float y3 = getRingSample(c, end + 2);
 
     const int64_t span = end - start + 1;
+    const int64_t fadeSamples = juce::jlimit<int64_t>(2, longBlend ? 48 : 16, span / 2 + 1);
 
-    for (int64_t i = 0; i < span; ++i) {
+    const auto editBlend = [amount, fadeSamples, span](int64_t i) noexcept {
+        if (span <= 1)
+            return 0.0f;
+
+        const float fadeIn = smoothStep(0.0f, static_cast<float>(fadeSamples),
+                                        static_cast<float>(i));
+        const float fadeOut = smoothStep(0.0f, static_cast<float>(fadeSamples),
+                                         static_cast<float>(span - 1 - i));
+        return amount * std::min(fadeIn, fadeOut);
+    };
+
+    float ambientStep = 0.0f;
+    for (int64_t k = 1; k <= 8; ++k) {
+        ambientStep += std::abs(getRingSample(c, start - k) - getRingSample(c, start - k - 1));
+        ambientStep += std::abs(getRingSample(c, end + k + 1) - getRingSample(c, end + k));
+    }
+    ambientStep *= 1.0f / 16.0f;
+    const float anchorStep = std::max(std::abs(y1 - y0), std::abs(y3 - y2));
+    const float anchorLevel = std::max({ std::abs(y0), std::abs(y1), std::abs(y2), std::abs(y3), 1.0e-5f });
+    const float residualLimit = std::max({ ambientStep * (longBlend ? 3.0f : 2.0f),
+                                           anchorStep * (longBlend ? 2.4f : 1.8f),
+                                           anchorLevel * (longBlend ? 0.20f : 0.14f),
+                                           0.0015f });
+
+    const auto localMedianAt = [this, &c](int64_t idx) noexcept {
+        std::array<float, 9> values;
+        for (int k = 0; k < 9; ++k)
+            values[static_cast<size_t>(k)] = getRingSample(c, idx - 4 + k);
+        return median9(values);
+    };
+
+    const auto candidateAt = [this, &c, start, end, span, y0, y1, y2, y3,
+                              editBlend, localMedianAt, residualLimit](int64_t i) noexcept {
         const float tLinear = span > 1
             ? static_cast<float>(i) / static_cast<float>(span - 1)
-            : 0.0f;
-
-        const float repaired = cubicInterp(y0, y1, y2, y3, tLinear);
-
-        // Edge blend: 1.0 at both endpoints (cubic matches surrounding samples →
-        // continuous transition), tapering to `amount` at the centre.  This avoids
-        // the clicks that a constant or sin-windowed blend introduces when the click
-        // region boundary doesn't match the surrounding audio level.
-        (void)longBlend;  // unified formula handles both short and long regions
-        const float edgeWeight = std::sin(tLinear * juce::MathConstants<float>::pi);
-        const float blend = 1.0f - (1.0f - amount) * edgeWeight;
-
+            : 0.5f;
         const float original = getRingSample(c, start + i);
-        setRingSample(c, start + i, original * (1.0f - blend) + repaired * blend);
+        const float trend = boundedRepairInterp(y0, y1, y2, y3, tLinear);
+        const float median = localMedianAt(start + i);
+        const float baseline = 0.72f * median + 0.28f * trend;
+        const float repaired = baseline + juce::jlimit(-residualLimit, residualLimit, original - baseline);
+        const float blend = editBlend(i);
+        const float candidate = original * (1.0f - blend) + repaired * blend;
+        const float localLimit = std::max({ std::abs(original),
+                                            std::abs(repaired),
+                                            std::abs(y0),
+                                            std::abs(y1),
+                                            std::abs(y2),
+                                            std::abs(y3),
+                                            1.0e-5f });
+        juce::ignoreUnused(end);
+        return juce::jlimit(-localLimit, localLimit, candidate);
+    };
+
+    float originalMaxStep = 0.0f;
+    float candidateMaxStep = 0.0f;
+    float previousOriginal = y1;
+    float previousCandidate = y1;
+    for (int64_t i = 0; i < span; ++i) {
+        const float original = getRingSample(c, start + i);
+        const float candidate = candidateAt(i);
+        originalMaxStep = std::max(originalMaxStep, std::abs(original - previousOriginal));
+        candidateMaxStep = std::max(candidateMaxStep, std::abs(candidate - previousCandidate));
+        previousOriginal = original;
+        previousCandidate = candidate;
     }
+    originalMaxStep = std::max(originalMaxStep, std::abs(y2 - previousOriginal));
+    candidateMaxStep = std::max(candidateMaxStep, std::abs(y2 - previousCandidate));
+
+    const float allowedStep = std::max(originalMaxStep * 1.03f,
+                                       anchorStep * 2.0f + 1.0e-4f);
+    if (candidateMaxStep > allowedStep)
+        return false;
+    if (originalMaxStep > 0.002f) {
+        const float requiredImprovement = longBlend ? 0.98f : 0.92f;
+        if (candidateMaxStep > originalMaxStep * requiredImprovement)
+            return false;
+    }
+
+    for (int64_t i = 0; i < span; ++i) {
+        setRingSample(c, start + i, candidateAt(i));
+    }
+
+    return true;
 }
 
 // ─── Prepare / reset / mode ───────────────────────────────────────────────────
@@ -165,6 +231,8 @@ void DeClickDsp::reset() noexcept {
 
         c.writeIndex = 0;
         c.absoluteIndex = 0;
+        c.lastRepairStart = -1;
+        c.lastRepairEnd = -1;
     }
 
     lastHardClickRepair  = 0.0f;
@@ -258,7 +326,21 @@ void DeClickDsp::updateModeCoefficients() {
 
 void DeClickDsp::redesignFilters() {
     for (auto& c : channels) {
-        c.ring.assign(static_cast<size_t>(ringSize), 0.0f);
+        if (c.ring.size() != static_cast<size_t>(ringSize))
+            c.ring.assign(static_cast<size_t>(ringSize), 0.0f);
+
+        c.hardHp = {};
+        c.mouthHp = {};
+        c.lowLp = {};
+        c.hardFastEnv = c.hardSlowEnv = 0.0f;
+        c.hardSlopeFast = c.hardSlopeSlow = 0.0f;
+        c.hardPrevX = 0.0f;
+        c.mouthFastEnv = c.mouthSlowEnv = 0.0f;
+        c.lowEnv = c.fullEnv = 0.0f;
+        c.hard = {};
+        c.mouth = {};
+        c.lastRepairStart = -1;
+        c.lastRepairEnd = -1;
         designHighPass(sampleRate, hardHpCutoffHz,  0.707f, c.hardHp);
         designHighPass(sampleRate, mouthHpCutoffHz, 0.707f, c.mouthHp);
         designLowPass (sampleRate, lowLpCutoffHz,   0.707f, c.lowLp);
@@ -301,6 +383,11 @@ void DeClickDsp::process(juce::AudioBuffer<float>& buffer, const Params& params)
 
     // Block-worth decay for metering: 100 ms time constant
     const float meterDecay = std::exp(-static_cast<float>(n) / (static_cast<float>(sampleRate) * 0.1f));
+    const auto overlapsRecentRepair = [](const ChannelState& c, int64_t start, int64_t end) noexcept {
+        if (c.lastRepairStart < 0 || c.lastRepairEnd < c.lastRepairStart)
+            return false;
+        return start <= c.lastRepairEnd + 8 && end >= c.lastRepairStart - 8;
+    };
 
     for (int ch = 0; ch < std::min(numCh, static_cast<int>(channels.size())); ++ch) {
         auto& c   = channels[static_cast<size_t>(ch)];
@@ -312,7 +399,13 @@ void DeClickDsp::process(juce::AudioBuffer<float>& buffer, const Params& params)
 
             setRingSample(c, curAbs, x);
 
-            if (strength > 0.001f) {
+            const bool repairEnabled = strength > 0.001f;
+            if (!repairEnabled) {
+                c.hard = {};
+                c.mouth = {};
+            }
+
+            {
                 // ── Low-band guard (protects against plosive-masking as click) ──
                 const float lpOut  = processBiquad(x, c.lowLp);
                 const float lpRect = std::abs(lpOut);
@@ -356,8 +449,10 @@ void DeClickDsp::process(juce::AudioBuffer<float>& buffer, const Params& params)
                     + 0.20f * smoothStep(2.5f / sensitivity, 7.0f / sensitivity, hardMR);
                 hardScore = clamp01(hardScore * lowGuardFactor);
 
-                processLane(c.hard, curAbs, hardScore, kHardStartScore, kHardContinueScore,
-                            hardMaxSamples, 2, hardCooldown);
+                if (repairEnabled) {
+                    processLane(c.hard, curAbs, hardScore, kHardStartScore, kHardContinueScore,
+                                hardMaxSamples, 2, hardCooldown);
+                }
 
                 // ── Mouth-click lane ──────────────────────────────────────────
                 const float mouthHpOut = processBiquad(x, c.mouthHp);
@@ -380,32 +475,42 @@ void DeClickDsp::process(juce::AudioBuffer<float>& buffer, const Params& params)
                     + 0.45f * smoothStep(1.5f / sensitivity, 4.0f / sensitivity, mouthMR);
                 mouthScore = clamp01(mouthScore * lowGuardFactor);
 
-                processLane(c.mouth, curAbs, mouthScore, kMouthStartScore, kMouthContinueScore,
-                            mouthMaxSamples, mouthMinSamples, mouthCooldown);
+                if (repairEnabled) {
+                    processLane(c.mouth, curAbs, mouthScore, kMouthStartScore, kMouthContinueScore,
+                                mouthMaxSamples, mouthMinSamples, mouthCooldown);
+                }
 
                 // ── Execute pending repairs ───────────────────────────────────
-                if (c.hard.pendingRepair && curAbs >= c.hard.pendingEnd + 2) {
+                // Fire only after the post-margin samples have been written so the
+                // post anchors read real audio instead of stale ring-buffer data.
+                if (repairEnabled && c.hard.pendingRepair && curAbs >= c.hard.pendingEnd + hardPostMargin + 2) {
                     const int64_t repairStart = c.hard.pendingStart - hardPreMargin;
                     const int64_t repairEnd   = c.hard.pendingEnd   + hardPostMargin;
                     const int64_t oldestSafe  = curAbs - lookaheadSamples;
-                    if (repairStart > oldestSafe) {
-                        repairRegion(c, repairStart, repairEnd, hardRepairBlend, false);
-                        lastHardClickRepair = 1.0f;
-                        ++recentRepairCount;
+                    if (repairStart > oldestSafe && !overlapsRecentRepair(c, repairStart, repairEnd)) {
+                        if (repairRegion(c, repairStart, repairEnd, hardRepairBlend, false)) {
+                            c.lastRepairStart = repairStart;
+                            c.lastRepairEnd = repairEnd;
+                            lastHardClickRepair = 1.0f;
+                            ++recentRepairCount;
+                        }
                     }
                     c.hard.pendingRepair = false;
                 }
 
-                if (c.mouth.pendingRepair && curAbs >= c.mouth.pendingEnd + 2) {
+                if (repairEnabled && c.mouth.pendingRepair && curAbs >= c.mouth.pendingEnd + mouthPostMargin + 2) {
                     const int64_t repairStart = c.mouth.pendingStart - mouthPreMargin;
                     const int64_t repairEnd   = c.mouth.pendingEnd   + mouthPostMargin;
                     const int64_t span        = repairEnd - repairStart + 1;
                     const bool longRegion     = span > mouthShortSamples;
                     const int64_t oldestSafe  = curAbs - lookaheadSamples;
-                    if (repairStart > oldestSafe) {
-                        repairRegion(c, repairStart, repairEnd, mouthRepairBlend, longRegion);
-                        lastMouthClickRepair = 1.0f;
-                        ++recentRepairCount;
+                    if (repairStart > oldestSafe && !overlapsRecentRepair(c, repairStart, repairEnd)) {
+                        if (repairRegion(c, repairStart, repairEnd, mouthRepairBlend, longRegion)) {
+                            c.lastRepairStart = repairStart;
+                            c.lastRepairEnd = repairEnd;
+                            lastMouthClickRepair = 1.0f;
+                            ++recentRepairCount;
+                        }
                     }
                     c.mouth.pendingRepair = false;
                 }

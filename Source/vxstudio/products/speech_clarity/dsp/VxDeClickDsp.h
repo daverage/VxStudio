@@ -74,6 +74,8 @@ private:
 
         int writeIndex = 0;
         int64_t absoluteIndex = 0;
+        int64_t lastRepairStart = -1;
+        int64_t lastRepairEnd = -1;
     };
 
     static float clamp01(float x) noexcept;
@@ -81,13 +83,13 @@ private:
     static void  designHighPass(double sr, float hz, float q, BiquadState& s) noexcept;
     static void  designLowPass (double sr, float hz, float q, BiquadState& s) noexcept;
     static float processBiquad (float x, BiquadState& s) noexcept;
-    static float cubicInterp   (float y0, float y1, float y2, float y3, float t) noexcept;
+    static float boundedRepairInterp(float y0, float y1, float y2, float y3, float t) noexcept;
     static float median9       (std::array<float, 9>& values) noexcept;
 
     float getRingSample(const ChannelState& c, int64_t idx) const noexcept;
     void  setRingSample(ChannelState& c, int64_t idx, float value) noexcept;
 
-    void repairRegion(ChannelState& c, int64_t start, int64_t end,
+    bool repairRegion(ChannelState& c, int64_t start, int64_t end,
                       float amount, bool longBlend) noexcept;
 
     void processLane(LaneState& lane, int64_t curAbs, float score,

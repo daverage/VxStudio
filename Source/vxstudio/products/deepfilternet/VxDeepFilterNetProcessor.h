@@ -44,7 +44,7 @@ private:
     void prepareEngineIfNeeded();
     ModelVariant selectedModelVariant() const noexcept;
     void timerCallback() override;
-    void blendProcessedWithDry(juce::AudioBuffer<float>& buffer, float wetMix);
+    void blendProcessedWithDry(juce::AudioBuffer<float>& buffer, float prevWetMix, float wetMix);
 
     vxsuite::deepfilternet::DeepFilterService engine;
     vxsuite::SilenceGuard silenceGuard;
@@ -53,8 +53,9 @@ private:
     int currentBlockSize = 0;
     float smoothedClean = 0.0f;
     float smoothedGuard = 0.5f;
-    float startupWetRamp = 0.0f;
+    float prevWetMix = 0.0f;
     bool controlsPrimed = false;
+    bool holdbackActive = true;
     vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     std::mutex enginePrepareMutex;
 };

@@ -104,8 +104,8 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     midDryDelayBuf .assign(midDryDelaySize, 0.0f);
 
     // ── Attack / release coefficients ────────────────────────────────────────
-    attackCoeff  = std::exp(-hopSec / 0.026f);
-    releaseCoeff = std::exp(-hopSec / 0.260f);
+    attackCoeff  = std::exp(-hopSec / 0.040f);
+    releaseCoeff = std::exp(-hopSec / 0.080f);
 
     reset();
 }
@@ -170,6 +170,7 @@ void DenoiserDsp::reset() {
 
     phaseReady      = false;
     fifoLive        = false;
+    suppressionActivePrev = false;
     firstFrame      = true;
     prevFrameEnergy = kEps;
     signalPresence  = 0.5f;
@@ -248,6 +249,7 @@ void DenoiserDsp::resetFifoState() {
 
     phaseReady      = false;
     fifoLive        = false;
+    suppressionActivePrev = false;
     firstFrame      = true;
 }
 
@@ -663,7 +665,11 @@ void DenoiserDsp::processFrame(const float amount,
         const float vk  = Gamma * gH1;
         const float LR  = (1.0f + xiDD[k]) * std::exp(-std::min(vk, 30.0f));
         const float pH1 = 1.0f / (1.0f + (kQAbsence / (1.0f - kQAbsence)) * LR);
-        presenceProb[k] = 0.90f * presenceProb[k] + 0.10f * pH1;
+        // Asymmetric smoothing: fast detection (~40ms), slow release (~150ms).
+        // The OM-LSA gain is a log-interpolation between gH1 and kGH0=0.001, so a
+        // fast presenceProb decay causes a multi-dB step — heard as an abrupt gate.
+        const float pAlpha = (pH1 > presenceProb[k]) ? 0.87f : 0.965f;
+        presenceProb[k] = pAlpha * presenceProb[k] + (1.0f - pAlpha) * pH1;
 
         const float pSm = presenceProb[k];
         const float lnG = pSm       * std::log(std::max(kEps, gH1))
@@ -805,21 +811,23 @@ void DenoiserDsp::processFrame(const float amount,
     }
 
     // ── 9. Temporal smoothing (attack/release + LF stability) ─────────────────
-    for (int k = 0; k < kBins; ++k) {
-        float coeff = (gainFreqSmooth[k] < gainSmooth[k]) ? attackCoeff
-                                                           : releaseCoeff;
-        const float lf = lfStab[k];
-        if (lf > 0.0f && voiceMode)
-            coeff = std::max(coeff, 0.93f + 0.062f * lf);
-        gainSmooth[k] = coeff * gainSmooth[k]
-                      + (1.0f - coeff) * gainFreqSmooth[k];
-    }
+    const bool suppressionActive = amount > 1.0e-5f;
+    if (suppressionActive && !suppressionActivePrev) {
+        gainSmooth = gainFreqSmooth;
+        suppressionActivePrev = true;
+    } else {
+        if (!suppressionActive)
+            suppressionActivePrev = false;
 
-    // General-mode minimum gain floor: prevent severe level collapse with amount-dependent scaling
-    if (!voiceMode) {
-        const float adaptiveFloor = amount > 0.85f ? 0.80f : (0.40f + 0.40f * amount);
-        for (int k = 0; k < kBins; ++k)
-            gainSmooth[k] = std::max(gainSmooth[k], adaptiveFloor);
+        for (int k = 0; k < kBins; ++k) {
+            float coeff = (gainFreqSmooth[k] < gainSmooth[k]) ? attackCoeff
+                                                               : releaseCoeff;
+            const float lf = lfStab[k];
+            if (lf > 0.0f && voiceMode)
+                coeff = std::max(coeff, 0.93f + 0.062f * lf);
+            gainSmooth[k] = coeff * gainSmooth[k]
+                          + (1.0f - coeff) * gainFreqSmooth[k];
+        }
     }
 
     // ── 9b. High-frequency preservation at high denoise amounts ────────────────
@@ -840,7 +848,7 @@ void DenoiserDsp::processFrame(const float amount,
         }
     }
 
-    // ── 10. Gain application + phase-vocoder synthesis ────────────────────────
+    // ── 10. Gain application + input-phase synthesis ───────────────────────────
     float presSum = 0.0f;
     for (int k = 0; k < kBins; ++k) {
         const float gk   = gainSmooth[k];
@@ -852,21 +860,13 @@ void DenoiserDsp::processFrame(const float amount,
         if (k == 0 || k == kBins - 1) {
             fftBuf[static_cast<size_t>(2 * k)] = safe(reIn >= 0.0f ? mag : -mag);
         } else {
-            const float phIn = std::atan2(imIn, reIn);
-            float phOut = phIn;
-            if (phaseReady) {
-                // std::remainder  -  no loop, handles arbitrarily large jumps
-                const float dphi = spectral::wrapPi((phIn - prevPhaseIn[k]) - phaseAdv[k]);
-                phOut = spectral::wrapPi(prevPhaseOut[k] + phaseAdv[k] + dphi);
-            }
-            fftBuf[static_cast<size_t>(2 * k)]     = safe(mag * std::cos(phOut));
-            fftBuf[static_cast<size_t>(2 * k + 1)] = safe(mag * std::sin(phOut));
-            prevPhaseIn [k] = phIn;
-            prevPhaseOut[k] = phOut;
+            const float phaseIn = std::atan2(imIn, reIn);
+            fftBuf[static_cast<size_t>(2 * k)]     = safe(mag * std::cos(phaseIn));
+            fftBuf[static_cast<size_t>(2 * k + 1)] = safe(mag * std::sin(phaseIn));
         }
         presSum += presenceProb[k];
     }
-    phaseReady = true;
+    phaseReady = false;
     signalPresence = 0.94f * signalPresence
                    + 0.06f * (presSum / static_cast<float>(kBins));
 
