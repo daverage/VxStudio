@@ -2,6 +2,8 @@
 #include "../../framework/VxStudioHelpContent.h"
 #include "VxStudioVersions.h"
 
+#include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -11,8 +13,18 @@ constexpr std::string_view kCleanParam = "clean";
 constexpr std::string_view kGuardParam = "guard";
 constexpr std::string_view kModelParam = "model";
 constexpr std::string_view kListenParam = "listen";
+constexpr double kLiveStartupPrerollSeconds = 0.0;
 
 vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
+    if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::rnnoise) {
+        return {
+            "rnnoise",
+            "RNNoise Model",
+            {},
+            {}
+        };
+    }
+
     if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
         return {
             "deepfilternet2",
@@ -43,9 +55,12 @@ juce::String describeBackend(const vxsuite::deepfilternet::DeepFilterService& en
 }
 
 juce::String describeVariant(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
-    return variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2
-        ? "DeepFilterNet 2"
-        : "DeepFilterNet 3";
+    switch (variant) {
+        case vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2: return "DeepFilterNet 2";
+        case vxsuite::deepfilternet::DeepFilterService::ModelVariant::rnnoise: return "RNNoise";
+        case vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn3: break;
+    }
+    return "DeepFilterNet 3";
 }
 
 } // namespace
@@ -77,7 +92,7 @@ vxsuite::ProductIdentity VXDeepFilterNetAudioProcessor::makeIdentity() {
     identity.helpHtml = vxsuite::help::deepFilterNet.html;
     identity.readmeSection = vxsuite::help::deepFilterNet.readmeSection;
     identity.selectorLabel = "Model";
-    identity.selectorChoiceLabels = { "DeepFilterNet 3", "DeepFilterNet 2" };
+    identity.selectorChoiceLabels = { "DeepFilterNet 3", "DeepFilterNet 2", "RNNoise" };
     identity.defaultMode = vxsuite::Mode::vocal;
     identity.theme.accentRgb = { 0.92f, 0.56f, 0.18f };
     identity.theme.accent2Rgb = { 0.14f, 0.11f, 0.08f };
@@ -113,11 +128,15 @@ vxsuite::ModelPackage VXDeepFilterNetAudioProcessor::currentModelPackage() const
 }
 
 bool VXDeepFilterNetAudioProcessor::isModelReadyForUi() const noexcept {
+    if (selectedModelVariant() == ModelVariant::rnnoise)
+        return true;
     return vxsuite::ModelAssetService::instance().isReady(makeDeepFilterPackage(selectedModelVariant()))
         || engine.isRealtimeReady();
 }
 
 bool VXDeepFilterNetAudioProcessor::isModelDownloadInProgress() const noexcept {
+    if (selectedModelVariant() == ModelVariant::rnnoise)
+        return false;
     return vxsuite::ModelAssetService::instance().isDownloading(makeDeepFilterPackage(selectedModelVariant()));
 }
 
@@ -126,6 +145,8 @@ float VXDeepFilterNetAudioProcessor::getModelDownloadProgress() const noexcept {
 }
 
 bool VXDeepFilterNetAudioProcessor::shouldPromptForModelDownload() const noexcept {
+    if (selectedModelVariant() == ModelVariant::rnnoise)
+        return false;
     return !isModelReadyForUi()
         && vxsuite::ModelAssetService::instance().shouldPrompt(makeDeepFilterPackage(selectedModelVariant()));
 }
@@ -173,20 +194,26 @@ void VXDeepFilterNetAudioProcessor::prepareSuite(const double sampleRate, const 
 }
 
 void VXDeepFilterNetAudioProcessor::resetSuite() {
-    engine.resetRealtime();
+    if (isNonRealtime())
+        engine.resetRealtime();
     silenceGuard.reset();
     smoothedClean = 0.0f;
     smoothedGuard = 0.5f;
     prevWetMix = 0.0f;
     controlsPrimed = false;
-    holdbackActive = true;
+    holdbackActive = !engine.isRealtimeReady() || engine.isInStartupBypass();
     tonalAnalysis.reset();
 }
 
 
 VXDeepFilterNetAudioProcessor::ModelVariant VXDeepFilterNetAudioProcessor::selectedModelVariant() const noexcept {
-    if (const auto* raw = parameters.getRawParameterValue(kModelParam.data()))
-        return raw->load() < 0.5f ? ModelVariant::dfn3 : ModelVariant::dfn2;
+    if (const auto* raw = parameters.getRawParameterValue(kModelParam.data())) {
+        const int choice = juce::roundToInt(raw->load());
+        if (choice == 1)
+            return ModelVariant::dfn2;
+        if (choice == 2)
+            return ModelVariant::rnnoise;
+    }
     return ModelVariant::dfn3;
 }
 
@@ -195,9 +222,11 @@ void VXDeepFilterNetAudioProcessor::prepareEngineIfNeeded() {
     if (currentSampleRateHz <= 1000.0 || currentBlockSize <= 0)
         return;
     engine.setModelVariant(selectedModelVariant());
+    engine.setStartupPrerollSeconds(isNonRealtime() ? 0.0 : kLiveStartupPrerollSeconds);
     if (engine.needsRealtimePrepare(currentSampleRateHz, currentBlockSize)) {
         engine.prepareRealtime(currentSampleRateHz, currentBlockSize);
         setReportedLatencySamples(engine.getLatencySamples());
+        holdbackActive = engine.isInStartupBypass();
     }
 }
 
@@ -214,6 +243,7 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
+    const bool muteSilentOutput = vxsuite::blockRmsLinear(buffer) < 0.002f;
     silenceGuard.update(buffer);
 
     const float cleanTarget = vxsuite::readNormalized(parameters, productIdentity.primaryParamId, 0.5f);
@@ -236,21 +266,23 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
     holdbackActive = engine.isInStartupBypass();
 
-    // DFN has STFT/model lookahead: output is invalid until enough context has been fed.
-    // During holdback the engine already zeros its output internally. We output silence here
-    // so the host's latency compensation hides the delay — the listener never hears warmup
-    // or dry passthrough. prevWetMix is pre-armed to the target so the first Running block
-    // starts at full strength without any ramp.
-    if (wasHolding) {
+    if (isNonRealtime() && wasHolding) {
         buffer.clear();
         prevWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
         return;
     }
 
-    // Guard=0 → full wet (full denoising); Guard=1 → fully dry (backed off).
-    const float wetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+    if (muteSilentOutput) {
+        buffer.clear();
+        prevWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+        return;
+    }
+
+    const float targetWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+    const bool liveDryGuardActive = !isNonRealtime() && wasHolding;
+    const float wetMix = liveDryGuardActive ? 0.0f : targetWetMix;
     if (firstControlBlock)
-        prevWetMix = wetMix;
+        prevWetMix = liveDryGuardActive ? 0.0f : wetMix;
 
     blendProcessedWithDry(buffer, prevWetMix, wetMix);
     prevWetMix = wetMix;

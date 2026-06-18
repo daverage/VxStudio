@@ -53,6 +53,7 @@ vxsuite::ProductIdentity VXRepairAudioProcessor::makeIdentity() {
     id.theme.backgroundRgb = { 0.07f, 0.05f, 0.03f };
     id.theme.panelRgb      = { 0.11f, 0.08f, 0.05f };
     id.theme.textRgb       = { 0.97f, 0.93f, 0.87f };
+    id.showStereoGainMeter = true;
     return id;
 }
 
@@ -116,6 +117,17 @@ juce::String VXRepairAudioProcessor::getStatusText() const {
 
 juce::AudioProcessorEditor* VXRepairAudioProcessor::createEditor() {
     return new VXRepairEditor(*this);
+}
+
+vxsuite::MeteringSnapshot VXRepairAudioProcessor::getMeteringSnapshot() const noexcept {
+    vxsuite::MeteringSnapshot s;
+    const auto act = getToolActivity();
+    s.gainReductionDb = (act.noise + act.reverb + act.click + act.clarity) * 6.0f;
+    s.inputPeakL  = inputPeakL.load(std::memory_order_relaxed);
+    s.inputPeakR  = inputPeakR.load(std::memory_order_relaxed);
+    s.outputPeakL = outputPeakL.load(std::memory_order_relaxed);
+    s.outputPeakR = outputPeakR.load(std::memory_order_relaxed);
+    return s;
 }
 
 void VXRepairAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
@@ -444,6 +456,20 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     using vxsuite::speech_clarity::DePolosiveDsp;
     using vxsuite::speech_clarity::DeBreathDsp;
 
+    // Capture input peak for I/O metering.
+    {
+        const int nCh = buffer.getNumChannels();
+        float peakL = 0.0f, peakR = 0.0f;
+        const auto* d0 = nCh > 0 ? buffer.getReadPointer(0) : nullptr;
+        const auto* d1 = nCh > 1 ? buffer.getReadPointer(1) : nullptr;
+        for (int i = 0; i < numSamples; ++i) {
+            if (d0) peakL = std::max(peakL, std::abs(d0[i]));
+            if (d1) peakR = std::max(peakR, std::abs(d1[i]));
+        }
+        inputPeakL.store(peakL, std::memory_order_relaxed);
+        inputPeakR.store(nCh > 1 ? peakR : peakL, std::memory_order_relaxed);
+    }
+
     detectClarityIntensities(buffer, numSamples);
     const float sibI   = sibilanceIntensity.load(std::memory_order_relaxed);
     const float plosI  = plosiveIntensity.load(std::memory_order_relaxed);
@@ -569,6 +595,19 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                 for (int i = 0; i < numSamples; ++i) out[i] = dry[i] - out[i];
             }
         }
+        // Capture output peak for the listen path.
+        {
+            const int nCh = buffer.getNumChannels();
+            float peakL = 0.0f, peakR = 0.0f;
+            const auto* d0 = nCh > 0 ? buffer.getReadPointer(0) : nullptr;
+            const auto* d1 = nCh > 1 ? buffer.getReadPointer(1) : nullptr;
+            for (int i = 0; i < numSamples; ++i) {
+                if (d0) peakL = std::max(peakL, std::abs(d0[i]));
+                if (d1) peakR = std::max(peakR, std::abs(d1[i]));
+            }
+            outputPeakL.store(peakL, std::memory_order_relaxed);
+            outputPeakR.store(nCh > 1 ? peakR : peakL, std::memory_order_relaxed);
+        }
         return;
     }
 
@@ -679,6 +718,20 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const float makeupLinear = std::pow(10.0f, makeupDb / 20.0f);
     if (anyActive && std::abs(makeupLinear - 1.0f) > 0.001f)
         buffer.applyGain(makeupLinear);
+
+    // Capture output peak for I/O metering.
+    {
+        const int nCh = buffer.getNumChannels();
+        float peakL = 0.0f, peakR = 0.0f;
+        const auto* d0 = nCh > 0 ? buffer.getReadPointer(0) : nullptr;
+        const auto* d1 = nCh > 1 ? buffer.getReadPointer(1) : nullptr;
+        for (int i = 0; i < numSamples; ++i) {
+            if (d0) peakL = std::max(peakL, std::abs(d0[i]));
+            if (d1) peakR = std::max(peakR, std::abs(d1[i]));
+        }
+        outputPeakL.store(peakL, std::memory_order_relaxed);
+        outputPeakR.store(nCh > 1 ? peakR : peakL, std::memory_order_relaxed);
+    }
 }
 
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)

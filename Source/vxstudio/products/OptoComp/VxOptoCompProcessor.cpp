@@ -65,6 +65,7 @@ vxsuite::ProductIdentity VXOptoCompAudioProcessor::makeIdentity() {
     identity.theme.backgroundRgb = { 0.08f, 0.06f, 0.03f };
     identity.theme.panelRgb = { 0.13f, 0.10f, 0.05f };
     identity.theme.textRgb = { 0.98f, 0.95f, 0.84f };
+    identity.showStereoGainMeter = true;
     return identity;
 }
 
@@ -171,6 +172,10 @@ vxsuite::MeteringSnapshot VXOptoCompAudioProcessor::getMeteringSnapshot() const 
     s.gainReductionDb = optoDsp.getGainReductionDb();
     s.compActivity    = optoDsp.getCompActivity();
     s.limiterActivity = optoDsp.getLimiterActivity();
+    s.inputPeakL  = optoDsp.getDryPeakL();
+    s.inputPeakR  = optoDsp.getDryPeakR();
+    s.outputPeakL = optoDsp.getWetPeakL();
+    s.outputPeakR = optoDsp.getWetPeakR();
     return s;
 }
 

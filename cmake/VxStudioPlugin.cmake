@@ -3,6 +3,7 @@ function(vxstudio_add_framework target_name)
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioHelpView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioLookAndFeel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioLevelTraceView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioGainMeterView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioModelAssets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioProcessorBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp

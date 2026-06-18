@@ -8,7 +8,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
       processor(owner),
       lookAndFeel(owner.getProductIdentity().theme),
       tooltipWindow(this, 700),
-      levelTraceView(owner.getProductIdentity().theme) {
+      levelTraceView(owner.getProductIdentity().theme),
+      gainMeterView(owner.getProductIdentity().theme) {
     auto makeMouseTransparent = [](auto& component) {
         component.setInterceptsMouseClicks(false, false);
     };
@@ -20,11 +21,14 @@ EditorBase::EditorBase(ProcessorBase& owner)
     const bool compactControlBank = hasControlBank && identity.compactControlBankLayout;
     const bool hasTertiary = identity.supportsTertiaryControl();
     const bool hasQuaternary = identity.supportsQuaternaryControl();
-    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : (hasQuaternary ? 720 : (hasTertiary ? 560 : 440)),
+    // Reserve extra width for the stereo gain meter sidebar so the knob layout
+    // sees enough room to stay side-by-side (not stacked).
+    const int meterExtra = identity.showStereoGainMeter ? 98 : 0;
+    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : (hasQuaternary ? 720 : (hasTertiary ? 560 : 440)) + meterExtra,
                     hasControlBank ? (compactControlBank ? 640 : 720) : (hasQuaternary ? 560 : 520),
-                    1280,
+                    1280 + meterExtra,
                     940);
-    setSize(hasControlBank ? (compactControlBank ? 1020 : 1160) : (hasQuaternary ? 1100 : (hasTertiary ? 950 : 760)),
+    setSize(hasControlBank ? (compactControlBank ? 1020 : 1160) : (hasQuaternary ? 1100 : (hasTertiary ? 950 : 760)) + meterExtra,
             hasControlBank ? (compactControlBank ? 680 : 760) : (hasQuaternary ? 740 : 660));
 
     suiteLabel.setText(toJuceString(identity.suiteName), juce::dontSendNotification);
@@ -157,6 +161,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
         addAndMakeVisible(traceZoomBox);
         addAndMakeVisible(levelTraceView);
     }
+    if (identity.showStereoGainMeter)
+        addAndMakeVisible(gainMeterView);
     const bool analyzeStyle = identity.learnButtonLabel == "Analyze";
     if (analyzeStyle) {
         learnButton.setTooltip("Play the track through once, then press Analyze again to stop and lock the offline levelling map.");
@@ -460,6 +466,16 @@ void EditorBase::resized() {
         modelDownloadLabel.setBounds(modelRow.removeFromLeft(scaled(176)));
         modelRow.removeFromLeft(scaled(8));
         modelDownloadBar.setBounds(modelRow);
+    }
+
+    // Carve the stereo gain meter off the right before the stacked check and
+    // knob layout, so knobs see the correct remaining width.
+    gainMeterBounds = {};
+    if (processor.getProductIdentity().showStereoGainMeter) {
+        const int meterW = scaled(94);
+        gainMeterBounds = body.removeFromRight(meterW).reduced(scaled(3), scaled(4));
+        gainMeterView.setBounds(gainMeterBounds);
+        body.removeFromRight(scaled(4));
     }
 
     const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 860 : 680));
@@ -783,6 +799,12 @@ void EditorBase::timerCallback() {
         modelButton.setButtonText(processor.getModelDownloadButtonText());
         if (!modelPromptVisible && processor.shouldPromptForModelDownload())
             showModelDownloadPrompt(true);
+    }
+    if (processor.getProductIdentity().showStereoGainMeter) {
+        const auto s = processor.getMeteringSnapshot();
+        gainMeterView.setLevels(s.inputPeakL, s.inputPeakR, s.outputPeakL, s.outputPeakR);
+        if (!gainMeterBounds.isEmpty())
+            repaint(gainMeterBounds);
     }
     if (processor.getProductIdentity().showLevelTrace) {
         vxsuite::spectrum::SnapshotView snapshot;

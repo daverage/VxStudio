@@ -74,6 +74,7 @@ struct ProductIdentity {
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
     bool showLevelTrace = false;
+    bool showStereoGainMeter = false;
     // Decorative filter-curve icons drawn above the knobs (no interactivity).
     bool showLowShelfIcon  = false;   // HP/low-shelf shape
     bool showHighShelfIcon = false;   // LP/high-shelf shape

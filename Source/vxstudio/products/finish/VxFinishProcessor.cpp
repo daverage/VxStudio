@@ -45,6 +45,7 @@ vxsuite::ProductIdentity VXFinishAudioProcessor::makeIdentity() {
     identity.theme.backgroundRgb = { 0.07f, 0.05f, 0.04f };
     identity.theme.panelRgb = { 0.12f, 0.09f, 0.07f };
     identity.theme.textRgb = { 0.98f, 0.94f, 0.88f };
+    identity.showStereoGainMeter = true;
     return identity;
 }
 
@@ -148,6 +149,10 @@ vxsuite::MeteringSnapshot VXFinishAudioProcessor::getMeteringSnapshot() const no
     s.gainReductionDb  = finishChain.getGainReductionDb();
     s.compActivity     = finishChain.getCompActivity();
     s.limiterActivity  = finishChain.getLimiterActivity();
+    s.inputPeakL  = finishChain.getDryPeakL();
+    s.inputPeakR  = finishChain.getDryPeakR();
+    s.outputPeakL = finishChain.getWetPeakL();
+    s.outputPeakR = finishChain.getWetPeakR();
     return s;
 }
 

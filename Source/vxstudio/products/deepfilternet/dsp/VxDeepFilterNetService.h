@@ -23,7 +23,8 @@ public:
 
     enum class ModelVariant {
         dfn3 = 0,
-        dfn2
+        dfn2,
+        rnnoise
     };
 
     enum class RealtimeBackend {
@@ -42,12 +43,12 @@ public:
     void prepareRealtime(double sampleRate, int maxBlockSize);
     void resetRealtime();
     bool needsRealtimePrepare(double sampleRate, int maxBlockSize) const;
+    void setStartupPrerollSeconds(double seconds) noexcept;
     bool processRealtime(juce::AudioBuffer<float>& buffer,
                          double sampleRate,
                          float strength,
                          uint64_t key);
     bool isInStartupBypass() const noexcept { return startupBypassActive.load(std::memory_order_acquire); }
-
     int getLatencySamples() const noexcept { return latencySamples; }
     float lastTailPrior() const noexcept { return tailPrior; }
     juce::String lastStatus() const;
@@ -80,7 +81,8 @@ private:
     enum class RuntimeApi {
         none = 0,
         dfn3,
-        dfn2
+        dfn2,
+        rnnoise
     };
 
     struct SampleFifo {
@@ -113,6 +115,8 @@ private:
         int blockSize = 0;
         int frameLength = 480;
         int latencySamples = 0;
+        int startupPrerollSamples48k = 0;
+        int startupHoldbackSamples48k = 0;
         bool ready = false;
         juce::File modelFile;
         juce::String backendTag { "none" };
@@ -128,7 +132,6 @@ private:
     void setStatus(StatusCode code) noexcept { statusCode.store(code, std::memory_order_relaxed); }
     bool prepareModelFile(ModelVariant variant, juce::File& modelFileOut);
     bool prepareChannel(ChannelState& channel, const RuntimeBundle& bundle);
-    int latencySamplesForVariant(ModelVariant variant, double sampleRate) const noexcept;
     RuntimeApi selectedRuntimeApi(ModelVariant variant) const noexcept;
     void* createRuntime(RuntimeApi api, const juce::String& modelPath, float attenuationLimitDb) const;
     void destroyRuntime(RuntimeApi api, void* runtime) const;
@@ -144,6 +147,7 @@ private:
     std::array<std::atomic<int>, 2> bundleReaders { 0, 0 };
     std::atomic<int> activeBundleIndex { -1 };
     std::atomic<int> requestedVariant { static_cast<int>(ModelVariant::dfn3) };
+    std::atomic<int> requestedStartupPreroll48k { 0 };
     int latencySamples = 0;
     float tailPrior = 0.0f;
     std::atomic<bool> rtReady { false };

@@ -855,7 +855,7 @@ void DenoiserDsp::processFrame(const float amount,
         const float reIn = fftBuf[static_cast<size_t>(2 * k)];
         const float imIn = (k == 0 || k == kBins - 1) ? 0.0f
                          : fftBuf[static_cast<size_t>(2 * k + 1)];
-        const float mag  = std::sqrt(std::max(kEps, reIn * reIn + imIn * imIn)) * gk;
+        const float mag  = std::sqrt(std::max(0.0f, reIn * reIn + imIn * imIn)) * gk;
 
         if (k == 0 || k == kBins - 1) {
             fftBuf[static_cast<size_t>(2 * k)] = safe(reIn >= 0.0f ? mag : -mag);

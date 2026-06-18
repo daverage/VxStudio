@@ -510,6 +510,26 @@ target_link_libraries(VXDenoiser PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXDenoiserPlugin ALL DEPENDS VXDenoiser_VST3)
 vxstudio_stage_vst3_bundle(VXDenoiser_VST3 "VXDenoiser")
 
+add_library(VxStudioRNNoiseRuntime STATIC
+  ThirdParty/rnnoise/src/celt_lpc.c
+  ThirdParty/rnnoise/src/denoise.c
+  ThirdParty/rnnoise/src/kiss_fft.c
+  ThirdParty/rnnoise/src/nnet.c
+  ThirdParty/rnnoise/src/nnet_default.c
+  ThirdParty/rnnoise/src/parse_lpcnet_weights.c
+  ThirdParty/rnnoise/src/pitch.c
+  ThirdParty/rnnoise/src/rnn.c
+  ThirdParty/rnnoise/src/rnnoise_data.c
+  ThirdParty/rnnoise/src/rnnoise_tables.c
+)
+target_include_directories(VxStudioRNNoiseRuntime PUBLIC
+  ThirdParty/rnnoise/include
+  ThirdParty/rnnoise/src
+)
+target_compile_definitions(VxStudioRNNoiseRuntime PRIVATE
+  RNNOISE_BUILD
+)
+
 juce_add_plugin(VXDeepFilterNet
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXDEEPFILTERNET}
   BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXDEEPFILTERNET}
@@ -539,6 +559,7 @@ target_link_libraries(VXDeepFilterNet PRIVATE
   VxStudioFramework
   VxStudioDeepFilterRuntime
   VxStudioDeepFilterRuntimeDfn2
+  VxStudioRNNoiseRuntime
   ${VXSTUDIO_DF_SYSTEM_LIBS}
   juce::juce_dsp)
 add_custom_target(VXDeepFilterNetPlugin ALL DEPENDS VXDeepFilterNet_VST3)
@@ -740,6 +761,7 @@ target_link_libraries(VXRepair PRIVATE
   juce::juce_dsp
   VxStudioDeepFilterRuntime
   VxStudioDeepFilterRuntimeDfn2
+  VxStudioRNNoiseRuntime
   ${VXSTUDIO_DF_SYSTEM_LIBS}
 )
 add_custom_target(VXRepairPlugin ALL DEPENDS VXRepair_VST3)
@@ -913,6 +935,7 @@ target_link_libraries(VXStudioPluginRegressionTests PRIVATE
   VxStudioFramework
   VxStudioDeepFilterRuntime
   VxStudioDeepFilterRuntimeDfn2
+  VxStudioRNNoiseRuntime
   ${VXSTUDIO_DF_SYSTEM_LIBS}
   juce::juce_dsp
   juce::juce_audio_processors
@@ -962,6 +985,7 @@ target_link_libraries(VXRepairPassthroughCheck PRIVATE
   VxStudioFramework
   VxStudioDeepFilterRuntime
   VxStudioDeepFilterRuntimeDfn2
+  VxStudioRNNoiseRuntime
   ${VXSTUDIO_DF_SYSTEM_LIBS}
   juce::juce_dsp
   juce::juce_audio_processors

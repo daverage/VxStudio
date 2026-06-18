@@ -32,6 +32,11 @@ public:
     float getEnvelopeDb() const noexcept { return opto.getEnvelopeDb(); }
     float getLimiterActivity() const noexcept { return limiterActivity; }
 
+    float getDryPeakL() const noexcept { return dryPeakL; }
+    float getDryPeakR() const noexcept { return dryPeakR; }
+    float getWetPeakL() const noexcept { return wetPeakL; }
+    float getWetPeakR() const noexcept { return wetPeakR; }
+
 private:
     void updateOptoParams(float outputGainDb);
     void processLimiter(juce::AudioBuffer<float>& buffer);
@@ -45,6 +50,10 @@ private:
     float limitGain = 1.0f;
     float limiterActivity = 0.0f;
     bool primed = false;
+    float dryPeakL = 0.0f;
+    float dryPeakR = 0.0f;
+    float wetPeakL = 0.0f;
+    float wetPeakR = 0.0f;
     OptoCompressorLA2A opto;
 };
 

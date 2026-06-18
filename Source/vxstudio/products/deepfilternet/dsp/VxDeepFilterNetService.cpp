@@ -8,6 +8,8 @@
 
 #include <juce_core/juce_core.h>
 
+#include <rnnoise.h>
+
 namespace vxsuite::deepfilternet {
 
 namespace {
@@ -16,10 +18,21 @@ constexpr double kEngineSampleRate = 48000.0;
 constexpr int kDefaultFrameLength = 480;
 constexpr int kFifoCapacity48k = 48000;
 constexpr int kDfn3Latency48k = 1920;
-constexpr int kDfn2LowLatency48k = 480;
+constexpr int kDfn2LlLatency48k = 480;
+constexpr int kRnNoiseLatency48k = 480;
 constexpr int kModelWarmupFrames = 8;
+constexpr float kRnNoisePcmScale = 32768.0f;
 
 vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
+    if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::rnnoise) {
+        return {
+            "rnnoise",
+            "RNNoise Model",
+            {},
+            {}
+        };
+    }
+
     if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::dfn2) {
         return {
             "deepfilternet2",
@@ -101,12 +114,12 @@ juce::String DeepFilterService::lastStatus() const {
 }
 
 DeepFilterService::RuntimeApi DeepFilterService::selectedRuntimeApi(const ModelVariant variant) const noexcept {
-    return variant == ModelVariant::dfn2 ? RuntimeApi::dfn2 : RuntimeApi::dfn3;
-}
-
-int DeepFilterService::latencySamplesForVariant(const ModelVariant variant, const double sampleRate) const noexcept {
-    const int latency48k = variant == ModelVariant::dfn2 ? kDfn2LowLatency48k : kDfn3Latency48k;
-    return juce::roundToInt(static_cast<double>(latency48k) * sampleRate / kEngineSampleRate);
+    switch (variant) {
+        case ModelVariant::dfn2: return RuntimeApi::dfn2;
+        case ModelVariant::rnnoise: return RuntimeApi::rnnoise;
+        case ModelVariant::dfn3: break;
+    }
+    return RuntimeApi::dfn3;
 }
 
 bool DeepFilterService::needsRealtimePrepare(const double sampleRate, const int maxBlockSize) const {
@@ -125,7 +138,14 @@ bool DeepFilterService::needsRealtimePrepare(const double sampleRate, const int 
         return true;
     if (active.blockSize < maxBlockSize)
         return true;
+    if (active.startupPrerollSamples48k != requestedStartupPreroll48k.load(std::memory_order_relaxed))
+        return true;
     return resetRequested.load(std::memory_order_relaxed);
+}
+
+void DeepFilterService::setStartupPrerollSeconds(const double seconds) noexcept {
+    const int samples48k = juce::roundToInt(std::max(0.0, seconds) * kEngineSampleRate);
+    requestedStartupPreroll48k.store(samples48k, std::memory_order_relaxed);
 }
 
 void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
@@ -150,6 +170,8 @@ void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
     bundle.blockSize = 0;
     bundle.frameLength = kDefaultFrameLength;
     bundle.latencySamples = 0;
+    bundle.startupPrerollSamples48k = 0;
+    bundle.startupHoldbackSamples48k = 0;
 }
 
 void* DeepFilterService::createRuntime(const RuntimeApi api,
@@ -160,6 +182,9 @@ void* DeepFilterService::createRuntime(const RuntimeApi api,
             return df2_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
         case RuntimeApi::dfn3:
             return df_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
+        case RuntimeApi::rnnoise:
+            juce::ignoreUnused(modelPath, attenuationLimitDb);
+            return rnnoise_create(nullptr);
         case RuntimeApi::none:
             break;
     }
@@ -177,6 +202,9 @@ void DeepFilterService::destroyRuntime(const RuntimeApi api, void* runtime) cons
         case RuntimeApi::dfn3:
             df_free(static_cast<DFState*>(runtime));
             return;
+        case RuntimeApi::rnnoise:
+            rnnoise_destroy(static_cast<DenoiseState*>(runtime));
+            return;
         case RuntimeApi::none:
             break;
     }
@@ -191,6 +219,9 @@ int DeepFilterService::runtimeFrameLength(const RuntimeApi api, void* runtime) c
             return static_cast<int>(df2_get_frame_length(static_cast<DF2State*>(runtime)));
         case RuntimeApi::dfn3:
             return static_cast<int>(df_get_frame_length(static_cast<DFState*>(runtime)));
+        case RuntimeApi::rnnoise:
+            juce::ignoreUnused(runtime);
+            return rnnoise_get_frame_size();
         case RuntimeApi::none:
             break;
     }
@@ -208,6 +239,9 @@ void DeepFilterService::setRuntimeAttenuation(const RuntimeApi api, void* runtim
         case RuntimeApi::dfn3:
             df_set_atten_lim(static_cast<DFState*>(runtime), attenuationLimitDb);
             return;
+        case RuntimeApi::rnnoise:
+            juce::ignoreUnused(runtime, attenuationLimitDb);
+            return;
         case RuntimeApi::none:
             break;
     }
@@ -222,6 +256,15 @@ float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime
             return df2_process_frame(static_cast<DF2State*>(runtime), input, output);
         case RuntimeApi::dfn3:
             return df_process_frame(static_cast<DFState*>(runtime), input, output);
+        case RuntimeApi::rnnoise: {
+            const int frameLength = rnnoise_get_frame_size();
+            for (int i = 0; i < frameLength; ++i)
+                output[i] = input[i] * kRnNoisePcmScale;
+            const float vad = rnnoise_process_frame(static_cast<DenoiseState*>(runtime), output, output);
+            for (int i = 0; i < frameLength; ++i)
+                output[i] /= kRnNoisePcmScale;
+            return vad;
+        }
         case RuntimeApi::none:
             break;
     }
@@ -247,6 +290,11 @@ bool DeepFilterService::extractEmbeddedModel(const ModelVariant variant, const j
 }
 
 bool DeepFilterService::prepareModelFile(const ModelVariant variant, juce::File& modelFileOut) {
+    if (variant == ModelVariant::rnnoise) {
+        modelFileOut = juce::File();
+        return true;
+    }
+
     auto modelFile = modelAssetForVariant(variant);
     if (modelFile.existsAsFile()) {
         modelFileOut = modelFile;
@@ -309,12 +357,11 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     channel.outputFifo.reset(kFifoCapacity48k);
 
     const int frameLength = runtimeFrameLength(bundle.runtimeApi, channel.runtime);
-    // Validate model frame length matches expected pinned version
-    const int expectedFrameLength = (bundle.runtimeApi == RuntimeApi::dfn2) ? DF2_EXPECTED_FRAME_LENGTH : DF_EXPECTED_FRAME_LENGTH;
-    if (frameLength != expectedFrameLength) {
-        // Model version mismatch: frame length doesn't match expected size
+    const int expectedFrameLength = bundle.runtimeApi == RuntimeApi::rnnoise
+        ? rnnoise_get_frame_size()
+        : ((bundle.runtimeApi == RuntimeApi::dfn2) ? DF2_EXPECTED_FRAME_LENGTH : DF_EXPECTED_FRAME_LENGTH);
+    if (frameLength != expectedFrameLength)
         return false;
-    }
     const int safeFrameLength = std::max(1, frameLength);
     channel.frameIn.assign(static_cast<size_t>(safeFrameLength), 0.0f);
     channel.frameOut.assign(static_cast<size_t>(safeFrameLength), 0.0f);
@@ -324,16 +371,15 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     channel.resampleIn.assign(static_cast<size_t>(maxResampledSize), 0.0f);
     channel.resampleOut.assign(static_cast<size_t>(maxResampledSize), 0.0f);
 
-    // Prime model GRU state with silent frames before the startup bypass period.
-    // DFN3 has 4-frame look-ahead: frames 1-4 of real audio produce invalid output
-    // regardless of GRU state. DFN2 has a cold-state transient even without look-ahead.
-    // The startup bypass (startupSamplesRemaining below) mutes those invalid frames;
-    // priming makes the transition at bypass end clean rather than buzzy.
+    // Warm up the resampler and GRU state with silence before real audio arrives.
+    // Without this, the resampler filter and model both start cold, producing a
+    // transient on the first real frame.
     for (int i = 0; i < kModelWarmupFrames; ++i)
         processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
-    std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
 
-    channel.startupSamplesRemaining = bundle.latencySamples;
+    channel.outputFifo.clear();
+    channel.inputFifo.clear();
+    channel.startupSamplesRemaining = bundle.startupHoldbackSamples48k;
     return true;
 }
 
@@ -355,7 +401,13 @@ bool DeepFilterService::prepareBundle(RuntimeBundle& bundle,
     bundle.runtimeApi = selectedRuntimeApi(variant);
     bundle.preparedVariant = variant;
     bundle.frameLength = kDefaultFrameLength;
-    bundle.latencySamples = latencySamplesForVariant(variant, bundle.sampleRate);
+    const int algorithmLatency48k = variant == ModelVariant::rnnoise
+        ? kRnNoiseLatency48k
+        : ((variant == ModelVariant::dfn2) ? kDfn2LlLatency48k : kDfn3Latency48k);
+    bundle.startupPrerollSamples48k = requestedStartupPreroll48k.load(std::memory_order_relaxed);
+    bundle.startupHoldbackSamples48k = algorithmLatency48k + bundle.startupPrerollSamples48k;
+    bundle.latencySamples = juce::roundToInt(static_cast<double>(algorithmLatency48k + bundle.startupPrerollSamples48k)
+                                            * bundle.sampleRate / kEngineSampleRate);
 
     if (!prepareModelFile(variant, bundle.modelFile))
         return false;
@@ -371,7 +423,9 @@ bool DeepFilterService::prepareBundle(RuntimeBundle& bundle,
     bundle.ready = true;
     bundle.capability = RealtimeCapability::embeddedRuntime;
     bundle.backend = RealtimeBackend::cpu;
-    bundle.backendTag = bundle.runtimeApi == RuntimeApi::dfn2 ? "libdf031:cpu" : "libdf:cpu";
+    bundle.backendTag = bundle.runtimeApi == RuntimeApi::rnnoise
+        ? "rnnoise:cpu"
+        : (bundle.runtimeApi == RuntimeApi::dfn2 ? "libdf031:cpu" : "libdf:cpu");
     return true;
 }
 
@@ -401,6 +455,7 @@ void DeepFilterService::prepareRealtime(const double sampleRate, const int maxBl
     rtBackend = bundle.backend;
     rtBackendTag = bundle.backendTag;
     resetRequested.store(false, std::memory_order_relaxed);
+    startupBypassActive.store(true, std::memory_order_release);
     setStatus(StatusCode::rtReady);
 }
 
@@ -460,14 +515,26 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
 
                 while (channel.inputFifo.available >= bundle.frameLength) {
                     channel.inputFifo.pop(channel.frameIn.data(), bundle.frameLength);
-                    processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
+                    processRuntimeFrame(bundle.runtimeApi, channel.runtime,
+                                        channel.frameIn.data(), channel.frameOut.data());
+                    if (bundle.runtimeApi == RuntimeApi::rnnoise) {
+                        const float wet = vxsuite::clamp01(strength);
+                        for (int i = 0; i < bundle.frameLength; ++i)
+                            channel.frameOut[static_cast<size_t>(i)] =
+                                channel.frameIn[static_cast<size_t>(i)]
+                                + (channel.frameOut[static_cast<size_t>(i)] - channel.frameIn[static_cast<size_t>(i)]) * wet;
+                    }
                     channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
                 }
 
-                const int outputCount = std::min(channel.outputFifo.available, sampleCount48k);
-                channel.outputFifo.pop(output48k, outputCount);
-                if (outputCount < sampleCount48k)
-                    juce::FloatVectorOperations::clear(output48k + outputCount, sampleCount48k - outputCount);
+                // Pop processed output; zero-fill on underrun at startup. The reported
+                // latency gives the host enough compensated delay to hide the initial
+                // model/resampler fill before processed audio is available.
+                const int toPop = std::min(channel.outputFifo.available, sampleCount48k);
+                if (toPop > 0)
+                    channel.outputFifo.pop(output48k, toPop);
+                if (toPop < sampleCount48k)
+                    juce::FloatVectorOperations::clear(output48k + toPop, sampleCount48k - toPop);
 
                 if (channel.startupSamplesRemaining > 0) {
                     const int bypassCount = std::min(channel.startupSamplesRemaining, sampleCount48k);

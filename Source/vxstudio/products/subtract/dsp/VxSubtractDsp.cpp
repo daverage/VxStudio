@@ -589,7 +589,7 @@ void SubtractDsp::applyGainAndOLA() {
         const float gk   = lerp(1.0f, gainSmooth[k], suppressionRamp);
         const float reIn = frame[2u * k];
         const float imIn = (k == 0u || k == bins - 1u) ? 0.0f : frame[2u * k + 1u];
-        const float mag  = std::sqrt(std::max(kEps, reIn * reIn + imIn * imIn)) * gk;
+        const float mag  = std::sqrt(std::max(0.0f, reIn * reIn + imIn * imIn)) * gk;
 
         if (k == 0u || k == bins - 1u) {
             frame[2u * k] = safe(reIn >= 0.0f ? mag : -mag);

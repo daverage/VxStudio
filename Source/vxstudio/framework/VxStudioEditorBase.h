@@ -3,6 +3,7 @@
 #include "VxStudioHelpView.h"
 #include "VxStudioLookAndFeel.h"
 #include "VxStudioLevelTraceView.h"
+#include "VxStudioGainMeterView.h"
 #include "VxStudioProcessorBase.h"
 
 #include <array>
@@ -93,7 +94,9 @@ private:
     std::unique_ptr<ButtonAttachment> learnAttachment;
     juce::TooltipWindow tooltipWindow;
     LevelTraceView levelTraceView;
+    GainMeterView gainMeterView;
     juce::Rectangle<int> activityStripBounds;
+    juce::Rectangle<int> gainMeterBounds;
     juce::Rectangle<int> traceViewBounds;
     juce::Rectangle<int> lowShelfIconBounds;
     juce::Rectangle<int> highShelfIconBounds;

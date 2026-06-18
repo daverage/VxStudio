@@ -26,6 +26,12 @@ struct MeteringSnapshot {
     float compActivity     = 0.0f;   // 0–1 compressor / leveler ride
     float limiterActivity  = 0.0f;   // 0–1 limiter engagement
 
+    // ── Stereo I/O level meters ──────────────────────────────────────────────
+    float inputPeakL  = 0.0f;   // linear peak, pre-processing left
+    float inputPeakR  = 0.0f;   // linear peak, pre-processing right
+    float outputPeakL = 0.0f;   // linear peak, post-processing left
+    float outputPeakR = 0.0f;   // linear peak, post-processing right
+
     // ── Loudness meters ──────────────────────────────────────────────────────
     float inputLufsShort   = -100.0f;  // pre-processing short-term LUFS
     float outputLufsShort  = -100.0f;  // post-processing short-term LUFS

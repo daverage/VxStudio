@@ -75,6 +75,7 @@ void Dsp::reset() {
     limitGain = 1.0f;
     limiterActivity = 0.0f;
     primed = false;
+    dryPeakL = dryPeakR = wetPeakL = wetPeakR = 0.0f;
 }
 
 void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& options) {
@@ -99,20 +100,39 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& option
     const float dryRms = static_cast<float>(std::sqrt(dryRmsSq / static_cast<double>(dryCount)));
     const float dryTruePeak = estimateTruePeak(buffer, numChannels);
 
+    // Park makeup at zero when signal is below −80 dBFS so that when audio resumes
+    // after silence (y1 decayed to zero → no compression on first sample), the makeup
+    // starts low rather than at its steady-state value. The 10ms blend rate on the
+    // first non-silent block ramps it to full before the opto attack establishes GR,
+    // preventing the limiter overload that caused a pop in the original snap behaviour.
+    if (dryTruePeak < 1.0e-4f) {
+        smoothedAutoMakeupDb = 0.0f;
+        primed = false;
+    }
+
     const float autoMakeupMaxDb = 18.0f;
     const float autoMakeupFromKnobDb = autoMakeupMaxDb * std::pow(peakReduction, voiceMode ? 0.40f : 0.43f);
-    if (!finishStageEnabled) {
+    if (dryTruePeak < 1.0e-4f || !finishStageEnabled) {
         smoothedAutoMakeupDb = 0.0f;
-    } else if (!primed) {
-        // Snap makeup gain on the first block so there is no audible ramp-up from 0.
-        // Without this, the compressor's output level fades in over ~180ms and the limiter
-        // can be driven unexpectedly as the makeup catches up, causing a crackle.
-        smoothedAutoMakeupDb = autoMakeupFromKnobDb;
     } else {
-        smoothedAutoMakeupDb += vxsuite::blockBlendAlpha(sr, numSamples, 0.18f)
+        const float blendRate = !primed ? 0.010f : 0.18f;
+        smoothedAutoMakeupDb += vxsuite::blockBlendAlpha(sr, numSamples, blendRate)
             * (autoMakeupFromKnobDb - smoothedAutoMakeupDb);
+        primed = true;
     }
-    primed = true;
+
+    // Capture per-channel dry peak before any processing.
+    {
+        const auto* ch0 = numChannels > 0 ? buffer.getReadPointer(0) : nullptr;
+        const auto* ch1 = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
+        float peakL = 0.0f, peakR = 0.0f;
+        for (int i = 0; i < numSamples; ++i) {
+            if (ch0) peakL = std::max(peakL, std::abs(ch0[i]));
+            if (ch1) peakR = std::max(peakR, std::abs(ch1[i]));
+        }
+        dryPeakL = peakL;
+        dryPeakR = numChannels > 1 ? peakR : peakL;
+    }
 
     updateOptoParams(smoothedAutoMakeupDb + params.outputGainDb);
     opto.process(buffer);
@@ -122,6 +142,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& option
         limitEnv = 0.0f;
         limitGain = 1.0f;
         limiterActivity = 0.0f;
+        wetPeakL = dryPeakL;
+        wetPeakR = dryPeakR;
         return;
     }
 
@@ -170,6 +192,19 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const ProcessOptions& option
         float* data = buffer.getWritePointer(ch);
         for (int i = 0; i < numSamples; ++i)
             data[i] = juce::jlimit(-kFinalCeiling, kFinalCeiling, data[i]);
+    }
+
+    // Capture per-channel wet peak after all processing.
+    {
+        const auto* ch0 = numChannels > 0 ? buffer.getReadPointer(0) : nullptr;
+        const auto* ch1 = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
+        float peakL = 0.0f, peakR = 0.0f;
+        for (int i = 0; i < numSamples; ++i) {
+            if (ch0) peakL = std::max(peakL, std::abs(ch0[i]));
+            if (ch1) peakR = std::max(peakR, std::abs(ch1[i]));
+        }
+        wetPeakL = peakL;
+        wetPeakR = numChannels > 1 ? peakR : peakL;
     }
 }
 

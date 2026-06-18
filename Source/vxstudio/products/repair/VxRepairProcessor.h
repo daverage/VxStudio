@@ -54,6 +54,8 @@ public:
                  reverbActivity.load(std::memory_order_relaxed) };
     }
 
+    vxsuite::MeteringSnapshot getMeteringSnapshot() const noexcept override;
+
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
@@ -121,4 +123,10 @@ private:
     std::atomic<float> clarityActivity { 0.0f };
     std::atomic<float> clickActivity   { 0.0f };
     std::atomic<float> reverbActivity  { 0.0f };
+
+    // Stereo I/O peak metering
+    std::atomic<float> inputPeakL  { 0.0f };
+    std::atomic<float> inputPeakR  { 0.0f };
+    std::atomic<float> outputPeakL { 0.0f };
+    std::atomic<float> outputPeakR { 0.0f };
 };
