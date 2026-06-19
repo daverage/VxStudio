@@ -3175,6 +3175,32 @@ bool testDeepFilterGuardRespondsMoreOnArtifactHeavyInput() {
     return true;
 }
 
+bool testDeepFilterFullGuardIsPdcAlignedDry() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    const auto input = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.04f));
+
+    VXDeepFilterNetAudioProcessor processor;
+    processor.prepareToPlay(sr, blockSize);
+    setParamNormalized(processor, "clean", 1.0f);
+    setParamNormalized(processor, "guard", 1.0f);
+    setParamNormalized(processor, "model", 0.0f);
+
+    const auto rendered = render(processor, input, blockSize);
+    const float diff = maxAbsDiff(input, rendered);
+    if (processor.getLatencySamples() <= 0
+        || !allFinite(rendered)
+        || diff > 1.0e-5f) {
+        std::cerr << "[VXSuitePluginRegression] DeepFilter full Guard is not aligned dry: latency="
+                  << processor.getLatencySamples() << " maxDiff=" << diff
+                  << " status=" << processor.getStatusText() << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testAnalyserDomainBindingSurvivesMultipleDomains() {
     constexpr double sr = 48000.0;
     constexpr int blockSize = 4096;
@@ -3917,6 +3943,7 @@ int main() {
     run("testDeepFilterOfflineRenderModeSwitchRecoversCleanly", testDeepFilterOfflineRenderModeSwitchRecoversCleanly);
     run("testDeepFilterStartupHoldbackReleasesValidProcessedAudio", testDeepFilterStartupHoldbackReleasesValidProcessedAudio);
     run("testDeepFilterGuardRespondsMoreOnArtifactHeavyInput", testDeepFilterGuardRespondsMoreOnArtifactHeavyInput);
+    run("testDeepFilterFullGuardIsPdcAlignedDry", testDeepFilterFullGuardIsPdcAlignedDry);
     run("testAnalyserDomainBindingSurvivesMultipleDomains", testAnalyserDomainBindingSurvivesMultipleDomains);
     run("testSubtractZeroKeepsPdcAlignedIdentity", testSubtractZeroKeepsPdcAlignedIdentity);
     run("testCleanupBlockSizeInvariance", testCleanupBlockSizeInvariance);

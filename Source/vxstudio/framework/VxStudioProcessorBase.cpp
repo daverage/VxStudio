@@ -149,8 +149,10 @@ void ProcessorBase::processPreparedBlock(juce::AudioBuffer<float>& buffer, juce:
     outputSafetyTrimmer.process(buffer, currentSampleRateHz);
     spectrumPublisher.publish(listenInputScratch, buffer);
     stagePublisher.publish(listenInputScratch, buffer, false);
-    if (canRenderListen)
-        renderListenOutput(buffer, listenInputScratch);
+    if (canRenderListen) {
+        ensureLatencyAlignedListenDry(buffer.getNumSamples());
+        renderListenOutput(buffer, getLatencyAlignedListenDryBuffer());
+    }
 }
 
 void ProcessorBase::processPreparedBypassedBlock(juce::AudioBuffer<float>& buffer) noexcept {

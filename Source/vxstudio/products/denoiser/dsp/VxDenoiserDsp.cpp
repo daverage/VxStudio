@@ -23,9 +23,58 @@ float DenoiserDsp::safe(float x) noexcept {
     return std::isfinite(x) && std::fpclassify(x) != FP_SUBNORMAL ? x : 0.0f;
 }
 
+// ── AsyncFifo ─────────────────────────────────────────────────────────────────
+
+void DenoiserDsp::AsyncFifo::reset(const int capacity) {
+    const int safeCapacity = std::max(1, capacity);
+    storage.assign(static_cast<size_t>(safeCapacity), 0.0f);
+    fifo.setTotalSize(safeCapacity);
+    fifo.reset();
+}
+
+void DenoiserDsp::AsyncFifo::clear() {
+    fifo.reset();
+}
+
+void DenoiserDsp::AsyncFifo::push(const float* data, const int count) {
+    if (data == nullptr || count <= 0) return;
+    int start1, size1, start2, size2;
+    fifo.prepareToWrite(count, start1, size1, start2, size2);
+    if (size1 > 0) juce::FloatVectorOperations::copy(storage.data() + start1, data, size1);
+    if (size2 > 0) juce::FloatVectorOperations::copy(storage.data() + start2, data + size1, size2);
+    fifo.finishedWrite(size1 + size2);
+}
+
+void DenoiserDsp::AsyncFifo::pop(float* dest, const int count) {
+    if (dest == nullptr || count <= 0) return;
+    int start1, size1, start2, size2;
+    fifo.prepareToRead(count, start1, size1, start2, size2);
+    if (size1 > 0) juce::FloatVectorOperations::copy(dest, storage.data() + start1, size1);
+    if (size2 > 0) juce::FloatVectorOperations::copy(dest + size1, storage.data() + start2, size2);
+    fifo.finishedRead(size1 + size2);
+}
+
+// ── Destructor ────────────────────────────────────────────────────────────────
+
+DenoiserDsp::~DenoiserDsp() {
+    stopInferenceThread();
+}
+
+// ── stopInferenceThread ───────────────────────────────────────────────────────
+
+void DenoiserDsp::stopInferenceThread() {
+    if (!inferenceThread.joinable()) return;
+    stopInference.store(true, std::memory_order_release);
+    workSignal.store(1, std::memory_order_release);
+    workSignal.notify_one();
+    inferenceThread.join();
+}
+
 // ── prepare ───────────────────────────────────────────────────────────────────
 
 void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
+    stopInferenceThread();
+
     sr = (sampleRate > 1000.0) ? sampleRate : 48000.0;
 
     // SR-adaptive FFT size: target 21.3 ms window → 1024@44.1/48k, 2048@88.2/96k
@@ -55,6 +104,7 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     frameBuffer.assign(kFftSize,     0.0f);
     fftBuf     .assign(kFftSize * 2, 0.0f);
     monoOut    .assign(safeBlock,    0.0f);
+    olaOutputFrame.assign(kFftSize,  0.0f);
 
     // ── Per-bin lookup tables ─────────────────────────────────────────────────
     const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
@@ -63,11 +113,8 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     lfStab      .resize(kBins);
     for (int k = 0; k < kBins; ++k) {
         const float hz   = static_cast<float>(k) * binHz;
-        // Moore & Glasberg (1990) ERB  -  drives smoother half-width
         const float erb = 24.7f * (4.37f * hz / 1000.0f + 1.0f);
         erbKernelHW[k] = juce::jlimit(1.0f, 10.0f, erb / binHz);
-
-        // LF stability: boost smoother persistence below 700 Hz
         lfStab[k] = clamp01((700.0f - hz) / 450.0f);
     }
 
@@ -107,12 +154,25 @@ void DenoiserDsp::prepare(const double sampleRate, const int maxBlockSize) {
     attackCoeff  = std::exp(-hopSec / 0.040f);
     releaseCoeff = std::exp(-hopSec / 0.080f);
 
+    // ── SPSC FIFOs ────────────────────────────────────────────────────────────
+    // 8 frames of headroom for each direction
+    inputSnapshotFifo.reset(kFftSize * 8);
+    outputFrameFifo  .reset(kFftSize * 8);
+
+    // Guard so reset() doesn't try to start the thread before prepare() finishes
+    isPrepared = false;
     reset();
+    isPrepared = true;
+
+    stopInference.store(false, std::memory_order_relaxed);
+    workSignal.store(0, std::memory_order_relaxed);
 }
 
 // ── reset ─────────────────────────────────────────────────────────────────────
 
 void DenoiserDsp::reset() {
+    stopInferenceThread();
+
     std::fill(inFifo     .begin(), inFifo     .end(), 0.0f);
     std::fill(frameBuffer.begin(), frameBuffer.end(), 0.0f);
     std::fill(olaAcc     .begin(), olaAcc     .end(), 0.0f);
@@ -148,9 +208,7 @@ void DenoiserDsp::reset() {
     sideDelayWrite = sideDelayRead = sideDelayCount = 0;
     midDryDelayWrite = midDryDelayRead = midDryDelayCount = 0;
 
-    // Pre-warm stereo delay lines with silence equal to the plugin's latency so
-    // the drain conditions are met from sample 0, eliminating the warmup period
-    // where stereo collapses to mono before the side-delay buffer fills.
+    // Pre-warm stereo delay lines so stereo is correct from sample 0
     if (sideDelaySize > latencySamples && midDryDelaySize > latencySamples) {
         sideDelayWrite    = 0;
         sideDelayRead     = sideDelaySize - latencySamples;
@@ -168,69 +226,28 @@ void DenoiserDsp::reset() {
     olaWritePos    = 0;
     olaReadPos     = 0;
 
+    inputSnapshotFifo.clear();
+    outputFrameFifo  .clear();
+
     phaseReady      = false;
     fifoLive        = false;
     suppressionActivePrev = false;
     firstFrame      = true;
     prevFrameEnergy = kEps;
-    signalPresence  = 0.5f;
-    smoothedGrDb    = 0.0f;
+    signalPresence .store(0.5f, std::memory_order_relaxed);
+    smoothedGrDb   .store(0.0f, std::memory_order_relaxed);
+
+    if (isPrepared) {
+        stopInference.store(false, std::memory_order_relaxed);
+        workSignal.store(0, std::memory_order_relaxed);
+    }
 }
 
-bool DenoiserDsp::drain(juce::AudioBuffer<float>& buffer) noexcept {
-    if (!fifoLive)
-        return false;
-
-    const int numSmp = buffer.getNumSamples();
-    if (numSmp <= 0)
-        return false;
-
-    const int accSz = olaAccumSize;
-    if (accSz <= 0)
-        return false;
-
-    // Check if there is any non-zero content remaining in the OLA accumulator
-    bool hasContent = false;
-    for (int i = 0; i < std::min(accSz, latencySamples + numSmp); ++i) {
-        if (std::abs(olaAcc[static_cast<size_t>(i % accSz)]) > 1.0e-7f) {
-            hasContent = true;
-            break;
-        }
-    }
-
-    if (!hasContent) {
-        buffer.clear();
-        return false;
-    }
-
-    // Feed silence into the FIFO to flush remaining frames
-    for (int i = 0; i < numSmp; ++i) {
-        inFifo[static_cast<size_t>(inFifoWritePos)] = 0.0f;
-        inFifoWritePos = (inFifoWritePos + 1) % kFftSize;
-        if (++hopFillCount == kHop) {
-            hopFillCount = 0;
-            const ProcessOptions silenceOpts {};
-            processFrame(0.0f, silenceOpts);  // amount=0 → pass-through gain
-        }
-    }
-
-    // Read from OLA ring into buffer (mono only for drain — stereo tail handled upstream)
-    const int numCh = buffer.getNumChannels();
-    for (int i = 0; i < numSmp; ++i) {
-        const int idx = olaReadPos % accSz;
-        const float s = safe(olaAcc[static_cast<size_t>(idx)] * 0.5f);
-        olaAcc[static_cast<size_t>(idx)] = 0.0f;
-        ++olaReadPos;
-        for (int ch = 0; ch < numCh; ++ch)
-            buffer.getWritePointer(ch)[i] = s;
-    }
-
-    return true;
-}
+// ── resetFifoState ────────────────────────────────────────────────────────────
 
 void DenoiserDsp::resetFifoState() {
-    // Lightweight phrase-boundary reset: clear STFT state without disrupting noise floor tracking.
-    // Preserves msState, noisePow, noiseFloorDb to maintain noise floor continuity.
+    stopInferenceThread();
+
     std::fill(inFifo     .begin(), inFifo     .end(), 0.0f);
     std::fill(frameBuffer.begin(), frameBuffer.end(), 0.0f);
     std::fill(olaAcc     .begin(), olaAcc     .end(), 0.0f);
@@ -247,11 +264,101 @@ void DenoiserDsp::resetFifoState() {
     olaWritePos    = 0;
     olaReadPos     = 0;
 
+    inputSnapshotFifo.clear();
+    outputFrameFifo  .clear();
+
     phaseReady      = false;
     fifoLive        = false;
     suppressionActivePrev = false;
     firstFrame      = true;
+
+    if (isPrepared) {
+        stopInference.store(false, std::memory_order_relaxed);
+        workSignal.store(0, std::memory_order_relaxed);
+    }
 }
+
+// ── drain ─────────────────────────────────────────────────────────────────────
+
+bool DenoiserDsp::drain(juce::AudioBuffer<float>& buffer) noexcept {
+    if (!fifoLive)
+        return false;
+
+    const int numSmp = buffer.getNumSamples();
+    if (numSmp <= 0)
+        return false;
+
+    const int accSz = olaAccumSize;
+    if (accSz <= 0)
+        return false;
+
+    // Stop inference thread so we can process synchronously below
+    stopInferenceThread();
+
+    // Drain any completed output frames the inference thread may have left
+    drainOutputFrames();
+
+    // Process pending snapshot frames that didn't get picked up by inference
+    while (inputSnapshotFifo.available() >= kFftSize) {
+        inputSnapshotFifo.pop(frameBuffer.data(), kFftSize);
+        const ProcessOptions silenceOpts {};
+        processFrame(frameBuffer.data(), 0.0f, silenceOpts, olaOutputFrame.data());
+        // OLA-accumulate the output
+        for (int n = 0; n < kFftSize; ++n) {
+            const int pos = (olaWritePos + n) % accSz;
+            olaAcc[static_cast<size_t>(pos)] += olaOutputFrame[n];
+        }
+        olaWritePos = (olaWritePos + kHop) % accSz;
+    }
+
+    // Check if there is any non-zero content remaining in the OLA accumulator
+    bool hasContent = false;
+    for (int i = 0; i < std::min(accSz, latencySamples + numSmp); ++i) {
+        if (std::abs(olaAcc[static_cast<size_t>(i % accSz)]) > 1.0e-7f) {
+            hasContent = true;
+            break;
+        }
+    }
+
+    if (!hasContent) {
+        buffer.clear();
+        return false;
+    }
+
+    // Feed silence into the FIFO to flush remaining frames (synchronous)
+    const ProcessOptions silenceOpts {};
+    for (int i = 0; i < numSmp; ++i) {
+        inFifo[static_cast<size_t>(inFifoWritePos)] = 0.0f;
+        inFifoWritePos = (inFifoWritePos + 1) % kFftSize;
+        if (++hopFillCount == kHop) {
+            hopFillCount = 0;
+            // Linearise ring for processFrame
+            for (int n = 0; n < kFftSize; ++n)
+                frameBuffer[n] = inFifo[(inFifoWritePos + n) % kFftSize];
+            processFrame(frameBuffer.data(), 0.0f, silenceOpts, olaOutputFrame.data());
+            for (int n = 0; n < kFftSize; ++n) {
+                const int pos = (olaWritePos + n) % accSz;
+                olaAcc[static_cast<size_t>(pos)] += olaOutputFrame[n];
+            }
+            olaWritePos = (olaWritePos + kHop) % accSz;
+        }
+    }
+
+    // Read from OLA ring into buffer
+    const int numCh = buffer.getNumChannels();
+    for (int i = 0; i < numSmp; ++i) {
+        const int idx = olaReadPos % accSz;
+        const float s = safe(olaAcc[static_cast<size_t>(idx)] * 0.5f);
+        olaAcc[static_cast<size_t>(idx)] = 0.0f;
+        ++olaReadPos;
+        for (int ch = 0; ch < numCh; ++ch)
+            buffer.getWritePointer(ch)[i] = s;
+    }
+
+    return true;
+}
+
+// ── resetFifoState (already above) ────────────────────────────────────────────
 
 // ── updateMinStats ────────────────────────────────────────────────────────────
 
@@ -306,6 +413,7 @@ bool DenoiserDsp::hasValidProcessingState(const int numChannels, const int numSa
         || !hasSize(msState, static_cast<size_t>(kBins))
         || !hasMinSize(monoOut, static_cast<size_t>(numSamples))
         || !hasMinSize(olaAcc, static_cast<size_t>(std::max(1, olaAccumSize)))
+        || !hasMinSize(olaOutputFrame, static_cast<size_t>(kFftSize))
         || olaAccumSize <= 0) {
         return false;
     }
@@ -329,6 +437,22 @@ bool DenoiserDsp::hasValidProcessingState(const int numChannels, const int numSa
     return true;
 }
 
+// ── drainOutputFrames ─────────────────────────────────────────────────────────
+
+void DenoiserDsp::drainOutputFrames() noexcept {
+    const int accSz = olaAccumSize;
+    if (accSz <= 0 || olaOutputFrame.empty()) return;
+
+    while (outputFrameFifo.available() >= kFftSize) {
+        outputFrameFifo.pop(olaOutputFrame.data(), kFftSize);
+        for (int n = 0; n < kFftSize; ++n) {
+            const int pos = (olaWritePos + n) % accSz;
+            olaAcc[static_cast<size_t>(pos)] += olaOutputFrame[n];
+        }
+        olaWritePos = (olaWritePos + kHop) % accSz;
+    }
+}
+
 // ── processInPlace ────────────────────────────────────────────────────────────
 
 bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
@@ -344,6 +468,9 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         fifoLive = true;
 
     const int accSz = olaAccumSize;
+
+    // ── Drain any completed inference frames into the OLA accumulator ─────────
+    drainOutputFrames();
 
     // ── Stereo M/S  -  push side & dry-mid into delay lines ────────────────────
     if (numCh >= 2) {
@@ -363,9 +490,15 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         }
     }
 
-    // ── Push mono mid into STFT FIFO, trigger frame every hop ─────────────────
+    // ── Push mono mid into inFifo; process one STFT frame at each hop ──────────
+    asyncAmount            .store(wet,                     std::memory_order_relaxed);
+    asyncIsVoiceMode       .store(options.isVoiceMode,     std::memory_order_relaxed);
+    asyncSpeechFocus       .store(options.speechFocus,     std::memory_order_relaxed);
+    asyncLateTailAggression.store(options.lateTailAggression, std::memory_order_relaxed);
+    asyncSourceProtect     .store(options.sourceProtect,   std::memory_order_relaxed);
+    asyncGuardStrictness   .store(options.guardStrictness, std::memory_order_relaxed);
+
     for (int i = 0; i < numSmp; ++i) {
-        // Build mono mid from all channels
         float midIn = 0.0f;
         for (int ch = 0; ch < numCh; ++ch)
             midIn += buffer.getReadPointer(ch)[i];
@@ -376,14 +509,20 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
         if (++hopFillCount == kHop) {
             hopFillCount = 0;
-            processFrame(wet, options);
+            // Linearise ring buffer (oldest → newest), process, then OLA-accumulate.
+            for (int n = 0; n < kFftSize; ++n)
+                frameBuffer[n] = inFifo[(inFifoWritePos + n) % kFftSize];
+            processFrame(frameBuffer.data(), wet, options, olaOutputFrame.data());
+            for (int n = 0; n < kFftSize; ++n) {
+                const int pos = (olaWritePos + n) % accSz;
+                olaAcc[static_cast<size_t>(pos)] += olaOutputFrame[n];
+            }
+            olaWritePos = (olaWritePos + kHop) % accSz;
         }
     }
 
     // ── Drain OLA ring → monoOut ──────────────────────────────────────────────
-    // sqrt-Hann applied at both analysis and synthesis (WOLA).
-    // At 75% overlap the sum of (sqrt-Hann)² = Hann over 4 frames = 2.0 for all n,
-    // so the raw OLA accumulator is 2× the desired output.  Multiply by 0.5 here.
+    // sqrt-Hann WOLA: sum of (sqrt-Hann)² over 4 overlapping frames = 2.0, so ×0.5
     for (int i = 0; i < numSmp; ++i) {
         const int idx = olaReadPos % accSz;
         monoOut[static_cast<size_t>(i)] = safe(olaAcc[static_cast<size_t>(idx)] * 0.5f);
@@ -391,34 +530,19 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         ++olaReadPos;
     }
 
-    // ── Update smoothed GR display (mean of gainSmooth across bins → dB) ────────
-    if (!gainSmooth.empty()) {
-        float meanGain = 0.0f;
-        for (float g : gainSmooth) meanGain += g;
-        meanGain /= static_cast<float>(gainSmooth.size());
-        const float grDbTarget = 20.0f * std::log10(std::max(1.0e-6f, meanGain));
-        smoothedGrDb = 0.85f * smoothedGrDb + 0.15f * grDbTarget;
-    }
-
     // ── Reconstruct stereo from mid + delayed side ────────────────────────────
     if (numCh >= 2) {
         float* l = buffer.getWritePointer(0);
         float* r = buffer.getWritePointer(1);
 
-        // Drain mid-dry delay (keeps buffer count balanced; no longer used for sideScale).
         for (int i = 0; i < numSmp; ++i) {
             if (midDryDelayCount >= latencySamples) {
                 midDryDelayRead  = (midDryDelayRead + 1) % midDryDelaySize;
                 --midDryDelayCount;
             }
         }
-        // Side is passed through at unity  -  dynamic M/S balance scaling
-        // was causing time-varying stereo width modulation perceived as delay.
         const float sideScale = 1.0f;
 
-        // Interpolate sideScale from prev block to current across samples to
-        // avoid a step at the block boundary (block-rate step is otherwise
-        // audible as a low-frequency thump when stereo image changes quickly).
         const float sideScaleStart = prevSideScale;
         const float sideScaleEnd   = sideScale;
         const float sideScaleInc   = (numSmp > 1)
@@ -445,6 +569,52 @@ bool DenoiserDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     }
 
     return true;
+}
+
+// ── runInferenceLoop ──────────────────────────────────────────────────────────
+
+void DenoiserDsp::runInferenceLoop() {
+    std::vector<float> frameIn(static_cast<size_t>(kFftSize));
+    std::vector<float> frameOut(static_cast<size_t>(kFftSize));
+
+    for (;;) {
+        // Wait for the audio thread to signal work
+        workSignal.wait(0, std::memory_order_acquire);
+        workSignal.store(0, std::memory_order_relaxed);
+
+        if (stopInference.load(std::memory_order_acquire))
+            return;
+
+        // Read current params
+        const float amt = asyncAmount.load(std::memory_order_relaxed);
+        ProcessOptions opts;
+        opts.isVoiceMode        = asyncIsVoiceMode       .load(std::memory_order_relaxed);
+        opts.speechFocus        = asyncSpeechFocus        .load(std::memory_order_relaxed);
+        opts.lateTailAggression = asyncLateTailAggression.load(std::memory_order_relaxed);
+        opts.sourceProtect      = asyncSourceProtect      .load(std::memory_order_relaxed);
+        opts.guardStrictness    = asyncGuardStrictness    .load(std::memory_order_relaxed);
+
+        // Process all pending snapshot frames
+        while (inputSnapshotFifo.available() >= kFftSize) {
+            if (stopInference.load(std::memory_order_relaxed))
+                return;
+            inputSnapshotFifo.pop(frameIn.data(), kFftSize);
+
+            // Energy gate: below ~-68 dBFS, skip FFT and pass-through via WOLA synthesis window.
+            // WOLA with sqrt-Hann and 75% overlap reconstructs perfectly with unity gain,
+            // so windowing the input produces correct silence-era output at near-zero CPU cost.
+            float peak = 0.0f;
+            for (int n = 0; n < kFftSize; ++n) peak = std::max(peak, std::abs(frameIn[n]));
+            if (peak < 4.0e-4f) {
+                for (int n = 0; n < kFftSize; ++n) frameOut[n] = frameIn[n] * window[n];
+                outputFrameFifo.push(frameOut.data(), kFftSize);
+                continue;
+            }
+
+            processFrame(frameIn.data(), amt, opts, frameOut.data());
+            outputFrameFifo.push(frameOut.data(), kFftSize);
+        }
+    }
 }
 
 void DenoiserDsp::applyHumAndNarrowbandSuppression(const float amount,
@@ -579,15 +749,18 @@ void DenoiserDsp::applyHumAndNarrowbandSuppression(const float amount,
 }
 
 // ── processFrame ──────────────────────────────────────────────────────────────
+// frameIn is kFftSize ordered samples (oldest first). outputFrame receives the
+// synthesis-windowed IFFT output for OLA accumulation by the caller.
 
-void DenoiserDsp::processFrame(const float amount,
-                                const ProcessOptions& options) noexcept {
+void DenoiserDsp::processFrame(const float* frameIn,
+                                const float amount,
+                                const ProcessOptions& options,
+                                float* outputFrame) noexcept {
     ++stftFrameCount;
 
-    // ── 1. Extract windowed frame ─────────────────────────────────────────────
+    // ── 1. Apply analysis window ──────────────────────────────────────────────
     for (int n = 0; n < kFftSize; ++n) {
-        const int ring = (inFifoWritePos + n) % kFftSize;
-        fftBuf[static_cast<size_t>(n)]            = inFifo[static_cast<size_t>(ring)] * window[n];
+        fftBuf[static_cast<size_t>(n)]            = frameIn[n] * window[n];
         fftBuf[static_cast<size_t>(n + kFftSize)] = 0.0f;
     }
 
@@ -612,10 +785,7 @@ void DenoiserDsp::processFrame(const float amount,
         prevMag[k]  = m;
     }
 
-    // Per-bin seeding is handled inside updateMinStats on the first non-zero frame;
-    // no global seed needed here  -  seeding at currPow caused immediate muting because
-    // noisePow ≥ signal power → Γ < 1 → gains → floor for the first Martin-window
-    // convergence period (~40 frames / 200 ms at 48 kHz).
+    juce::ignoreUnused(totalPow);
     firstFrame = false;
 
     // ── 4. Bark transient detection ───────────────────────────────────────────
@@ -657,17 +827,12 @@ void DenoiserDsp::processFrame(const float amount,
         const float Gamma = p / n;
         const float xiInst = std::max(0.0f, Gamma - 1.0f);
 
-        // Decision-Directed a priori SNR
         xiDD[k] = std::max(0.0f, 0.97f * (cleanPowPrev[k] / n) + 0.03f * xiInst);
 
-        // OM-LSA speech-presence probability & optimal gain
         const float gH1 = xiDD[k] / (xiDD[k] + 1.0f);
         const float vk  = Gamma * gH1;
         const float LR  = (1.0f + xiDD[k]) * std::exp(-std::min(vk, 30.0f));
         const float pH1 = 1.0f / (1.0f + (kQAbsence / (1.0f - kQAbsence)) * LR);
-        // Asymmetric smoothing: fast detection (~40ms), slow release (~150ms).
-        // The OM-LSA gain is a log-interpolation between gH1 and kGH0=0.001, so a
-        // fast presenceProb decay causes a multi-dB step — heard as an abrupt gate.
         const float pAlpha = (pH1 > presenceProb[k]) ? 0.87f : 0.965f;
         presenceProb[k] = pAlpha * presenceProb[k] + (1.0f - pAlpha) * pH1;
 
@@ -676,17 +841,14 @@ void DenoiserDsp::processFrame(const float amount,
                         + (1.0f - pSm) * std::log(kGH0);
         float g = std::exp(lnG);
 
-        // Tonalness  -  protect spectral peaks from over-suppression
         const float left       = currPow[(k > 0) ? k - 1 : k];
         const float right      = currPow[(k + 1 < kBins) ? k + 1 : k];
         tonalness[k] = spectral::tonalnessFromNeighbors(p, left, right);
 
-        // Suppression strength scaled by local SNR and user controls
         const float snr_dB  = 10.0f * std::log10(std::max(1.0f, Gamma));
         const float betaBin = juce::jlimit(0.30f, 2.5f,
                                            aggression / (1.0f + 0.045f * snr_dB));
 
-        // Transient protection
         const bool  inTransient = barkHold[static_cast<size_t>(binToBark[k])] > 0
                                 || energyRatio > 1.38f;
         const float transProtect = inTransient
@@ -697,15 +859,13 @@ void DenoiserDsp::processFrame(const float amount,
         const float strength = std::max(0.20f, (betaBin * transProtect * speechGuard) - 0.40f * tonalness[k]);
 
         g = std::pow(std::max(0.0f, g), strength);
-        g = 1.0f + (g - 1.0f) * amount;  // wet blend
+        g = 1.0f + (g - 1.0f) * amount;
 
-        // Tonal and transient restoration
         if (tonalness[k] > 0.0f)
             g = g + (1.0f - g) * ((voiceMode ? 0.28f : 0.18f) * tonalness[k]);
         if (inTransient)
             g = g + (1.0f - g) * ((voiceMode ? 0.34f : 0.20f) * guardStrict);
 
-        // SNR-adaptive minimum gain floor
         const float maskHead = clamp01(snr_dB / 35.0f);
         const float minGain  = juce::jlimit(globalFloor, voiceMode ? 0.16f : 0.12f,
                                             (0.026f + 0.070f * maskHead) * (voiceMode ? 0.88f : 0.76f));
@@ -716,12 +876,9 @@ void DenoiserDsp::processFrame(const float amount,
         if (speechWeightedProtect > 0.0f)
             g = g + (1.0f - g) * (voiceMode ? 0.18f : 0.10f) * speechWeightedProtect;
 
-        // Anti-flicker: slow-release suppression counter
-        // Increment fast when suppressed; decrement slowly (every 4 frames).
         if (g <= minGain + 0.05f) {
             suppressCount[k] = std::min(suppressCount[k] + 1, 24);
         } else {
-            // Slow release: decrement every 4 frames only (gate on frame clock, not count value)
             if ((stftFrameCount & 3) == 0 && suppressCount[k] > 0)
                 --suppressCount[k];
         }
@@ -738,7 +895,7 @@ void DenoiserDsp::processFrame(const float amount,
     for (int k = 0; k < kBins; ++k)
         gainTarget[k] = std::min(gainTarget[k], std::min(humTargetGain[k], narrowbandTargetGain[k]));
 
-    // ── 6. Bark masking floor (protect tonal bins from creating hollow pockets) ──
+    // ── 6. Bark masking floor ─────────────────────────────────────────────────
     std::fill(barkMaskFloor.begin(), barkMaskFloor.end(), 0.0f);
     for (int k = 0; k < kBins; ++k) {
         if (tonalness[k] < 0.60f || currPow[k] / noisePow[k] < 3.0f)
@@ -755,14 +912,12 @@ void DenoiserDsp::processFrame(const float amount,
         gainTarget[k] = std::max(gainTarget[k], barkMaskFloor[k]);
 
     // ── 7. ERB-adaptive frequency smoothing ───────────────────────────────────
-    // Variable triangular kernel width per bin  -  eliminates high-frequency
-    // graininess without over-smoothing low-frequency detail.
     for (int k = 0; k < kBins; ++k) {
-        const int hw = static_cast<int>(erbKernelHW[k]);  // half-width in bins
+        const int hw = static_cast<int>(erbKernelHW[k]);
         float gSum = 0.0f, wSum = 0.0f;
         for (int d = -hw; d <= hw; ++d) {
             const int idx = juce::jlimit(0, kBins - 1, k + d);
-            const float w = static_cast<float>(hw + 1 - std::abs(d)); // triangular
+            const float w = static_cast<float>(hw + 1 - std::abs(d));
             gSum += w * gainTarget[idx];
             wSum += w;
         }
@@ -770,13 +925,11 @@ void DenoiserDsp::processFrame(const float amount,
     }
 
     // ── 8. Harmonic comb protection (voice mode only) ─────────────────────────
-    // Locks gain across the harmonic series to prevent isolated dips that
-    // create chirpy/robotic artefacts on pitched sources.
     if (voiceMode) {
         std::fill(harmonicFloor.begin(), harmonicFloor.end(), 0.0f);
-        const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
-        const int minVoiceBin = std::max(1, static_cast<int>(80.0f / binHz));
-        const int maxVoiceBin = std::max(minVoiceBin, static_cast<int>(300.0f / binHz));
+        const float bHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
+        const int minVoiceBin = std::max(1, static_cast<int>(80.0f / bHz));
+        const int maxVoiceBin = std::max(minVoiceBin, static_cast<int>(300.0f / bHz));
         const int maxF0Bin = std::max(8, kBins / 5);
         for (int k = 8; k < maxF0Bin; ++k) {
             if (k < minVoiceBin || k > maxVoiceBin)
@@ -831,21 +984,28 @@ void DenoiserDsp::processFrame(const float amount,
     }
 
     // ── 9b. High-frequency preservation at high denoise amounts ────────────────
-    // When clean amount is high (> 0.7), preserve air and brightness above 8 kHz
-    // to prevent the characteristic "muffled" sound from heavy denoising.
     if (amount > 0.70f) {
         const float hfBoostAmount = juce::jlimit(0.0f, 1.0f, (amount - 0.70f) / 0.30f);
-
         const float hfBoostGain = 0.12f * hfBoostAmount;
         const float hfCutoffHz = 8000.0f;
-        const float binHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
-        const int hfStartBin = std::max(0, static_cast<int>(hfCutoffHz / binHz));
+        const float bHz = static_cast<float>(sr) / static_cast<float>(kFftSize);
+        const int hfStartBin = std::max(0, static_cast<int>(hfCutoffHz / bHz));
 
         for (int k = hfStartBin; k < kBins; ++k) {
             const float rolloff = juce::jlimit(0.0f, 1.0f, (static_cast<float>(k - hfStartBin)) / 128.0f);
             const float boost = hfBoostGain * rolloff;
             gainSmooth[k] = juce::jlimit(gainSmooth[k], 1.0f, gainSmooth[k] + boost);
         }
+    }
+
+    // Update smoothed GR display (mean gainSmooth → dB), written via atomic for audio thread reads
+    {
+        float meanGain = 0.0f;
+        for (float g : gainSmooth) meanGain += g;
+        meanGain /= static_cast<float>(gainSmooth.size());
+        const float grDbTarget = 20.0f * std::log10(std::max(1.0e-6f, meanGain));
+        const float prev = smoothedGrDb.load(std::memory_order_relaxed);
+        smoothedGrDb.store(0.85f * prev + 0.15f * grDbTarget, std::memory_order_relaxed);
     }
 
     // ── 10. Gain application + input-phase synthesis ───────────────────────────
@@ -867,26 +1027,27 @@ void DenoiserDsp::processFrame(const float amount,
         presSum += presenceProb[k];
     }
     phaseReady = false;
-    signalPresence = 0.94f * signalPresence
-                   + 0.06f * (presSum / static_cast<float>(kBins));
-
-    // Update smoothed noise floor estimate (dB)
-    float avgNoisePow = kEps;
-    for (int k = 0; k < kBins; ++k)
-        avgNoisePow += noisePow[k];
-    avgNoisePow /= static_cast<float>(kBins);
-    const float noiseFloorDbTarget = 10.0f * std::log10(std::max(kEps, avgNoisePow));
-    noiseFloorDb = 0.8f * noiseFloorDb + 0.2f * noiseFloorDbTarget;
-
-    // ── 11. Inverse FFT + overlap-add ─────────────────────────────────────────
-    fft.performInverse(fftBuf.data());
-
-    const int accSz = olaAccumSize;
-    for (int n = 0; n < kFftSize; ++n) {
-        const int pos = (olaWritePos + n) % accSz;
-        olaAcc[static_cast<size_t>(pos)] += fftBuf[static_cast<size_t>(n)] * window[n];
+    {
+        const float prev = signalPresence.load(std::memory_order_relaxed);
+        signalPresence.store(0.94f * prev + 0.06f * (presSum / static_cast<float>(kBins)),
+                             std::memory_order_relaxed);
     }
-    olaWritePos = (olaWritePos + kHop) % accSz;
+
+    // Update noise floor display
+    {
+        float avgNoisePow = kEps;
+        for (int k = 0; k < kBins; ++k) avgNoisePow += noisePow[k];
+        avgNoisePow /= static_cast<float>(kBins);
+        const float noiseFloorDbTarget = 10.0f * std::log10(std::max(kEps, avgNoisePow));
+        const float prev = noiseFloorDb.load(std::memory_order_relaxed);
+        noiseFloorDb.store(0.8f * prev + 0.2f * noiseFloorDbTarget, std::memory_order_relaxed);
+    }
+
+    // ── 11. Inverse FFT + synthesis window → outputFrame ──────────────────────
+    fft.performInverse(fftBuf.data());
+    for (int n = 0; n < kFftSize; ++n)
+        outputFrame[n] = fftBuf[static_cast<size_t>(n)] * window[n];
+    // OLA accumulation happens in processInPlace/drain after this returns.
 }
 
 } // namespace vxsuite::denoiser

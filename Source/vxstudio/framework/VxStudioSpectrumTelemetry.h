@@ -224,8 +224,6 @@ struct SummaryAccumulator {
     int envelopeFilled = 0;
     int envelopeSamplesPerBucket = 1;
     int envelopeSampleCounter = 0;
-    int fftHopSize = 512;
-    int fftSamplesSinceUpdate = 0;
     double midEnergy = 0.0;
     double sideEnergy = 0.0;
     double leftEnergy = 0.0;
@@ -243,6 +241,7 @@ struct SummaryAccumulator {
     void prepare(double sampleRate, int publishIntervalSamples) noexcept;
     void reset() noexcept;
     void update(const juce::AudioBuffer<float>& buffer) noexcept;
+    void computeSpectrum() noexcept;  // call from publish thread, not audio thread
     [[nodiscard]] AnalysisSummary summary() const noexcept;
 };
 

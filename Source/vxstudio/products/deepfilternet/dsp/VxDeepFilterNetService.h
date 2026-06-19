@@ -6,11 +6,9 @@
 
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -66,7 +64,6 @@ public:
     ModelVariant getModelVariant() const noexcept {
         return static_cast<ModelVariant>(requestedVariant.load(std::memory_order_relaxed));
     }
-
 private:
     enum class StatusCode {
         idle = 0,
@@ -102,6 +99,7 @@ private:
         std::unique_ptr<Resampler<1, 1>> resampler;
         SampleFifo inputFifo;
         SampleFifo outputFifo;
+
         std::vector<float> frameIn;
         std::vector<float> frameOut;
         std::vector<float> resampleIn;

@@ -384,7 +384,10 @@ void SnapshotPublisher::prepare(const double sampleRate, const int maxBlockSize)
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     publishIntervalSamples = std::max(512, std::min(kHistorySamples, static_cast<int>(currentSampleRate / 15.0)));
     levelTraceBucketSizeSamples = publishIntervalSamples;
-    samplesUntilPublish = std::max(publishIntervalSamples, std::max(1, maxBlockSize));
+    // Jitter the initial publish offset so plugins prepared together don't all
+    // flush to shared memory in the same audio block.
+    const int jitter = juce::Random::getSystemRandom().nextInt(std::max(1, publishIntervalSamples));
+    samplesUntilPublish = std::max(publishIntervalSamples, std::max(1, maxBlockSize)) + jitter;
     registrationAttempted = false;
     ensureRegistered();
     reset();
@@ -833,7 +836,6 @@ void SummaryAccumulator::prepare(const double sampleRate, const int publishInter
     longWindowSamples = std::max(1, static_cast<int>(this->sampleRate * 0.100f));
     envelopeSamplesPerBucket = std::max(1, static_cast<int>((this->sampleRate * kEnvelopeWindowSeconds)
                                                              / static_cast<float>(kSummaryEnvelopeBins)));
-    fftHopSize = std::max(1, kSummarySpectrumFftSize / 4);
     fft.prepare(kSummarySpectrumFftOrder);
     for (int i = 0; i < kSummarySpectrumFftSize; ++i) {
         const float phase = juce::MathConstants<float>::twoPi * static_cast<float>(i)
@@ -860,7 +862,6 @@ void SummaryAccumulator::reset() noexcept {
     envelopeWriteIndex = 0;
     envelopeFilled = 0;
     envelopeSampleCounter = 0;
-    fftSamplesSinceUpdate = 0;
     midEnergy = 0.0;
     sideEnergy = 0.0;
     leftEnergy = 0.0;
@@ -893,7 +894,6 @@ void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept
         blockPeak = std::max(blockPeak, absMono);
         monoHistory[static_cast<std::size_t>(monoHistoryWriteIndex)] = mono;
         monoHistoryWriteIndex = (monoHistoryWriteIndex + 1) % kSummarySpectrumFftSize;
-        ++fftSamplesSinceUpdate;
 
         const float left = buffer.getSample(0, sampleIndex);
         const float right = buffer.getSample(std::min(1, channels - 1), sampleIndex);
@@ -952,73 +952,68 @@ void SummaryAccumulator::update(const juce::AudioBuffer<float>& buffer) noexcept
         envelopeSampleCounter -= envelopeSamplesPerBucket;
     }
 
-    while (fftSamplesSinceUpdate >= fftHopSize) {
-        fftSamplesSinceUpdate -= fftHopSize;
-        if (!fft.isReady())
-            continue;
+}
 
-        int readIndex = monoHistoryWriteIndex;
-        for (int i = 0; i < kSummarySpectrumFftSize; ++i) {
-            fftData[static_cast<std::size_t>(i)] =
-                monoHistory[static_cast<std::size_t>(readIndex)] * spectrumWindow[static_cast<std::size_t>(i)];
-            readIndex = (readIndex + 1) % kSummarySpectrumFftSize;
+void SummaryAccumulator::computeSpectrum() noexcept {
+    if (!fft.isReady())
+        return;
+
+    int readIndex = monoHistoryWriteIndex;
+    for (int i = 0; i < kSummarySpectrumFftSize; ++i) {
+        fftData[static_cast<std::size_t>(i)] =
+            monoHistory[static_cast<std::size_t>(readIndex)] * spectrumWindow[static_cast<std::size_t>(i)];
+        readIndex = (readIndex + 1) % kSummarySpectrumFftSize;
+    }
+    std::fill(fftData.begin() + kSummarySpectrumFftSize, fftData.end(), 0.0f);
+    fft.performFrequencyOnlyForward(fftData.data());
+
+    constexpr float kMinFreq = 20.0f;
+    constexpr float kMaxFreq = 20000.0f;
+    const float nyquist = std::max(200.0f, sampleRate * 0.5f);
+    const float upperFreq = std::min(kMaxFreq, nyquist);
+    const float fftScale = 2.0f / static_cast<float>(kSummarySpectrumFftSize);
+
+    for (int band = 0; band < kSummarySpectrumBins; ++band) {
+        const float startNorm = static_cast<float>(band) / static_cast<float>(kSummarySpectrumBins);
+        const float endNorm = static_cast<float>(band + 1) / static_cast<float>(kSummarySpectrumBins);
+        const float startFreq = kMinFreq * std::pow(upperFreq / kMinFreq, startNorm);
+        const float endFreq = kMinFreq * std::pow(upperFreq / kMinFreq, endNorm);
+
+        int startBin = juce::jlimit(1,
+                                    kSummarySpectrumFftSize / 2,
+                                    static_cast<int>(std::floor(startFreq * kSummarySpectrumFftSize / sampleRate)));
+        int endBin = juce::jlimit(startBin,
+                                  kSummarySpectrumFftSize / 2,
+                                  static_cast<int>(std::ceil(endFreq * kSummarySpectrumFftSize / sampleRate)));
+
+        constexpr int kMinBinsPerBand = 3;
+        if ((endBin - startBin + 1) < kMinBinsPerBand) {
+            const int centerBin = juce::jlimit(1,
+                                               kSummarySpectrumFftSize / 2,
+                                               static_cast<int>(std::lround(std::sqrt(startFreq * endFreq)
+                                                                            * kSummarySpectrumFftSize / sampleRate)));
+            startBin = juce::jlimit(1, kSummarySpectrumFftSize / 2, centerBin - 1);
+            endBin = juce::jlimit(startBin, kSummarySpectrumFftSize / 2, centerBin + 1);
         }
-        std::fill(fftData.begin() + kSummarySpectrumFftSize, fftData.end(), 0.0f);
-        fft.performFrequencyOnlyForward(fftData.data());
 
-        constexpr float kMinFreq = 20.0f;
-        constexpr float kMaxFreq = 20000.0f;
-        const float nyquist = std::max(200.0f, sampleRate * 0.5f);
-        const float upperFreq = std::min(kMaxFreq, nyquist);
-        const float fftScale = 2.0f / static_cast<float>(kSummarySpectrumFftSize);
+        double powerSum = 0.0;
+        double weightSum = 0.0;
+        float peakMagnitude = 0.0f;
+        for (int bin = startBin; bin <= endBin; ++bin) {
+            const double magnitude = static_cast<double>(fftData[static_cast<std::size_t>(bin)]) * fftScale;
+            powerSum += magnitude * magnitude;
+            weightSum += 1.0;
+            peakMagnitude = std::max(peakMagnitude, static_cast<float>(magnitude));
+        }
 
-        for (int band = 0; band < kSummarySpectrumBins; ++band) {
-            const float startNorm = static_cast<float>(band) / static_cast<float>(kSummarySpectrumBins);
-            const float endNorm = static_cast<float>(band + 1) / static_cast<float>(kSummarySpectrumBins);
-            const float startFreq = kMinFreq * std::pow(upperFreq / kMinFreq, startNorm);
-            const float endFreq = kMinFreq * std::pow(upperFreq / kMinFreq, endNorm);
-
-            int startBin = juce::jlimit(1,
-                                        kSummarySpectrumFftSize / 2,
-                                        static_cast<int>(std::floor(startFreq * kSummarySpectrumFftSize / sampleRate)));
-            int endBin = juce::jlimit(startBin,
-                                      kSummarySpectrumFftSize / 2,
-                                      static_cast<int>(std::ceil(endFreq * kSummarySpectrumFftSize / sampleRate)));
-
-            // The lowest log bands can otherwise collapse to one or two FFT bins,
-            // which makes the analyser overreact to single-bin fluctuations and
-            // mis-shape the low end versus tools like SPAN.
-            constexpr int kMinBinsPerBand = 3;
-            if ((endBin - startBin + 1) < kMinBinsPerBand) {
-                const int centerBin = juce::jlimit(1,
-                                                   kSummarySpectrumFftSize / 2,
-                                                   static_cast<int>(std::lround(std::sqrt(startFreq * endFreq)
-                                                                                * kSummarySpectrumFftSize / sampleRate)));
-                startBin = juce::jlimit(1, kSummarySpectrumFftSize / 2, centerBin - 1);
-                endBin = juce::jlimit(startBin, kSummarySpectrumFftSize / 2, centerBin + 1);
-            }
-
-            double powerSum = 0.0;
-            double weightSum = 0.0;
-            float peakMagnitude = 0.0f;
-            for (int bin = startBin; bin <= endBin; ++bin) {
-                const double magnitude = static_cast<double>(fftData[static_cast<std::size_t>(bin)]) * fftScale;
-                powerSum += magnitude * magnitude;
-                weightSum += 1.0;
-                peakMagnitude = std::max(peakMagnitude, static_cast<float>(magnitude));
-            }
-
-            if (weightSum > 0.0) {
-                const float rmsMagnitude = static_cast<float>(std::sqrt(powerSum / weightSum));
-                const int binCount = endBin - startBin + 1;
-                const float peakWeight = binCount <= kMinBinsPerBand ? 0.30f : 0.75f;
-                // Preserve prominent partials without letting single low-bin spikes
-                // dominate the whole low-end contour.
-                spectrum[static_cast<std::size_t>(band)] =
-                    peakWeight * peakMagnitude + (1.0f - peakWeight) * rmsMagnitude;
-            } else {
-                spectrum[static_cast<std::size_t>(band)] = 0.0f;
-            }
+        if (weightSum > 0.0) {
+            const float rmsMagnitude = static_cast<float>(std::sqrt(powerSum / weightSum));
+            const int binCount = endBin - startBin + 1;
+            const float peakWeight = binCount <= kMinBinsPerBand ? 0.30f : 0.75f;
+            spectrum[static_cast<std::size_t>(band)] =
+                peakWeight * peakMagnitude + (1.0f - peakWeight) * rmsMagnitude;
+        } else {
+            spectrum[static_cast<std::size_t>(band)] = 0.0f;
         }
     }
 }
@@ -1534,7 +1529,10 @@ void StagePublisher::prepare(const double sampleRate, const int maxBlockSize) no
     registrationAttempted = false;
     currentSampleRate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     publishIntervalSamples = std::max(256, static_cast<int>(currentSampleRate / static_cast<double>(kTargetPublishHz)));
-    samplesUntilPublish = publishIntervalSamples;
+    // Jitter the initial publish offset so all plugins prepared together don't
+    // run their FFT and CriticalSection publish in the same audio block.
+    const int stageJitter = juce::Random::getSystemRandom().nextInt(std::max(1, publishIntervalSamples));
+    samplesUntilPublish = publishIntervalSamples + stageJitter;
     domainRefreshCountdown = kDomainRefreshSamples;
     inputAccumulator->prepare(currentSampleRate, publishIntervalSamples);
     outputAccumulator->prepare(currentSampleRate, publishIntervalSamples);
@@ -1818,6 +1816,13 @@ void StagePublisher::maybePublish(const bool bypassed, const int numChannels) no
             }
         }
     }
+
+    // Run spectrum FFT once at publish time (15 Hz) rather than every hop on the
+    // audio thread. With jittered initial offsets, plugins never all fire together.
+    if (inputAccumulator != nullptr)
+        inputAccumulator->computeSpectrum();
+    if (outputAccumulator != nullptr)
+        outputAccumulator->computeSpectrum();
 
     StageTelemetry telemetry;
     setStageIdentityFromProduct(telemetry.identity, identityDescriptor, instanceIdValue, localOrderIdValue);

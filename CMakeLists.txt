@@ -20,19 +20,6 @@ set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.2")
 set(VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.1")
 set(VXSUITE_PLUGIN_VERSION_VXREPAIR "0.1.1")
 
-execute_process(
-  COMMAND python3 -c "import pathlib, onnxruntime; p = pathlib.Path(onnxruntime.__file__).resolve().parent / 'capi'; libs = sorted(p.glob('libonnxruntime*.dylib')); print(libs[0] if libs else '', end='')"
-  OUTPUT_VARIABLE VXSTUDIO_ONNXRUNTIME_DYLIB
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  ERROR_QUIET
-)
-set(VXSTUDIO_HAS_ONNXRUNTIME FALSE)
-if(APPLE AND EXISTS "${VXSTUDIO_ONNXRUNTIME_DYLIB}")
-  add_library(VxStudioOnnxRuntime SHARED IMPORTED GLOBAL)
-  set_target_properties(VxStudioOnnxRuntime PROPERTIES IMPORTED_LOCATION "${VXSTUDIO_ONNXRUNTIME_DYLIB}")
-  set(VXSTUDIO_HAS_ONNXRUNTIME TRUE)
-endif()
-
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
 configure_file(
   "${CMAKE_SOURCE_DIR}/cmake/VxStudioVersions.h.in"
@@ -188,9 +175,14 @@ if(APPLE AND VXSTUDIO_MACOS_DEPLOYMENT_TARGET STREQUAL "")
 endif()
 set(VXSTUDIO_DF_EMBED_MODEL_FILES "")
 
+set(VXSTUDIO_DF_FEATURES "capi,default-model")
+
 if(WIN32)
   set(VXSTUDIO_DF_RUNTIME_LIB "${VXSTUDIO_LIBDF_TARGET_DIR}/df.lib")
   set(VXSTUDIO_DF_RUNTIME_DFN2_LIB "${VXSTUDIO_LIBDF_DFN2_TARGET_DIR}/df.lib")
+elseif(APPLE)
+  set(VXSTUDIO_DF_RUNTIME_LIB "${VXSTUDIO_LIBDF_TARGET_DIR}/libdf.a")
+  set(VXSTUDIO_DF_RUNTIME_DFN2_LIB "${VXSTUDIO_LIBDF_DFN2_TARGET_DIR}/libdf.a")
 else()
   set(VXSTUDIO_DF_RUNTIME_LIB "${VXSTUDIO_LIBDF_TARGET_DIR}/libdf.a")
   set(VXSTUDIO_DF_RUNTIME_DFN2_LIB "${VXSTUDIO_LIBDF_DFN2_TARGET_DIR}/libdf.a")
@@ -201,7 +193,7 @@ if(APPLE)
     COMMAND ${CMAKE_COMMAND} -E env
             CARGO_TARGET_DIR=${VXSTUDIO_LIBDF_TARGET_ROOT}
             MACOSX_DEPLOYMENT_TARGET=${VXSTUDIO_MACOS_DEPLOYMENT_TARGET}
-            ${CARGO_CMD} build --release --locked --no-default-features --manifest-path ${VXSTUDIO_LIBDF_DIR}/Cargo.toml --features capi
+            ${CARGO_CMD} build --release --no-default-features --manifest-path ${VXSTUDIO_LIBDF_DIR}/Cargo.toml --features ${VXSTUDIO_DF_FEATURES}
     WORKING_DIRECTORY ${VXSTUDIO_LIBDF_DIR}
     BYPRODUCTS ${VXSTUDIO_DF_RUNTIME_LIB}
     COMMENT "Building bundled DeepFilter runtime"
@@ -215,11 +207,28 @@ if(APPLE)
     BYPRODUCTS ${VXSTUDIO_DF_RUNTIME_DFN2_LIB}
     COMMENT "Building bundled DeepFilter DFN2 runtime"
     VERBATIM)
+elseif(WIN32)
+  add_custom_target(build_vxstudio_libdf
+    COMMAND ${CMAKE_COMMAND} -E env
+            CARGO_TARGET_DIR=${VXSTUDIO_LIBDF_TARGET_ROOT}
+            ${CARGO_CMD} build --release --no-default-features --manifest-path ${VXSTUDIO_LIBDF_DIR}/Cargo.toml --features ${VXSTUDIO_DF_FEATURES}
+    WORKING_DIRECTORY ${VXSTUDIO_LIBDF_DIR}
+    BYPRODUCTS ${VXSTUDIO_DF_RUNTIME_LIB}
+    COMMENT "Building bundled DeepFilter runtime"
+    VERBATIM)
+  add_custom_target(build_vxstudio_libdf_dfn2
+    COMMAND ${CMAKE_COMMAND} -E env
+            CARGO_TARGET_DIR=${VXSTUDIO_LIBDF_DFN2_TARGET_ROOT}
+            ${CARGO_CMD} build --release --locked --no-default-features --manifest-path ${VXSTUDIO_LIBDF_DFN2_DIR}/Cargo.toml --features capi
+    WORKING_DIRECTORY ${VXSTUDIO_LIBDF_DFN2_DIR}
+    BYPRODUCTS ${VXSTUDIO_DF_RUNTIME_DFN2_LIB}
+    COMMENT "Building bundled DeepFilter DFN2 runtime"
+    VERBATIM)
 else()
   add_custom_target(build_vxstudio_libdf
     COMMAND ${CMAKE_COMMAND} -E env
             CARGO_TARGET_DIR=${VXSTUDIO_LIBDF_TARGET_ROOT}
-            ${CARGO_CMD} build --release --locked --no-default-features --manifest-path ${VXSTUDIO_LIBDF_DIR}/Cargo.toml --features capi
+            ${CARGO_CMD} build --release --no-default-features --manifest-path ${VXSTUDIO_LIBDF_DIR}/Cargo.toml --features ${VXSTUDIO_DF_FEATURES}
     WORKING_DIRECTORY ${VXSTUDIO_LIBDF_DIR}
     BYPRODUCTS ${VXSTUDIO_DF_RUNTIME_LIB}
     COMMENT "Building bundled DeepFilter runtime"
@@ -567,8 +576,7 @@ vxstudio_stage_vst3_bundle(VXDeepFilterNet_VST3 "VXDeepFilterNet")
 vxstudio_strip_vst3_binary(VXDeepFilterNet_VST3 "VXDeepFilterNet")
 vxstudio_prune_vst3_resources(VXDeepFilterNet_VST3 "VXDeepFilterNet"
   "DeepFilterNet2_onnx.tar.gz"
-  "DeepFilterNet2_onnx_ll.tar.gz"
-  "DeepFilterNet3_onnx.tar.gz")
+  "DeepFilterNet2_onnx_ll.tar.gz")
 
 juce_add_plugin(VXTone
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXTONE}

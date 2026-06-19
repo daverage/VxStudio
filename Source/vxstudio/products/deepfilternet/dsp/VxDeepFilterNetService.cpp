@@ -4,7 +4,9 @@
 #include "../../../framework/VxStudioModelAssets.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 #include <juce_core/juce_core.h>
 
@@ -17,11 +19,27 @@ namespace {
 constexpr double kEngineSampleRate = 48000.0;
 constexpr int kDefaultFrameLength = 480;
 constexpr int kFifoCapacity48k = 48000;
-constexpr int kDfn3Latency48k = 1920;
+constexpr int kDfn3Latency48k = 1440; // 1 STFT frame (480) + conv_lookahead (2×480)
 constexpr int kDfn2LlLatency48k = 480;
 constexpr int kRnNoiseLatency48k = 480;
 constexpr int kModelWarmupFrames = 8;
 constexpr float kRnNoisePcmScale = 32768.0f;
+
+bool isEffectivelyDualMono(const juce::AudioBuffer<float>& buffer, const int numSamples) noexcept {
+    if (buffer.getNumChannels() < 2 || numSamples <= 0)
+        return false;
+
+    const auto* left = buffer.getReadPointer(0);
+    const auto* right = buffer.getReadPointer(1);
+    float peak = 0.0f;
+    float maxDiff = 0.0f;
+    for (int i = 0; i < numSamples; ++i) {
+        peak = std::max(peak, std::max(std::abs(left[i]), std::abs(right[i])));
+        maxDiff = std::max(maxDiff, std::abs(left[i] - right[i]));
+    }
+
+    return maxDiff <= (1.0e-6f + peak * 1.0e-4f);
+}
 
 vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
     if (variant == vxsuite::deepfilternet::DeepFilterService::ModelVariant::rnnoise) {
@@ -46,7 +64,7 @@ vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilter
         "deepfilternet3",
         "DeepFilterNet 3 Model",
         {},
-        { { "DeepFilterNet3_onnx.tar.gz", "https://github.com/daverage/VxStudio/releases/download/models-v1/DeepFilterNet3_onnx.tar.gz" } }
+        {}
     };
 }
 
@@ -272,9 +290,9 @@ float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime
 }
 
 juce::File DeepFilterService::modelAssetForVariant(const ModelVariant variant) const {
-    const auto fileName = variant == ModelVariant::dfn2
-        ? juce::String("DeepFilterNet2_onnx_ll.tar.gz")
-        : juce::String("DeepFilterNet3_onnx.tar.gz");
+    if (variant == ModelVariant::dfn3)
+        return juce::File{};
+    const auto fileName = juce::String("DeepFilterNet2_onnx_ll.tar.gz");
     const auto installedFile = vxsuite::ModelAssetService::instance().packageFile(packageForVariant(variant), fileName);
     return installedFile.existsAsFile() ? installedFile : juce::File{};
 }
@@ -290,7 +308,8 @@ bool DeepFilterService::extractEmbeddedModel(const ModelVariant variant, const j
 }
 
 bool DeepFilterService::prepareModelFile(const ModelVariant variant, juce::File& modelFileOut) {
-    if (variant == ModelVariant::rnnoise) {
+    if (variant == ModelVariant::rnnoise || variant == ModelVariant::dfn3) {
+        // rnnoise has no model file; dfn3 model is embedded in the Rust library via include_bytes!
         modelFileOut = juce::File();
         return true;
     }
@@ -365,15 +384,12 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     const int safeFrameLength = std::max(1, frameLength);
     channel.frameIn.assign(static_cast<size_t>(safeFrameLength), 0.0f);
     channel.frameOut.assign(static_cast<size_t>(safeFrameLength), 0.0f);
-
     const auto maxRatio = std::max(1.0, kEngineSampleRate / bundle.sampleRate);
     const auto maxResampledSize = std::max(safeFrameLength, static_cast<int>(std::ceil(bundle.blockSize * maxRatio)) + 128);
     channel.resampleIn.assign(static_cast<size_t>(maxResampledSize), 0.0f);
     channel.resampleOut.assign(static_cast<size_t>(maxResampledSize), 0.0f);
 
     // Warm up the resampler and GRU state with silence before real audio arrives.
-    // Without this, the resampler filter and model both start cold, producing a
-    // transient on the first real frame.
     for (int i = 0; i < kModelWarmupFrames; ++i)
         processRuntimeFrame(bundle.runtimeApi, channel.runtime, channel.frameIn.data(), channel.frameOut.data());
 
@@ -438,7 +454,8 @@ void DeepFilterService::prepareRealtime(const double sampleRate, const int maxBl
     waitForReaders(prepareIndex);
     auto& bundle = bundles[static_cast<size_t>(prepareIndex)];
     if (!prepareBundle(bundle, sampleRate, maxBlockSize, variant)) {
-        setStatus(bundle.modelFile.existsAsFile() ? StatusCode::rtInitFailed : StatusCode::rtMissingModel);
+        const bool modelAvailable = bundle.modelFile.existsAsFile() || variant == ModelVariant::dfn3;
+    setStatus(modelAvailable ? StatusCode::rtInitFailed : StatusCode::rtMissingModel);
         return;
     }
 
@@ -471,7 +488,7 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                                         const double sampleRate,
                                         const float strength,
                                         const uint64_t key) {
-    juce::ignoreUnused(key);
+    juce::ignoreUnused(key, sampleRate);
 
     const int activeIndex = activeBundleIndex.load(std::memory_order_acquire);
     if (activeIndex < 0 || !rtReady.load(std::memory_order_acquire) || !hasRealtimeBackend())
@@ -487,18 +504,18 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
 
     bundleReaders[static_cast<size_t>(activeIndex)].fetch_add(1, std::memory_order_acq_rel);
     const auto attenuationLimitDb = attenuationLimitForStrength(strength);
+    const bool dualMonoFastPath = numChannels == 2 && isEffectivelyDualMono(buffer, numSamples);
+    const int channelsToProcess = dualMonoFastPath ? 1 : numChannels;
     bool anyStartupBypass = false;
 
-    for (int channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+    for (int channelIndex = 0; channelIndex < channelsToProcess; ++channelIndex) {
         auto& channel = bundle.channels[static_cast<size_t>(channelIndex)];
         if (channel.runtime == nullptr || channel.resampler == nullptr)
             continue;
 
-        setRuntimeAttenuation(bundle.runtimeApi, channel.runtime, attenuationLimitDb);
-
-        float* sourceInput[] = { buffer.getWritePointer(channelIndex) };
+        float* sourceInput[]  = { buffer.getWritePointer(channelIndex) };
         float* sourceOutput[] = { buffer.getWritePointer(channelIndex) };
-        float* targetInput[] = { channel.resampleIn.data() };
+        float* targetInput[]  = { channel.resampleIn.data() };
         float* targetOutput[] = { channel.resampleOut.data() };
 
         channel.resampler->process(
@@ -508,11 +525,12 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
             targetOutput,
             numSamples,
             [&](float* const* inputBuffers, float* const* outputBuffers, int sampleCount48k) {
-                auto* input48k = inputBuffers[0];
+                auto* input48k  = inputBuffers[0];
                 auto* output48k = outputBuffers[0];
 
                 channel.inputFifo.push(input48k, sampleCount48k);
 
+                setRuntimeAttenuation(bundle.runtimeApi, channel.runtime, attenuationLimitDb);
                 while (channel.inputFifo.available >= bundle.frameLength) {
                     channel.inputFifo.pop(channel.frameIn.data(), bundle.frameLength);
                     processRuntimeFrame(bundle.runtimeApi, channel.runtime,
@@ -527,9 +545,6 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                     channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
                 }
 
-                // Pop processed output; zero-fill on underrun at startup. The reported
-                // latency gives the host enough compensated delay to hide the initial
-                // model/resampler fill before processed audio is available.
                 const int toPop = std::min(channel.outputFifo.available, sampleCount48k);
                 if (toPop > 0)
                     channel.outputFifo.pop(output48k, toPop);
@@ -542,8 +557,11 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                     channel.startupSamplesRemaining -= bypassCount;
                     anyStartupBypass = true;
                 }
-                });
+            });
     }
+
+    if (dualMonoFastPath)
+        buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
 
     tailPrior = 0.92f * tailPrior + 0.08f * vxsuite::clamp01(strength);
     startupBypassActive.store(anyStartupBypass, std::memory_order_release);

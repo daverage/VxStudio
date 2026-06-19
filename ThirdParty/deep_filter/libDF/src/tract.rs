@@ -83,7 +83,9 @@ impl Default for DfParams {
         #[cfg(feature = "default-model")]
         {
             log::debug!("Loading model DeepFilterNet3_onnx.tar.gz");
-            DfParams::from_bytes(include_bytes!("../../models/DeepFilterNet3_onnx.tar.gz"))
+            DfParams::from_bytes(include_bytes!(
+                "../../../../assets/deepfilternet/models/DeepFilterNet3_onnx.tar.gz"
+            ))
                 .expect("Could not load model config")
         }
         #[cfg(not(feature = "default-model"))]

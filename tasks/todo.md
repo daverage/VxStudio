@@ -1,20 +1,26 @@
-# VXRepair: Add Click DSP
+# Inference thread refactor - DeepFilterNet
 
-## Scope
-Add `DeClickDsp` as a 4th tool row in VXRepair (after Speech Clarity, before Reverb).
-Click DSP already compiled into VXRepair via CMake. Analysis, parameters, processing,
-latency accounting, and editor all need updating.
+## Goal
+Move ONNX/RNNoise inference off the audio thread into a dedicated per-channel
+inference thread. Audio thread only does FIFO push/pop and an atomic notify.
 
-## Files
+## Changes
 
-- [x] VxRepairAnalysis.h/cpp — add clickScore to RepairAssessment + crest-factor detection
-- [x] VxRepairProcessor.h — add deClickDsp, clickIntensity, clickDryDelay, update ToolActivity
-- [x] VxRepairProcessor.cpp — params, prepare, reset, process, applyAssessment, getToolActivity
-- [x] VxRepairEditor.h — 4 rows, clickActivityDisplay
-- [x] VxRepairEditor.cpp — Click row, taller editor, paintRepair, timerCallback
+### VxDeepFilterNetService.h
+- [x] Remove `SampleFifo` struct
+- [x] Add `ThreadSafeSampleFifo` (backed by `juce::AbstractFifo` for SPSC lock-free)
+- [x] Update `ChannelState`: replace SampleFifo fields, add `inferenceThread`,
+      `workSignal` (atomic<int>), `stopInference` (atomic<bool>),
+      `requestedAttenDb` (atomic<float>), `requestedStrength` (atomic<float>)
+- [x] Declare `runInferenceLoop(ChannelState&, RuntimeBundle&)`
 
-## Key decisions
-- Click DSP always runs (0 strength when off) → reported latency = noiseLat + clickLat + reverbLat
-- click_listen uses a clickDryDelay buffer (same pattern as noise dry delay)
-- Click order in chain: click → plosive → esser → breath (matches VXSpeechClarity)
-- Editor height: 580 → 660 to fit 4th row
+### VxDeepFilterNetService.cpp
+- [x] Implement `ThreadSafeSampleFifo::reset/clear/push/pop`
+- [x] `releaseBundle`: stop + join inference threads BEFORE destroying runtimes
+- [x] `prepareChannel`: start inference thread after channel setup
+- [x] `processRealtime` callback: push input, atomic notify, pop output - no inference
+- [x] Store `requestedAttenDb` / `requestedStrength` per channel before callback
+- [x] Remove `setRuntimeAttenuation` call from audio thread
+- [x] Implement `runInferenceLoop`: wait on workSignal, drain inputFifo, infer, push output
+
+## Status: COMPLETE - builds clean

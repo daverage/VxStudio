@@ -36,13 +36,12 @@ vxsuite::ModelPackage makeDeepFilterPackage(const vxsuite::deepfilternet::DeepFi
         };
     }
 
+    // DFN3 model is embedded in the plugin binary via include_bytes! — no download needed.
     return {
         "deepfilternet3",
         "DeepFilterNet 3 Model",
-        "VX DeepFilterNet uses an external ML denoise model. Downloading it enables realtime voice denoise without inflating the plugin bundle size.",
-        {
-            { "DeepFilterNet3_onnx.tar.gz", "https://github.com/daverage/VxStudio/releases/download/models-v1/DeepFilterNet3_onnx.tar.gz", 7983136 }
-        }
+        {},
+        {}
     };
 }
 
@@ -128,9 +127,10 @@ vxsuite::ModelPackage VXDeepFilterNetAudioProcessor::currentModelPackage() const
 }
 
 bool VXDeepFilterNetAudioProcessor::isModelReadyForUi() const noexcept {
-    if (selectedModelVariant() == ModelVariant::rnnoise)
+    const auto variant = selectedModelVariant();
+    if (variant == ModelVariant::rnnoise || variant == ModelVariant::dfn3)
         return true;
-    return vxsuite::ModelAssetService::instance().isReady(makeDeepFilterPackage(selectedModelVariant()))
+    return vxsuite::ModelAssetService::instance().isReady(makeDeepFilterPackage(variant))
         || engine.isRealtimeReady();
 }
 
