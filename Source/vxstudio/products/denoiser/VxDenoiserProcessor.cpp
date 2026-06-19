@@ -5,6 +5,7 @@
 #include "../../framework/VxStudioReadabilityGuard.h"
 #include "VxStudioVersions.h"
 
+#include <array>
 #include <cmath>
 
 namespace {
@@ -140,7 +141,33 @@ void VXDenoiserAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     ensureLatencyAlignedListenDry(numSamples);
     const float dryRms = vxsuite::analysis::rms(buffer);
+    std::array<float, 2> dryChannelRms { 0.0f, 0.0f };
+    const int measuredChannels = std::min(buffer.getNumChannels(), 2);
+    for (int ch = 0; ch < measuredChannels; ++ch)
+        dryChannelRms[static_cast<size_t>(ch)] = vxsuite::analysis::rmsChannel(buffer, ch);
     denoiserDsp.processInPlace(buffer, effectiveClean, opts);
+
+    if (measuredChannels > 1 && effectiveClean > 1.0e-4f) {
+        const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        const float meanRms = 0.5f * (dryChannelRms[0] + dryChannelRms[1]);
+        for (int ch = 0; ch < measuredChannels; ++ch) {
+            const float excess = meanRms > 1.0e-6f
+                ? vxsuite::clamp01((dryChannelRms[static_cast<size_t>(ch)] - meanRms) / meanRms)
+                : 0.0f;
+            const float wetScale = 1.0f + 0.85f * effectiveClean * excess;
+            if (wetScale <= 1.0001f)
+                continue;
+
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = alignedDry.getReadPointer(ch);
+            const int samples = std::min(numSamples, alignedDry.getNumSamples());
+            for (int i = 0; i < samples; ++i)
+                wet[i] = dry[i] + (wet[i] - dry[i]) * wetScale;
+        }
+    }
+
+    if (smoothedGuard > 0.90f && effectiveClean > 0.8f)
+        buffer.applyGain(isVoice ? 0.96f : 0.86f);
 
     // Wet level is tracked for activity display only. Avoid automatic make-up gain.
     const float wetRms = vxsuite::analysis::rms(buffer);

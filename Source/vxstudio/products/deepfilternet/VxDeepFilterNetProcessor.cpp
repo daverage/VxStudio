@@ -260,25 +260,30 @@ void VXDeepFilterNetAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
     }
 
     const float effectiveClean = vxsuite::clamp01(smoothedClean);
+    const float effectiveGuard = vxsuite::clamp01(smoothedGuard);
 
     ensureLatencyAlignedListenDry(numSamples);
-    const bool wasHolding = holdbackActive;
-    engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, 0);
-    holdbackActive = engine.isInStartupBypass();
-
-    if (isNonRealtime() && wasHolding) {
-        buffer.clear();
-        prevWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+    if (effectiveGuard >= 0.9995f) {
+        const auto& alignedDryScratch = getLatencyAlignedListenDryBuffer();
+        const int channels = std::min(buffer.getNumChannels(), alignedDryScratch.getNumChannels());
+        const int samples = std::min(buffer.getNumSamples(), alignedDryScratch.getNumSamples());
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.copyFrom(ch, 0, alignedDryScratch, ch, 0, samples);
+        prevWetMix = 0.0f;
         return;
     }
+
+    const bool wasHolding = holdbackActive;
+    engine.processRealtime(buffer, currentSampleRateHz, effectiveClean, effectiveGuard, 0);
+    holdbackActive = engine.isInStartupBypass();
 
     if (muteSilentOutput) {
         buffer.clear();
-        prevWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+        prevWetMix = 1.0f - effectiveGuard;
         return;
     }
 
-    const float targetWetMix = 1.0f - vxsuite::clamp01(smoothedGuard);
+    const float targetWetMix = 1.0f - effectiveGuard;
     const bool liveDryGuardActive = !isNonRealtime() && wasHolding;
     const float wetMix = liveDryGuardActive ? 0.0f : targetWetMix;
     if (firstControlBlock)

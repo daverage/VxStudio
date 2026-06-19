@@ -3,6 +3,8 @@
 #include "../../framework/VxStudioOptoProductVoicing.h"
 #include "VxStudioVersions.h"
 
+#include <cmath>
+
 namespace {
 
 constexpr std::string_view kProductName = "VX Studio Finish";
@@ -113,6 +115,20 @@ void VXFinishAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     const auto [smoothedFinish, smoothedBody, smoothedGain] = controls.process(
         finishTarget, bodyTarget, gainTarget, currentSampleRateHz, numSamples,
         0.080f, 0.100f, 0.080f);
+
+    if (smoothedFinish <= 1.0e-6f
+        && std::abs(smoothedBody - 0.5f) <= 1.0e-6f
+        && std::abs(smoothedGain - 0.5f) <= 1.0e-6f) {
+        ensureLatencyAlignedListenDry(numSamples);
+        const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+        const int channels = std::min(buffer.getNumChannels(), alignedDry.getNumChannels());
+        const int samples = std::min(buffer.getNumSamples(), alignedDry.getNumSamples());
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.copyFrom(ch, 0, alignedDry, ch, 0, samples);
+        finishChain.reset();
+        outputTrimmer.reset();
+        return;
+    }
 
     // 1. DETECT MODE (Framework Pattern)
     const bool voiceMode = vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal;

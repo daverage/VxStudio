@@ -24,6 +24,8 @@ constexpr int kDfn2LlLatency48k = 480;
 constexpr int kRnNoiseLatency48k = 480;
 constexpr int kModelWarmupFrames = 8;
 constexpr float kRnNoisePcmScale = 32768.0f;
+constexpr float kGuardSpeechBackoff = 0.65f;
+constexpr float kModelPeakLimit = 1.5f;
 
 bool isEffectivelyDualMono(const juce::AudioBuffer<float>& buffer, const int numSamples) noexcept {
     if (buffer.getNumChannels() < 2 || numSamples <= 0)
@@ -39,6 +41,32 @@ bool isEffectivelyDualMono(const juce::AudioBuffer<float>& buffer, const int num
     }
 
     return maxDiff <= (1.0e-6f + peak * 1.0e-4f);
+}
+
+void constrainModelFrame(const float* input, float* output, const int frameLength, float& previousOutput) noexcept {
+    if (input == nullptr || output == nullptr || frameLength <= 0)
+        return;
+
+    for (int i = 0; i < frameLength; ++i) {
+        const float dry = std::isfinite(input[i]) ? input[i] : 0.0f;
+        float wet = output[i];
+        if (!std::isfinite(wet)) {
+            output[i] = dry;
+            previousOutput = dry;
+            continue;
+        }
+
+        const float inputStep = i == 0 ? std::abs(dry - previousOutput)
+                                       : std::abs(dry - input[i - 1]);
+        const float allowedStep = std::max(0.35f, inputStep * 6.0f + 0.05f);
+        const float step = wet - previousOutput;
+        if (std::abs(step) > allowedStep)
+            wet = previousOutput + std::copysign(allowedStep, step);
+
+        const float dynamicLimit = std::max(kModelPeakLimit, std::abs(dry) * 8.0f + 0.25f);
+        output[i] = juce::jlimit(-dynamicLimit, dynamicLimit, wet);
+        previousOutput = output[i];
+    }
 }
 
 vxsuite::ModelPackage packageForVariant(const vxsuite::deepfilternet::DeepFilterService::ModelVariant variant) {
@@ -178,6 +206,9 @@ void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
         std::fill(channel.frameIn.begin(), channel.frameIn.end(), 0.0f);
         std::fill(channel.frameOut.begin(), channel.frameOut.end(), 0.0f);
         channel.startupSamplesRemaining = 0;
+        channel.lastModelWetMix = 1.0f;
+        channel.lastOutputSample = 0.0f;
+        channel.modelWetPrimed = false;
     }
     bundle.modelFile = juce::File();
     bundle.ready = false;
@@ -396,6 +427,9 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     channel.outputFifo.clear();
     channel.inputFifo.clear();
     channel.startupSamplesRemaining = bundle.startupHoldbackSamples48k;
+    channel.lastModelWetMix = 1.0f;
+    channel.lastOutputSample = 0.0f;
+    channel.modelWetPrimed = false;
     return true;
 }
 
@@ -487,6 +521,7 @@ float DeepFilterService::attenuationLimitForStrength(const float strength) const
 bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                                         const double sampleRate,
                                         const float strength,
+                                        const float guard,
                                         const uint64_t key) {
     juce::ignoreUnused(key, sampleRate);
 
@@ -504,6 +539,8 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
 
     bundleReaders[static_cast<size_t>(activeIndex)].fetch_add(1, std::memory_order_acq_rel);
     const auto attenuationLimitDb = attenuationLimitForStrength(strength);
+    const float cleanAmount = vxsuite::clamp01(strength);
+    const float guardAmount = vxsuite::clamp01(guard);
     const bool dualMonoFastPath = numChannels == 2 && isEffectivelyDualMono(buffer, numSamples);
     const int channelsToProcess = dualMonoFastPath ? 1 : numChannels;
     bool anyStartupBypass = false;
@@ -533,14 +570,30 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                 setRuntimeAttenuation(bundle.runtimeApi, channel.runtime, attenuationLimitDb);
                 while (channel.inputFifo.available >= bundle.frameLength) {
                     channel.inputFifo.pop(channel.frameIn.data(), bundle.frameLength);
-                    processRuntimeFrame(bundle.runtimeApi, channel.runtime,
-                                        channel.frameIn.data(), channel.frameOut.data());
-                    if (bundle.runtimeApi == RuntimeApi::rnnoise) {
-                        const float wet = vxsuite::clamp01(strength);
-                        for (int i = 0; i < bundle.frameLength; ++i)
+                    const float vad = vxsuite::clamp01(processRuntimeFrame(bundle.runtimeApi, channel.runtime,
+                                                                            channel.frameIn.data(), channel.frameOut.data()));
+                    constrainModelFrame(channel.frameIn.data(), channel.frameOut.data(),
+                                        bundle.frameLength, channel.lastOutputSample);
+
+                    const float baseWet = bundle.runtimeApi == RuntimeApi::rnnoise ? cleanAmount : 1.0f;
+                    const float speechBackoff = guardAmount * vad * kGuardSpeechBackoff;
+                    const float targetWet = vxsuite::clamp01(baseWet * (1.0f - speechBackoff));
+                    if (!channel.modelWetPrimed) {
+                        channel.lastModelWetMix = targetWet;
+                        channel.modelWetPrimed = true;
+                    }
+                    if (targetWet < 0.9995f || channel.lastModelWetMix < 0.9995f) {
+                        const float startWet = channel.lastModelWetMix;
+                        for (int i = 0; i < bundle.frameLength; ++i) {
+                            const float t = bundle.frameLength > 1
+                                ? static_cast<float>(i) / static_cast<float>(bundle.frameLength - 1)
+                                : 1.0f;
+                            const float weight = startWet + (targetWet - startWet) * t;
                             channel.frameOut[static_cast<size_t>(i)] =
                                 channel.frameIn[static_cast<size_t>(i)]
-                                + (channel.frameOut[static_cast<size_t>(i)] - channel.frameIn[static_cast<size_t>(i)]) * wet;
+                                + (channel.frameOut[static_cast<size_t>(i)] - channel.frameIn[static_cast<size_t>(i)]) * weight;
+                        }
+                        channel.lastModelWetMix = targetWet;
                     }
                     channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
                 }
@@ -563,7 +616,6 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
     if (dualMonoFastPath)
         buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
 
-    tailPrior = 0.92f * tailPrior + 0.08f * vxsuite::clamp01(strength);
     startupBypassActive.store(anyStartupBypass, std::memory_order_release);
     bundleReaders[static_cast<size_t>(activeIndex)].fetch_sub(1, std::memory_order_acq_rel);
     setStatus(StatusCode::rtReady);

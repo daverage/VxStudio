@@ -140,6 +140,9 @@ void VXCleanupAudioProcessor::prepareSuite(const double sampleRate, const int sa
     vxsuite::spectral::prepareSqrtHannWindow(spectralWindow, spectralSize);
     persistentCleanupStage.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     correctiveChain.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
+    voicedDryBuffer.setSize(std::max(1, getTotalNumOutputChannels()),
+                            std::max(1, samplesPerBlock),
+                            false, false, true);
     assertiveLowState.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())), 0.0f);
     assertivePresenceState.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())), 0.0f);
     setReportedLatencySamples(0);
@@ -180,6 +183,15 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
     const int numSamples = buffer.getNumSamples();
     if (numSamples <= 0)
         return;
+
+    if (voicedDryBuffer.getNumChannels() < buffer.getNumChannels()
+        || voicedDryBuffer.getNumSamples() < numSamples) {
+        voicedDryBuffer.setSize(std::max(1, buffer.getNumChannels()),
+                                std::max(1, numSamples),
+                                false, false, true);
+    }
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        voicedDryBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
 
     float dryPeak = 0.0f;
     double dryRmsSq = 0.0;
@@ -350,12 +362,17 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
       + 0.12f * persistentLowMidDensity
       + 0.10f * shortPresenceDensity
       + 0.08f * evidence.lowMidRatio);
-    const float voicedMaterialGuard = juce::jlimit(0.58f, 1.0f,
-        1.0f - 0.24f * evidence.speechConfidence - 0.18f * harmonicity
-              - 0.10f * focus + 0.12f * densityPressure);
-    const float highBandSpeechGuard = juce::jlimit(0.50f, 1.0f,
-        1.0f - 0.28f * evidence.speechConfidence - 0.16f * harmonicity
-              - 0.12f * highBias + 0.10f * densityPressure);
+    const float voicedMaterialGuard = juce::jlimit(0.36f, 1.0f,
+        1.0f - 0.34f * evidence.speechConfidence - 0.28f * harmonicity
+              - 0.14f * focus + 0.08f * densityPressure);
+    const float highBandSpeechGuard = juce::jlimit(0.32f, 1.0f,
+        1.0f - 0.40f * evidence.speechConfidence - 0.24f * harmonicity
+              - 0.18f * highBias + 0.08f * densityPressure);
+    const float voicedTransparencyGuard = voiceMode
+        ? juce::jlimit(0.40f, 1.0f,
+            1.0f - 0.36f * evidence.speechConfidence - 0.24f * harmonicity
+                  - 0.10f * focus + 0.08f * densityPressure)
+        : 1.0f;
     const float cleanupRamp = juce::jlimit(0.0f, 1.0f,
         0.45f * cleanupStrength + 0.55f * cleanupStrength * cleanupStrength);
     const float cleanupIntensity = juce::jlimit(0.95f, 3.10f,
@@ -368,6 +385,7 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
             (cleanupRamp * (0.46f + 0.32f * densityPressure)
             + 0.06f * cleanupStrength * cleanupStrength)
           * voicedMaterialGuard);
+        persistentParams.clean *= voicedTransparencyGuard;
         persistentParams.focus = focus;
         persistentParams.voiceMode = voiceMode;
         persistentParams.sidechainPresent = false;
@@ -460,10 +478,10 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         0.08f + 0.92f * lowBias * lowBias);
     const float plosiveVoicedGuard = juce::jlimit(0.05f, 1.0f,
         1.0f - 0.92f * voicedIntegrity * std::pow(1.0f - plosiveTarget, 2.0f));
-    const float voicedHighBandGuard = juce::jlimit(0.58f, 1.0f,
-        1.0f - 0.34f * voicedIntegrity * (0.45f + 0.55f * highBias));
-    const float voicedBreathGuard = juce::jlimit(0.55f, 1.0f,
-        1.0f - 0.38f * voicedIntegrity * (0.55f + 0.45f * breathAir));
+    const float voicedHighBandGuard = juce::jlimit(0.38f, 1.0f,
+        1.0f - 0.48f * voicedIntegrity * (0.45f + 0.55f * highBias));
+    const float voicedBreathGuard = juce::jlimit(0.42f, 1.0f,
+        1.0f - 0.48f * voicedIntegrity * (0.55f + 0.45f * breathAir));
     const auto readabilityGuard = vxsuite::corrective::deriveReadabilityGuard(
         evidence,
         analysis,
@@ -500,7 +518,9 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                                    - 0.14f * readabilityGuard.cumulativeRisk
                                    + 0.10f * readabilityGuard.densityPersistence));
     // Blend algorithm-detected sibilance with direct character control
-    const float characterHighControl = cleanupDrive * character * (voiceMode ? 0.92f : 0.78f);
+    const float characterHighGuard = voiceMode ? highBandSpeechGuard * voicedHighSafety : 1.0f;
+    const float characterHighControl = cleanupDrive * character * (voiceMode ? 0.92f : 0.78f)
+                                     * characterHighGuard;
     params.deEss = vxsuite::clamp01(
         0.50f * (cleanupDrive * cleanupIntensity * qualityTrust * sibilanceWeight
                            * (voiceMode ? 1.26f : 1.14f)
@@ -544,7 +564,8 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
         0.18f + 0.82f * vxsuite::clamp01(troubleEvidence * (1.0f - 0.58f * troubleOverlap)));
     // Blend algorithm-detected trouble with character-dial direct control
     // This ensures the high-shelf works even on test signals like pink noise
-    const float characterControl = cleanupDrive * character * (voiceMode ? 0.85f : 0.72f);
+    const float characterControl = cleanupDrive * character * (voiceMode ? 0.85f : 0.72f)
+                                 * characterHighGuard;
     params.troubleSmooth = vxsuite::clamp01(
         0.60f * (rawTroubleSmooth * params.troubleConfidence)  // Algorithm detection
       + 0.40f * characterControl);  // Direct character control
@@ -656,6 +677,26 @@ void VXCleanupAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, j
                 assertiveLowState[static_cast<size_t>(ch)] = low;
                 assertivePresenceState[static_cast<size_t>(ch)] = presence;
             }
+        }
+    }
+
+    const float voicedRestore = voiceMode
+        ? juce::jlimit(0.0f, 0.62f,
+            cleanupDrive
+          * voicedIntegrity
+          * (0.38f + 0.30f * focus)
+          * juce::jlimit(0.28f, 1.0f,
+              1.0f - 0.46f * spectral.spectralFlatness
+                    - 0.34f * evidence.artifactRisk
+                    - 0.16f * readabilityGuard.cumulativeRisk))
+        : 0.0f;
+    if (voicedRestore > 1.0e-4f) {
+        const float wetKeep = 1.0f - voicedRestore;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = voicedDryBuffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                wet[i] = dry[i] + (wet[i] - dry[i]) * wetKeep;
         }
     }
 

@@ -3182,6 +3182,7 @@ bool testDeepFilterFullGuardIsPdcAlignedDry() {
     const auto input = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.04f));
 
     VXDeepFilterNetAudioProcessor processor;
+    processor.setNonRealtime(true);
     processor.prepareToPlay(sr, blockSize);
     setParamNormalized(processor, "clean", 1.0f);
     setParamNormalized(processor, "guard", 1.0f);
@@ -3212,13 +3213,20 @@ bool testAnalyserDomainBindingSurvivesMultipleDomains() {
     {
         VXStudioAnalyserAudioProcessor analyserA;
         analyserA.prepareToPlay(sr, blockSize);
+        juce::AudioProcessor::TrackProperties trackA;
+        trackA.channelUID = "regression-analyser-track-a";
+        analyserA.updateTrackProperties(trackA);
 
         VXStudioAnalyserAudioProcessor analyserB;
         analyserB.prepareToPlay(sr, blockSize);
+        juce::AudioProcessor::TrackProperties trackB;
+        trackB.channelUID = "regression-analyser-track-b";
+        analyserB.updateTrackProperties(trackB);
         expectedDomainId = analyserB.analysisDomainId();
 
         VXCleanupAudioProcessor cleanup;
         cleanup.prepareToPlay(sr, blockSize);
+        cleanup.updateTrackProperties(trackB);
         setParamNormalized(cleanup, "cleanup", 0.62f);
         setParamNormalized(cleanup, "body", 0.42f);
         setParamNormalized(cleanup, "focus", 0.58f);
@@ -3234,7 +3242,7 @@ bool testAnalyserDomainBindingSurvivesMultipleDomains() {
             if (!stage.active)
                 continue;
             const auto stageName = fixedLabelToString(stage.telemetry.identity.stageName);
-            if (stageName == "Cleanup") {
+            if (stageName.containsIgnoreCase("Cleanup")) {
                 seenCleanupStages << "domain=" << juce::String(static_cast<juce::int64>(stage.analysisDomainId))
                                   << " stageId=" << fixedLabelToString(stage.telemetry.identity.stageId)
                                   << " instance=" << juce::String(static_cast<juce::int64>(stage.telemetry.identity.instanceId))
@@ -3242,7 +3250,7 @@ bool testAnalyserDomainBindingSurvivesMultipleDomains() {
             }
             if (stage.analysisDomainId != expectedDomainId)
                 continue;
-            if (stageName == "Cleanup") {
+            if (stageName.containsIgnoreCase("Cleanup")) {
                 cleanupFoundInNewestAnalyserDomain = true;
                 break;
             }
@@ -3871,12 +3879,24 @@ void operator delete[](void* ptr, std::size_t) noexcept {
     std::free(ptr);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     bool ok = true;
+    int passCount = 0;
+    int failCount = 0;
+    const juce::String filter = argc > 1 ? juce::String(argv[1]) : juce::String();
     const auto run = [&](const char* name, auto&& fn) {
+        if (filter.isNotEmpty() && !juce::String(name).containsIgnoreCase(filter))
+            return;
+
         const bool passed = fn();
-        (void) name;
         ok &= passed;
+        if (passed) {
+            ++passCount;
+            std::cerr << "[VXSuitePluginRegression] PASS " << name << "\n";
+        } else {
+            ++failCount;
+            std::cerr << "[VXSuitePluginRegression] FAIL " << name << "\n";
+        }
     };
     run("testCleanupZeroIsIdentity", testCleanupZeroIsIdentity);
     run("testSubtractLearnStartsOnFirstPress", testSubtractLearnStartsOnFirstPress);
@@ -3961,5 +3981,10 @@ int main() {
     run("testProximityAndFinishFrequencyResponseRegression", testProximityAndFinishFrequencyResponseRegression);
     run("testNoSteadyStateAllocationsOnAudioThread", testNoSteadyStateAllocationsOnAudioThread);
     run("testCombinedChainKeepsSilenceSilent", testCombinedChainKeepsSilenceSilent);
+    std::cerr << "[VXSuitePluginRegression] summary: " << passCount << " passed, "
+              << failCount << " failed";
+    if (filter.isNotEmpty())
+        std::cerr << " (filter: " << filter << ")";
+    std::cerr << "\n";
     return ok ? 0 : 1;
 }

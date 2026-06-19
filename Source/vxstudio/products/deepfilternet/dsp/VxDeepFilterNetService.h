@@ -45,10 +45,10 @@ public:
     bool processRealtime(juce::AudioBuffer<float>& buffer,
                          double sampleRate,
                          float strength,
+                         float guard,
                          uint64_t key);
     bool isInStartupBypass() const noexcept { return startupBypassActive.load(std::memory_order_acquire); }
     int getLatencySamples() const noexcept { return latencySamples; }
-    float lastTailPrior() const noexcept { return tailPrior; }
     juce::String lastStatus() const;
     bool hasRealtimeBackend() const noexcept { return rtBackend != RealtimeBackend::none; }
     bool isRealtimeReady() const noexcept { return rtReady.load(std::memory_order_acquire); }
@@ -105,6 +105,9 @@ private:
         std::vector<float> resampleIn;
         std::vector<float> resampleOut;
         int startupSamplesRemaining = 0;
+        float lastModelWetMix = 1.0f;
+        float lastOutputSample = 0.0f;
+        bool modelWetPrimed = false;
     };
 
     struct RuntimeBundle {
@@ -147,7 +150,6 @@ private:
     std::atomic<int> requestedVariant { static_cast<int>(ModelVariant::dfn3) };
     std::atomic<int> requestedStartupPreroll48k { 0 };
     int latencySamples = 0;
-    float tailPrior = 0.0f;
     std::atomic<bool> rtReady { false };
     juce::String rtBackendTag { "none" };
     RealtimeCapability rtCapability = RealtimeCapability::unavailable;

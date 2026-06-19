@@ -139,9 +139,9 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float patternFactor = isVoice ? (0.50f + 0.15f * (1.0f - focus)) : 0.80f;
 
     // Distance-derived proximity parameters
-    const float proximityFcHz = juce::jlimit(80.0f, 3000.0f,
-        kSpeedOfSound / (2.0f * juce::MathConstants<float>::pi * distance));
-    const float proximityGainDb = juce::jlimit(0.0f, isVoice ? 16.0f : 18.0f,
+    const float physicsFcHz = kSpeedOfSound / (2.0f * juce::MathConstants<float>::pi * distance);
+    const float proximityFcHz = juce::jlimit(85.0f, isVoice ? 260.0f : 320.0f, physicsFcHz);
+    const float proximityGainDb = juce::jlimit(0.0f, isVoice ? 11.0f : 13.0f,
         20.0f * std::log10(d_ref / distance) * patternFactor);
 
     // Mud compensation: user-controlled bell cut scaled by physics gain
@@ -149,8 +149,10 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
     const float mudCutDb = -0.45f * proximityGainDb * mud;
 
     // Air shelf: user-controlled brightness at high frequency
-    const float highFc = isVoice ? 7600.f : 11000.f;
-    const float highGain = (isVoice ? 7.5f : 9.0f) * air;
+    const float highFc = closer > 0.001f ? (isVoice ? 3200.f : 4200.f)
+                                         : (isVoice ? 7600.f : 11000.f);
+    const float highGain = (isVoice ? 7.5f : 9.0f) * air
+        + (isVoice ? 2.3f : 1.6f) * closer;
 
     // Content analysis for adaptive gain scaling
     const float lowCoeff = onePoleCoeff(sr, isVoice ? 180.0f : 200.0f);
@@ -199,8 +201,8 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
         juce::jlimit(0.85f, 1.08f, 0.90f + 0.12f * lowShare - 0.10f * mudRisk);
 
     // Output trim for stable loudness
-    const float outputTrimDb = -juce::jlimit(0.0f, 4.0f,
-        0.18f * adaptiveProximityGain * (0.68f + 0.32f * lowShare)
+    const float outputTrimDb = -juce::jlimit(0.0f, 7.0f,
+        0.48f * adaptiveProximityGain * (0.45f + 0.95f * lowShare)
       + 0.08f * std::abs(mudCutDb) * (0.45f + 0.55f * midShare)
       + 0.10f * highGain * (0.50f + 0.50f * airEnergy));
 

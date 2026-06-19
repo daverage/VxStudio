@@ -40,6 +40,7 @@ private:
 
     vxsuite::cleanup::Dsp correctiveChain;
     vxsuite::clarity::ClarityDsp persistentCleanupStage;
+    juce::AudioBuffer<float> voicedDryBuffer;
     std::atomic<bool> sidechainActive{false};
     vxsuite::corrective::TonalAnalysisState tonalAnalysis;
     vxsuite::RealFft spectralFft;

@@ -447,7 +447,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     auto applyNoiseDsp = [&](juce::AudioBuffer<float>& buf, float str) {
         if (useDeepFilter)
-            dfService.processRealtime(buf, currentSampleRate, str, 0);
+            dfService.processRealtime(buf, currentSampleRate, str, 0.0f, 0);
         else
             denoiserDsp.processInPlace(buf, str, noiseOpts);
     };
@@ -618,7 +618,7 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     if (useDeepFilter && noiseOn) {
         // DeepFilter replaces the denoiser STFT; its latency is handled separately.
         const float preRms = bufRms(buffer);
-        dfService.processRealtime(buffer, currentSampleRate, noiseStr, 0);
+        dfService.processRealtime(buffer, currentSampleRate, noiseStr, 0.0f, 0);
         const float wetRms = bufRms(buffer);
         const float gr = preRms > 1.0e-6f ? juce::jlimit(0.0f, 1.0f, 1.0f - wetRms / preRms) : 0.0f;
         noiseActivity.store(0.88f * noiseActivity.load(std::memory_order_relaxed) + 0.12f * gr, std::memory_order_relaxed);

@@ -41,6 +41,21 @@ constexpr std::array<float, vxsuite::ProductIdentity::maxControlBankControls> kB
     0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 1.0f
 };
 
+bool isEffectivelyDualMono(const juce::AudioBuffer<float>& buffer, const int numSamples) noexcept {
+    if (buffer.getNumChannels() < 2 || numSamples <= 0)
+        return false;
+
+    const auto* left = buffer.getReadPointer(0);
+    const auto* right = buffer.getReadPointer(1);
+    float peak = 0.0f;
+    float maxDiff = 0.0f;
+    for (int i = 0; i < numSamples; ++i) {
+        peak = std::max(peak, std::max(std::abs(left[i]), std::abs(right[i])));
+        maxDiff = std::max(maxDiff, std::abs(left[i] - right[i]));
+    }
+    return maxDiff <= (1.0e-6f + peak * 1.0e-4f);
+}
+
 } // namespace
 
 VXRebalanceAudioProcessor::VXRebalanceAudioProcessor()
@@ -182,6 +197,13 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         vxsuite::readNormalized(parameters, kOtherParam, 0.5f),
         vxsuite::readNormalized(parameters, kStrengthParam, 1.0f)
     };
+    if (isEffectivelyDualMono(buffer, numSamples)) {
+        for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
+            auto& target = targets[static_cast<size_t>(i)];
+            target = 0.5f + (target - 0.5f) * 0.65f;
+        }
+    }
+
     const auto voiceContext = getVoiceContextSnapshot();
     const auto signalQuality = getSignalQualitySnapshot();
     const int recordingType = vxsuite::readChoiceIndex(parameters, kRecordingTypeParam, 0);

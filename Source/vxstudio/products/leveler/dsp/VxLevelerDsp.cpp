@@ -264,7 +264,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         highAbs /= static_cast<float>(numChannels);
 
         if (!voiceMode) {
-            const float weightedLevel = 0.16f * lowAbs + 0.92f * monoAbs + 0.32f * highAbs;
+            const float weightedLevel = 0.10f * lowAbs + 0.90f * monoAbs + 0.46f * highAbs;
             const float weightedLevelDb = gainToDbFloor(weightedLevel);
             const bool startupActivity = weightedLevelDb > -65.0f || peakAbs > 0.015f;
             if (!generalPrimed && !startupActivity) {
@@ -719,6 +719,8 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
 
     for (int i = 0; i < numSamples; ++i) {
         std::array<float, 2> delayedSample { 0.0f, 0.0f };
+        std::array<float, 2> presenceBandSample { 0.0f, 0.0f };
+        std::array<float, 2> highBandSample { 0.0f, 0.0f };
         float monoAbs = 0.0f;
         float peakAbs = 0.0f;
         float lowAbs = 0.0f;
@@ -746,6 +748,8 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
             const float lowMidBand = state.lp2000 - state.lp150;
             const float presenceBand = state.lp4000 - state.lp2000;
             const float highBand = delayed - state.lp4000;
+            presenceBandSample[static_cast<size_t>(ch)] = presenceBand;
+            highBandSample[static_cast<size_t>(ch)] = highBand;
 
             lowAbs += std::abs(lowBand);
             lowMidAbs += std::abs(lowMidBand);
@@ -760,11 +764,11 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
         presenceAbs /= static_cast<float>(numChannels);
         highAbs /= static_cast<float>(numChannels);
 
-        const float weightedLevel = 0.06f * lowAbs
-            + 0.82f * monoAbs
+        const float weightedLevel = 0.03f * lowAbs
+            + 0.80f * monoAbs
             + 0.12f * lowMidAbs
-            + 0.42f * presenceAbs
-            + 0.18f * highAbs;
+            + 0.65f * presenceAbs
+            + 0.24f * highAbs;
         const float weightedLevelDb = gainToDbFloor(weightedLevel);
         const bool startupActivity = weightedLevelDb > -65.0f || peakAbs > 0.015f;
         if (!generalPrimed && !startupActivity) {
@@ -902,8 +906,15 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
 
         const float localFinalGain =
             juce::Decibels::decibelsToGain(generalNormalizeGainDb) * rideGain * generalSpikeGain;
-        for (int ch = 0; ch < numChannels; ++ch)
-            buffer.setSample(ch, i, delayedSample[static_cast<size_t>(ch)] * localFinalGain);
+        const float upperShare = clamp01((presenceAbs + highAbs)
+                                         / std::max(1.0e-6f, lowAbs + lowMidAbs + presenceAbs + highAbs));
+        const float upperTame = 1.0f - 0.16f * level * control * upperShare;
+        for (int ch = 0; ch < numChannels; ++ch) {
+            const auto index = static_cast<size_t>(ch);
+            const float upper = presenceBandSample[index] + highBandSample[index];
+            const float shaped = delayedSample[index] + (upperTame - 1.0f) * upper;
+            buffer.setSample(ch, i, shaped * localFinalGain);
+        }
 
         levelActivityAccum += (std::abs(generalRideGainDb)
                                + 0.45f * std::abs(generalNormalizeGainDb)
