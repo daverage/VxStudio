@@ -1224,6 +1224,21 @@ int DomainRegistry::allDomainsForProcess(const std::uint64_t hostProcessId,
     return count;
 }
 
+int DomainRegistry::allActiveDomains(std::array<std::uint64_t, kMaxDomains>& out) const noexcept {
+    const juce::ScopedLock scoped(registryMutex);
+    auto* state = domainState();
+    if (state == nullptr)
+        return 0;
+    int count = 0;
+    for (auto& slot : state->slots) {
+        if (analysisAtomicRef(slot.active).load(std::memory_order_acquire) == 0u)
+            continue;
+        if (count < static_cast<int>(out.size()))
+            out[static_cast<std::size_t>(count++)] = slot.analysisDomainId;
+    }
+    return count;
+}
+
 bool DomainRegistry::ownerStageIdForDomain(const std::uint64_t domainId,
                                             std::array<char, 32>& out) const noexcept {
     const juce::ScopedLock scoped(registryMutex);
@@ -1646,8 +1661,19 @@ void StagePublisher::refreshDomainBinding(const bool force) noexcept {
         // analyser on this process — unambiguous. With multiple analysers we
         // cannot determine the right one, so we fall back to the process ID.
         std::array<std::uint64_t, kMaxDomains> domainIds {};
-        if (domainReg.allDomainsForProcess(pid, domainIds) == 1)
+        const int pidCount = domainReg.allDomainsForProcess(pid, domainIds);
+        if (pidCount == 1) {
             newDomainId = domainIds[0];
+        } else if (pidCount == 0) {
+            // PID-filtered lookup returned nothing. This can happen when the DAW
+            // loads some plugins in a sandboxed process with a different PID than
+            // the analyser (seen on macOS with AU/AUv3 sandboxing). Fall back to
+            // a global domain search: only bind when exactly one analyser is
+            // registered globally — same "unambiguous" constraint as above.
+            std::array<std::uint64_t, kMaxDomains> allIds {};
+            if (domainReg.allActiveDomains(allIds) == 1)
+                newDomainId = allIds[0];
+        }
     }
 
     if (newDomainId == 0) {

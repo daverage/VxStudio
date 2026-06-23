@@ -8,6 +8,7 @@
 #include "../Source/vxstudio/products/finish/VxFinishProcessor.h"
 #include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxstudio/products/rebalance/VxRebalanceProcessor.h"
+#include "../Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor.h"
 #include "../Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.h"
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
@@ -18,6 +19,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <new>
+#include <thread>
 
 namespace {
 
@@ -1736,6 +1738,87 @@ bool testSpeechClarityDeclickDoesNotAmplifyClicks() {
     return true;
 }
 
+bool testSpeechClarityWetPathAndListenDeltaAreAudible() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+    auto input = makeSpeechLike(sr, 1.1f);
+
+    for (int i = 0; i < input.getNumSamples(); ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sr);
+        const float sibEnv = (t > 0.32f && t < 0.44f) || (t > 0.68f && t < 0.80f) ? 1.0f : 0.0f;
+        const float sibilance = 0.13f * sibEnv * std::sin(2.0f * juce::MathConstants<float>::pi * 7600.0f * t);
+        for (int ch = 0; ch < input.getNumChannels(); ++ch)
+            input.addSample(ch, i, sibilance);
+    }
+
+    for (const int clickSample : { static_cast<int>(0.52 * sr), static_cast<int>(0.87 * sr) }) {
+        for (int ch = 0; ch < input.getNumChannels(); ++ch) {
+            input.setSample(ch, clickSample - 1, -0.18f);
+            input.setSample(ch, clickSample, 0.48f);
+            input.setSample(ch, clickSample + 1, -0.16f);
+        }
+    }
+
+    auto configure = [=](VXSpeechClarityAudioProcessor& processor, const bool listen) {
+        processor.prepareToPlay(sr, blockSize);
+        setParamNormalized(processor, "sibilance", 1.0f);
+        setParamNormalized(processor, "plosive", 0.8f);
+        setParamNormalized(processor, "breath", 0.0f);
+        setParamNormalized(processor, "click", 1.0f);
+        setParamNormalized(processor, "listen", listen ? 1.0f : 0.0f);
+    };
+
+    VXSpeechClarityAudioProcessor wetProcessor;
+    configure(wetProcessor, false);
+    const auto wet = render(wetProcessor, input, blockSize);
+
+    VXSpeechClarityAudioProcessor listenProcessor;
+    configure(listenProcessor, true);
+    const auto listen = render(listenProcessor, input, blockSize);
+
+    const auto diffRmsSkip = [](const juce::AudioBuffer<float>& a,
+                                const juce::AudioBuffer<float>& b,
+                                const int skipSamples) {
+        double energy = 0.0;
+        int count = 0;
+        const int channels = std::min(a.getNumChannels(), b.getNumChannels());
+        const int samples = std::min(a.getNumSamples(), b.getNumSamples());
+        const int start = juce::jlimit(0, samples, skipSamples);
+        for (int ch = 0; ch < channels; ++ch) {
+            const auto* aa = a.getReadPointer(ch);
+            const auto* bb = b.getReadPointer(ch);
+            for (int i = start; i < samples; ++i) {
+                const float diff = aa[i] - bb[i];
+                energy += static_cast<double>(diff) * diff;
+                ++count;
+            }
+        }
+        return count > 0 ? static_cast<float>(std::sqrt(energy / static_cast<double>(count))) : 0.0f;
+    };
+
+    const int skip = wetProcessor.getLatencySamples() + 2048;
+    const float wetDeltaRms = diffRmsSkip(wet, input, skip);
+    const float wetDeltaPeak = maxAbsDiffSkip(input, wet, skip);
+    const float listenRms = rmsSkip(listen, skip);
+    auto reconstructed = addBuffers(input, listen);
+    const float reconstructionError = maxAbsDiffSkip(wet, reconstructed, skip);
+
+    if (!allFinite(wet)
+        || !allFinite(listen)
+        || wetDeltaRms <= 2.0e-4f
+        || wetDeltaPeak <= 2.0e-3f
+        || listenRms <= wetDeltaRms * 0.45f
+        || reconstructionError > 0.035f) {
+        std::cerr << "[VXSuitePluginRegression] Speech Clarity wet path/listen delta is not measurably active: wetDeltaRms="
+                  << wetDeltaRms << " wetDeltaPeak=" << wetDeltaPeak
+                  << " listenRms=" << listenRms
+                  << " reconstructionError=" << reconstructionError << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge() {
     constexpr double sr = 48000.0;
 
@@ -3202,6 +3285,117 @@ bool testDeepFilterFullGuardIsPdcAlignedDry() {
     return true;
 }
 
+bool testDeepFilterListenIsRemovedContentAndGuardListenIsSilent() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    if (!ensureDeepFilterTestModelsInstalled())
+        return false;
+
+    const auto input = addBuffers(makeSpeechLike(sr, 1.2f), makeNoise(sr, 1.2f, 0.09f));
+
+    auto configure = [=](VXDeepFilterNetAudioProcessor& processor, const float guard, const bool listen) {
+        processor.setNonRealtime(true);
+        processor.prepareToPlay(sr, blockSize);
+        setParamNormalized(processor, "clean", 1.0f);
+        setParamNormalized(processor, "guard", guard);
+        setParamNormalized(processor, "model", 0.0f);
+        setParamNormalized(processor, "listen", listen ? 1.0f : 0.0f);
+    };
+
+    VXDeepFilterNetAudioProcessor wetProcessor;
+    configure(wetProcessor, 0.20f, false);
+    const auto wet = render(wetProcessor, input, blockSize);
+
+    VXDeepFilterNetAudioProcessor listenProcessor;
+    configure(listenProcessor, 0.20f, true);
+    const auto listen = render(listenProcessor, input, blockSize);
+
+    const int skip = wetProcessor.getLatencySamples() + 4096;
+    const auto recombined = addBuffers(wet, listen);
+    const float listenRms = rmsSkip(listen, skip);
+    const float recombinedError = maxAbsDiffSkip(input, recombined, skip);
+    if (!allFinite(wet)
+        || !allFinite(listen)
+        || listenRms <= 1.0e-5f
+        || recombinedError > 0.035f) {
+        std::cerr << "[VXSuitePluginRegression] DeepFilter listen is not removed-content audition: listenRms="
+                  << listenRms << " recombinedError=" << recombinedError << "\n";
+        return false;
+    }
+
+    VXDeepFilterNetAudioProcessor guardedListenProcessor;
+    configure(guardedListenProcessor, 1.0f, true);
+    const auto guardedListen = render(guardedListenProcessor, input, blockSize);
+    if (!allFinite(guardedListen)
+        || rmsSkip(guardedListen, skip) > 1.0e-5f
+        || peakAbs(guardedListen) > 1.0e-4f) {
+        std::cerr << "[VXSuitePluginRegression] DeepFilter full-Guard Listen leaked delayed dry/delta: rms="
+                  << rmsSkip(guardedListen, skip) << " peak=" << peakAbs(guardedListen) << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool testDeepFilterConcurrentInstancesBothProcess() {
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    if (!ensureDeepFilterTestModelsInstalled())
+        return false;
+
+    const auto inputA = addBuffers(makeSpeechLike(sr, 1.2f), makeNoise(sr, 1.2f, 0.07f));
+    const auto inputB = addBuffers(makeSpeechLike(sr, 1.2f), makeNoise(sr, 1.2f, 0.11f));
+
+    auto configure = [=](VXDeepFilterNetAudioProcessor& processor) {
+        processor.setNonRealtime(true);
+        processor.prepareToPlay(sr, blockSize);
+        setParamNormalized(processor, "clean", 1.0f);
+        setParamNormalized(processor, "guard", 0.10f);
+        setParamNormalized(processor, "model", 0.0f);
+    };
+
+    VXDeepFilterNetAudioProcessor reference;
+    configure(reference);
+    const auto referenceOut = render(reference, inputB, blockSize);
+
+    VXDeepFilterNetAudioProcessor processorA;
+    VXDeepFilterNetAudioProcessor processorB;
+    configure(processorA);
+    configure(processorB);
+
+    juce::AudioBuffer<float> outA;
+    juce::AudioBuffer<float> outB;
+    std::thread renderA([&] { outA = render(processorA, inputA, blockSize); });
+    std::thread renderB([&] { outB = render(processorB, inputB, blockSize); });
+    renderA.join();
+    renderB.join();
+
+    const int skip = std::max(processorB.getLatencySamples() + 4096, 8192);
+    const float processedRms = rmsSkip(outB, skip);
+    const float dryResidual = bestGainResidualRatioSkip(inputB, outB, skip);
+    const float referenceResidual = bestGainResidualRatioSkip(referenceOut, outB, skip);
+    if (!allFinite(outA)
+        || !allFinite(outB)
+        || processedRms <= 1.0e-6f
+        || dryResidual < 0.02f
+        || referenceResidual > 0.35f
+        || processorA.getStatusText().containsIgnoreCase("init failed")
+        || processorB.getStatusText().containsIgnoreCase("init failed")
+        || processorA.getStatusText().containsIgnoreCase("fallback")
+        || processorB.getStatusText().containsIgnoreCase("fallback")) {
+        std::cerr << "[VXSuitePluginRegression] Concurrent DeepFilter instances did not both process: rms="
+                  << processedRms << " dryResidual=" << dryResidual
+                  << " referenceResidual=" << referenceResidual
+                  << " statusA=" << processorA.getStatusText()
+                  << " statusB=" << processorB.getStatusText() << "\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testAnalyserDomainBindingSurvivesMultipleDomains() {
     constexpr double sr = 48000.0;
     constexpr int blockSize = 4096;
@@ -3928,6 +4122,7 @@ int main(int argc, char* argv[]) {
     run("testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase", testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase);
     run("testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial", testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial);
     run("testSpeechClarityDeclickDoesNotAmplifyClicks", testSpeechClarityDeclickDoesNotAmplifyClicks);
+    run("testSpeechClarityWetPathAndListenDeltaAreAudible", testSpeechClarityWetPathAndListenDeltaAreAudible);
     run("testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge", testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge);
     run("testFinishStrongSettingsAreAudibleButBounded", testFinishStrongSettingsAreAudibleButBounded);
     run("testFinishGainIsBipolarAroundCenter", testFinishGainIsBipolarAroundCenter);
@@ -3964,6 +4159,8 @@ int main(int argc, char* argv[]) {
     run("testDeepFilterStartupHoldbackReleasesValidProcessedAudio", testDeepFilterStartupHoldbackReleasesValidProcessedAudio);
     run("testDeepFilterGuardRespondsMoreOnArtifactHeavyInput", testDeepFilterGuardRespondsMoreOnArtifactHeavyInput);
     run("testDeepFilterFullGuardIsPdcAlignedDry", testDeepFilterFullGuardIsPdcAlignedDry);
+    run("testDeepFilterListenIsRemovedContentAndGuardListenIsSilent", testDeepFilterListenIsRemovedContentAndGuardListenIsSilent);
+    run("testDeepFilterConcurrentInstancesBothProcess", testDeepFilterConcurrentInstancesBothProcess);
     run("testAnalyserDomainBindingSurvivesMultipleDomains", testAnalyserDomainBindingSurvivesMultipleDomains);
     run("testSubtractZeroKeepsPdcAlignedIdentity", testSubtractZeroKeepsPdcAlignedIdentity);
     run("testCleanupBlockSizeInvariance", testCleanupBlockSizeInvariance);

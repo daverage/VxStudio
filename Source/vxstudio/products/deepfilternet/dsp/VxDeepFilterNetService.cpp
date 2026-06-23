@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <mutex>
 #include <thread>
 
 #include <juce_core/juce_core.h>
@@ -26,6 +27,11 @@ constexpr int kModelWarmupFrames = 8;
 constexpr float kRnNoisePcmScale = 32768.0f;
 constexpr float kGuardSpeechBackoff = 0.65f;
 constexpr float kModelPeakLimit = 1.5f;
+
+std::mutex& deepFilterRuntimeMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
 
 bool isEffectivelyDualMono(const juce::AudioBuffer<float>& buffer, const int numSamples) noexcept {
     if (buffer.getNumChannels() < 2 || numSamples <= 0)
@@ -226,6 +232,7 @@ void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
 void* DeepFilterService::createRuntime(const RuntimeApi api,
                                        const juce::String& modelPath,
                                        const float attenuationLimitDb) const {
+    const std::lock_guard lock(deepFilterRuntimeMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             return df2_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
@@ -244,6 +251,7 @@ void DeepFilterService::destroyRuntime(const RuntimeApi api, void* runtime) cons
     if (runtime == nullptr)
         return;
 
+    const std::lock_guard lock(deepFilterRuntimeMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             df2_free(static_cast<DF2State*>(runtime));
@@ -281,6 +289,7 @@ void DeepFilterService::setRuntimeAttenuation(const RuntimeApi api, void* runtim
     if (runtime == nullptr)
         return;
 
+    const std::lock_guard lock(deepFilterRuntimeMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             df2_set_atten_lim(static_cast<DF2State*>(runtime), attenuationLimitDb);
@@ -300,6 +309,7 @@ float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime
     if (runtime == nullptr || input == nullptr || output == nullptr)
         return 0.0f;
 
+    const std::lock_guard lock(deepFilterRuntimeMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             return df2_process_frame(static_cast<DF2State*>(runtime), input, output);
@@ -575,25 +585,26 @@ bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,
                     constrainModelFrame(channel.frameIn.data(), channel.frameOut.data(),
                                         bundle.frameLength, channel.lastOutputSample);
 
-                    const float baseWet = bundle.runtimeApi == RuntimeApi::rnnoise ? cleanAmount : 1.0f;
-                    const float speechBackoff = guardAmount * vad * kGuardSpeechBackoff;
-                    const float targetWet = vxsuite::clamp01(baseWet * (1.0f - speechBackoff));
-                    if (!channel.modelWetPrimed) {
-                        channel.lastModelWetMix = targetWet;
-                        channel.modelWetPrimed = true;
-                    }
-                    if (targetWet < 0.9995f || channel.lastModelWetMix < 0.9995f) {
-                        const float startWet = channel.lastModelWetMix;
-                        for (int i = 0; i < bundle.frameLength; ++i) {
-                            const float t = bundle.frameLength > 1
-                                ? static_cast<float>(i) / static_cast<float>(bundle.frameLength - 1)
-                                : 1.0f;
-                            const float weight = startWet + (targetWet - startWet) * t;
-                            channel.frameOut[static_cast<size_t>(i)] =
-                                channel.frameIn[static_cast<size_t>(i)]
-                                + (channel.frameOut[static_cast<size_t>(i)] - channel.frameIn[static_cast<size_t>(i)]) * weight;
+                    if (bundle.runtimeApi == RuntimeApi::rnnoise) {
+                        const float speechBackoff = guardAmount * vad * kGuardSpeechBackoff;
+                        const float targetWet = vxsuite::clamp01(cleanAmount * (1.0f - speechBackoff));
+                        if (!channel.modelWetPrimed) {
+                            channel.lastModelWetMix = targetWet;
+                            channel.modelWetPrimed = true;
                         }
-                        channel.lastModelWetMix = targetWet;
+                        if (targetWet < 0.9995f || channel.lastModelWetMix < 0.9995f) {
+                            const float startWet = channel.lastModelWetMix;
+                            for (int i = 0; i < bundle.frameLength; ++i) {
+                                const float t = bundle.frameLength > 1
+                                    ? static_cast<float>(i) / static_cast<float>(bundle.frameLength - 1)
+                                    : 1.0f;
+                                const float weight = startWet + (targetWet - startWet) * t;
+                                channel.frameOut[static_cast<size_t>(i)] =
+                                    channel.frameIn[static_cast<size_t>(i)]
+                                    + (channel.frameOut[static_cast<size_t>(i)] - channel.frameIn[static_cast<size_t>(i)]) * weight;
+                            }
+                            channel.lastModelWetMix = targetWet;
+                        }
                     }
                     channel.outputFifo.push(channel.frameOut.data(), bundle.frameLength);
                 }

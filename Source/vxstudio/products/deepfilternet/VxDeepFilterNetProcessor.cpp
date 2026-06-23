@@ -308,6 +308,30 @@ void VXDeepFilterNetAudioProcessor::blendProcessedWithDry(juce::AudioBuffer<floa
     }
 }
 
+void VXDeepFilterNetAudioProcessor::renderListenOutput(juce::AudioBuffer<float>& outputBuffer,
+                                                       const juce::AudioBuffer<float>&) {
+    const auto& alignedDry = getLatencyAlignedListenDryBuffer();
+    const int channels = std::min(outputBuffer.getNumChannels(), alignedDry.getNumChannels());
+    const int samples = std::min(outputBuffer.getNumSamples(), alignedDry.getNumSamples());
+    double deltaEnergy = 0.0;
+    int count = 0;
+    for (int ch = 0; ch < channels; ++ch) {
+        auto* out = outputBuffer.getWritePointer(ch);
+        const auto* dry = alignedDry.getReadPointer(ch);
+        for (int i = 0; i < samples; ++i) {
+            out[i] = dry[i] - out[i];
+            deltaEnergy += static_cast<double>(out[i]) * out[i];
+            ++count;
+        }
+    }
+
+    const float deltaRms = count > 0
+        ? static_cast<float>(std::sqrt(deltaEnergy / static_cast<double>(count)))
+        : 0.0f;
+    if (deltaRms < 1.0e-5f)
+        outputBuffer.clear();
+}
+
 #if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXDeepFilterNetAudioProcessor();

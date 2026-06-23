@@ -928,7 +928,11 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
   Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
+  Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor.cpp
   Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxstudio/products/tone/VxToneProcessor.cpp

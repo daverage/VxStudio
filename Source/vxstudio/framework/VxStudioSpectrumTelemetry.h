@@ -257,6 +257,9 @@ public:
     [[nodiscard]] bool latestActiveDomain(DomainView& out, std::uint64_t contextKeyHash = 0) const noexcept;
     [[nodiscard]] int allDomainsForProcess(std::uint64_t hostProcessId,
                                            std::array<std::uint64_t, kMaxDomains>& out, std::uint64_t contextKeyHash = 0) const noexcept;
+    // Returns all active domains regardless of process ID. Used as a fallback
+    // when allDomainsForProcess returns 0 due to DAW plugin sandboxing.
+    [[nodiscard]] int allActiveDomains(std::array<std::uint64_t, kMaxDomains>& out) const noexcept;
     [[nodiscard]] bool ownerStageIdForDomain(std::uint64_t domainId,
                                              std::array<char, 32>& out) const noexcept;
     [[nodiscard]] std::uint64_t currentProcessId() const noexcept;
