@@ -4,7 +4,7 @@ Professional, modern website for VX Studio audio plugins. Ready to deploy to vxs
 
 The website copy should track the current suite contract:
 
-- `12` plugins in the suite
+- `15` plugins in the suite
 - stronger top-of-range behavior across the main processing products
 - track-local `VXStudioAnalyser` behavior
 - the latest regression pass completing successfully

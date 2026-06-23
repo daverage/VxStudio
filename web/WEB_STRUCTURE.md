@@ -80,12 +80,12 @@ Contains: VST3 installer + 12 .vst3 plugin files
 vxstudio-complete/
 ├── VST3/
 │   ├── VXTone.vst3/
-│   ├── VXCleanup.vst3/
+│   ├── VXSpeechClarity.vst3/
 │   ├── VXDenoiser.vst3/
-│   └── ... (9 more)
+│   └── ... (12 more)
 ├── AudioUnits/
 │   ├── VXTone.component/
-│   └── ... (11 more)
+│   └── ... (14 more)
 ├── INSTALL.txt
 ├── README.txt
 └── LICENSE.txt
@@ -97,8 +97,8 @@ vxsuite-0.1.0-windows-x64/
 ├── installer.exe              # Optional: Windows installer
 ├── VST3/
 │   ├── VXTone.vst3
-│   ├── VXCleanup.vst3
-│   └── ... (10 more)
+│   ├── VXSpeechClarity.vst3
+│   └── ... (13 more)
 ├── INSTALL.txt
 ├── README.txt
 └── LICENSE.txt

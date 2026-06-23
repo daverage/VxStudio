@@ -38,12 +38,12 @@ Framework and plugin DSP versions are tracked independently.
 
 | Component | Version |
 |---|---|
-| VX Studio Framework | `0.2.1` |
-| VXDeepFilterNet | `0.2.1` |
+| VX Studio Framework | `0.2.2` |
+| VXDeepFilterNet | `0.2.2` |
 | VXDenoiser | `0.2.1` |
 | VXSubtract | `0.2.1` |
 | VXDeverb | `0.2.1` |
-| VXSpeechClarity | `0.1.0` |
+| VXSpeechClarity | `0.2.0` |
 | VXProximity | `0.2.1` |
 | VXProximityClassic | `0.1.0` |
 | VXTone | `0.2.0` |
@@ -65,9 +65,10 @@ Framework and plugin DSP versions are tracked independently.
 - VXRepair is a new all-in-one guided repair assistant combining noise, clicks, clarity, and deverb in a single analysed workflow.
 - VXCleanup has been archived  -  replaced by VXSpeechClarity (speech artifacts) and VXToneRefine (tonal refinement).
 - GR meters are now active on VXDenoiser and VXDeverb.
-- VXDeepFilterNet now has an active Guard control with artifact-aware blending.
+- VXDeepFilterNet now has an active Guard control with artifact-aware blending, and inference runs on a dedicated per-channel thread (audio thread is lock-free).
 - VXSubtract now warns when a learned noise profile may be stale (> 20 min old).
-- The full regression harness currently passes end-to-end.
+- Domain binding falls back to all active domains when DAW plugin sandboxing prevents process ID matching.
+- The full regression harness currently passes end-to-end, including Speech Clarity wet path and listen-delta coverage.
 
 Latest verification:
 
