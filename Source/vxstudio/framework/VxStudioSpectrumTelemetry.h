@@ -279,7 +279,8 @@ public:
                       std::uint64_t analysisDomainId,
                       std::uint64_t ctorInstanceId,
                       std::uint64_t& instanceIdOut,
-                      std::uint64_t& localOrderIdOut) noexcept;
+                      std::uint64_t& localOrderIdOut,
+                      std::uint64_t preferredLocalOrderId = 0) noexcept;
     void unregisterStage(int slotIndex, std::uint64_t instanceId) noexcept;
     [[nodiscard]] bool publish(int slotIndex,
                                std::uint64_t instanceId,
@@ -363,6 +364,8 @@ private:
     // (e.g. in updateTrackProperties setters) without data race.
     std::atomic<std::uint64_t> registeredInstanceId { 0 };
     std::uint64_t localOrderIdValue = 0;
+    // Preserved across domain re-bindings so re-registration never changes chain order.
+    std::uint64_t stableLocalOrderId = 0;
     std::uint64_t analysisDomainIdValue = 0;
     double currentSampleRate = 48000.0;
     int publishIntervalSamples = 2400;

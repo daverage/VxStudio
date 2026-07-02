@@ -1281,7 +1281,8 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
                                  const std::uint64_t analysisDomainId,
                                  const std::uint64_t ctorInstanceId,
                                  std::uint64_t& instanceIdOut,
-                                 std::uint64_t& localOrderIdOut) noexcept {
+                                 std::uint64_t& localOrderIdOut,
+                                 const std::uint64_t preferredLocalOrderId) noexcept {
     auto* state = analysisState();
     const auto nowMs = static_cast<std::uint64_t>(juce::Time::currentTimeMillis());
     const int domainIndex = domainIndexFor(analysisDomainId);
@@ -1290,7 +1291,11 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         // Use the caller's stable ctorInstanceId as the slot identity so we can
         // find and evict exactly this instance's previous slot on re-registration.
         instanceIdOut = (ctorInstanceId != 0) ? ctorInstanceId : state->nextInstanceId++;
-        localOrderIdOut = state->nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
+        // Reuse the caller's previous localOrderId when provided — this preserves chain order
+        // across domain re-bindings (re-registration order != actual chain order).
+        localOrderIdOut = (preferredLocalOrderId != 0)
+            ? preferredLocalOrderId
+            : state->nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
         slot.analysisDomainId = analysisDomainId;
         setStageIdentityFromProduct(slot.telemetry.identity, identity, instanceIdOut, localOrderIdOut);
         slot.telemetry.state.timestampMs = nowMs;
@@ -1358,7 +1363,9 @@ int StageRegistry::registerStage(const ProductIdentity& identity,
         slot.active = true;
         slot.analysisDomainId = analysisDomainId;
         instanceIdOut = localState.nextInstanceId++;
-        localOrderIdOut = localState.nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
+        localOrderIdOut = (preferredLocalOrderId != 0)
+            ? preferredLocalOrderId
+            : localState.nextLocalOrderIds[static_cast<std::size_t>(domainIndex)]++;
         setStageIdentityFromProduct(slot.telemetry.identity, identity, instanceIdOut, localOrderIdOut);
         slot.telemetry.state.timestampMs = nowMs;
         slot.telemetry.state.isLive = true;
@@ -1615,7 +1622,8 @@ void StagePublisher::ensureRegistered() noexcept {
                                                         analysisDomainIdValue,
                                                         ctorInstanceId,
                                                         instanceIdValue,
-                                                        localOrderIdValue);
+                                                        localOrderIdValue,
+                                                        stableLocalOrderId);
     if (slotIndex < 0 || instanceIdValue == 0) {
         slotIndex = -1;
         instanceIdValue = 0;
@@ -1623,6 +1631,10 @@ void StagePublisher::ensureRegistered() noexcept {
         registrationAttempted = false;
         return;
     }
+    // Preserve chain order across domain re-registrations: save the first-ever
+    // localOrderId and reuse it on all subsequent registrations.
+    if (stableLocalOrderId == 0)
+        stableLocalOrderId = localOrderIdValue;
 
     // Publish the instanceId atomically so message-thread setters can see it.
     registeredInstanceId.store(instanceIdValue, std::memory_order_release);
