@@ -40,10 +40,12 @@ Source/vxstudio/vst/
 *.aiff
 *.aif
 *.m4a
+*.reapeaks
 
 # Numpy / scientific data blobs
 *.npz
 *.npy
+*.arrow
 
 # Large model and archive files not tracked by git
 assets/rebalance/models/demucs/
