@@ -162,12 +162,19 @@ public:
         int frameCounter = 0;
     };
 
+    struct AiMaskFrame {
+        bool available = false;
+        float confidence = 0.0f;
+        std::array<std::array<float, kBins>, kSourceCount> masks {};
+    };
+
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void reset();
     void setControlTargets(const std::array<float, kControlCount>& normalizedValues);
     void setAnalysisContext(const AnalysisContext& newContext) noexcept;
     void setSignalQuality(const vxsuite::SignalQualitySnapshot& newQuality) noexcept;
     void setRecordingType(RecordingType newType) noexcept;
+    void setAiMaskFrame(const AiMaskFrame& frame) noexcept;
     void process(juce::AudioBuffer<float>& buffer);
 
     [[nodiscard]] int latencySamples() const noexcept { return activeFftSize; }
@@ -197,6 +204,7 @@ private:
         float confidence = 0.0f;
         float dominantSeparation = 0.0f;
         bool allowHardIsolation = false;
+        bool aiGuided = false;
     };
 
     struct RenderFrame {
@@ -332,6 +340,7 @@ private:
     void writeObjectOwnershipToBins() noexcept;
     void applyObjectOwnershipToMasks(std::array<std::array<float, kBins>, kSourceCount>& masks) noexcept;
     void buildForegroundBackgroundRender() noexcept;
+    [[nodiscard]] bool buildAiFaderRender() noexcept;
     [[nodiscard]] OwnershipFrame buildOwnershipFrameForBin(int bin,
                                                            const std::array<float, kSourceCount>& sourceContributions,
                                                            bool allowHardIsolation,
@@ -382,6 +391,7 @@ private:
     std::array<float, kBins> compositeGain {};
     std::array<float, kBins> prevCompositeGain {};
     std::array<std::array<float, kBins>, kSourceCount> smoothedMasks {};
+    AiMaskFrame aiMaskFrame {};
     bool masksPrimed = false;
 
     // Harmonic grouping and source persistence state

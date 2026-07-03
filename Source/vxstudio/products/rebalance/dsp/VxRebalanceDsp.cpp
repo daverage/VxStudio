@@ -176,6 +176,7 @@ void Dsp::reset() {
     }
     for (auto& masks : smoothedMasks)
         std::fill(masks.begin(), masks.end(), 0.0f);
+    aiMaskFrame = {};
     masksPrimed = false;
 
     // Reset harmonic grouping and source persistence state
@@ -231,6 +232,10 @@ void Dsp::reset() {
         channel.outputCount = initialZeros;
         channel.outputWritePos = initialZeros % static_cast<int>(channel.outputFifo.size());
     }
+}
+
+void Dsp::setAiMaskFrame(const AiMaskFrame& frame) noexcept {
+    aiMaskFrame = frame;
 }
 
 void Dsp::setControlTargets(const std::array<float, kControlCount>& normalizedValues) {
@@ -954,8 +959,38 @@ void Dsp::computeMasks(const std::array<float, kBins>& analysisMag,
     // Phase 2: Object ownership override - make objects authoritative
     applyObjectOwnershipToMasks(smoothedMasks);
 
-    // Phase 2: Foreground/background rendering for object-based separation
-    buildForegroundBackgroundRender();
+    if (aiMaskFrame.available) {
+        const float aiTrust = juce::jlimit(0.0f, 1.0f, aiMaskFrame.confidence);
+        for (int k = 0; k < activeBins; ++k) {
+            float total = 0.0f;
+            for (int source = 0; source < kSourceCount; ++source)
+                total += std::max(0.0f, aiMaskFrame.masks[static_cast<size_t>(source)][static_cast<size_t>(k)]);
+
+            if (total <= kEps)
+                continue;
+
+            for (int source = 0; source < kSourceCount; ++source) {
+                const float neuralMask = juce::jlimit(
+                    0.0f,
+                    1.0f,
+                    aiMaskFrame.masks[static_cast<size_t>(source)][static_cast<size_t>(k)] / total);
+                auto& dspMask = smoothedMasks[static_cast<size_t>(source)][static_cast<size_t>(k)];
+                dspMask = lerp(dspMask, neuralMask, aiTrust);
+            }
+
+            float normalizedTotal = 0.0f;
+            for (int source = 0; source < kSourceCount; ++source)
+                normalizedTotal += smoothedMasks[static_cast<size_t>(source)][static_cast<size_t>(k)];
+            normalizedTotal = std::max(kEps, normalizedTotal);
+
+            for (int source = 0; source < kSourceCount; ++source)
+                smoothedMasks[static_cast<size_t>(source)][static_cast<size_t>(k)] /= normalizedTotal;
+        }
+    }
+
+    // AI mode is a source fader over the neural masks. Classic mode keeps the spectral ownership renderer.
+    if (!buildAiFaderRender())
+        buildForegroundBackgroundRender();
 
     for (int k = 0; k < activeBins; ++k)
         prevAnalysisMag[static_cast<size_t>(k)] = analysisMag[static_cast<size_t>(k)];
@@ -1976,6 +2011,21 @@ Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
     const auto* tracked = (clusterId >= 0 && clusterId < kMaxTrackedClusters)
         ? &trackedClusters[static_cast<size_t>(clusterId)]
         : nullptr;
+    std::array<float, kSourceCount> neuralMasks {};
+    float aiTotal = 0.0f;
+    if (aiMaskFrame.available) {
+        for (int s = 0; s < kSourceCount; ++s)
+            aiTotal += std::max(0.0f, aiMaskFrame.masks[static_cast<size_t>(s)][static_cast<size_t>(bin)]);
+        if (aiTotal > kEps) {
+            frame.aiGuided = true;
+            for (int s = 0; s < kSourceCount; ++s)
+                neuralMasks[static_cast<size_t>(s)] = juce::jlimit(
+                    0.0f,
+                    1.0f,
+                    aiMaskFrame.masks[static_cast<size_t>(s)][static_cast<size_t>(bin)] / aiTotal);
+        }
+    }
+    const float aiTrust = frame.aiGuided ? juce::jlimit(0.0f, 1.0f, aiMaskFrame.confidence + 0.08f) : 0.0f;
 
     for (int s = 0; s < kSourceCount; ++s) {
         const float slider = currentControlValues[static_cast<size_t>(s)];
@@ -2035,6 +2085,18 @@ Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
                 ownership *= lerp(1.0f, 1.22f, clamp01(tracked->onsetStrength));
         }
 
+        if (frame.aiGuided) {
+            const float neuralMask = neuralMasks[static_cast<size_t>(s)];
+            const float neuralGate = juce::jlimit(
+                0.03f,
+                1.72f,
+                0.04f + 1.58f * std::pow(neuralMask, 0.72f));
+            ownership *= lerp(1.0f, neuralGate, aiTrust);
+
+            if (std::abs(sliderSigned) > 0.08f && neuralMask < 0.10f)
+                ownership *= lerp(1.0f, 0.24f + 3.8f * neuralMask, aiTrust);
+        }
+
         frame.ownership[static_cast<size_t>(s)] = ownership;
     }
 
@@ -2061,6 +2123,8 @@ Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
     }
 
     frame.confidence = juce::jlimit(0.0f, 1.0f, 0.70f * fastConfidence + 0.30f * slowConfidence);
+    if (frame.aiGuided)
+        frame.confidence = juce::jlimit(0.0f, 1.0f, frame.confidence + 0.24f * aiTrust);
     frame.dominantSeparation = frame.separationForces[static_cast<size_t>(frame.dominant)];
     frame.renderDominant = (allowHardIsolation && activeSourceIndex >= 0 && frame.confidence > 0.5f)
         ? activeSourceIndex
@@ -2082,9 +2146,10 @@ Dsp::RenderFrame Dsp::buildRenderFrameForBin(
         value /= frame.renderTotal;
 
     if (ownershipFrame.allowHardIsolation && ownershipFrame.confidence > 0.5f) {
+        const int isolationSource = activeSourceIndex >= 0 ? activeSourceIndex : ownershipFrame.dominant;
         for (int s = 0; s < kSourceCount; ++s)
             frame.renderWeights[static_cast<size_t>(s)] =
-                s == ownershipFrame.dominant ? 1.0f : frame.renderWeights[static_cast<size_t>(s)] * 0.02f;
+                s == isolationSource ? 1.0f : frame.renderWeights[static_cast<size_t>(s)] * 0.02f;
     } else if (ownershipFrame.confidence >= 0.6f) {
         for (int s = 0; s < kSourceCount; ++s) {
             if (s == ownershipFrame.dominant) {
@@ -2092,15 +2157,15 @@ Dsp::RenderFrame Dsp::buildRenderFrameForBin(
                     (1.0f + 1.35f * ownershipFrame.dominantSeparation);
             } else if (s == ownershipFrame.runnerUp) {
                 frame.renderWeights[static_cast<size_t>(s)] *=
-                    std::max(0.01f, 1.0f - ownershipFrame.dominantSeparation * 1.10f);
+                    std::max(0.01f, 1.0f - ownershipFrame.dominantSeparation * (ownershipFrame.aiGuided ? 1.55f : 1.10f));
             } else {
-                frame.renderWeights[static_cast<size_t>(s)] *= 0.01f;
+                frame.renderWeights[static_cast<size_t>(s)] *= ownershipFrame.aiGuided ? 0.003f : 0.01f;
             }
         }
 
         if (ownershipFrame.confidence >= 0.82f) {
             for (int s = 0; s < kSourceCount; ++s)
-                frame.renderWeights[static_cast<size_t>(s)] = s == ownershipFrame.dominant ? 1.0f : 0.005f;
+                frame.renderWeights[static_cast<size_t>(s)] = s == ownershipFrame.dominant ? 1.0f : (ownershipFrame.aiGuided ? 0.0015f : 0.005f);
         }
     } else if (ownershipFrame.confidence >= 0.3f) {
         for (int s = 0; s < kSourceCount; ++s) {
@@ -2161,7 +2226,9 @@ Dsp::RenderFrame Dsp::buildRenderFrameForBin(
 
     const float residualScale = ownershipFrame.allowHardIsolation
         ? 0.01f
-        : (ownershipFrame.confidence >= 0.6f ? 0.02f : 0.08f);
+        : (ownershipFrame.aiGuided
+            ? (ownershipFrame.confidence >= 0.6f ? 0.006f : 0.025f)
+            : (ownershipFrame.confidence >= 0.6f ? 0.02f : 0.08f));
     const float ibmGain =
         ownershipFrame.contributions[static_cast<size_t>(ownershipFrame.renderDominant)] + residualEnergy * residualScale;
 
@@ -2234,6 +2301,96 @@ void Dsp::publishDebugFrameForBin(
     debugConfidenceSum += ownershipFrame.confidence;
 }
 
+bool Dsp::buildAiFaderRender() noexcept
+{
+    if (!aiMaskFrame.available)
+        return false;
+
+    const float strength = currentControlValues[static_cast<size_t>(kStrengthIndex)];
+    const float aiTrust = juce::jlimit(0.0f, 1.0f, aiMaskFrame.confidence);
+    if (aiTrust <= 0.01f)
+        return false;
+
+    std::array<float, kSourceCount> sourceGains {};
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float sliderSigned = (currentControlValues[static_cast<size_t>(s)] - 0.5f) * 2.0f;
+        sourceGains[static_cast<size_t>(s)] = juce::jlimit(0.0f, 2.0f, 1.0f + sliderSigned * strength);
+    }
+
+    std::array<int, kDebugBins> debugDominant {};
+    std::array<float, kDebugBins> debugBestConfidence {};
+    std::array<float, kDebugBins> debugDominantMask {};
+    std::array<float, kDebugBins> debugOtherMask {};
+    std::array<float, kSourceCount> debugCoverage {};
+    float debugConfidenceSum = 0.0f;
+    for (auto& value : debugDominant)
+        value = otherSource;
+
+    for (int k = 0; k < activeBins; ++k) {
+        std::array<float, kSourceCount> masksForBin {};
+        float totalMask = 0.0f;
+        for (int s = 0; s < kSourceCount; ++s) {
+            masksForBin[static_cast<size_t>(s)] =
+                std::max(0.0f, aiMaskFrame.masks[static_cast<size_t>(s)][static_cast<size_t>(k)]);
+            totalMask += masksForBin[static_cast<size_t>(s)];
+        }
+
+        if (totalMask <= kEps) {
+            compositeGain[static_cast<size_t>(k)] = lerp(prevCompositeGain[static_cast<size_t>(k)], 1.0f, 0.7f);
+            prevCompositeGain[static_cast<size_t>(k)] = compositeGain[static_cast<size_t>(k)];
+            continue;
+        }
+
+        int dominant = otherSource;
+        float dominantMask = 0.0f;
+        float faderGain = 0.0f;
+        for (int s = 0; s < kSourceCount; ++s) {
+            const float mask = masksForBin[static_cast<size_t>(s)] / totalMask;
+            masksForBin[static_cast<size_t>(s)] = mask;
+            faderGain += mask * sourceGains[static_cast<size_t>(s)];
+            if (mask > dominantMask) {
+                dominantMask = mask;
+                dominant = s;
+            }
+        }
+
+        const float targetGain = lerp(1.0f, faderGain, aiTrust);
+        compositeGain[static_cast<size_t>(k)] =
+            juce::jlimit(0.0f, 2.0f, lerp(prevCompositeGain[static_cast<size_t>(k)], targetGain, 0.78f));
+        prevCompositeGain[static_cast<size_t>(k)] = compositeGain[static_cast<size_t>(k)];
+
+        const int debugIndex = juce::jlimit(0, kDebugBins - 1, (k * kDebugBins) / activeBins);
+        const float binConfidence = aiTrust * juce::jlimit(0.0f, 1.0f, dominantMask * 1.35f);
+        if (binConfidence >= debugBestConfidence[static_cast<size_t>(debugIndex)]) {
+            debugBestConfidence[static_cast<size_t>(debugIndex)] = binConfidence;
+            debugDominant[static_cast<size_t>(debugIndex)] = dominant;
+            debugDominantMask[static_cast<size_t>(debugIndex)] = dominantMask;
+            debugOtherMask[static_cast<size_t>(debugIndex)] = masksForBin[static_cast<size_t>(otherSource)];
+        }
+        debugCoverage[static_cast<size_t>(dominant)] += binConfidence;
+        debugConfidenceSum += binConfidence;
+    }
+
+    const float coverageSum = std::max(kEps,
+        debugCoverage[0] + debugCoverage[1] + debugCoverage[2] + debugCoverage[3] + debugCoverage[4]);
+    for (int i = 0; i < kDebugBins; ++i) {
+        debugDominantSources[static_cast<size_t>(i)].store(
+            debugDominant[static_cast<size_t>(i)], std::memory_order_relaxed);
+        debugConfidence[static_cast<size_t>(i)].store(
+            debugBestConfidence[static_cast<size_t>(i)], std::memory_order_relaxed);
+        debugDominantMasks[static_cast<size_t>(i)].store(
+            debugDominantMask[static_cast<size_t>(i)], std::memory_order_relaxed);
+        debugOtherMasks[static_cast<size_t>(i)].store(
+            debugOtherMask[static_cast<size_t>(i)], std::memory_order_relaxed);
+    }
+    for (int s = 0; s < kSourceCount; ++s) {
+        debugDominantCoverage[static_cast<size_t>(s)].store(
+            debugCoverage[static_cast<size_t>(s)] / coverageSum, std::memory_order_relaxed);
+    }
+    debugOverallConfidence.store(debugConfidenceSum / static_cast<float>(activeBins), std::memory_order_relaxed);
+    debugFrameCounter.store(currentFrameCount, std::memory_order_relaxed);
+    return true;
+}
 
 void Dsp::buildForegroundBackgroundRender() noexcept
 {

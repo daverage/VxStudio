@@ -699,6 +699,158 @@ target_link_libraries(VXRebalance PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXRebalancePlugin ALL DEPENDS VXRebalance_VST3)
 vxstudio_stage_vst3_bundle(VXRebalance_VST3 "VXRebalance")
 
+juce_add_plugin(VxRebalanceAI
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREBALANCE}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREBALANCE}
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxstudio.vxrebalanceai"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VRAI"
+)
+target_compile_definitions(VxRebalanceAI PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+  VXSTUDIO_REBALANCE_AI_VARIANT=1
+)
+juce_generate_juce_header(VxRebalanceAI)
+target_sources(VxRebalanceAI PRIVATE
+  Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxstudio/products/rebalance/ai/OnnxStemgenBackend.cpp
+  Source/vxstudio/products/rebalance/ai/VxRealtimeStemSplitter.cpp
+  Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
+)
+target_include_directories(VxRebalanceAI PRIVATE Source)
+target_link_libraries(VxRebalanceAI PRIVATE VxStudioFramework juce::juce_dsp)
+
+set(VXSTUDIO_REBALANCE_AI_ORT_DIR "${CMAKE_SOURCE_DIR}/ThirdParty/onnxruntime")
+set(VXSTUDIO_REBALANCE_AI_MODEL_DIR "${CMAKE_SOURCE_DIR}/ThirdParty/stemgenrt/model")
+set(VXSTUDIO_REBALANCE_AI_MODEL_ONNX "${VXSTUDIO_REBALANCE_AI_MODEL_DIR}/model.onnx")
+set(VXSTUDIO_REBALANCE_AI_MODEL_DATA "${VXSTUDIO_REBALANCE_AI_MODEL_DIR}/model.onnx.data")
+find_library(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY
+  NAMES onnxruntime
+  PATHS "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/lib"
+  NO_DEFAULT_PATH
+)
+set(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED FALSE)
+if(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY
+   AND EXISTS "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/include"
+   AND EXISTS "${VXSTUDIO_REBALANCE_AI_MODEL_ONNX}"
+   AND EXISTS "${VXSTUDIO_REBALANCE_AI_MODEL_DATA}")
+  set(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED TRUE)
+  message(STATUS "VxRebalanceAI realtime splitter enabled")
+  target_sources(VxRebalanceAI PRIVATE
+    ThirdParty/stemgenrt/plugin/source/OnnxRuntime.cpp
+  )
+  target_include_directories(VxRebalanceAI PRIVATE
+    ThirdParty/stemgenrt/plugin/include
+    "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/include"
+  )
+  target_link_libraries(VxRebalanceAI PRIVATE "${VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY}")
+  target_compile_definitions(VxRebalanceAI PRIVATE
+    VXSTUDIO_REBALANCE_AI_HAS_STEMGENRT=1
+    STEMGENRT_USE_ONNXRUNTIME=1
+    VXSTUDIO_REBALANCE_AI_MODEL_PATH="${VXSTUDIO_REBALANCE_AI_MODEL_ONNX}"
+  )
+
+  if(APPLE)
+    get_filename_component(VXSTUDIO_REBALANCE_AI_ORT_REALPATH
+      "${VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY}" REALPATH)
+    get_filename_component(VXSTUDIO_REBALANCE_AI_ORT_BASENAME
+      "${VXSTUDIO_REBALANCE_AI_ORT_REALPATH}" NAME)
+    set_property(TARGET VxRebalanceAI_VST3 APPEND PROPERTY BUILD_RPATH "@loader_path/../Frameworks")
+    add_custom_command(TARGET VxRebalanceAI_VST3 POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../Frameworks"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${VXSTUDIO_REBALANCE_AI_ORT_REALPATH}"
+              "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../Frameworks/${VXSTUDIO_REBALANCE_AI_ORT_BASENAME}"
+      COMMAND install_name_tool -id
+              "@rpath/${VXSTUDIO_REBALANCE_AI_ORT_BASENAME}"
+              "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../Frameworks/${VXSTUDIO_REBALANCE_AI_ORT_BASENAME}"
+      COMMAND install_name_tool -change
+              "${VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY}"
+              "@rpath/${VXSTUDIO_REBALANCE_AI_ORT_BASENAME}"
+              "$<TARGET_FILE:VxRebalanceAI_VST3>" || true
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+              "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/Frameworks"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${VXSTUDIO_REBALANCE_AI_ORT_REALPATH}"
+              "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/Frameworks/${VXSTUDIO_REBALANCE_AI_ORT_BASENAME}"
+      VERBATIM)
+  elseif(WIN32)
+    find_file(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_DLL
+      NAMES onnxruntime.dll
+      PATHS "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/lib" "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/bin"
+      NO_DEFAULT_PATH
+    )
+    find_file(VXSTUDIO_REBALANCE_AI_DIRECTML_DLL
+      NAMES DirectML.dll
+      PATHS "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/lib" "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/bin"
+      NO_DEFAULT_PATH
+    )
+    file(GLOB VXSTUDIO_REBALANCE_AI_ORT_PROVIDER_DLLS
+      "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/lib/onnxruntime_providers_*.dll"
+      "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/bin/onnxruntime_providers_*.dll"
+    )
+    set(VXSTUDIO_REBALANCE_AI_RUNTIME_DLLS "")
+    if(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_DLL)
+      list(APPEND VXSTUDIO_REBALANCE_AI_RUNTIME_DLLS "${VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_DLL}")
+    endif()
+    if(VXSTUDIO_REBALANCE_AI_DIRECTML_DLL)
+      list(APPEND VXSTUDIO_REBALANCE_AI_RUNTIME_DLLS "${VXSTUDIO_REBALANCE_AI_DIRECTML_DLL}")
+    endif()
+    list(APPEND VXSTUDIO_REBALANCE_AI_RUNTIME_DLLS ${VXSTUDIO_REBALANCE_AI_ORT_PROVIDER_DLLS})
+
+    foreach(runtime_dll IN LISTS VXSTUDIO_REBALANCE_AI_RUNTIME_DLLS)
+      get_filename_component(runtime_dll_name "${runtime_dll}" NAME)
+      add_custom_command(TARGET VxRebalanceAI_VST3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${runtime_dll}"
+                "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/${runtime_dll_name}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${runtime_dll}"
+                "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/x86_64-win/${runtime_dll_name}"
+        VERBATIM)
+    endforeach()
+  endif()
+
+  add_custom_command(TARGET VxRebalanceAI_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../Resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VXSTUDIO_REBALANCE_AI_MODEL_ONNX}"
+            "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../Resources/model.onnx"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VXSTUDIO_REBALANCE_AI_MODEL_DATA}"
+            "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../Resources/model.onnx.data"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/Resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VXSTUDIO_REBALANCE_AI_MODEL_ONNX}"
+            "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/Resources/model.onnx"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VXSTUDIO_REBALANCE_AI_MODEL_DATA}"
+            "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/Resources/model.onnx.data"
+    VERBATIM)
+else()
+  message(STATUS "VxRebalanceAI realtime splitter disabled; install ThirdParty/onnxruntime and ThirdParty/stemgenrt/model")
+endif()
+add_custom_target(VxRebalanceAIPlugin ALL DEPENDS VxRebalanceAI_VST3)
+vxstudio_stage_vst3_bundle(VxRebalanceAI_VST3 "VxRebalanceAI")
+if(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED AND APPLE)
+  add_custom_command(TARGET VxRebalanceAI_VST3 POST_BUILD
+    COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE_DIR:VxRebalanceAI_VST3>/../.."
+    COMMAND /usr/bin/codesign --force --sign - "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3"
+    COMMENT "Signing VxRebalanceAI.vst3 after bundling realtime splitter resources"
+    VERBATIM)
+endif()
+
 juce_add_plugin(VXStudioAnalyser
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER}
   BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER}
@@ -791,6 +943,7 @@ add_custom_target(VXSuite_VST3
     VXRefine_VST3
     VXLeveler_VST3
     VXRebalance_VST3
+    VxRebalanceAI_VST3
     VXStudioAnalyser_VST3
     VXRepair_VST3
     VXDeverbStage
@@ -805,6 +958,7 @@ add_custom_target(VXSuite_VST3
     VXRefineStage
     VXLevelerStage
     VXRebalanceStage
+    VxRebalanceAIStage
     VXStudioAnalyserStage
     VXRepairStage
   COMMENT "Building all VX Suite VST3 products")
@@ -892,6 +1046,38 @@ target_link_libraries(VXRebalanceMeasure PRIVATE
 )
 target_compile_definitions(VXRebalanceMeasure PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXRebalanceMeasure)
+
+if(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED)
+  add_executable(VxRebalanceAISmokeTest
+    tests/VxRebalanceAISmokeTest.cpp
+    Source/vxstudio/products/rebalance/ai/OnnxStemgenBackend.cpp
+    Source/vxstudio/products/rebalance/ai/VxRealtimeStemSplitter.cpp
+    Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
+    ThirdParty/stemgenrt/plugin/source/OnnxRuntime.cpp
+  )
+  target_include_directories(VxRebalanceAISmokeTest PRIVATE
+    Source
+    tests
+    ThirdParty/stemgenrt/plugin/include
+    "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/include"
+  )
+  target_link_libraries(VxRebalanceAISmokeTest PRIVATE
+    VxStudioFramework
+    juce::juce_dsp
+    juce::juce_audio_basics
+    "${VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY}"
+  )
+  target_compile_definitions(VxRebalanceAISmokeTest PRIVATE
+    VXSTUDIO_REBALANCE_AI_HAS_STEMGENRT=1
+    STEMGENRT_USE_ONNXRUNTIME=1
+    VXSTUDIO_REBALANCE_AI_MODEL_PATH="${VXSTUDIO_REBALANCE_AI_MODEL_ONNX}"
+  )
+  if(APPLE)
+    set_property(TARGET VxRebalanceAISmokeTest APPEND PROPERTY
+      BUILD_RPATH "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/lib")
+  endif()
+  vxstudio_add_executable_test(VxRebalanceAISmokeTest)
+endif()
 
 add_executable(VxStudioVoiceAnalysisTests
   tests/VxStudioVoiceAnalysisTests.cpp

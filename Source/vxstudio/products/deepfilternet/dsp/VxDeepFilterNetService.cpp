@@ -412,7 +412,7 @@ bool DeepFilterService::prepareChannel(ChannelState& channel, const RuntimeBundl
     if (channel.runtime == nullptr)
         return false;
 
-    channel.resampler = std::make_unique<Resampler<1, 1>>(bundle.sampleRate, kEngineSampleRate);
+    channel.resampler = std::make_unique<StreamingResampler<1, 1>>(bundle.sampleRate, kEngineSampleRate);
     channel.inputFifo.reset(kFifoCapacity48k);
     channel.outputFifo.reset(kFifoCapacity48k);
 

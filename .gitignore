@@ -52,6 +52,8 @@ assets/rebalance/models/demucs/
 assets/rebalance/models/openunmix_umxhq_spec_onnx/rebalance_umx4.json
 assets/rebalance/models/openunmix_umxhq_spec_onnx/vx_rebalance_umx4.tar.gz
 assets/rebalance/models/vx_rebalance_spleeter5.onnx
+ThirdParty/onnxruntime/
+ThirdParty/stemgenrt/model/
 
 # Render output directories (generated, not source)
 data/voice_corpus/renders/

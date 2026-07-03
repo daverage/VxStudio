@@ -5,6 +5,10 @@
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxRebalanceDsp.h"
 
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+#include "ai/VxRealtimeStemSplitter.h"
+#endif
+
 #include <array>
 #include <vector>
 
@@ -15,6 +19,10 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     juce::String getStatusText() const override;
     vxsuite::rebalance::Dsp::DebugSnapshot getDebugSnapshot() const noexcept;
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+    vxsuite::rebalance::ai::RealtimeStemSplitter::DebugSnapshot getAiDebugSnapshot() const noexcept;
+    juce::String getAiStatusText() const;
+#endif
     float getLocalOutputTrimMaxReductionDb() const noexcept { return outputTrimmer.getMaxObservedReductionDb(); }
 
 protected:
@@ -28,6 +36,9 @@ private:
     void processNeutralWithLatency(juce::AudioBuffer<float>& buffer);
 
     vxsuite::rebalance::Dsp dsp;
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+    vxsuite::rebalance::ai::RealtimeStemSplitter realtimeSplitter;
+#endif
     vxsuite::OutputTrimmer outputTrimmer;
     vxsuite::SilenceGuard silenceGuard;
     double currentSampleRateHz = 48000.0;

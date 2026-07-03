@@ -2,7 +2,7 @@
 
 #include "../third_party/df.h"
 #include "../third_party/df2.h"
-#include "../../../../../ThirdParty/resampler/Resampler.hpp"
+#include "../../../framework/VxStudioStreamingResampler.h"
 
 #include <array>
 #include <atomic>
@@ -96,7 +96,7 @@ private:
 
     struct ChannelState {
         void* runtime = nullptr;
-        std::unique_ptr<Resampler<1, 1>> resampler;
+        std::unique_ptr<StreamingResampler<1, 1>> resampler;
         SampleFifo inputFifo;
         SampleFifo outputFifo;
 
