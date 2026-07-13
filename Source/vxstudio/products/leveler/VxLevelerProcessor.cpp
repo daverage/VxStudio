@@ -20,8 +20,8 @@ constexpr std::string_view kAnalysisModeParam = "analysisMode";
 constexpr std::string_view kAnalyzeParam = "analyze";
 constexpr std::string_view kTargetParam = "target";
 constexpr std::string_view kGateParam = "gate";
-constexpr float kTargetRangeDb = 6.0f;
-constexpr float kGateRangeDb = 8.0f;
+constexpr float kTargetRangeDb = 12.0f;
+constexpr float kGateRangeDb = 12.0f;
 
 // Coverage display: 90% marks "enough material to be useful" (18 s); the
 // last 10% crawls over a full-song timescale so the bar never claims "done"
