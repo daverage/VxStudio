@@ -23,6 +23,15 @@ constexpr std::string_view kGateParam = "gate";
 constexpr float kTargetRangeDb = 6.0f;
 constexpr float kGateRangeDb = 8.0f;
 
+// Coverage display: 90% marks "enough material to be useful" (18 s); the
+// last 10% crawls over a full-song timescale so the bar never claims "done"
+// while more of the track would still improve the map.
+float analysisCoverage(const float observedSeconds) {
+    if (observedSeconds <= 18.0f)
+        return 0.9f * observedSeconds / 18.0f;
+    return 0.9f + 0.1f * std::min(1.0f, (observedSeconds - 18.0f) / 162.0f);
+}
+
 } // namespace
 
 VXLevelerAudioProcessor::VXLevelerAudioProcessor()
@@ -214,7 +223,7 @@ void VXLevelerAudioProcessor::setStateInformation(const void* data, const int si
     analysisReady = true;
     analysisConfidence = static_cast<float>(el->getDoubleAttribute("confidence", 1.0));
     analysisObservedSeconds = static_cast<float>(el->getDoubleAttribute("observedSeconds", 0.0));
-    analysisProgress = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 18.0f);
+    analysisProgress = analysisCoverage(analysisObservedSeconds);
 }
 
 vxsuite::leveler::Dsp::DebugSnapshot VXLevelerAudioProcessor::getDebugSnapshot() const noexcept {
@@ -394,7 +403,7 @@ void VXLevelerAudioProcessor::stopAnalysisCapture() {
         const float coverageConfidence = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 18.0f);
         const float durationConfidence = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 30.0f);
         const float rangeConfidence = juce::jlimit(0.0f, 1.0f, (result.globalDynamicRangeDb - 1.5f) / 8.5f);
-        const float usableFloor = 0.58f + 0.22f * coverageConfidence;
+        const float usableFloor = 0.62f + 0.22f * coverageConfidence;
         analysisConfidence = juce::jlimit(0.0f,
                                           1.0f,
                                           usableFloor
@@ -432,7 +441,7 @@ void VXLevelerAudioProcessor::captureAnalysisAudio(const juce::AudioBuffer<float
             analysisFrameCursor = 0;
             analysisEnergy = 0.0;
             analysisObservedSeconds = static_cast<float>(analysisCapturedBlocks * preparedBlockSize) / static_cast<float>(currentSampleRateHz);
-            analysisProgress = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 18.0f);
+            analysisProgress = analysisCoverage(analysisObservedSeconds);
             analysisConfidence = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 24.0f);
         }
     }
