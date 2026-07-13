@@ -334,7 +334,7 @@ inline constexpr HelpContent leveler {
     "VXLeveler Help",
     R"(
 <h1>VXLeveler</h1>
-<p>Adaptive level control with two distinct behaviours: Vocal Rider for speech-focused riding and Mix Leveler for broader programme smoothing. It is meant to feel more like automatic fader support than static compression.</p>
+<p>Adaptive level control with two behaviours: Vocal Rider rides a voice toward a held reference level - freezing the fader in pauses instead of pumping room tone - and Mix Leveler smooths whole-programme level. Both share the same controls; it is meant to feel like automatic fader support, not static compression. The level trace shows the ride in action: the bright line is the fader (dimmed while parked), the dashed line is the level it is steering toward.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Choose Vocal Rider when speech intelligibility is the priority.</li>
@@ -346,13 +346,15 @@ inline constexpr HelpContent leveler {
 </ul>
 <h2>Example settings</h2>
 <ul>
-<li>Vocal Rider for uneven dialogue: Level 65%, Control 60%.</li>
+<li>Vocal Rider for uneven dialogue: Level 65%, Control 60%, Target and Depth centred.</li>
+<li>Vocal against a backing track: route the music into the sidechain, Level 70%, Target +2 dB to sit the vocal slightly hot.</li>
 <li>Mix Leveler for broad programme smoothing: Level 50%, Control 45%.</li>
-<li>Heavier rider action: Level 75%, Control 70%.</li>
+<li>Whole-song consistency: Mix Leveler, Analysis Offline, press Analyze while the song plays, then Level 60%.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>
 <li>Speech riding in mixed or inconsistent recordings.</li>
+<li>Holding a vocal at a set level above a changing arrangement (sidechain).</li>
 <li>Programme smoothing before final finish/limiting.</li>
 <li>Long-form content where sections vary in level too much.</li>
 </ul>)",

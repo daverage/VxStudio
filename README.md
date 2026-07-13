@@ -25,7 +25,7 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXToneRefine | Guided tonal correction | `Mud`, `Harshness`, `Smooth` | Boxiness, brittleness, transparent smoothing |
 | VXFinish | Final polish and level control | `Finish`, `Body`, `Gain` | Compression, recovery lift, controlled loudness |
 | VXOptoComp | Professional LA2A-style opto levelling | `Peak Red.`, `Body`, `Gain`, `Pro`, `Behavior`, `Stereo Link` | Smooth riding, gentle limiting, opto character, engineer-facing control |
-| VXLeveler | Adaptive riding and programme levelling | `Level`, `Control` | Speech riding, long-form consistency |
+| VXLeveler | Adaptive riding and programme levelling, with sidechain vocal riding | `Level`, `Control`, `Target`, `Depth` | Speech riding, vocal-over-music riding, long-form consistency |
 | VXRebalance | Confidence-driven source-family rebalance | `Vocals`, `Drums`, `Bass`, `Guitar`, `Other`, `Strength` | Broad mix moves without stems |
 | VXRepair | All-in-one guided voice repair | `Noise`, `Speech Clarity`, `Clicks`, `Reverb` | Automatic problem detection and one-step correction |
 | VXStudioAnalyser | Chain-aware dry-vs-wet analyser | `Avg Time`, `Smoothing` | Inspecting stage impact and whole-chain tone |
@@ -60,10 +60,11 @@ Framework and plugin DSP versions are tracked independently.
 ## Current status
 
 - `15` focused plugins are implemented and shipping in the shared VX Studio shell.
-- VXSpeechClarity and VXToneRefine (formerly VXClarity and VXRefine) are live  -  Speech Clarity DSP is active across all four bands.
+- VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
 - VXProximityClassic is a new two-control simplified proximity model.
 - VXRepair is a new all-in-one guided repair assistant combining noise, clicks, clarity, and deverb in a single analysed workflow.
-- VXCleanup has been archived  -  replaced by VXSpeechClarity (speech artifacts) and VXToneRefine (tonal refinement).
+- VXCleanup has been removed from the active product set and replaced by VXSpeechClarity for speech artifacts plus VXToneRefine for tonal refinement.
+- VxRebalanceAI exists as an experimental opt-in tool, but it is not a shipping VX Studio product yet.
 - GR meters are now active on VXDenoiser and VXDeverb.
 - VXDeepFilterNet now has an active Guard control with artifact-aware blending, and inference runs on a dedicated per-channel thread (audio thread is lock-free).
 - VXSubtract now warns when a learned noise profile may be stale (> 20 min old).
@@ -141,7 +142,7 @@ Most VX Studio products use the shared `Vocal / General` selector when the DSP t
 Important exceptions:
 
 - `VXDeepFilterNet` uses the main selector as a model selector: `DeepFilterNet 3` or `DeepFilterNet 2`.
-- `VXLeveler` uses `Vocal Rider` and `Mix Leveler`, plus an `Analysis` selector with `Realtime`, `Smart Realtime`, and `Offline`.
+- `VXLeveler` uses `Vocal Rider` and `Mix Leveler`, plus an `Analysis` selector with `Realtime`, `Smart Realtime`, and `Offline` (available in both modes). It also accepts an optional stereo sidechain input in `Vocal Rider` mode.
 - `VXRebalance` does not use the shared Vocal/General selector. It uses `Recording Type` with `Studio`, `Live`, and `Phone / Rough`.
 - `VXStudioAnalyser` is a custom analyser UI rather than a standard processing shell.
 
@@ -421,23 +422,27 @@ Practical scenarios:
 
 ### VXLeveler
 
-Adaptive level control with two distinct behaviours: `Vocal Rider` for speech-focused riding and `Mix Leveler` for broader programme smoothing. It is meant to feel more like automatic fader support than static compression.
+Adaptive level control with two behaviours: `Vocal Rider` rides a voice toward a held reference level - freezing the fader in pauses instead of pumping room tone - and `Mix Leveler` smooths whole-programme level. Both modes share the same controls; it is meant to feel like automatic fader support, not static compression. The level trace shows the ride in action: the bright line is the fader (dimmed while parked), the dashed line is the level it is steering toward.
 
 How to use it:
 
-- Choose `Vocal Rider` when speech intelligibility is the priority.
-- Choose `Mix Leveler` when you want gentler overall programme control.
+- Choose `Vocal Rider` when speech intelligibility is the priority; `Mix Leveler` for gentler whole-programme control.
 - Use `Level` for how far the processor should even things out and `Control` for how assertively it reacts.
+- `Target` rides the material hotter or quieter than its learned reference; `Depth` sets how far the ride reaches into pauses and quiet dips.
+- Route your music bus into the plugin's sidechain input and `Vocal Rider` holds the vocal a set amount above the music - `Target` then sets how hot it sits. Remove the routing and it returns to riding the vocal against its own level.
+- In `Offline` analysis mode, press `Analyze` while the track plays to learn its level map; the rider then steers toward the analyzed reference, locked to the DAW timeline in `Mix Leveler` mode.
 
 Example settings:
 
-- `Vocal Rider` for uneven dialogue: `Level 65%`, `Control 60%`
+- `Vocal Rider` for uneven dialogue: `Level 65%`, `Control 60%`, `Target` and `Depth` centred
+- Vocal against a backing track: music routed to the sidechain, `Level 70%`, `Target +2 dB`
 - `Mix Leveler` for broad programme smoothing: `Level 50%`, `Control 45%`
-- Heavier rider action: `Level 75%`, `Control 70%`
+- Whole-song consistency: `Mix Leveler`, `Analysis Offline`, `Analyze` a pass, then `Level 60%`
 
 Practical scenarios:
 
 - Speech riding in mixed or inconsistent recordings
+- Holding a vocal at a set level above a changing arrangement (sidechain)
 - Programme smoothing before final finish or limiting
 - Long-form content where sections vary in level too much
 
@@ -558,6 +563,8 @@ Built `.vst3` bundles are staged into `Source/vxstudio/vst/`.
 
 VXDeepFilterNet also requires model files in `assets/deepfilternet/models/`. Without them the plugin still builds, but no model will be available at runtime.
 
+VxRebalanceAI is experimental and disabled by default. To build it locally, configure with `-DVXSTUDIO_ENABLE_REBALANCE_AI=ON` and provide ONNX Runtime plus `ThirdParty/stemgenrt/model/model.onnx` and `model.onnx.data`.
+
 ### Windows
 
 Windows support is wired up and the GitHub Actions release workflow now builds and publishes Windows assets on hosted runners, but broader host validation is still pending.
@@ -605,6 +612,12 @@ Useful plugin targets:
 | `VXRepair_VST3` | Repair plugin |
 | `VXStudioAnalyser_VST3` | Studio analyser plugin |
 
+Experimental opt-in target:
+
+| Target | Description |
+|---|---|
+| `VxRebalanceAIPlugin` | Experimental AI rebalance tool; not part of the shipping suite target |
+
 ---
 
 ## Repository layout
@@ -629,7 +642,6 @@ Source/
       rebalance/      VXRebalance processor, DSP, and diagnostics UI
       repair/         VXRepair processor (embeds denoiser/deverb/speech_clarity DSP)
       analyser/       VXStudioAnalyser processor and custom analyser UI
-      cleanup/        VXCleanup  -  archived, sources kept for reference
 tests/                Measurement and behaviour tests
 tools/                Utility scripts and fixture builders
 assets/               Models, REAPER presets, and related resources
@@ -644,5 +656,5 @@ tasks/                Working plans, reports, and lessons
 - macOS VST3 builds are confirmed and staged.
 - Windows build generation is present and the release workflow can publish Windows assets without a local Windows machine, but broader end-to-end host validation is still pending.
 - All 15 plugins build on macOS from the current tree.
-- VXDeepFilterNet is the only plugin with extra runtime model dependencies.
+- VXDeepFilterNet is the only shipping plugin with extra runtime model dependencies. VxRebalanceAI has additional ONNX/model dependencies because it is experimental and opt-in.
 - VXRepair embeds DSP from VXDenoiser, VXDeverb, and VXSpeechClarity  -  modifying those DSP files requires re-testing VXRepair.
