@@ -132,13 +132,6 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const float monoPenalty = clamp01(params.monoScore);
     const float compressionPenalty = clamp01(params.compressionScore);
     const float tiltPenalty = clamp01(params.tiltScore);
-    const float mixDecisionTrust = voiceMode
-        ? 1.0f
-        : clamp01(signalTrust
-                  * (1.0f - 0.22f * monoPenalty)
-                  * (1.0f - 0.18f * compressionPenalty));
-    const float mixTiltPenalty = voiceMode ? 0.0f : tiltPenalty;
-
     if (!voiceMode) {
         processGeneralMode(buffer,
                            detector,
@@ -172,55 +165,26 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                         decide(targetState, detector, level, control),
                         stateTransition);
 
-    const float levelEnvAttack = timeCoeff(sr, voiceMode ? 0.035f : 0.080f);
-    const float levelEnvRelease = timeCoeff(sr, voiceMode ? 0.220f : 0.300f);
-    const float anchorRiseCoeff = timeCoeff(sr, voiceMode ? 1.750f : 1.250f);
-    const float anchorFallCoeff = timeCoeff(sr, voiceMode ? 1.750f : 0.450f);
+    const float levelEnvAttack = timeCoeff(sr, 0.035f);
+    const float levelEnvRelease = timeCoeff(sr, 0.220f);
+    const float anchorRiseCoeff = timeCoeff(sr, 1.750f);
+    const float anchorFallCoeff = timeCoeff(sr, 1.750f);
     const float phraseAnchorRiseCoeff = timeCoeff(sr, 0.800f);
     const float phraseAnchorFallCoeff = timeCoeff(sr, 1.800f);
-    const float levelGainAttack = timeCoeff(sr, voiceMode ? 0.025f : 0.120f);
-    const float levelGainRelease = timeCoeff(sr, voiceMode ? 0.240f : 0.650f);
+    const float levelGainAttack = timeCoeff(sr, 0.025f);
+    const float levelGainRelease = timeCoeff(sr, 0.240f);
     const float liftAttack = timeCoeff(sr, 0.020f);
     const float liftRelease = timeCoeff(sr, 0.160f);
     const float tameAttack = timeCoeff(sr, 0.004f);
-    const float tameRelease = timeCoeff(sr, voiceMode ? 0.120f : 0.180f);
+    const float tameRelease = timeCoeff(sr, 0.120f);
     const float overrideAttack = timeCoeff(sr, 0.010f);
-    const float overrideRelease = timeCoeff(sr, voiceMode ? 0.180f : 0.240f);
-    const float generalMomentaryCoeff = timeCoeff(sr, 0.40f);
-    const float generalShortCoeff = timeCoeff(sr, 3.0f);
-    const float generalBaselineRiseCoeff = timeCoeff(sr, 4.2f);
-    const float generalBaselineFallCoeff = timeCoeff(sr, 8.0f);
-    const float generalSpikeRelease = timeCoeff(sr, 0.085f);
-    const float generalNormalizeAttack = timeCoeff(sr, 1.2f);
-    const float generalNormalizeRelease = timeCoeff(sr, 3.0f);
-    const float programLoudnessCoeff = timeCoeff(sr, 12.0f);
-    const float programRestoreAttack = timeCoeff(sr, 2.2f);
-    const float programRestoreRelease = timeCoeff(sr, 5.5f);
+    const float overrideRelease = timeCoeff(sr, 0.180f);
 
-    const float levelShape = (voiceMode ? 0.35f : 0.34f) + (voiceMode ? 0.70f : 0.72f) * level;
-    const float maxUpwardGain = voiceMode
-        ? 1.0f + 1.05f * level
-        : 1.0f + 0.95f * std::pow(level, 0.90f);
-    const float maxDownwardGain = voiceMode
-        ? std::max(0.24f, 1.0f - 0.55f * level)
-        : std::max(0.30f, 1.0f - 0.62f * std::pow(level, 0.92f));
-    const float maxLiftAmount = voiceMode
-        ? 0.28f + 0.82f * level
-        : 0.30f + 1.05f * std::pow(level, 0.92f);
-    const float maxTameDepth = voiceMode
-        ? 0.15f + 0.60f * control
-        : 0.12f + 0.52f * std::pow(control, 0.90f);
-    const bool mixOfflineMode = !voiceMode
-        && params.analysisMode == MixAnalysisMode::offline
-        && offlineAnalysis.isValid();
-    const int offlineBlockIndex = mixOfflineMode
-        ? std::clamp(static_cast<int>(offlineProcessedSamples / std::max(1, offlineAnalysis.blockSize)),
-                     0,
-                     std::max(0, static_cast<int>(offlineAnalysis.targetCurveDb.size()) - 1))
-        : 0;
-    const float offlineTargetDb = mixOfflineMode
-        ? offlineAnalysis.targetCurveDb[static_cast<size_t>(offlineBlockIndex)]
-        : 0.0f;
+    const float levelShape = 0.35f + 0.70f * level;
+    const float maxUpwardGain = 1.0f + 1.05f * level;
+    const float maxDownwardGain = std::max(0.24f, 1.0f - 0.55f * level);
+    const float maxLiftAmount = 0.28f + 0.82f * level;
+    const float maxTameDepth = 0.15f + 0.60f * control;
 
     float levelActivityAccum = 0.0f;
     float liftActivityAccum = 0.0f;
@@ -263,267 +227,56 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         lowAbs /= static_cast<float>(numChannels);
         highAbs /= static_cast<float>(numChannels);
 
-        if (!voiceMode) {
-            const float weightedLevel = 0.10f * lowAbs + 0.90f * monoAbs + 0.46f * highAbs;
-            const float weightedLevelDb = gainToDbFloor(weightedLevel);
-            const bool startupActivity = weightedLevelDb > -65.0f || peakAbs > 0.015f;
-            if (!generalPrimed && !startupActivity) {
-                generalSpikeGain = 1.0f;
-                for (int ch = 0; ch < numChannels; ++ch)
-                    buffer.setSample(ch, i, delayedSample[static_cast<size_t>(ch)]);
-                continue;
-            }
-
-            if (!generalPrimed) {
-                generalMomentary = weightedLevel;
-                generalShort = weightedLevel;
-                generalBaseline = weightedLevel;
-                generalWetShort = weightedLevel;
-                generalWetBaseline = weightedLevel;
-                generalPrimed = true;
-                generalPrimeCooldownSamples = std::max(1, juce::roundToInt(static_cast<float>(sr) * 1.25f));
-            } else {
-                generalMomentary = generalMomentaryCoeff * generalMomentary + (1.0f - generalMomentaryCoeff) * weightedLevel;
-                generalShort = generalShortCoeff * generalShort + (1.0f - generalShortCoeff) * weightedLevel;
-                const float baselineCoeff = generalShort > generalBaseline ? generalBaselineRiseCoeff : generalBaselineFallCoeff;
-                generalBaseline = baselineCoeff * generalBaseline + (1.0f - baselineCoeff) * generalShort;
-            }
-            const float primeRelax = (!voiceMode
-                                      && params.analysisMode == MixAnalysisMode::smartRealtime
-                                      && generalPrimeCooldownSamples > 0)
-                ? clamp01(static_cast<float>(generalPrimeCooldownSamples) / std::max(1.0f, static_cast<float>(sr) * 1.25f))
-                : 0.0f;
-            if (generalPrimeCooldownSamples > 0)
-                --generalPrimeCooldownSamples;
-
-            generalHighEnv = (highAbs > generalHighEnv ? tameAttack : tameRelease) * generalHighEnv
-                + (1.0f - (highAbs > generalHighEnv ? tameAttack : tameRelease)) * highAbs;
-
-            const float momentaryDb = gainToDbFloor(generalMomentary);
-            const float shortDb = gainToDbFloor(generalShort);
-            const float baselineDb = gainToDbFloor(generalBaseline);
-
-            const auto targetFrame = mixOfflineMode
-                ? MixTargetFrame { baselineDb,
-                                   offlineTargetDb,
-                                   offlineTargetDb,
-                                   1.0f }
-                : makeMixTargetFrame(shortDb, baselineDb, level);
-            const float errorDb = shortDb - targetFrame.finalTargetDb;
-            const float targetConfidence = clamp01(targetFrame.confidence * mixDecisionTrust);
-            const float deadbandDb = (tuning.mixDeadbandBase - tuning.mixDeadbandLevelWeight * level)
-                + (1.0f - targetConfidence) * 0.85f;
-            const float rampWidthDb = 2.00f - 0.45f * level;
-            const float hotMixGuard = clamp01((peakAbs - 0.52f) / 0.24f)
-                * (0.45f + 0.55f * compressionPenalty)
-                * (0.35f + 0.65f * control);
-            float rideTargetDb = 0.0f;
-            if (!neutral && std::abs(errorDb) > deadbandDb) {
-                const float excessDb = std::abs(errorDb) - deadbandDb;
-                const float ramp = clamp01(excessDb / std::max(0.5f, rampWidthDb));
-                const float shapedRamp = ramp * ramp * (3.0f - 2.0f * ramp);
-                const float downLimitDb = juce::jmap(primeRelax,
-                                                     (3.0f + 4.6f * level) * (0.90f + 0.14f * control),
-                                                     1.6f + 2.0f * level) * (1.0f + 0.22f * hotMixGuard);
-                const float upLimitDb = (1.4f + 3.2f * level) * (0.94f + 0.10f * control)
-                    * (1.0f - 0.92f * hotMixGuard);
-                rideTargetDb = errorDb > 0.0f
-                    ? -downLimitDb * shapedRamp
-                    : upLimitDb * shapedRamp;
-                rideTargetDb *= targetConfidence;
-            }
-
-            const float downRate = (1.4f + 5.2f * level) / static_cast<float>(sr);
-            const float upRate = (0.28f + 1.40f * level) / static_cast<float>(sr);
-            generalRideGainDb = stepToward(generalRideGainDb,
-                                           rideTargetDb,
-                                           rideTargetDb < generalRideGainDb ? downRate : upRate);
-
-            const float rideGain = juce::Decibels::decibelsToGain(generalRideGainDb);
-            const float overshootDb = momentaryDb - shortDb;
-            const float overshootThresholdDb = ((1.35f - 0.55f * control)
-                                                + primeRelax * (0.90f - 0.20f * control))
-                * juce::jmap(compressionPenalty, 1.0f, 0.82f);
-            float spikeTarget = 1.0f;
-            if (!neutral && overshootDb > overshootThresholdDb) {
-                const float overshootExcess = overshootDb - overshootThresholdDb;
-                const float spikeDb = std::min(5.8f + 5.0f * control, overshootExcess * (0.92f + 0.55f * control));
-                spikeTarget = juce::Decibels::decibelsToGain(-spikeDb * (0.70f + 0.30f * mixDecisionTrust));
-            }
-
-            const float predictedPeak = peakAbs * rideGain * spikeTarget;
-            const float peakCeiling = juce::jmap(control, 0.0f, 1.0f, 0.992f, 0.94f);
-            if (!neutral && predictedPeak > peakCeiling && predictedPeak > 1.0e-5f)
-                spikeTarget = std::min(spikeTarget, peakCeiling / predictedPeak);
-
-            if (spikeTarget < generalSpikeGain)
-                generalSpikeGain = spikeTarget;
-            else
-                generalSpikeGain = generalSpikeRelease * generalSpikeGain + (1.0f - generalSpikeRelease) * spikeTarget;
-
-            const float wetWeightedLevel = weightedLevel * rideGain * generalSpikeGain;
-            generalWetShort = generalShortCoeff * generalWetShort + (1.0f - generalShortCoeff) * wetWeightedLevel;
-            const float wetBaselineCoeff = generalWetShort > generalWetBaseline ? generalBaselineRiseCoeff : generalBaselineFallCoeff;
-            generalWetBaseline = wetBaselineCoeff * generalWetBaseline + (1.0f - wetBaselineCoeff) * generalWetShort;
-
-            const float dryShortDb = gainToDbFloor(generalShort);
-            const float wetShortDb = gainToDbFloor(generalWetShort);
-            const float dryBaselineDb = gainToDbFloor(generalBaseline);
-            const float wetBaselineDb = gainToDbFloor(generalWetBaseline);
-            const float shortLostDb = dryShortDb - wetShortDb;
-            const float baselineLostDb = dryBaselineDb - wetBaselineDb;
-            const float normalizeHeadroomDb = juce::Decibels::gainToDecibels(std::max(peakCeiling / std::max(peakAbs * rideGain * generalSpikeGain, 1.0e-5f), 1.0e-5f), 0.0f);
-            const float desiredRecoverDb = std::max(0.0f,
-                                                    shortLostDb
-                                                        - (tuning.mixNormalizeShortThresholdBase
-                                                           - tuning.mixNormalizeShortThresholdLevelWeight * level));
-            const float baselineGuardDb = std::max(0.0f,
-                                                   baselineLostDb
-                                                       - (tuning.mixNormalizeBaselineThresholdBase
-                                                          - tuning.mixNormalizeBaselineThresholdLevelWeight * level));
-            const float allowedNormalizeDb = juce::jlimit(0.0f,
-                                                          tuning.mixNormalizeMaxDb * level,
-                                                          std::min(tuning.mixNormalizeMaxDb * level,
-                                                                  std::min(desiredRecoverDb * (tuning.mixNormalizeShortScaleBase
-                                                                                                + tuning.mixNormalizeShortScaleLevelWeight * level),
-                                                                            baselineGuardDb * (tuning.mixNormalizeBaselineScaleBase
-                                                                                                + tuning.mixNormalizeBaselineScaleLevelWeight * level) + 1.2f)));
-            const float spikePenalty = clamp01((1.0f - generalSpikeGain) / 0.25f);
-            const float normalizeTargetDb = neutral
-                ? 0.0f
-                : juce::jlimit(0.0f,
-                               std::max(0.0f, normalizeHeadroomDb - 0.3f),
-                               allowedNormalizeDb
-                                   * (1.0f - 0.88f * hotMixGuard)
-                                   * (1.0f - tuning.mixNormalizeSpikePenalty * spikePenalty)
-                                   * (0.55f + 0.45f * targetConfidence));
-            const float normalizeCoeff = normalizeTargetDb > generalNormalizeGainDb ? generalNormalizeAttack : generalNormalizeRelease;
-            generalNormalizeGainDb = normalizeCoeff * generalNormalizeGainDb
-                + (1.0f - normalizeCoeff) * normalizeTargetDb;
-
-            const float localFinalGain = juce::Decibels::decibelsToGain(generalNormalizeGainDb) * rideGain * generalSpikeGain;
-            programDry = programLoudnessCoeff * programDry + (1.0f - programLoudnessCoeff) * weightedLevel;
-            programWet = programLoudnessCoeff * programWet + (1.0f - programLoudnessCoeff) * (weightedLevel * localFinalGain);
-            const float programDryDb = gainToDbFloor(programDry);
-            const float programWetDb = gainToDbFloor(programWet);
-            const float programmeLostDb = programDryDb - programWetDb;
-            const float localPredictedPeak = std::max(peakAbs * localFinalGain, 1.0e-5f);
-            const float programHeadroomDb = juce::Decibels::gainToDecibels(std::max(peakCeiling / localPredictedPeak, 1.0e-5f), 0.0f);
-            const float restorePrimeScale = 1.0f - 0.40f * primeRelax;
-            const float desiredProgramRestoreDb = neutral
-                ? 0.0f
-                : std::max(0.0f,
-                           programmeLostDb - (1.10f + 0.35f * (1.0f - level)));
-            const float maxProgramRestoreDb = 7.0f * (0.35f + 0.65f * level);
-            const float restorePenalty = (1.0f - 0.40f * spikePenalty) * (1.0f - 0.90f * hotMixGuard);
-            const float programRestoreTargetDb = juce::jlimit(0.0f,
-                                                              std::max(0.0f, programHeadroomDb - 0.15f),
-                                                              std::min(maxProgramRestoreDb,
-                                                                       desiredProgramRestoreDb
-                                                                           * restorePenalty
-                                                                           * restorePrimeScale
-                                                                           * (0.50f + 0.50f * signalTrust)));
-            const float restoreCoeff = programRestoreTargetDb > programRestoreGainDb ? programRestoreAttack : programRestoreRelease;
-            programRestoreGainDb = restoreCoeff * programRestoreGainDb
-                + (1.0f - restoreCoeff) * programRestoreTargetDb;
-            const float finalGain = localFinalGain * juce::Decibels::decibelsToGain(programRestoreGainDb);
-            for (int ch = 0; ch < numChannels; ++ch)
-                buffer.setSample(ch, i, delayedSample[static_cast<size_t>(ch)] * finalGain);
-
-            levelActivityAccum += (std::abs(generalRideGainDb)
-                                   + 0.45f * std::abs(generalNormalizeGainDb)
-                                   + 0.35f * std::abs(programRestoreGainDb))
-                / std::max(6.0f, 10.5f * level);
-            tameActivityAccum += std::abs(1.0f - generalSpikeGain);
-            continue;
-        }
-
         const float detectorLevel = std::max(monoAbs, peakAbs * 0.85f);
         const float envCoeff = detectorLevel > levelEnv ? levelEnvAttack : levelEnvRelease;
         levelEnv = envCoeff * levelEnv + (1.0f - envCoeff) * detectorLevel;
         const float anchorCoeff = levelEnv > anchorEnv ? anchorRiseCoeff : anchorFallCoeff;
         anchorEnv = anchorCoeff * anchorEnv + (1.0f - anchorCoeff) * levelEnv;
-        if (voiceMode) {
-            if (detector.phraseStart > 0.18f || vocalPhraseAnchor <= 1.0e-6f)
-                vocalPhraseAnchor = levelEnv;
-            const float phraseCoeff = levelEnv > vocalPhraseAnchor ? phraseAnchorRiseCoeff : phraseAnchorFallCoeff;
-            if (detector.phraseActivity > 0.16f)
-                vocalPhraseAnchor = phraseCoeff * vocalPhraseAnchor + (1.0f - phraseCoeff) * levelEnv;
-            else if (detector.phraseEnd > 0.12f)
-                vocalPhraseAnchor = 0.985f * vocalPhraseAnchor + 0.015f * levelEnv;
-        } else {
-            vocalPhraseAnchor = 0.0f;
-        }
+        if (detector.phraseStart > 0.18f || vocalPhraseAnchor <= 1.0e-6f)
+            vocalPhraseAnchor = levelEnv;
+        const float phraseCoeff = levelEnv > vocalPhraseAnchor ? phraseAnchorRiseCoeff : phraseAnchorFallCoeff;
+        if (detector.phraseActivity > 0.16f)
+            vocalPhraseAnchor = phraseCoeff * vocalPhraseAnchor + (1.0f - phraseCoeff) * levelEnv;
+        else if (detector.phraseEnd > 0.12f)
+            vocalPhraseAnchor = 0.985f * vocalPhraseAnchor + 0.015f * levelEnv;
 
         const float safeEnv = std::max(levelEnv, 1.0e-5f);
-        const float vocalAnchor = detector.phraseActivity > 0.08f
+        const float safeAnchor = detector.phraseActivity > 0.08f
             ? std::max(vocalPhraseAnchor, 1.0e-5f)
             : std::max(anchorEnv, 1.0e-5f);
-        const float safeAnchor = voiceMode ? vocalAnchor : std::max(anchorEnv, 1.0e-5f);
         const float envOverAnchor = clamp01((safeEnv - safeAnchor) / (safeAnchor + 1.0e-5f));
         const float envUnderAnchor = clamp01((safeAnchor - safeEnv) / (safeAnchor + 1.0e-5f));
-        const float hotInstrumentGuard = voiceMode
-            ? clamp01((peakAbs - 0.46f) / 0.24f)
-                * clamp01(0.62f * detector.instrumentDominance + 0.38f * detector.transientStrength)
-            : 0.0f;
+        const float hotInstrumentGuard = clamp01((peakAbs - 0.46f) / 0.24f)
+            * clamp01(0.62f * detector.instrumentDominance + 0.38f * detector.transientStrength);
         float targetGain = 1.0f;
         if (!neutral) {
-            if (voiceMode) {
-                const float levelRatio = safeAnchor / safeEnv;
-                const float ratioGain = std::pow(levelRatio, levelShape);
-                const float biasGain = juce::jlimit(0.55f,
-                                                    1.45f,
-                                                    1.0f + voiceDecision.levelBias * (0.8f + 0.7f * level));
-                const float voiceCapBase = clamp01((std::max(level, control) - 0.82f) / 0.18f);
-                const float voiceLiftDrive = voiceCapBase * envUnderAnchor;
-                const float voiceTameDrive = voiceCapBase * envOverAnchor;
-                const float adaptiveMaxUpwardGain = juce::jmap(hotInstrumentGuard,
-                                                               maxUpwardGain + (1.95f - maxUpwardGain) * voiceLiftDrive,
-                                                               1.08f + 0.12f * envUnderAnchor);
-                const float adaptiveMaxDownwardGain = juce::jmap(hotInstrumentGuard,
-                                                                 maxDownwardGain + (0.18f - maxDownwardGain) * voiceTameDrive,
-                                                                 0.14f + 0.10f * (1.0f - envOverAnchor));
-                targetGain = juce::jlimit(adaptiveMaxDownwardGain,
-                                          adaptiveMaxUpwardGain,
-                                          ratioGain * biasGain);
-            } else {
-                const float envDb = juce::Decibels::gainToDecibels(safeEnv, -120.0f);
-                const float anchorDb = juce::Decibels::gainToDecibels(safeAnchor, -120.0f);
-                const float diffDb = anchorDb - envDb;
-                const float deadbandDb = 1.4f - 0.5f * level;
-                const float generalStrength = 0.34f + 0.46f * level;
-                if (std::abs(diffDb) > deadbandDb) {
-                    const float generalCapBase = clamp01((level - 0.84f) / 0.16f);
-                    const float downwardDrive = generalCapBase * clamp01(((-diffDb) - 4.0f) / 8.0f);
-                    const float upwardDrive = generalCapBase * clamp01((diffDb - 4.5f) / 10.0f);
-                    const float minGainDb = juce::jmap(downwardDrive, -9.0f * level, -13.0f * level);
-                    const float maxGainDb = juce::jmap(upwardDrive, 1.8f * level, 2.2f * level);
-                    const float wantedGainDb = juce::jlimit(minGainDb,
-                                                            maxGainDb,
-                                                            (std::abs(diffDb) - deadbandDb)
-                                                                * generalStrength
-                                                                * (diffDb >= 0.0f ? 1.0f : -1.0f));
-                    targetGain = juce::Decibels::decibelsToGain(wantedGainDb);
-                    const float adaptiveMaxUpwardGain = maxUpwardGain + (1.6f - maxUpwardGain) * upwardDrive;
-                    const float adaptiveMaxDownwardGain = maxDownwardGain + (0.34f - maxDownwardGain) * downwardDrive;
-                    targetGain = juce::jlimit(adaptiveMaxDownwardGain, adaptiveMaxUpwardGain, targetGain);
-                }
-                else {
-                    targetGain = juce::jlimit(maxDownwardGain, maxUpwardGain, targetGain);
-                }
-            }
+            const float levelRatio = safeAnchor / safeEnv;
+            const float ratioGain = std::pow(levelRatio, levelShape);
+            const float biasGain = juce::jlimit(0.55f,
+                                                1.45f,
+                                                1.0f + voiceDecision.levelBias * (0.8f + 0.7f * level));
+            const float voiceCapBase = clamp01((std::max(level, control) - 0.82f) / 0.18f);
+            const float voiceLiftDrive = voiceCapBase * envUnderAnchor;
+            const float voiceTameDrive = voiceCapBase * envOverAnchor;
+            const float adaptiveMaxUpwardGain = juce::jmap(hotInstrumentGuard,
+                                                           maxUpwardGain + (1.95f - maxUpwardGain) * voiceLiftDrive,
+                                                           1.08f + 0.12f * envUnderAnchor);
+            const float adaptiveMaxDownwardGain = juce::jmap(hotInstrumentGuard,
+                                                             maxDownwardGain + (0.18f - maxDownwardGain) * voiceTameDrive,
+                                                             0.14f + 0.10f * (1.0f - envOverAnchor));
+            targetGain = juce::jlimit(adaptiveMaxDownwardGain,
+                                      adaptiveMaxUpwardGain,
+                                      ratioGain * biasGain);
         }
 
         const float levellerCoeff = targetGain < levellerGain ? levelGainAttack : levelGainRelease;
         levellerGain = levellerCoeff * levellerGain + (1.0f - levellerCoeff) * targetGain;
 
-        const float overrideZone = voiceMode ? clamp01((std::max(level, control) - 0.60f) / 0.40f) : 0.0f;
-        const float problemWeight = voiceMode
-            ? (targetState == MixState::voiceBuried
-                   ? 1.0f
-                   : (targetState == MixState::guitarDominant ? 0.72f
-                                                              : (targetState == MixState::voiceLeading ? 0.10f : 0.24f)))
-            : 0.0f;
+        const float overrideZone = clamp01((std::max(level, control) - 0.60f) / 0.40f);
+        const float problemWeight = targetState == MixState::voiceBuried
+            ? 1.0f
+            : (targetState == MixState::guitarDominant ? 0.72f
+                                                        : (targetState == MixState::voiceLeading ? 0.10f : 0.24f));
         const float maskingPressure = clamp01(0.42f * detector.instrumentDominance
                                               + 0.34f * detector.buriedSpeech
                                               + 0.24f * envOverAnchor);
@@ -535,27 +288,21 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float transientNeed = clamp01(0.65f * detector.instrumentDominance
                                             + 0.35f * detector.transientStrength);
 
-        const float targetOverrideGain = voiceMode
-            ? juce::jlimit(0.12f,
-                           1.0f,
-                           1.0f - overrideZone * problemWeight * overrideTrigger * (0.10f + 0.78f * level))
-            : 1.0f;
+        const float targetOverrideGain = juce::jlimit(0.12f,
+                                                       1.0f,
+                                                       1.0f - overrideZone * problemWeight * overrideTrigger * (0.10f + 0.78f * level));
         const float overrideGainCoeff = targetOverrideGain < overrideGain ? overrideAttack : overrideRelease;
         overrideGain = overrideGainCoeff * overrideGain + (1.0f - overrideGainCoeff) * targetOverrideGain;
 
-        const float liftGain = voiceMode
-            ? 1.0f + voiceDecision.speechLift * maxLiftAmount * (1.0f - 0.68f * hotInstrumentGuard)
-            : 1.0f;
+        const float liftGain = 1.0f + voiceDecision.speechLift * maxLiftAmount * (1.0f - 0.68f * hotInstrumentGuard);
         const float liftCoeff = liftGain > speechLiftGain ? liftAttack : liftRelease;
         speechLiftGain = liftCoeff * speechLiftGain + (1.0f - liftCoeff) * liftGain;
 
-        const float targetOverrideLiftGain = voiceMode
-            ? juce::jlimit(1.0f,
-                           3.2f,
-                           1.0f + overrideZone * speechNeed * overrideTrigger
-                                     * (0.14f + 1.35f * level + 0.12f * detector.phraseActivity)
-                                     * (1.0f - 0.78f * hotInstrumentGuard))
-            : 1.0f;
+        const float targetOverrideLiftGain = juce::jlimit(1.0f,
+                                                           3.2f,
+                                                           1.0f + overrideZone * speechNeed * overrideTrigger
+                                                                     * (0.14f + 1.35f * level + 0.12f * detector.phraseActivity)
+                                                                     * (1.0f - 0.78f * hotInstrumentGuard));
         const float overrideLiftCoeff = targetOverrideLiftGain > overrideLiftGain ? overrideAttack : overrideRelease;
         overrideLiftGain = overrideLiftCoeff * overrideLiftGain
             + (1.0f - overrideLiftCoeff) * targetOverrideLiftGain;
@@ -564,16 +311,10 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         highEnv = highEnvCoeff * highEnv + (1.0f - highEnvCoeff) * highAbs;
 
         float tame = 0.0f;
-        if (neutral) {
-            tame = 0.0f;
-        } else if (voiceMode) {
+        if (!neutral) {
             tame = voiceDecision.transientTame * maxTameDepth;
             if (targetState == MixState::voiceBuried)
                 tame *= 1.3f;
-        } else {
-            const float relativeBrightness = highEnv / (safeEnv + 1.0e-5f);
-            const float tameTrigger = clamp01((relativeBrightness - (0.34f - 0.06f * control)) / 0.42f);
-            tame = tameTrigger * maxTameDepth * (1.0f - 0.22f * mixTiltPenalty);
         }
         tame = clamp01(tame);
 
@@ -581,19 +322,15 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float tameCoeff = targetHighTameGain < highTameGain ? tameAttack : tameRelease;
         highTameGain = tameCoeff * highTameGain + (1.0f - tameCoeff) * targetHighTameGain;
 
-        const float targetOverrideTameGain = voiceMode
-            ? juce::jlimit(0.08f,
-                           1.0f,
-                           1.0f - overrideZone * problemWeight * transientNeed * overrideTrigger
-                                     * (0.10f + 0.72f * control))
-            : 1.0f;
+        const float targetOverrideTameGain = juce::jlimit(0.08f,
+                                                           1.0f,
+                                                           1.0f - overrideZone * problemWeight * transientNeed * overrideTrigger
+                                                                     * (0.10f + 0.72f * control));
         const float overrideTameCoeff = targetOverrideTameGain < overrideTameGain ? overrideAttack : overrideRelease;
         overrideTameGain = overrideTameCoeff * overrideTameGain
             + (1.0f - overrideTameCoeff) * targetOverrideTameGain;
 
-        const float articulation = voiceMode
-            ? (0.40f + 0.34f * detector.transientStrength + 0.10f * detector.intelligibility)
-            : 0.0f;
+        const float articulation = 0.40f + 0.34f * detector.transientStrength + 0.10f * detector.intelligibility;
         const float effectiveLevellerGain = levellerGain * overrideGain;
         const float effectiveSpeechLiftGain = speechLiftGain * overrideLiftGain;
         const float effectiveHighTameGain = juce::jlimit(0.05f, 1.0f, highTameGain * overrideTameGain);
@@ -610,7 +347,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
             const float highSide = 0.5f * (highBand[0] - highBand[1]);
 
             float sideTameGain = highTameGain;
-            if (voiceMode && (targetState == MixState::guitarDominant || targetState == MixState::voiceBuried)) {
+            if (targetState == MixState::guitarDominant || targetState == MixState::voiceBuried) {
                 const float extraSideTame = (1.0f - effectiveHighTameGain)
                     * (0.35f + 0.65f * detector.stereoSpread)
                     * (0.45f + 0.55f * detector.instrumentDominance);
@@ -619,7 +356,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 sideTameGain = effectiveHighTameGain;
             }
 
-            const float sideSpeechBlend = voiceMode ? (0.12f + 0.10f * detector.stereoSpread) : 0.0f;
+            const float sideSpeechBlend = 0.12f + 0.10f * detector.stereoSpread;
             const float outMid = effectiveLevellerGain
                 * (mid
                    + articulation * (effectiveSpeechLiftGain - 1.0f) * speechMid
@@ -659,17 +396,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         tameActivity = 0.0f;
     }
 
-    if (!voiceMode) {
-        globalTracker.update(gainToDbFloor(generalShort),
-                             gainToDbFloor(generalMomentary),
-                             gainToDbFloor(generalShort) > -72.0f,
-                             numSamples);
-        offlineActive = mixOfflineMode;
-        if (mixOfflineMode && offlineAnalysis.isValid())
-            offlineProcessedSamples += numSamples;
-    } else {
-        offlineActive = false;
-    }
+    offlineActive = false;
 }
 
 void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
