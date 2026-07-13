@@ -35,7 +35,6 @@ private:
     static float timeAlpha(double sampleRate, float seconds) noexcept;
 
     double sr = 48000.0;
-    int maxBlock = 0;
 
     float low150 = 0.0f;
     float low2000 = 0.0f;
@@ -62,7 +61,7 @@ private:
     float alphaFast = 0.0f;
     float alphaSlow = 0.0f;
     float alphaBand = 0.0f;
-    float alphaScore = 0.0f;
+    float alphaScorePerSample = 0.0f;
 };
 
 } // namespace vxsuite::leveler

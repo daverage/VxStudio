@@ -15,15 +15,17 @@ inline float clamp01(const float x) noexcept {
 
 void Detector::prepare(const double sampleRate, const int maxBlockSize) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    maxBlock = std::max(1, maxBlockSize);
+    static_cast<void>(maxBlockSize);
     coeff150 = onePoleCoeff(sr, 150.0f);
     coeff2000 = onePoleCoeff(sr, 2000.0f);
     coeff4000 = onePoleCoeff(sr, 4000.0f);
     alphaFast  = timeAlpha(sr, 0.010f);   // per-sample inner loop
     alphaSlow  = timeAlpha(sr, 0.120f);   // per-sample inner loop
     alphaBand  = timeAlpha(sr, 0.070f);   // per-sample inner loop
-    // alphaScore is applied once per block  -  use block-rate coefficient
-    alphaScore = std::pow(timeAlpha(sr, 0.160f), static_cast<float>(maxBlock));
+    // Score smoothing is applied once per analyse() call; the per-sample
+    // alpha is raised to the actual block length there so the smoothing time
+    // does not depend on the host buffer size.
+    alphaScorePerSample = timeAlpha(sr, 0.160f);
     reset();
 }
 
@@ -96,6 +98,7 @@ DetectorSnapshot Detector::analyse(const juce::AudioBuffer<float>& input,
 
     const float avgDiff = blockDiffAccum / static_cast<float>(numSamples);
     avgAbsDiff = 0.8f * avgAbsDiff + 0.2f * avgDiff;
+    const float alphaScore = std::pow(alphaScorePerSample, static_cast<float>(numSamples));
 
     const float fullEnv = std::max(envFullSlow, 1.0e-5f);
     const float lowShare = clamp01(envLow / (fullEnv + 1.0e-5f));
