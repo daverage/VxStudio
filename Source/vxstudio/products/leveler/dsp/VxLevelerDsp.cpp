@@ -89,6 +89,8 @@ void Dsp::reset() {
     vocalPhraseAnchor = 0.0f;
     rideGate = 0.0f;
     gateEnv = 0.0f;
+    longTargetEnv = 0.0f;
+    longTargetSettleSamples = 0;
     activeState = MixState::neutral;
     targetState = MixState::neutral;
     stateTransition = 1.0f;
@@ -173,8 +175,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const float anchorFallCoeff = timeCoeff(sr, 1.750f);
     const float phraseAnchorRiseCoeff = timeCoeff(sr, 0.800f);
     const float phraseAnchorFallCoeff = timeCoeff(sr, 1.800f);
-    const float levelGainAttack = timeCoeff(sr, 0.025f);
-    const float levelGainRelease = timeCoeff(sr, 0.240f);
+    const float levelGainAttack = timeCoeff(sr, 0.060f);
+    const float levelGainRelease = timeCoeff(sr, 0.350f);
     const float liftAttack = timeCoeff(sr, 0.020f);
     const float liftRelease = timeCoeff(sr, 0.160f);
     const float tameAttack = timeCoeff(sr, 0.004f);
@@ -186,6 +188,10 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const float gateEnvAttack = timeCoeff(sr, 0.004f);
     const float gateEnvRelease = timeCoeff(sr, 0.040f);
     const float gateRelaxCoeff = timeCoeff(sr, 6.0f);
+    const float longTargetCoeff = timeCoeff(sr, 30.0f);
+    const float longTargetSeedCoeff = timeCoeff(sr, 0.3f);
+    const int longTargetSettleLimit = juce::roundToInt(static_cast<float>(sr));
+    const float rideDeadbandDb = 1.2f - 0.6f * level;
 
     const float levelShape = 0.35f + 0.70f * level;
     const float maxUpwardGain = 1.0f + 1.05f * level;
@@ -277,9 +283,32 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float gateCoeff = gateTargetRaw > rideGate ? gateOpenCoeff : gateCloseCoeff;
         rideGate = gateCoeff * rideGate + (1.0f - gateCoeff) * gateTargetRaw;
 
+        // Long-term held reference: only learns while the vocal is actually
+        // present, so a loud chorus stays "loud" instead of becoming the new
+        // normal within a couple of seconds.
+        if (rideGate > 0.85f) {
+            if (longTargetEnv <= 1.0e-6f)
+                longTargetEnv = levelEnv;
+            // Bootstrap by time, not level: the seed lands while levelEnv is
+            // still attacking, so learn fast for the first second of
+            // gate-open material, then hold (10 s) so a louder section stays
+            // "loud" instead of becoming the new normal.
+            const float coeff = longTargetSettleSamples < longTargetSettleLimit
+                ? longTargetSeedCoeff
+                : longTargetCoeff;
+            longTargetEnv = coeff * longTargetEnv + (1.0f - coeff) * levelEnv;
+            if (longTargetSettleSamples < longTargetSettleLimit)
+                ++longTargetSettleSamples;
+        }
+
+        const float rideEnvDb = gainToDbFloor(safeEnv);
+        const float refDb = 0.35f * gainToDbFloor(safeAnchor)
+            + 0.65f * gainToDbFloor(std::max(longTargetEnv, 1.0e-5f));
+        const float safeRef = juce::Decibels::decibelsToGain(refDb);
+
         float targetGain = 1.0f;
         if (!neutral) {
-            const float levelRatio = safeAnchor / safeEnv;
+            const float levelRatio = safeRef / safeEnv;
             const float ratioGain = std::pow(levelRatio, levelShape);
             const float biasGain = juce::jlimit(0.55f,
                                                 1.45f,
@@ -299,6 +328,10 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         }
 
         const float heldGain = levellerGain;
+        // Deadband: when the vocal already sits at the reference, the fader
+        // rests instead of chasing sub-dB errors.
+        if (std::abs(rideEnvDb - refDb) < rideDeadbandDb)
+            targetGain = heldGain + 0.15f * (targetGain - heldGain);
         targetGain = heldGain + rideGate * (targetGain - heldGain);
 
         const float levellerCoeff = targetGain < levellerGain ? levelGainAttack : levelGainRelease;

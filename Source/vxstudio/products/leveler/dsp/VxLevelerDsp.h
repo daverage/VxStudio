@@ -163,6 +163,8 @@ private:
     float vocalPhraseAnchor = 0.0f;
     float rideGate = 0.0f;
     float gateEnv = 0.0f;
+    float longTargetEnv = 0.0f;
+    int longTargetSettleSamples = 0;
     MixState activeState = MixState::neutral;
     MixState targetState = MixState::neutral;
     float stateTransition = 1.0f;
