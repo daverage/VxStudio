@@ -74,6 +74,7 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     identity.helpHtml = vxsuite::help::leveler.html;
     identity.readmeSection = vxsuite::help::leveler.readmeSection;
     identity.showLevelTrace = true;
+    identity.wantsSidechainInput = true;
     identity.stageId   = "vx.leveler";
     identity.stageType = vxsuite::StageType::mixed;
     identity.theme.accentRgb = { 0.82f, 0.64f, 0.24f };
@@ -90,6 +91,8 @@ juce::String VXLevelerAudioProcessor::getStatusText() const {
 
     const int analysisMode = vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1);
     if (vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal) {
+        if (dsp.isSidechainSteering())
+            return "Vocal rider - riding against the sidechain music";
         if (analysisMode == 2)
             return dsp.hasOfflineTargetMap()
                 ? "Vocal rider - riding toward the analyzed take level"
@@ -326,6 +329,20 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     } else {
         analyzeToggleLatched = analyzeEnabled;
     }
+    float sidechainLevel = 0.0f;
+    bool sidechainPresent = false;
+    if (const auto* sc = getSidechainBuffer(); sc != nullptr && sc->getNumChannels() > 0 && sc->getNumSamples() > 0) {
+        sidechainPresent = true;
+        double accum = 0.0;
+        for (int ch = 0; ch < sc->getNumChannels(); ++ch) {
+            const float* data = sc->getReadPointer(ch);
+            for (int i = 0; i < sc->getNumSamples(); ++i)
+                accum += std::abs(data[i]);
+        }
+        sidechainLevel = static_cast<float>(accum / (sc->getNumChannels() * sc->getNumSamples()));
+    }
+    dsp.setSidechainLevel(sidechainLevel, sidechainPresent);
+
     std::int64_t timelineSample = -1;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
@@ -344,6 +361,7 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     rideGainDbForUi.store(dsp.getRideGainDb(), std::memory_order_relaxed);
     rideGateForUi.store(dsp.getRideGateOpenness(), std::memory_order_relaxed);
     rideReferenceDbForUi.store(dsp.getRideReferenceDb(), std::memory_order_relaxed);
+    sidechainActiveForUi.store(dsp.isSidechainSteering(), std::memory_order_relaxed);
 }
 
 bool VXLevelerAudioProcessor::shouldShowLearnUi() const noexcept {

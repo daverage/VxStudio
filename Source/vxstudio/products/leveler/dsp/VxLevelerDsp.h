@@ -87,6 +87,14 @@ public:
     void setOfflineAnalysis(OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
     void setTimelineSample(std::int64_t s) noexcept { timelineSample = s; }
+    // Block-level sidechain (music) level for the coming process() call.
+    // present = false when no bus is connected/enabled.
+    void setSidechainLevel(float linearLevel, bool present) noexcept {
+        scBlockLevel = linearLevel;
+        scPresent = present;
+    }
+    // True while the sidechain is confidently steering the ride reference.
+    [[nodiscard]] bool isSidechainSteering() const noexcept { return scConfidence > 0.5f; }
     void reset();
     void process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector,
                  const ProcessOptions& options = {});
@@ -179,6 +187,10 @@ private:
     float gateEnv = 0.0f;
     float longTargetEnv = 0.0f;
     int longTargetSettleSamples = 0;
+    float scBlockLevel = 0.0f;
+    bool scPresent = false;
+    float scEnv = 0.0f;
+    float scConfidence = 0.0f;
     MixState activeState = MixState::neutral;
     MixState targetState = MixState::neutral;
     float stateTransition = 1.0f;

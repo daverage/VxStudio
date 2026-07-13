@@ -340,6 +340,9 @@ inline constexpr HelpContent leveler {
 <li>Choose Vocal Rider when speech intelligibility is the priority.</li>
 <li>Choose Mix Leveler when you want gentler overall programme control.</li>
 <li>Use Level for how far the processor should even things out and Control for how assertively it reacts.</li>
+<li>Target rides the material hotter or quieter than its learned reference; Depth sets how far the ride reaches into pauses and quiet dips.</li>
+<li>Route your music bus into the plugin's sidechain input and the Vocal Rider holds your vocal a set amount above the music - Target then sets how hot it sits. Remove the routing and it returns to riding the vocal against its own level.</li>
+<li>In Offline analysis mode, press Analyze while the track plays to learn its level map; the rider then steers toward the analyzed reference.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>

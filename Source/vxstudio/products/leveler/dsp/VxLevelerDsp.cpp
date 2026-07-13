@@ -92,6 +92,8 @@ void Dsp::reset() {
     rideGate = 0.0f;
     gateEnv = 0.0f;
     longTargetEnv = 0.0f;
+    scEnv = 0.0f;
+    scConfidence = 0.0f;
     longTargetSettleSamples = 0;
     activeState = MixState::neutral;
     targetState = MixState::neutral;
@@ -198,6 +200,16 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const bool vocalOffline = params.analysisMode == MixAnalysisMode::offline
         && offlineAnalysis.isValid();
     const float vocalOfflineRefDb = vocalOffline ? offlineAnalysis.activeMedianDb : 0.0f;
+
+    // Sidechain (music) envelope: same ballistics as the vocal envelope so
+    // the two levels stay comparable. Confidence crossfades between
+    // music-referenced and self-referenced riding - music stopping hands the
+    // reference back smoothly, never snaps.
+    const float scEnvAttack = levelEnvAttack;
+    const float scEnvRelease = levelEnvRelease;
+    const float scConfidenceRise = timeCoeff(sr, 0.200f);
+    const float scConfidenceFall = timeCoeff(sr, 2.0f);
+    const float scLevelForBlock = scPresent ? std::max(scBlockLevel, 0.0f) : 0.0f;
     const float levelShape = 0.35f + 0.70f * level;
     const float maxUpwardGain = 1.0f + 1.05f * level;
     const float maxDownwardGain = std::max(0.24f, 1.0f - 0.55f * level);
@@ -307,13 +319,26 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                 ++longTargetSettleSamples;
         }
 
+        const float scEnvCoeff = scLevelForBlock > scEnv ? scEnvAttack : scEnvRelease;
+        scEnv = scEnvCoeff * scEnv + (1.0f - scEnvCoeff) * scLevelForBlock;
+        const float scTargetConfidence = (scPresent && gainToDbFloor(scEnv) > -60.0f) ? 1.0f : 0.0f;
+        const float scConfCoeff = scTargetConfidence > scConfidence ? scConfidenceRise : scConfidenceFall;
+        scConfidence = scConfCoeff * scConfidence + (1.0f - scConfCoeff) * scTargetConfidence;
+
         const float rideEnvDb = gainToDbFloor(safeEnv);
         const float longRefDb = vocalOffline
             ? vocalOfflineRefDb
             : gainToDbFloor(std::max(longTargetEnv, 1.0e-5f));
-        const float refDb = 0.35f * gainToDbFloor(safeAnchor)
+        const float selfRefDb = 0.35f * gainToDbFloor(safeAnchor)
             + 0.65f * longRefDb
             + targetOffsetDb;
+        // Music-relative reference: sit the vocal a fixed voicing amount above
+        // the sidechain, Target setting how hot it sits. Clamped so an extreme
+        // sidechain can't drag the ride to the rails.
+        const float scRefDb = clampf(gainToDbFloor(std::max(scEnv, 1.0e-5f))
+                                         + 2.0f + targetOffsetDb,
+                                     -42.0f, -6.0f);
+        const float refDb = juce::jmap(scConfidence, selfRefDb, scRefDb);
         const float safeRef = juce::Decibels::decibelsToGain(refDb);
         lastRefDb = refDb;
 

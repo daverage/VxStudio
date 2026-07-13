@@ -594,6 +594,156 @@ void analyzerActiveMedian() {
                + std::to_string(result.globalMedianDb) + " dB)");
 }
 
+// Voice render with a per-block sidechain level callback.
+template <typename ScFn>
+juce::AudioBuffer<float> renderVoiceWithSidechain(const juce::AudioBuffer<float>& input,
+                                                  vxsuite::leveler::Dsp& dsp,
+                                                  const double burstSeconds,
+                                                  const double cycleSeconds,
+                                                  ScFn&& scLevelAt) {
+    juce::AudioBuffer<float> output(input.getNumChannels(), input.getNumSamples());
+    juce::AudioBuffer<float> block(input.getNumChannels(), kBlockSize);
+    for (int start = 0; start < input.getNumSamples(); start += kBlockSize) {
+        const int len = std::min(kBlockSize, input.getNumSamples() - start);
+        block.setSize(input.getNumChannels(), len, false, false, true);
+        for (int ch = 0; ch < input.getNumChannels(); ++ch)
+            block.copyFrom(ch, 0, input, ch, start, len);
+        const double tMid = (static_cast<double>(start) + 0.5 * len) / kSampleRate;
+        const double phase = std::fmod(tMid, cycleSeconds);
+        const bool on = phase < burstSeconds;
+        vxsuite::leveler::DetectorSnapshot snapshot {};
+        snapshot.phraseActivity = on ? 1.0f : 0.0f;
+        snapshot.speechPresence = on ? 0.7f : 0.0f;
+        scLevelAt(dsp, tMid);
+        dsp.process(block, snapshot);
+        for (int ch = 0; ch < input.getNumChannels(); ++ch)
+            output.copyFrom(ch, start, block, ch, 0, len);
+    }
+    return output;
+}
+
+// A silent or absent sidechain must leave the rider bit-identical.
+void sidechainAbsentIsIdentical() {
+    auto signal = makeBurstSignal(10.0, -18.0f);
+    const double cycle = signal.burstSeconds + signal.gapSeconds;
+    vxsuite::leveler::Dsp::Params params {};
+    params.level = 0.8f;
+    params.control = 0.3f;
+    params.voiceMode = true;
+
+    vxsuite::leveler::Dsp reference;
+    reference.prepare(kSampleRate, kBlockSize, kNumChannels);
+    reference.setParams(params);
+    const auto refOut = renderVoice(signal.buffer, reference, signal.burstSeconds, cycle);
+
+    vxsuite::leveler::Dsp silentSc;
+    silentSc.prepare(kSampleRate, kBlockSize, kNumChannels);
+    silentSc.setParams(params);
+    const auto scOut = renderVoiceWithSidechain(signal.buffer, silentSc, signal.burstSeconds, cycle,
+        [](vxsuite::leveler::Dsp& d, double) { d.setSidechainLevel(0.0f, true); });
+
+    float maxDiff = 0.0f;
+    for (int ch = 0; ch < kNumChannels; ++ch)
+        for (int i = 0; i < refOut.getNumSamples(); ++i)
+            maxDiff = std::max(maxDiff, std::abs(refOut.getSample(ch, i) - scOut.getSample(ch, i)));
+    expect(maxDiff == 0.0f, "sidechainAbsentIsIdentical",
+           "max diff vs no-SC render " + std::to_string(maxDiff));
+    expect(!silentSc.isSidechainSteering(), "sidechainAbsentIsIdentical.badgeOff", "");
+}
+
+// Task 3 acceptance: with music in the sidechain, the vocal follows the
+// music level; without it, the vocal is held constant.
+void sidechainRidesRelative() {
+    const double sectionSeconds = 10.0;
+    const double burstSeconds = 0.8;
+    const double gapSeconds = 1.2;
+    const double cycle = burstSeconds + gapSeconds;
+    auto signal = makeBurstSignal(2.0 * sectionSeconds, -22.0f, burstSeconds, gapSeconds);
+
+    const auto sectionLevels = [&](const bool withMusic) {
+        vxsuite::leveler::Dsp dsp;
+        dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+        vxsuite::leveler::Dsp::Params params {};
+        params.level = 0.8f;
+        params.control = 0.3f;
+        params.voiceMode = true;
+        dsp.setParams(params);
+        const auto output = renderVoiceWithSidechain(signal.buffer, dsp, burstSeconds, cycle,
+            [&](vxsuite::leveler::Dsp& d, const double t) {
+                if (!withMusic) {
+                    d.setSidechainLevel(0.0f, false);
+                    return;
+                }
+                const float musicDb = t < sectionSeconds ? -30.0f : -18.0f;
+                d.setSidechainLevel(juce::Decibels::decibelsToGain(musicDb), true);
+            });
+        const int delay = dsp.latencySamples();
+        const auto sectionBurstDb = [&](const double sectionStart) {
+            double sum = 0.0;
+            int count = 0;
+            for (int k = 0; k < static_cast<int>(sectionSeconds / cycle); ++k) {
+                const double burstStart = sectionStart + k * cycle;
+                if (burstStart - sectionStart < sectionSeconds * 0.5)
+                    continue;
+                sum += rmsDb(output, atSeconds(burstStart + 0.15) + delay,
+                             atSeconds(burstStart + burstSeconds - 0.10) + delay);
+                ++count;
+            }
+            return static_cast<float>(sum / std::max(1, count));
+        };
+        return std::pair<float, float>(sectionBurstDb(0.0), sectionBurstDb(sectionSeconds));
+    };
+
+    const auto [quietMusic, loudMusic] = sectionLevels(true);
+    const auto [noScA, noScB] = sectionLevels(false);
+    expect(loudMusic - quietMusic >= 3.0f, "sidechainRidesRelative.follows",
+           "vocal moved " + std::to_string(loudMusic - quietMusic) + " dB across a 12 dB music step (needs >= 3)");
+    expect(std::abs(noScB - noScA) < 1.0f, "sidechainRidesRelative.selfRefStable",
+           "without SC the sections differ by " + std::to_string(noScB - noScA) + " dB (needs < 1)");
+}
+
+// Processor-level: sidechain bus layout, isolation, and badge behaviour.
+void processorSidechainBus() {
+    VXLevelerAudioProcessor processor;
+
+    auto layout = processor.getBusesLayout();
+    const bool hasScBus = processor.getBusCount(true) > 1;
+    expect(hasScBus, "processorSidechainBus.busExists", "");
+    if (!hasScBus)
+        return;
+
+    layout.inputBuses.set(1, juce::AudioChannelSet::stereo());
+    expect(processor.checkBusesLayoutSupported(layout), "processorSidechainBus.stereoScAccepted", "");
+    auto quad = layout;
+    quad.inputBuses.set(1, juce::AudioChannelSet::quadraphonic());
+    expect(!processor.checkBusesLayoutSupported(quad), "processorSidechainBus.quadScRejected", "");
+
+    processor.setBusesLayout(layout);
+    processor.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
+    processor.prepareToPlay(kSampleRate, kBlockSize);
+
+    // Silent main + music in the SC: output must be silence (SC never leaks).
+    const int totalChannels = processor.getTotalNumInputChannels();
+    juce::AudioBuffer<float> ioBuffer(std::max(totalChannels, 4), kBlockSize);
+    juce::MidiBuffer midi;
+    float maxOut = 0.0f;
+    for (int blockIndex = 0; blockIndex < 200; ++blockIndex) {
+        ioBuffer.clear();
+        for (int i = 0; i < kBlockSize; ++i) {
+            const double t = (blockIndex * kBlockSize + i) / kSampleRate;
+            const float music = 0.2f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * 180.0 * t));
+            ioBuffer.setSample(2, i, music);
+            ioBuffer.setSample(3, i, music);
+        }
+        processor.processBlock(ioBuffer, midi);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlockSize; ++i)
+                maxOut = std::max(maxOut, std::abs(ioBuffer.getSample(ch, i)));
+    }
+    expect(maxOut < 1.0e-6f, "processorSidechainBus.noLeak",
+           "max main output with silent main input " + std::to_string(maxOut));
+}
+
 // level=0, control=0 must be a pure 10 ms delay in both modes.
 void neutralIsTransparent() {
     auto signal = makeBurstSignal(6.0, -18.0f);
@@ -638,6 +788,9 @@ int main() {
     mixDepthChangesSensitivity();
     vocalOfflineReferencePins();
     analyzerActiveMedian();
+    sidechainAbsentIsIdentical();
+    sidechainRidesRelative();
+    processorSidechainBus();
     neutralIsTransparent();
 
     if (failures == 0) {

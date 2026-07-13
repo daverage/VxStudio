@@ -24,6 +24,7 @@ public:
     bool isLearnActive() const noexcept override { return analysisActive; }
     bool isLearnReady() const noexcept override { return analysisReady; }
     bool shouldShowLearnUi() const noexcept override;
+    bool hasSidechainActive() const noexcept override { return sidechainActiveForUi.load(std::memory_order_relaxed); }
     bool hasGainTrace() const noexcept override { return true; }
     float getGainTraceDb() const noexcept override { return rideGainDbForUi.load(std::memory_order_relaxed); }
     float getGainTraceOpenness() const noexcept override { return rideGateForUi.load(std::memory_order_relaxed); }
@@ -72,4 +73,5 @@ private:
     std::atomic<float> rideGainDbForUi { 0.0f };
     std::atomic<float> rideGateForUi { 1.0f };
     std::atomic<float> rideReferenceDbForUi { -100.0f };
+    std::atomic<bool> sidechainActiveForUi { false };
 };
