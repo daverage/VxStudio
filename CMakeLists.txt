@@ -1036,6 +1036,7 @@ vxstudio_add_executable_test(VXLevelerTuneSearch)
 
 add_executable(VxLevelerRiderTests
   tests/VxLevelerRiderTests.cpp
+  Source/vxstudio/products/leveler/VxLevelerProcessor.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp

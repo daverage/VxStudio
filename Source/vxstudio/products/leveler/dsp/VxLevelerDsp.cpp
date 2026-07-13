@@ -43,6 +43,8 @@ Dsp::DebugSnapshot Dsp::getDebugSnapshot() const noexcept {
     snapshot.globalUpperDb = globalTracker.getGlobalUpperDb();
     snapshot.globalDynamicRangeDb = globalTracker.getDynamicRangeDb();
     snapshot.globalConfidence = globalTracker.getConfidence();
+    snapshot.offlineBlockIndex = lastOfflineBlockIndex;
+    snapshot.offlineWaiting = offlineWaiting;
     return snapshot;
 }
 
@@ -110,7 +112,9 @@ void Dsp::reset() {
     generalHighEnv = 0.0f;
     globalTracker.reset();
     offlineProcessedSamples = 0;
+    lastOfflineBlockIndex = -1;
     offlineActive = false;
+    offlineWaiting = false;
     liftActivity = 0.0f;
     levelActivity = 0.0f;
     tameActivity = 0.0f;
@@ -466,6 +470,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     }
 
     offlineActive = false;
+    offlineWaiting = false;
+    lastOfflineBlockIndex = -1;
 }
 
 void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
@@ -501,12 +507,30 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
     const float programRestoreAttack = timeCoeff(sr, 2.2f);
     const float programRestoreRelease = timeCoeff(sr, 5.5f);
     const bool mixOfflineMode = params.analysisMode == MixAnalysisMode::offline && offlineAnalysis.isValid();
-    const int offlineBlockIndex = mixOfflineMode
-        ? std::clamp(static_cast<int>(offlineProcessedSamples / std::max(1, offlineAnalysis.blockSize)),
-                     0,
-                     std::max(0, static_cast<int>(offlineAnalysis.targetCurveDb.size()) - 1))
-        : 0;
-    const float offlineTargetDb = mixOfflineMode
+    bool offlineMapIndexed = false;   // a curve entry is usable for this block
+    bool offlineOutOfRange = false;   // map exists but timeline is outside it
+    int offlineBlockIndex = 0;
+    if (mixOfflineMode) {
+        if (timelineSample >= 0 && offlineAnalysis.startSample >= 0) {
+            const std::int64_t rel = timelineSample - offlineAnalysis.startSample;
+            const std::int64_t index = rel / static_cast<std::int64_t>(std::max(1, offlineAnalysis.blockSize));
+            if (rel >= 0 && index < static_cast<std::int64_t>(offlineAnalysis.targetCurveDb.size())) {
+                offlineBlockIndex = static_cast<int>(index);
+                offlineMapIndexed = true;
+            } else {
+                offlineOutOfRange = true;
+            }
+        } else {
+            // No playhead position (or map from an older session): fall back to
+            // the free-running counter, which assumes linear playback from the
+            // last reset().
+            offlineBlockIndex = std::clamp(static_cast<int>(offlineProcessedSamples / std::max(1, offlineAnalysis.blockSize)),
+                                           0,
+                                           std::max(0, static_cast<int>(offlineAnalysis.targetCurveDb.size()) - 1));
+            offlineMapIndexed = true;
+        }
+    }
+    const float offlineTargetDb = offlineMapIndexed
         ? offlineAnalysis.targetCurveDb[static_cast<size_t>(offlineBlockIndex)]
         : 0.0f;
 
@@ -601,9 +625,24 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
         const float momentaryDb = gainToDbFloor(generalMomentary);
         const float shortDb = gainToDbFloor(generalShort);
         const float baselineDb = gainToDbFloor(generalBaseline);
-        const auto targetFrame = mixOfflineMode
-            ? MixTargetFrame { baselineDb, offlineTargetDb, offlineTargetDb, 1.0f }
-            : makeMixTargetFrame(shortDb, baselineDb, level);
+        MixTargetFrame targetFrame {};
+        if (offlineMapIndexed) {
+            targetFrame = MixTargetFrame { baselineDb, offlineTargetDb, offlineTargetDb, 1.0f };
+        } else if (offlineOutOfRange) {
+            // Timeline is outside the analysed region: use the offline global
+            // stats as a fixed target (mirrors makeMixTargetFrame's global
+            // branch) so behaviour stays stable across loops and seeks
+            // instead of silently drifting on a misaligned curve.
+            float globalTargetDb = offlineAnalysis.globalMedianDb
+                + 0.12f * (shortDb - offlineAnalysis.globalMedianDb);
+            if (shortDb > offlineAnalysis.globalUpperDb) {
+                const float rangeDb = std::max(1.5f, offlineAnalysis.globalDynamicRangeDb);
+                globalTargetDb = std::min(globalTargetDb, offlineAnalysis.globalUpperDb - 0.12f * rangeDb);
+            }
+            targetFrame = MixTargetFrame { baselineDb, globalTargetDb, globalTargetDb, 0.9f };
+        } else {
+            targetFrame = makeMixTargetFrame(shortDb, baselineDb, level);
+        }
         const float errorDb = shortDb - targetFrame.finalTargetDb;
         const float targetConfidence = clamp01(targetFrame.confidence * mixDecisionTrust);
         const float deadbandDb = (tuning.mixDeadbandBase - tuning.mixDeadbandLevelWeight * level)
@@ -723,8 +762,10 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
                          gainToDbFloor(generalMomentary),
                          gainToDbFloor(generalShort) > -72.0f,
                          numSamples);
-    offlineActive = mixOfflineMode;
-    if (mixOfflineMode && offlineAnalysis.isValid())
+    offlineActive = offlineMapIndexed;
+    offlineWaiting = offlineOutOfRange;
+    lastOfflineBlockIndex = offlineMapIndexed ? offlineBlockIndex : -1;
+    if (mixOfflineMode)
         offlineProcessedSamples += numSamples;
 }
 

@@ -75,6 +75,8 @@ public:
         float globalUpperDb = -100.0f;
         float globalDynamicRangeDb = 0.0f;
         float globalConfidence = 0.0f;
+        int offlineBlockIndex = -1;
+        bool offlineWaiting = false;
     };
 
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
@@ -82,6 +84,7 @@ public:
     void setTuning(const Tuning& t) noexcept { tuning = t; }
     void setOfflineAnalysis(OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
+    void setTimelineSample(std::int64_t s) noexcept { timelineSample = s; }
     void reset();
     void process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector,
                  const ProcessOptions& options = {});
@@ -93,6 +96,9 @@ public:
     float getGlobalConfidence() const noexcept { return globalTracker.getConfidence(); }
     bool hasOfflineTargetMap() const noexcept { return offlineAnalysis.isValid(); }
     bool isOfflineActive() const noexcept { return offlineActive; }
+    // True when an offline map exists but the current timeline position falls
+    // outside it, so the fixed global-stats fallback target is in use.
+    bool isOfflineWaitingForTimeline() const noexcept { return offlineWaiting; }
     [[nodiscard]] const OfflineAnalysisResult& getOfflineAnalysis() const noexcept { return offlineAnalysis; }
     DebugSnapshot getDebugSnapshot() const noexcept;
 
@@ -188,7 +194,10 @@ private:
     OfflineAnalysisResult offlineAnalysis {};
     int preparedBlockSize = 256;
     std::int64_t offlineProcessedSamples = 0;
+    std::int64_t timelineSample = -1;
+    int lastOfflineBlockIndex = -1;
     bool offlineActive = false;
+    bool offlineWaiting = false;
 
     float liftActivity = 0.0f;
     float levelActivity = 0.0f;

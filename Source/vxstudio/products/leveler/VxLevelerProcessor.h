@@ -6,6 +6,8 @@
 #include "dsp/VxLevelerDsp.h"
 #include "dsp/VxLevelerOfflineAnalyzer.h"
 
+#include <cstdint>
+
 class VXLevelerAudioProcessor final : public vxsuite::ProcessorBase {
 public:
     VXLevelerAudioProcessor();
@@ -24,6 +26,9 @@ public:
     void setDebugTuning(const vxsuite::leveler::Dsp::Tuning& tuning) noexcept;
     void setOfflineAnalysis(vxsuite::leveler::OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
+    [[nodiscard]] const vxsuite::leveler::OfflineAnalysisResult& getOfflineAnalysis() const noexcept {
+        return dsp.getOfflineAnalysis();
+    }
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
     [[nodiscard]] vxsuite::leveler::Dsp::DebugSnapshot getDebugSnapshot() const noexcept;
@@ -38,7 +43,7 @@ private:
     void resetAnalysisCapture(bool keepOfflineMap = true) noexcept;
     void startAnalysisCapture();
     void stopAnalysisCapture();
-    void captureAnalysisAudio(const juce::AudioBuffer<float>& buffer) noexcept;
+    void captureAnalysisAudio(const juce::AudioBuffer<float>& buffer, std::int64_t timelineSample) noexcept;
     static vxsuite::ProductIdentity makeIdentity();
 
     vxsuite::leveler::Detector detector;
@@ -57,4 +62,5 @@ private:
     int analysisMaxBlocks = 0;
     int analysisFrameCursor = 0;
     double analysisEnergy = 0.0;
+    std::int64_t analysisStartSample = -1;
 };

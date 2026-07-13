@@ -72,6 +72,8 @@ juce::String VXLevelerAudioProcessor::getStatusText() const {
         case 0:
             return "Realtime mix leveler for whole-track consistency";
         case 2:
+            if (dsp.hasOfflineTargetMap() && dsp.isOfflineWaitingForTimeline())
+                return "Offline mix leveler - offline map waiting for timeline";
             if (analysisReady && dsp.hasOfflineTargetMap())
                 return "Offline mix leveler - analysis locked and active";
             return dsp.hasOfflineTargetMap()
@@ -138,6 +140,7 @@ void VXLevelerAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
         el->setAttribute("globalDynamicRangeDb", static_cast<double>(offlineAnalysis.globalDynamicRangeDb));
         el->setAttribute("confidence", static_cast<double>(analysisConfidence));
         el->setAttribute("observedSeconds", static_cast<double>(analysisObservedSeconds));
+        el->setAttribute("startSample", juce::String(offlineAnalysis.startSample));
         juce::MemoryBlock blob(offlineAnalysis.targetCurveDb.data(),
                                offlineAnalysis.targetCurveDb.size() * sizeof(float));
         el->setAttribute("targetCurve", blob.toBase64Encoding());
@@ -176,6 +179,7 @@ void VXLevelerAudioProcessor::setStateInformation(const void* data, const int si
     analysis.globalMedianDb = static_cast<float>(el->getDoubleAttribute("globalMedianDb", -30.0));
     analysis.globalUpperDb = static_cast<float>(el->getDoubleAttribute("globalUpperDb", -24.0));
     analysis.globalDynamicRangeDb = static_cast<float>(el->getDoubleAttribute("globalDynamicRangeDb", 6.0));
+    analysis.startSample = el->getStringAttribute("startSample", "-1").getLargeIntValue();
     analysis.targetCurveDb.resize(count);
     std::memcpy(analysis.targetCurveDb.data(), blob.getData(), blob.getSize());
 
@@ -287,8 +291,15 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     } else {
         analyzeToggleLatched = analyzeEnabled;
     }
+    std::int64_t timelineSample = -1;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+            if (auto s = pos->getTimeInSamples())
+                timelineSample = *s;
+    dsp.setTimelineSample(timelineSample);
+
     if (analysisActive)
-        captureAnalysisAudio(buffer);
+        captureAnalysisAudio(buffer, timelineSample);
 
     const auto detectorSnapshot = detector.analyse(buffer,
                                                    getVoiceAnalysisSnapshot(),
@@ -324,6 +335,7 @@ void VXLevelerAudioProcessor::resetAnalysisCapture(const bool keepOfflineMap) no
 
 void VXLevelerAudioProcessor::startAnalysisCapture() {
     dsp.clearOfflineAnalysis();
+    analysisStartSample = -1;
     analysisActive = true;
     analysisReady = false;
     analysisConfidence = 0.0f;
@@ -347,7 +359,9 @@ void VXLevelerAudioProcessor::stopAnalysisCapture() {
                                                                     currentSampleRateHz,
                                                                     preparedBlockSize);
     if (result.isValid()) {
-        dsp.setOfflineAnalysis(result);
+        auto stamped = result;
+        stamped.startSample = analysisStartSample;
+        dsp.setOfflineAnalysis(std::move(stamped));
         analysisReady = true;
         const float coverageConfidence = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 18.0f);
         const float durationConfidence = juce::jlimit(0.0f, 1.0f, analysisObservedSeconds / 30.0f);
@@ -365,11 +379,15 @@ void VXLevelerAudioProcessor::stopAnalysisCapture() {
     }
 }
 
-void VXLevelerAudioProcessor::captureAnalysisAudio(const juce::AudioBuffer<float>& buffer) noexcept {
+void VXLevelerAudioProcessor::captureAnalysisAudio(const juce::AudioBuffer<float>& buffer,
+                                                   const std::int64_t timelineSample) noexcept {
     const int numChannels = std::max(1, buffer.getNumChannels());
     const int numSamples = buffer.getNumSamples();
     if (analysisCapturedBlocks >= analysisMaxBlocks || numSamples <= 0)
         return;
+
+    if (analysisStartSample < 0 && analysisCapturedBlocks == 0 && analysisFrameCursor == 0)
+        analysisStartSample = timelineSample;
 
     for (int i = 0; i < numSamples; ++i) {
         for (int ch = 0; ch < numChannels; ++ch) {
@@ -392,7 +410,7 @@ void VXLevelerAudioProcessor::captureAnalysisAudio(const juce::AudioBuffer<float
     }
 }
 
-#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
+#if !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXLevelerAudioProcessor();
 }

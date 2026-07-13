@@ -2,9 +2,11 @@
 // Drives vxsuite::leveler::Dsp directly with synthetic DetectorSnapshots so the
 // tests target the ride behaviour, not the detector.
 
+#include "../Source/vxstudio/products/leveler/VxLevelerProcessor.h"
 #include "../Source/vxstudio/products/leveler/dsp/VxLevelerDsp.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_events/juce_events.h>
 
 #include <cmath>
 #include <cstdint>
@@ -214,6 +216,148 @@ void sectionLevellingPersists() {
                + " dB (must be <= " + std::to_string(0.55f * inDiff) + ")");
 }
 
+// Fills a block with a steady tone loud enough to prime the general engine.
+void fillTone(juce::AudioBuffer<float>& block, const std::int64_t startSample) {
+    for (int i = 0; i < block.getNumSamples(); ++i) {
+        const double t = static_cast<double>(startSample + i) / kSampleRate;
+        const float s = 0.2f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * 220.0 * t));
+        for (int ch = 0; ch < block.getNumChannels(); ++ch)
+            block.setSample(ch, i, s);
+    }
+}
+
+vxsuite::leveler::OfflineAnalysisResult makeSyntheticAnalysis(const std::int64_t startSample,
+                                                              const int numBlocks) {
+    vxsuite::leveler::OfflineAnalysisResult analysis {};
+    analysis.sampleRate = kSampleRate;
+    analysis.blockSize = kBlockSize;
+    analysis.globalMedianDb = -24.0f;
+    analysis.globalUpperDb = -18.0f;
+    analysis.globalDynamicRangeDb = 6.0f;
+    analysis.startSample = startSample;
+    analysis.targetCurveDb.resize(static_cast<size_t>(numBlocks));
+    for (int i = 0; i < numBlocks; ++i)
+        analysis.targetCurveDb[static_cast<size_t>(i)] = -30.0f + 0.01f * static_cast<float>(i);
+    return analysis;
+}
+
+// Task 4 acceptance: with a playhead position, the offline curve index must
+// follow the timeline (seek/loop safe); outside the analysed range the fixed
+// global-stats fallback engages.
+void offlineCurveFollowsTimeline() {
+    vxsuite::leveler::Dsp dsp;
+    dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+    vxsuite::leveler::Dsp::Params params {};
+    params.level = 0.5f;
+    params.control = 0.3f;
+    params.voiceMode = false;
+    params.analysisMode = vxsuite::leveler::Dsp::MixAnalysisMode::offline;
+    dsp.setParams(params);
+
+    const std::int64_t startSample = 48000;
+    dsp.setOfflineAnalysis(makeSyntheticAnalysis(startSample, 200));
+
+    juce::AudioBuffer<float> block(kNumChannels, kBlockSize);
+    const vxsuite::leveler::DetectorSnapshot snapshot {};
+
+    bool indexFollows = true;
+    // Non-contiguous k values simulate seeks and loops.
+    for (const int k : { 0, 5, 6, 120, 40, 41, 7, 199 }) {
+        const std::int64_t timeline = startSample + static_cast<std::int64_t>(k) * kBlockSize;
+        dsp.setTimelineSample(timeline);
+        fillTone(block, timeline);
+        dsp.process(block, snapshot);
+        const auto debug = dsp.getDebugSnapshot();
+        if (debug.offlineBlockIndex != k || debug.offlineWaiting)
+            indexFollows = false;
+    }
+    expect(indexFollows, "offlineCurveFollowsTimeline", "curve index tracks timeline across seeks");
+}
+
+void offlineFallbackOutOfRange() {
+    vxsuite::leveler::Dsp dsp;
+    dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+    vxsuite::leveler::Dsp::Params params {};
+    params.level = 0.5f;
+    params.control = 0.3f;
+    params.voiceMode = false;
+    params.analysisMode = vxsuite::leveler::Dsp::MixAnalysisMode::offline;
+    dsp.setParams(params);
+
+    const std::int64_t startSample = 48000;
+    dsp.setOfflineAnalysis(makeSyntheticAnalysis(startSample, 100));
+
+    juce::AudioBuffer<float> block(kNumChannels, kBlockSize);
+    const vxsuite::leveler::DetectorSnapshot snapshot {};
+
+    // Before the analysed region.
+    dsp.setTimelineSample(0);
+    fillTone(block, 0);
+    dsp.process(block, snapshot);
+    const auto before = dsp.getDebugSnapshot();
+    expect(before.offlineWaiting && before.offlineBlockIndex < 0,
+           "offlineFallbackOutOfRange.before", "global-stats fallback before map start");
+
+    // After the analysed region.
+    const std::int64_t past = startSample + static_cast<std::int64_t>(150) * kBlockSize;
+    dsp.setTimelineSample(past);
+    fillTone(block, past);
+    dsp.process(block, snapshot);
+    const auto after = dsp.getDebugSnapshot();
+    expect(after.offlineWaiting && after.offlineBlockIndex < 0,
+           "offlineFallbackOutOfRange.after", "global-stats fallback past map end");
+
+    // No playhead / old chunk (startSample = -1): free-running counter engages.
+    dsp.setOfflineAnalysis(makeSyntheticAnalysis(-1, 100));
+    dsp.reset();
+    dsp.setTimelineSample(-1);
+    bool freeRunning = true;
+    for (int k = 0; k < 4; ++k) {
+        fillTone(block, static_cast<std::int64_t>(k) * kBlockSize);
+        dsp.process(block, snapshot);
+        if (dsp.getDebugSnapshot().offlineBlockIndex != k || dsp.getDebugSnapshot().offlineWaiting)
+            freeRunning = false;
+    }
+    expect(freeRunning, "offlineFallbackOutOfRange.freeRunning",
+           "free-running index without playhead/startSample");
+}
+
+// State round-trip: startSample must survive save/load; loading a chunk
+// without the attribute (older version) must yield -1.
+void offlineStateRoundTrip() {
+    VXLevelerAudioProcessor saver;
+    saver.prepareToPlay(kSampleRate, kBlockSize);
+    auto analysis = makeSyntheticAnalysis(96000, 50);
+    saver.setOfflineAnalysis(analysis);
+
+    juce::MemoryBlock state;
+    saver.getStateInformation(state);
+
+    VXLevelerAudioProcessor loader;
+    loader.prepareToPlay(kSampleRate, kBlockSize);
+    loader.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    const auto& loaded = loader.getOfflineAnalysis();
+    expect(loaded.isValid() && loaded.startSample == 96000,
+           "offlineStateRoundTrip.survives",
+           "startSample " + std::to_string(loaded.startSample));
+
+    // Old chunks carry no startSample attribute; the loader must default to -1.
+    VXLevelerAudioProcessor oldSaver;
+    oldSaver.prepareToPlay(kSampleRate, kBlockSize);
+    auto oldAnalysis = makeSyntheticAnalysis(-1, 50);
+    oldSaver.setOfflineAnalysis(oldAnalysis);
+    juce::MemoryBlock oldState;
+    oldSaver.getStateInformation(oldState);
+
+    VXLevelerAudioProcessor oldLoader;
+    oldLoader.prepareToPlay(kSampleRate, kBlockSize);
+    oldLoader.setStateInformation(oldState.getData(), static_cast<int>(oldState.getSize()));
+    expect(oldLoader.getOfflineAnalysis().isValid()
+               && oldLoader.getOfflineAnalysis().startSample == -1,
+           "offlineStateRoundTrip.oldChunkDefaults",
+           "startSample " + std::to_string(oldLoader.getOfflineAnalysis().startSample));
+}
+
 // level=0, control=0 must be a pure 10 ms delay in both modes.
 void neutralIsTransparent() {
     auto signal = makeBurstSignal(6.0, -18.0f);
@@ -242,8 +386,12 @@ void neutralIsTransparent() {
 } // namespace
 
 int main() {
+    const juce::ScopedJuceInitialiser_GUI juceInit;
     gateFreezesInSilence();
     sectionLevellingPersists();
+    offlineCurveFollowsTimeline();
+    offlineFallbackOutOfRange();
+    offlineStateRoundTrip();
     neutralIsTransparent();
 
     if (failures == 0) {
