@@ -81,6 +81,9 @@ struct ProductIdentity {
     std::string_view learnButtonLabel;
     bool showLevelTrace = false;
     bool showStereoGainMeter = false;
+    // Adds a stereo "Sidechain" input bus (disabled until the host routes to
+    // it). Detection-only: the framework never writes SC channels to output.
+    bool wantsSidechainInput = false;
     // Decorative filter-curve icons drawn above the knobs (no interactivity).
     bool showLowShelfIcon  = false;   // HP/low-shelf shape
     bool showHighShelfIcon = false;   // LP/high-shelf shape

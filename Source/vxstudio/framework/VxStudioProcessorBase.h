@@ -100,6 +100,15 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
 protected:
+    // Sidechain input for this block (nullptr when the product doesn't
+    // request one, the host hasn't enabled/connected the bus, or outside
+    // processProduct). Detection-only; never routed to the output.
+    const juce::AudioBuffer<float>* getSidechainBuffer() const noexcept {
+        return activeSidechain;
+    }
+
+    static juce::AudioProcessor::BusesProperties makeDefaultBuses(bool wantsSidechain);
+
     virtual void prepareSuite(double sampleRate, int samplesPerBlock) = 0;
     virtual void resetSuite() = 0;
     virtual void processProduct(juce::AudioBuffer<float>&, juce::MidiBuffer&) = 0;
@@ -136,6 +145,8 @@ private:
     void processPreparedBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi);
     void processPreparedBypassedBlock(juce::AudioBuffer<float>& buffer) noexcept;
     juce::AudioBuffer<float> listenInputScratch;
+    juce::AudioBuffer<float> sidechainView;   // non-owning per-chunk view
+    const juce::AudioBuffer<float>* activeSidechain = nullptr;
     ProcessCoordinator processCoordinator;
     OutputTrimmer outputSafetyTrimmer;
     double currentSampleRateHz = 48000.0;

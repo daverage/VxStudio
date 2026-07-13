@@ -8,11 +8,19 @@ namespace vxsuite {
 ProcessorBase::ProcessorBase(ProductIdentity identity)
     : ProcessorBase(identity, createSimpleParameterLayout(identity)) {}
 
+juce::AudioProcessor::BusesProperties ProcessorBase::makeDefaultBuses(const bool wantsSidechain) {
+    auto buses = BusesProperties()
+                     .withInput("Input", juce::AudioChannelSet::stereo(), true)
+                     .withOutput("Output", juce::AudioChannelSet::stereo(), true);
+    if (wantsSidechain)
+        buses = buses.withInput("Sidechain", juce::AudioChannelSet::stereo(), false);
+    return buses;
+}
+
 ProcessorBase::ProcessorBase(ProductIdentity identity,
                              juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout)
     : ProcessorBase(std::move(identity), std::move(parameterLayout),
-                    BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
-                                     .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {}
+                    makeDefaultBuses(identity.wantsSidechainInput)) {}
 
 ProcessorBase::ProcessorBase(ProductIdentity identity,
                              juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout,
@@ -92,32 +100,49 @@ void ProcessorBase::releaseResources() {
 }
 
 void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
-    const int preparedBlockSize = listenInputScratch.getNumSamples();
-    if (preparedBlockSize <= 0 || buffer.getNumSamples() <= preparedBlockSize) {
-        processPreparedBlock(buffer, midi);
-        return;
-    }
+    // The host buffer carries every bus's channels. The whole downstream
+    // pipeline (analysis, listen scratch, publishers, safety trim) must only
+    // ever see the main bus, so split here and expose the sidechain - when
+    // present - through getSidechainBuffer() for the duration of the block.
+    const bool hasSidechainBus = productIdentity.wantsSidechainInput
+        && getBusCount(true) > 1
+        && getChannelCountOfBus(true, 1) > 0
+        && buffer.getNumChannels() >= getMainBusNumInputChannels() + getChannelCountOfBus(true, 1);
+    const int mainChannels = hasSidechainBus
+        ? std::min(buffer.getNumChannels(), getMainBusNumOutputChannels())
+        : buffer.getNumChannels();
+    const int scChannels = hasSidechainBus ? getChannelCountOfBus(true, 1) : 0;
+    auto* const* channelPointers = buffer.getArrayOfWritePointers();
 
-    const int chunkSize = std::max(1, preparedBlockSize);
+    const int preparedBlockSize = listenInputScratch.getNumSamples();
+    const int chunkSize = (preparedBlockSize <= 0 || buffer.getNumSamples() <= preparedBlockSize)
+        ? std::max(1, buffer.getNumSamples())
+        : preparedBlockSize;
+
     for (int start = 0; start < buffer.getNumSamples(); start += chunkSize) {
         const int num = std::min(chunkSize, buffer.getNumSamples() - start);
-        juce::AudioBuffer<float> blockView(buffer.getArrayOfWritePointers(), buffer.getNumChannels(), start, num);
+        if (hasSidechainBus) {
+            sidechainView = juce::AudioBuffer<float>(channelPointers + mainChannels, scChannels, start, num);
+            activeSidechain = &sidechainView;
+        }
+        juce::AudioBuffer<float> blockView(channelPointers, mainChannels, start, num);
         processPreparedBlock(blockView, midi);
+        activeSidechain = nullptr;
     }
 }
 
 void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ignoreUnused(midi);
+    const int mainChannels = productIdentity.wantsSidechainInput
+        ? std::min(buffer.getNumChannels(), getMainBusNumOutputChannels())
+        : buffer.getNumChannels();
     const int preparedBlockSize = listenInputScratch.getNumSamples();
-    if (preparedBlockSize <= 0 || buffer.getNumSamples() <= preparedBlockSize) {
-        processPreparedBypassedBlock(buffer);
-        return;
-    }
-
-    const int chunkSize = std::max(1, preparedBlockSize);
+    const int chunkSize = (preparedBlockSize <= 0 || buffer.getNumSamples() <= preparedBlockSize)
+        ? std::max(1, buffer.getNumSamples())
+        : preparedBlockSize;
     for (int start = 0; start < buffer.getNumSamples(); start += chunkSize) {
         const int num = std::min(chunkSize, buffer.getNumSamples() - start);
-        juce::AudioBuffer<float> blockView(buffer.getArrayOfWritePointers(), buffer.getNumChannels(), start, num);
+        juce::AudioBuffer<float> blockView(buffer.getArrayOfWritePointers(), mainChannels, start, num);
         processPreparedBypassedBlock(blockView);
     }
 }
@@ -173,7 +198,18 @@ void ProcessorBase::processPreparedBypassedBlock(juce::AudioBuffer<float>& buffe
 bool ProcessorBase::isBusesLayoutSupported(const BusesLayout& layouts) const {
     const auto input = layouts.getMainInputChannelSet();
     const auto output = layouts.getMainOutputChannelSet();
-    return input == output && (input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo());
+    if (input != output || (input != juce::AudioChannelSet::mono() && input != juce::AudioChannelSet::stereo()))
+        return false;
+    if (layouts.inputBuses.size() > 1) {
+        if (!productIdentity.wantsSidechainInput)
+            return false;
+        const auto sidechain = layouts.getChannelSet(true, 1);
+        if (!sidechain.isDisabled()
+            && sidechain != juce::AudioChannelSet::mono()
+            && sidechain != juce::AudioChannelSet::stereo())
+            return false;
+    }
+    return true;
 }
 
 void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
