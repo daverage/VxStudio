@@ -441,6 +441,159 @@ void gateSenseShiftsFreeze() {
                + std::to_string(openRise) + " dB (open)");
 }
 
+// Renders continuous (non-bursty) material through general mode.
+juce::AudioBuffer<float> renderGeneral(const juce::AudioBuffer<float>& input,
+                                       vxsuite::leveler::Dsp& dsp) {
+    juce::AudioBuffer<float> output(input.getNumChannels(), input.getNumSamples());
+    juce::AudioBuffer<float> block(input.getNumChannels(), kBlockSize);
+    const vxsuite::leveler::DetectorSnapshot snapshot {};
+    for (int start = 0; start < input.getNumSamples(); start += kBlockSize) {
+        const int len = std::min(kBlockSize, input.getNumSamples() - start);
+        block.setSize(input.getNumChannels(), len, false, false, true);
+        for (int ch = 0; ch < input.getNumChannels(); ++ch)
+            block.copyFrom(ch, 0, input, ch, start, len);
+        dsp.process(block, snapshot);
+        for (int ch = 0; ch < input.getNumChannels(); ++ch)
+            output.copyFrom(ch, start, block, ch, 0, len);
+    }
+    return output;
+}
+
+// Two-level continuous tone: quiet section then loud section.
+juce::AudioBuffer<float> makeStepTone(const double secondsPerSection,
+                                      const float quietDb, const float loudDb) {
+    const int sectionSamples = static_cast<int>(secondsPerSection * kSampleRate);
+    juce::AudioBuffer<float> buffer(kNumChannels, 2 * sectionSamples);
+    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+        const float amp = juce::Decibels::decibelsToGain(i < sectionSamples ? quietDb : loudDb);
+        const float sample = amp * static_cast<float>(
+            std::sin(2.0 * juce::MathConstants<double>::pi * 220.0 * (i / kSampleRate)));
+        for (int ch = 0; ch < kNumChannels; ++ch)
+            buffer.setSample(ch, i, sample);
+    }
+    return buffer;
+}
+
+vxsuite::leveler::Dsp::Params generalParams(const vxsuite::leveler::Dsp::MixAnalysisMode mode) {
+    vxsuite::leveler::Dsp::Params params {};
+    params.level = 0.8f;
+    params.control = 0.3f;
+    params.voiceMode = false;
+    params.analysisMode = mode;
+    return params;
+}
+
+// Regression for the Realtime-mode dead ride: makeMixTargetFrame returned
+// confidence 0 in Realtime mode, which multiplied the ride target to zero.
+void realtimeModeActuallyLevels() {
+    const auto input = makeStepTone(10.0, -30.0f, -18.0f);
+    vxsuite::leveler::Dsp dsp;
+    dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+    dsp.setParams(generalParams(vxsuite::leveler::Dsp::MixAnalysisMode::realtime));
+    const auto output = renderGeneral(input, dsp);
+    const int delay = dsp.latencySamples();
+
+    // Loud section, shortly after the step (before the local target has fully
+    // re-normalised): the ride must be pulling the level down.
+    const float inDb = rmsDb(input, atSeconds(12.0), atSeconds(14.0));
+    const float outDb = rmsDb(output, atSeconds(12.0) + delay, atSeconds(14.0) + delay);
+    expect(outDb < inDb - 1.0f, "realtimeModeActuallyLevels",
+           "ride pulled the loud section by " + std::to_string(outDb - inDb) + " dB (needs < -1)");
+}
+
+// Target knob in mix mode: offsets the ride target.
+void mixTargetOffsetShifts() {
+    const auto runWithOffset = [](const float offsetDb) {
+        const auto input = makeStepTone(8.0, -24.0f, -24.0f);   // steady tone
+        vxsuite::leveler::Dsp dsp;
+        dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+        auto params = generalParams(vxsuite::leveler::Dsp::MixAnalysisMode::realtime);
+        params.targetOffsetDb = offsetDb;
+        dsp.setParams(params);
+        const auto output = renderGeneral(input, dsp);
+        return rmsDb(output, atSeconds(12.0), atSeconds(15.5));
+    };
+    const float hotDb = runWithOffset(4.0f);
+    const float quietDb = runWithOffset(-4.0f);
+    expect(hotDb > quietDb + 1.5f, "mixTargetOffsetShifts",
+           "+4 vs -4 dB target: " + std::to_string(hotDb - quietDb) + " dB apart (needs > 1.5)");
+}
+
+// Depth knob in mix mode: sensitivity trim on the ride deadband.
+void mixDepthChangesSensitivity() {
+    const auto activityWith = [](const float senseDb) {
+        // Gentle wobble around the baseline - inside the calm deadband,
+        // outside the sensitive one.
+        const int n = static_cast<int>(16.0 * kSampleRate);
+        juce::AudioBuffer<float> input(kNumChannels, n);
+        for (int i = 0; i < n; ++i) {
+            const double t = i / kSampleRate;
+            const float levelDb = -24.0f + 1.6f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * t / 7.0));
+            const float sample = juce::Decibels::decibelsToGain(levelDb)
+                * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * 220.0 * t));
+            for (int ch = 0; ch < kNumChannels; ++ch)
+                input.setSample(ch, i, sample);
+        }
+        vxsuite::leveler::Dsp dsp;
+        dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+        auto params = generalParams(vxsuite::leveler::Dsp::MixAnalysisMode::realtime);
+        params.gateSenseDb = senseDb;
+        dsp.setParams(params);
+        renderGeneral(input, dsp);
+        return dsp.getLevelActivity();
+    };
+    const float calm = activityWith(-8.0f);
+    const float sensitive = activityWith(8.0f);
+    expect(sensitive > calm, "mixDepthChangesSensitivity",
+           "level activity calm " + std::to_string(calm) + " vs sensitive " + std::to_string(sensitive));
+}
+
+// Vocal offline: the analyzed take's active median becomes the ride
+// reference, so quiet playback rides up toward it.
+void vocalOfflineReferencePins() {
+    auto signal = makeBurstSignal(14.0, -30.0f);
+    const double cycle = signal.burstSeconds + signal.gapSeconds;
+
+    const auto lateLevelWith = [&](const bool withAnalysis) {
+        vxsuite::leveler::Dsp dsp;
+        dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+        vxsuite::leveler::Dsp::Params params {};
+        params.level = 0.8f;
+        params.control = 0.3f;
+        params.voiceMode = true;
+        params.analysisMode = withAnalysis
+            ? vxsuite::leveler::Dsp::MixAnalysisMode::offline
+            : vxsuite::leveler::Dsp::MixAnalysisMode::smartRealtime;
+        dsp.setParams(params);
+        if (withAnalysis) {
+            auto analysis = makeSyntheticAnalysis(-1, 100);
+            analysis.activeMedianDb = -22.0f;   // take is meant to sit ~8 dB hotter
+            dsp.setOfflineAnalysis(analysis);
+        }
+        const auto output = renderVoice(signal.buffer, dsp, signal.burstSeconds, cycle);
+        return lateBurstLevelDb(output, dsp.latencySamples(), cycle, signal.burstSeconds);
+    };
+
+    const float selfLearned = lateLevelWith(false);
+    const float pinned = lateLevelWith(true);
+    expect(pinned > selfLearned + 2.0f, "vocalOfflineReferencePins",
+           "self-learned " + std::to_string(selfLearned) + " dB vs analyzed-ref "
+               + std::to_string(pinned) + " dB");
+}
+
+// Analyzer: active median must ignore the silent gaps a sparse take is full of.
+void analyzerActiveMedian() {
+    std::vector<float> blockDb;
+    for (int i = 0; i < 200; ++i)
+        blockDb.push_back(i % 3 == 0 ? -20.0f : -100.0f);   // sparse take: 1/3 signal, 2/3 gaps
+    const auto result = vxsuite::leveler::OfflineAnalyzer::analyse(blockDb.data(), blockDb.size(),
+                                                                   kSampleRate, kBlockSize);
+    expect(std::abs(result.activeMedianDb + 20.0f) < 1.0f && result.globalMedianDb < -60.0f,
+           "analyzerActiveMedian",
+           "active median " + std::to_string(result.activeMedianDb) + " dB while plain median sits in the gaps ("
+               + std::to_string(result.globalMedianDb) + " dB)");
+}
+
 // level=0, control=0 must be a pure 10 ms delay in both modes.
 void neutralIsTransparent() {
     auto signal = makeBurstSignal(6.0, -18.0f);
@@ -480,6 +633,11 @@ int main() {
     offlineStateRoundTrip();
     targetOffsetShiftsRide();
     gateSenseShiftsFreeze();
+    realtimeModeActuallyLevels();
+    mixTargetOffsetShifts();
+    mixDepthChangesSensitivity();
+    vocalOfflineReferencePins();
+    analyzerActiveMedian();
     neutralIsTransparent();
 
     if (failures == 0) {

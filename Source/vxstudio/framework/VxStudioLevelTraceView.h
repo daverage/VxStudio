@@ -13,7 +13,9 @@ public:
     void setSnapshot(const spectrum::SnapshotView& snapshot);
     void setUnavailable();
     // Feed the optional gain-trace overlay (one sample per UI tick).
-    void pushGainSample(float gainDb, bool enabled);
+    void pushGainSample(float gainDb, float openness, bool enabled);
+    // Feed the optional reference line (dBFS; enabled = draw it).
+    void setReferenceDb(float referenceDb, bool enabled);
     void setZoomSeconds(float seconds);
     [[nodiscard]] float zoomSeconds() const noexcept { return zoomSecondsValue; }
 
@@ -38,12 +40,15 @@ private:
     struct GainSample {
         double timeMs = 0.0;
         float gainDb = 0.0f;
+        float openness = 1.0f;
     };
     static constexpr int kGainTraceSamples = 512;
     bool gainTraceEnabled = false;
     int gainTraceWriteIndex = 0;
     int gainTraceCount = 0;
     std::array<GainSample, kGainTraceSamples> gainTrace {};
+    bool referenceEnabled = false;
+    float referenceDb = -100.0f;
 };
 
 } // namespace vxsuite

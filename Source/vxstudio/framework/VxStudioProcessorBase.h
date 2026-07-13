@@ -58,6 +58,13 @@ public:
     // in dB; must be safe to call from the UI thread (store atomically).
     virtual bool hasGainTrace() const noexcept { return false; }
     virtual float getGainTraceDb() const noexcept { return 0.0f; }
+    // Openness of the gain trace's gate/hold state [0,1]; segments below 0.5
+    // are drawn dimmed (fader parked). Products without a gate return 1.
+    virtual float getGainTraceOpenness() const noexcept { return 1.0f; }
+    // Optional target/reference level (dBFS) drawn as a faint line on the
+    // level trace - shows what the processing is steering toward.
+    virtual bool hasReferenceTrace() const noexcept { return false; }
+    virtual float getReferenceTraceDb() const noexcept { return -100.0f; }
     float getOutputSafetyTrimReductionDb() const noexcept { return outputSafetyTrimmer.getCurrentReductionDb(); }
     float getOutputSafetyTrimMaxReductionDb() const noexcept { return outputSafetyTrimmer.getMaxObservedReductionDb(); }
     float getOutputSafetyTrimActivity() const noexcept { return outputSafetyTrimmer.getCurrentActivity01(); }

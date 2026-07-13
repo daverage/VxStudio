@@ -51,15 +51,15 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     identity.secondaryHint = "Set how firmly peaks and harsh bursts are contained without flattening the take.";
     identity.tertiaryParamId = kTargetParam;
     identity.tertiaryLabel = "Target";
-    identity.tertiaryHint = "Ride the vocal hotter or quieter than its learned reference level.";
+    identity.tertiaryHint = "Ride the material hotter or quieter than its learned reference level.";
     identity.tertiaryDefaultValue = 0.5f;
     identity.tertiaryCenteredDbRange = kTargetRangeDb;
     identity.quaternaryParamId = kGateParam;
-    identity.quaternaryLabel = "Gate";
-    identity.quaternaryHint = "Left freezes the fader sooner in pauses; right rides deeper into quiet material.";
+    identity.quaternaryLabel = "Depth";
+    identity.quaternaryHint = "Left holds the ride back in pauses and quiet dips; right rides deeper into them.";
     identity.quaternaryDefaultValue = 0.5f;
     identity.quaternaryCenteredDbRange = kGateRangeDb;
-    identity.extraControlsFollowVocalMode = true;
+    identity.auxSelectorFollowsGeneralMode = false;
     identity.dspVersion = vxsuite::versions::plugins::leveler;
     identity.helpTitle = vxsuite::help::leveler.title;
     identity.helpHtml = vxsuite::help::leveler.html;
@@ -79,10 +79,15 @@ juce::String VXLevelerAudioProcessor::getStatusText() const {
     if (analysisActive)
         return "Offline mix analysis - capturing programme map";
 
-    if (vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal)
-        return "Intelligent vocal rider for speech-led performance recordings";
-
     const int analysisMode = vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1);
+    if (vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::vocal) {
+        if (analysisMode == 2)
+            return dsp.hasOfflineTargetMap()
+                ? "Vocal rider - riding toward the analyzed take level"
+                : "Vocal rider - analyze a pass to lock the reference level";
+        return "Intelligent vocal rider for speech-led performance recordings";
+    }
+
     switch (analysisMode) {
         case 0:
             return "Realtime mix leveler for whole-track consistency";
@@ -153,6 +158,7 @@ void VXLevelerAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
         el->setAttribute("globalMedianDb", static_cast<double>(offlineAnalysis.globalMedianDb));
         el->setAttribute("globalUpperDb", static_cast<double>(offlineAnalysis.globalUpperDb));
         el->setAttribute("globalDynamicRangeDb", static_cast<double>(offlineAnalysis.globalDynamicRangeDb));
+        el->setAttribute("activeMedianDb", static_cast<double>(offlineAnalysis.activeMedianDb));
         el->setAttribute("confidence", static_cast<double>(analysisConfidence));
         el->setAttribute("observedSeconds", static_cast<double>(analysisObservedSeconds));
         el->setAttribute("startSample", juce::String(offlineAnalysis.startSample));
@@ -194,6 +200,9 @@ void VXLevelerAudioProcessor::setStateInformation(const void* data, const int si
     analysis.globalMedianDb = static_cast<float>(el->getDoubleAttribute("globalMedianDb", -30.0));
     analysis.globalUpperDb = static_cast<float>(el->getDoubleAttribute("globalUpperDb", -24.0));
     analysis.globalDynamicRangeDb = static_cast<float>(el->getDoubleAttribute("globalDynamicRangeDb", 6.0));
+    // Older chunks have no active median - the plain median is the safe stand-in.
+    analysis.activeMedianDb = static_cast<float>(
+        el->getDoubleAttribute("activeMedianDb", el->getDoubleAttribute("globalMedianDb", -30.0)));
     analysis.startSample = el->getStringAttribute("startSample", "-1").getLargeIntValue();
     analysis.targetCurveDb.resize(count);
     std::memcpy(analysis.targetCurveDb.data(), blob.getData(), blob.getSize());
@@ -289,15 +298,15 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     params.analysisMode = static_cast<vxsuite::leveler::Dsp::MixAnalysisMode>(
         juce::jlimit(0, 2, vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1)));
     const auto signalQuality = getSignalQualitySnapshot();
-    params.targetOffsetDb = isVoice ? vxsuite::readCenteredDb(parameters, kTargetParam, kTargetRangeDb) : 0.0f;
-    params.gateSenseDb = isVoice ? vxsuite::readCenteredDb(parameters, kGateParam, kGateRangeDb) : 0.0f;
+    params.targetOffsetDb = vxsuite::readCenteredDb(parameters, kTargetParam, kTargetRangeDb);
+    params.gateSenseDb = vxsuite::readCenteredDb(parameters, kGateParam, kGateRangeDb);
     params.monoScore = signalQuality.monoScore;
     params.compressionScore = signalQuality.compressionScore;
     params.tiltScore = signalQuality.tiltScore;
     params.separationConfidence = signalQuality.separationConfidence;
     const bool analyzeEnabled = vxsuite::readBool(parameters, productIdentity.learnParamId, false);
-    const bool allowAnalysis = !params.voiceMode
-        && params.analysisMode == vxsuite::leveler::Dsp::MixAnalysisMode::offline;
+    const bool allowAnalysis =
+        params.analysisMode == vxsuite::leveler::Dsp::MixAnalysisMode::offline;
     if (!allowAnalysis && analysisActive)
         stopAnalysisCapture();
     if (allowAnalysis) {
@@ -324,11 +333,12 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     dsp.setParams(params);
     dsp.process(buffer, detectorSnapshot, options);
     rideGainDbForUi.store(dsp.getRideGainDb(), std::memory_order_relaxed);
+    rideGateForUi.store(dsp.getRideGateOpenness(), std::memory_order_relaxed);
+    rideReferenceDbForUi.store(dsp.getRideReferenceDb(), std::memory_order_relaxed);
 }
 
 bool VXLevelerAudioProcessor::shouldShowLearnUi() const noexcept {
-    return vxsuite::readMode(parameters, productIdentity) == vxsuite::Mode::general
-        && vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1) == 2;
+    return vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1) == 2;
 }
 
 void VXLevelerAudioProcessor::prepareAnalysisCapture(const int maxBlockSize) {

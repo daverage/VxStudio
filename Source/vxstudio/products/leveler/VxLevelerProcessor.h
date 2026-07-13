@@ -26,6 +26,9 @@ public:
     bool shouldShowLearnUi() const noexcept override;
     bool hasGainTrace() const noexcept override { return true; }
     float getGainTraceDb() const noexcept override { return rideGainDbForUi.load(std::memory_order_relaxed); }
+    float getGainTraceOpenness() const noexcept override { return rideGateForUi.load(std::memory_order_relaxed); }
+    bool hasReferenceTrace() const noexcept override { return true; }
+    float getReferenceTraceDb() const noexcept override { return rideReferenceDbForUi.load(std::memory_order_relaxed); }
     void setDebugTuning(const vxsuite::leveler::Dsp::Tuning& tuning) noexcept;
     void setOfflineAnalysis(vxsuite::leveler::OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
@@ -67,4 +70,6 @@ private:
     double analysisEnergy = 0.0;
     std::int64_t analysisStartSample = -1;
     std::atomic<float> rideGainDbForUi { 0.0f };
+    std::atomic<float> rideGateForUi { 1.0f };
+    std::atomic<float> rideReferenceDbForUi { -100.0f };
 };

@@ -114,6 +114,8 @@ void Dsp::reset() {
     offlineProcessedSamples = 0;
     lastOfflineBlockIndex = -1;
     rideGainDbSnapshot = 0.0f;
+    rideReferenceDbSnapshot = -100.0f;
+    rideGateSnapshot = 0.0f;
     offlineActive = false;
     offlineWaiting = false;
     liftActivity = 0.0f;
@@ -138,19 +140,9 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const bool voiceMode = params.voiceMode;
     const bool neutral = level < 1.0e-4f && control < 1.0e-4f;
     const float signalTrust = juce::jlimit(0.35f, 1.0f, 0.35f + 0.65f * clamp01(params.separationConfidence));
-    const float monoPenalty = clamp01(params.monoScore);
     const float compressionPenalty = clamp01(params.compressionScore);
-    const float tiltPenalty = clamp01(params.tiltScore);
     if (!voiceMode) {
-        processGeneralMode(buffer,
-                           detector,
-                           level,
-                           control,
-                           neutral,
-                           signalTrust,
-                           monoPenalty,
-                           compressionPenalty,
-                           tiltPenalty);
+        processGeneralMode(buffer, level, control, neutral, signalTrust, compressionPenalty);
         return;
     }
 
@@ -200,6 +192,12 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
 
     const float targetOffsetDb = clampf(params.targetOffsetDb, -12.0f, 12.0f);
     const float gateSenseDb = clampf(params.gateSenseDb, -12.0f, 12.0f);
+    // With an analyzed take, pin the long-term reference to the take's active
+    // median instead of learning it live - the whole performance rides toward
+    // one known level, independent of playback position.
+    const bool vocalOffline = params.analysisMode == MixAnalysisMode::offline
+        && offlineAnalysis.isValid();
+    const float vocalOfflineRefDb = vocalOffline ? offlineAnalysis.activeMedianDb : 0.0f;
     const float levelShape = 0.35f + 0.70f * level;
     const float maxUpwardGain = 1.0f + 1.05f * level;
     const float maxDownwardGain = std::max(0.24f, 1.0f - 0.55f * level);
@@ -209,6 +207,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     float levelActivityAccum = 0.0f;
     float liftActivityAccum = 0.0f;
     float tameActivityAccum = 0.0f;
+    float lastRefDb = rideReferenceDbSnapshot;
 
     for (int i = 0; i < numSamples; ++i) {
         std::array<float, 2> delayedSample { 0.0f, 0.0f };
@@ -309,10 +308,14 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         }
 
         const float rideEnvDb = gainToDbFloor(safeEnv);
+        const float longRefDb = vocalOffline
+            ? vocalOfflineRefDb
+            : gainToDbFloor(std::max(longTargetEnv, 1.0e-5f));
         const float refDb = 0.35f * gainToDbFloor(safeAnchor)
-            + 0.65f * gainToDbFloor(std::max(longTargetEnv, 1.0e-5f))
+            + 0.65f * longRefDb
             + targetOffsetDb;
         const float safeRef = juce::Decibels::decibelsToGain(refDb);
+        lastRefDb = refDb;
 
         float targetGain = 1.0f;
         if (!neutral) {
@@ -474,22 +477,19 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     }
 
     rideGainDbSnapshot = neutral ? 0.0f : gainToDbFloor(levellerGain * overrideGain);
-    offlineActive = false;
+    rideReferenceDbSnapshot = lastRefDb;
+    rideGateSnapshot = rideGate;
+    offlineActive = vocalOffline;
     offlineWaiting = false;
     lastOfflineBlockIndex = -1;
 }
 
 void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
-                             const DetectorSnapshot& detector,
                              const float level,
                              const float control,
                              const bool neutral,
                              const float signalTrust,
-                             const float monoPenalty,
-                             const float compressionPenalty,
-                             const float tiltPenalty) noexcept {
-    static_cast<void>(detector);
-    static_cast<void>(monoPenalty);
+                             const float compressionPenalty) noexcept {
 
     const int numChannels = std::min<int>({ buffer.getNumChannels(), static_cast<int>(channels.size()), 2 });
     const int numSamples = buffer.getNumSamples();
@@ -511,6 +511,10 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
     const float programLoudnessCoeff = timeCoeff(sr, 12.0f);
     const float programRestoreAttack = timeCoeff(sr, 2.2f);
     const float programRestoreRelease = timeCoeff(sr, 5.5f);
+    const float targetOffsetDb = clampf(params.targetOffsetDb, -12.0f, 12.0f);
+    // Gate knob in mix mode acts as ride sensitivity: right shrinks the
+    // deadband (rides deeper into small deviations), left grows it (calmer).
+    const float senseDeadbandTrimDb = -0.12f * clampf(params.gateSenseDb, -12.0f, 12.0f);
     const bool mixOfflineMode = params.analysisMode == MixAnalysisMode::offline && offlineAnalysis.isValid();
     bool offlineMapIndexed = false;   // a curve entry is usable for this block
     bool offlineOutOfRange = false;   // map exists but timeline is outside it
@@ -541,6 +545,7 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
 
     float levelActivityAccum = 0.0f;
     float tameActivityAccum = 0.0f;
+    float lastTargetDb = rideReferenceDbSnapshot;
 
     for (int i = 0; i < numSamples; ++i) {
         std::array<float, 2> delayedSample { 0.0f, 0.0f };
@@ -648,10 +653,13 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
         } else {
             targetFrame = makeMixTargetFrame(shortDb, baselineDb, level);
         }
-        const float errorDb = shortDb - targetFrame.finalTargetDb;
+        lastTargetDb = targetFrame.finalTargetDb + targetOffsetDb;
+        const float errorDb = shortDb - lastTargetDb;
         const float targetConfidence = clamp01(targetFrame.confidence * mixDecisionTrust);
-        const float deadbandDb = (tuning.mixDeadbandBase - tuning.mixDeadbandLevelWeight * level)
-            + (1.0f - targetConfidence) * 0.85f;
+        const float deadbandDb = std::max(0.2f,
+                                          (tuning.mixDeadbandBase - tuning.mixDeadbandLevelWeight * level)
+                                              + (1.0f - targetConfidence) * 0.85f
+                                              + senseDeadbandTrimDb);
         const float rampWidthDb = 2.00f - 0.45f * level;
         const float hotMixGuard = clamp01((peakAbs - 0.52f) / 0.24f)
             * (0.45f + 0.55f * compressionPenalty)
@@ -771,6 +779,8 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
         ? 0.0f
         : generalRideGainDb + generalNormalizeGainDb + programRestoreGainDb
             + gainToDbFloor(std::max(generalSpikeGain, 1.0e-5f));
+    rideReferenceDbSnapshot = lastTargetDb;
+    rideGateSnapshot = generalPrimed ? 1.0f : 0.0f;
     offlineActive = offlineMapIndexed;
     offlineWaiting = offlineOutOfRange;
     lastOfflineBlockIndex = offlineMapIndexed ? offlineBlockIndex : -1;
@@ -823,6 +833,10 @@ Dsp::MixTargetFrame Dsp::makeMixTargetFrame(const float shortDb,
     frame.localTargetDb = baselineDb + localBlend * (shortDb - baselineDb);
 
     if (params.analysisMode == MixAnalysisMode::realtime) {
+        // The local target is the only reference in Realtime mode - trust it
+        // fully. (Leaving confidence at 0 multiplied the ride target to zero,
+        // which silently disabled riding in this mode.)
+        frame.confidence = 1.0f;
         frame.globalTargetDb = frame.localTargetDb;
         frame.finalTargetDb = frame.localTargetDb;
         return frame;

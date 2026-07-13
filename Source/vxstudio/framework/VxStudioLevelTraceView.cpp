@@ -30,16 +30,21 @@ void LevelTraceView::setUnavailable() {
     repaint();
 }
 
-void LevelTraceView::pushGainSample(const float gainDb, const bool enabled) {
+void LevelTraceView::pushGainSample(const float gainDb, const float openness, const bool enabled) {
     gainTraceEnabled = enabled;
     if (!enabled) {
         gainTraceCount = 0;
         gainTraceWriteIndex = 0;
         return;
     }
-    gainTrace[static_cast<size_t>(gainTraceWriteIndex)] = { juce::Time::getMillisecondCounterHiRes(), gainDb };
+    gainTrace[static_cast<size_t>(gainTraceWriteIndex)] = { juce::Time::getMillisecondCounterHiRes(), gainDb, openness };
     gainTraceWriteIndex = (gainTraceWriteIndex + 1) % kGainTraceSamples;
     gainTraceCount = std::min(gainTraceCount + 1, kGainTraceSamples);
+}
+
+void LevelTraceView::setReferenceDb(const float newReferenceDb, const bool enabled) {
+    referenceEnabled = enabled;
+    referenceDb = newReferenceDb;
 }
 
 void LevelTraceView::setZoomSeconds(const float seconds) {
@@ -116,13 +121,30 @@ void LevelTraceView::paint(juce::Graphics& g) {
     g.setColour(accent.withAlpha(0.92f));
     g.strokePath(wetPath, juce::PathStrokeType(1.9f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
+    // Optional reference line: the level the processing steers toward,
+    // drawn on the same dBFS scale as the dry/wet traces.
+    if (referenceEnabled && referenceDb > -60.0f) {
+        const float refClamped = juce::jlimit(-42.0f, 0.0f, referenceDb);
+        const float refY = plot.getBottom() - ((refClamped + 42.0f) / 42.0f) * plot.getHeight();
+        g.setColour(accent.withAlpha(0.38f));
+        const float dashes[] = { 5.0f, 4.0f };
+        g.drawDashedLine(juce::Line<float>(plot.getX(), refY, plot.getRight(), refY),
+                         dashes, 2, 1.0f);
+    }
+
     // Optional gain-trace overlay: the processing gain trajectory (e.g. a
     // rider's fader), +/-12 dB mapped over the plot height, 0 dB centred.
+    // Segments where the gate/hold is engaged (openness < 0.5) draw dimmed.
     if (gainTraceEnabled && gainTraceCount > 1) {
         const double nowMs = juce::Time::getMillisecondCounterHiRes();
         const double windowMs = static_cast<double>(visibleSeconds) * 1000.0;
-        juce::Path gainPath;
-        bool started = false;
+        juce::Path openPath;
+        juce::Path heldPath;
+        bool openStarted = false;
+        bool heldStarted = false;
+        float prevX = 0.0f;
+        float prevY = 0.0f;
+        bool havePrev = false;
         for (int i = gainTraceCount - 1; i >= 0; --i) {
             const int index = (gainTraceWriteIndex - 1 - (gainTraceCount - 1 - i) + 2 * kGainTraceSamples) % kGainTraceSamples;
             const auto& sample = gainTrace[static_cast<size_t>(index)];
@@ -132,16 +154,24 @@ void LevelTraceView::paint(juce::Graphics& g) {
             const float x = plot.getRight() - static_cast<float>(ageMs / windowMs) * plotWidth;
             const float gainNorm = juce::jlimit(0.0f, 1.0f, (sample.gainDb + 12.0f) / 24.0f);
             const float y = plot.getBottom() - gainNorm * plot.getHeight();
-            if (!started) {
-                gainPath.startNewSubPath(x, y);
-                started = true;
-            } else {
-                gainPath.lineTo(x, y);
-            }
+            const bool open = sample.openness >= 0.5f;
+            auto& path = open ? openPath : heldPath;
+            bool& started = open ? openStarted : heldStarted;
+            if (havePrev)
+                { if (!started) path.startNewSubPath(prevX, prevY); else path.lineTo(prevX, prevY); path.lineTo(x, y); started = true; }
+            else if (!started)
+                { path.startNewSubPath(x, y); started = true; }
+            prevX = x;
+            prevY = y;
+            havePrev = true;
         }
-        if (started) {
+        if (heldStarted) {
+            g.setColour(accent.brighter(0.9f).withAlpha(0.28f));
+            g.strokePath(heldPath, juce::PathStrokeType(1.1f));
+        }
+        if (openStarted) {
             g.setColour(accent.brighter(0.9f).withAlpha(0.85f));
-            g.strokePath(gainPath, juce::PathStrokeType(1.1f));
+            g.strokePath(openPath, juce::PathStrokeType(1.1f));
         }
     }
 

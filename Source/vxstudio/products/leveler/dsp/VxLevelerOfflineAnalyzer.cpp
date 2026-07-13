@@ -39,6 +39,18 @@ OfflineAnalysisResult analyseBlockDbVector(const float* blockDbData,
     result.globalUpperDb = quantileAt(0.82f);
     result.globalDynamicRangeDb = std::max(1.5f, result.globalUpperDb - result.globalMedianDb);
 
+    // Active median: ignore near-silent blocks (gaps between phrases). The
+    // floor tracks the loud end of the material so room tone never counts.
+    const float activeFloorDb = std::max(-72.0f, quantileAt(0.95f) - 24.0f);
+    std::vector<float> active;
+    active.reserve(sorted.size());
+    for (const float db : sorted)
+        if (db >= activeFloorDb)
+            active.push_back(db);
+    result.activeMedianDb = active.empty()
+        ? result.globalMedianDb
+        : active[active.size() / 2];
+
     const float blockSeconds = static_cast<float>(result.blockSize) / static_cast<float>(result.sampleRate);
     const float shortCoeff = std::exp(-blockSeconds / 3.0f);
     const float baselineRise = std::exp(-blockSeconds / 4.0f);

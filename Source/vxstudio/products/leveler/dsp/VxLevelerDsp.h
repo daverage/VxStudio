@@ -107,6 +107,11 @@ public:
     // (voice: leveller x override fader; general: ride + normalize +
     // restore + spike). Cached once per block.
     [[nodiscard]] float getRideGainDb() const noexcept { return rideGainDbSnapshot; }
+    // Ride reference level (dBFS, detector-envelope domain) of the last block.
+    [[nodiscard]] float getRideReferenceDb() const noexcept { return rideReferenceDbSnapshot; }
+    // Ride-gate openness [0,1] at the end of the last block (1 in mix mode
+    // once the engine is primed - mix mode has no phrase gate).
+    [[nodiscard]] float getRideGateOpenness() const noexcept { return rideGateSnapshot; }
 
 private:
     struct MixTargetFrame final {
@@ -136,14 +141,11 @@ private:
     static float shapeConfidence(float confidence) noexcept;
     MixTargetFrame makeMixTargetFrame(float shortDb, float baselineDb, float level) const noexcept;
     void processGeneralMode(juce::AudioBuffer<float>& buffer,
-                            const DetectorSnapshot& detector,
                             float level,
                             float control,
                             bool neutral,
                             float signalTrust,
-                            float monoPenalty,
-                            float compressionPenalty,
-                            float tiltPenalty) noexcept;
+                            float compressionPenalty) noexcept;
     void updateActivity(float levelActivityAccum,
                         float liftActivityAccum,
                         float tameActivityAccum,
@@ -203,6 +205,8 @@ private:
     std::int64_t timelineSample = -1;
     int lastOfflineBlockIndex = -1;
     float rideGainDbSnapshot = 0.0f;
+    float rideReferenceDbSnapshot = -100.0f;
+    float rideGateSnapshot = 0.0f;
     bool offlineActive = false;
     bool offlineWaiting = false;
 

@@ -13,6 +13,10 @@ struct OfflineAnalysisResult final {
     float globalMedianDb = -30.0f;
     float globalUpperDb = -24.0f;
     float globalDynamicRangeDb = 6.0f;
+    // Median over blocks with actual signal (silence-gated). For sparse
+    // material such as a vocal take, the plain median lands in the gaps;
+    // this is the level the material actually plays at.
+    float activeMedianDb = -30.0f;
     // Timeline position (in samples) of the first captured analysis block;
     // -1 when unknown (no playhead, or state saved by an older version).
     std::int64_t startSample = -1;
