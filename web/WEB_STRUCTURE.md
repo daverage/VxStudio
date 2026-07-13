@@ -63,14 +63,14 @@ web/downloads/
 ```
 vxstudio-complete.zip
 Example: vxstudio-complete.zip
-Contains: 12 .vst3 bundles + 12 .component (Audio Units)
+Contains: 15 .vst3 bundles
 ```
 
 **Windows:**
 ```
 vxsuite-{VERSION}-windows-x64.zip
 Example: vxsuite-0.1.0-windows-x64.zip
-Contains: VST3 installer + 12 .vst3 plugin files
+Contains: VST3 installer + 15 .vst3 plugin files
 ```
 
 ### Contents of Distribution Zips
@@ -80,12 +80,9 @@ Contains: VST3 installer + 12 .vst3 plugin files
 vxstudio-complete/
 ├── VST3/
 │   ├── VXTone.vst3/
-│   ├── VXSpeechClarity.vst3/
+│   ├── VXClarity.vst3/
 │   ├── VXDenoiser.vst3/
-│   └── ... (12 more)
-├── AudioUnits/
-│   ├── VXTone.component/
-│   └── ... (14 more)
+│   └── ... (13 more)
 ├── INSTALL.txt
 ├── README.txt
 └── LICENSE.txt
@@ -97,7 +94,7 @@ vxsuite-0.1.0-windows-x64/
 ├── installer.exe              # Optional: Windows installer
 ├── VST3/
 │   ├── VXTone.vst3
-│   ├── VXSpeechClarity.vst3
+│   ├── VXClarity.vst3
 │   └── ... (13 more)
 ├── INSTALL.txt
 ├── README.txt

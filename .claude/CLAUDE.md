@@ -4,7 +4,7 @@
 
 ## Stack
 # Primary language: C++ / Cmake
-# Build command:    cmake --build build -j$(nproc)
+# Build command:    cmake --build build --parallel
 
 ## Conventions
 # Add project-specific coding conventions here.

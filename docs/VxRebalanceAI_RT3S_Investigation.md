@@ -4,9 +4,9 @@ Date: 2026-07-02
 
 ## Scope
 
-This note records the first pass over GPU Audio RT3S as a possible realtime GPU stem-separation backend for VxRebalanceAI. The current product implementation remains ONNX/StemgenRT-based, and the new code boundary keeps that as the fallback backend.
+This note records the first pass over GPU Audio RT3S as a possible realtime GPU stem-separation backend for VxRebalanceAI. VxRebalanceAI is currently an experimental opt-in tool, not a shipping VX Studio product. The current implementation remains ONNX/StemgenRT-based when the tool is explicitly enabled.
 
-Decision update: GPU Audio RT3S is deferred for VxRebalanceAI. The product should remain CPU/ONNX-based for now because we do not want proprietary GPU Audio binaries, external platform installs, or redistribution/licensing risk in this plugin.
+Decision update: GPU Audio RT3S is deferred for VxRebalanceAI. The tool should remain CPU/ONNX-based for now because we do not want proprietary GPU Audio binaries, external platform installs, or redistribution/licensing risk in this repo.
 
 ## Repositories inspected
 

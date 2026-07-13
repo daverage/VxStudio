@@ -385,7 +385,7 @@ void VXDeverbAudioProcessor::applyLoudnessCompensation(juce::AudioBuffer<float>&
     wetBuffer.applyGainRamp(0, wetBuffer.getNumSamples(), startGain, appliedGain);
 }
 
-#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
+#if !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXDeverbAudioProcessor();
 }

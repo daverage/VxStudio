@@ -15,14 +15,6 @@ do
 end
 
 local plugins = {
-  cleanup = {
-    display_name = "VXCleanup (VX Suite)",
-    library_name = "VST3: VXCleanup (VX Suite)",
-    file_stem = "VXCleanup",
-    binary = "VXCleanup.vst3",
-    unique_id = 588610322,
-    class_id = "ABCDEF019182FAEB565853315658434C",
-  },
   deepfilternet = {
     display_name = "VXDeepFilterNet (VX Suite)",
     library_name = "VST3: VXDeepFilterNet (VX Suite)",
@@ -92,10 +84,9 @@ local plugins = {
 local scenarios = {
   {
     name = "Camera Review - Far Phone",
-    chain = { "subtract", "cleanup", "denoiser", "deepfilternet", "deverb", "proximity", "tone", "optocomp", "finish" },
+    chain = { "subtract", "denoiser", "deepfilternet", "deverb", "proximity", "tone", "optocomp", "finish" },
     params = {
       subtract = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Learn"] = 0.0, ["Subtract"] = 0.22, ["Protect"] = 0.68 },
-      cleanup = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Low Shelf"] = 1.0, ["High Shelf"] = 0.0, ["Cleanup"] = 0.38, ["Body"] = 0.56, ["Focus"] = 0.60 },
       denoiser = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Clean"] = 0.18, ["Guard"] = 0.72 },
       deepfilternet = { ["Model"] = 0.0, ["Listen"] = 0.0, ["Clean"] = 0.26, ["Guard"] = 0.62 },
       deverb = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Reduce"] = 0.20, ["Blend"] = 0.18 },
@@ -107,10 +98,9 @@ local scenarios = {
   },
   {
     name = "Live Music - Front Of Room",
-    chain = { "cleanup", "tone", "optocomp", "finish" },
+    chain = { "tone", "optocomp", "finish" },
     params = {
       subtract = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Learn"] = 0.0, ["Subtract"] = 0.0, ["Protect"] = 0.80 },
-      cleanup = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Low Shelf"] = 0.0, ["High Shelf"] = 0.0, ["Cleanup"] = 0.10, ["Body"] = 0.60, ["Focus"] = 0.48 },
       denoiser = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Clean"] = 0.0, ["Guard"] = 0.80 },
       deepfilternet = { ["Model"] = 0.0, ["Listen"] = 0.0, ["Clean"] = 0.0, ["Guard"] = 0.80 },
       deverb = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Reduce"] = 0.05, ["Blend"] = 0.10 },
@@ -122,10 +112,9 @@ local scenarios = {
   },
   {
     name = "Podcast Finishing - Clean Voice",
-    chain = { "cleanup", "proximity", "tone", "optocomp", "finish" },
+    chain = { "proximity", "tone", "optocomp", "finish" },
     params = {
       subtract = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Learn"] = 0.0, ["Subtract"] = 0.0, ["Protect"] = 0.80 },
-      cleanup = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Low Shelf"] = 1.0, ["High Shelf"] = 0.0, ["Cleanup"] = 0.20, ["Body"] = 0.58, ["Focus"] = 0.54 },
       denoiser = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Clean"] = 0.0, ["Guard"] = 0.80 },
       deepfilternet = { ["Model"] = 0.0, ["Listen"] = 0.0, ["Clean"] = 0.0, ["Guard"] = 0.80 },
       deverb = { ["Mode"] = 0.0, ["Listen"] = 0.0, ["Reduce"] = 0.05, ["Blend"] = 0.10 },
@@ -137,10 +126,9 @@ local scenarios = {
   },
   {
     name = "Mixed Audio - Voice + Guitar",
-    chain = { "cleanup", "tone", "optocomp", "finish" },
+    chain = { "tone", "optocomp", "finish" },
     params = {
       subtract = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Learn"] = 0.0, ["Subtract"] = 0.0, ["Protect"] = 0.85 },
-      cleanup = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Low Shelf"] = 0.0, ["High Shelf"] = 0.0, ["Cleanup"] = 0.16, ["Body"] = 0.60, ["Focus"] = 0.52 },
       denoiser = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Clean"] = 0.0, ["Guard"] = 0.85 },
       deepfilternet = { ["Model"] = 0.0, ["Listen"] = 0.0, ["Clean"] = 0.0, ["Guard"] = 0.85 },
       deverb = { ["Mode"] = 1.0, ["Listen"] = 0.0, ["Reduce"] = 0.0, ["Blend"] = 0.10 },
@@ -154,7 +142,6 @@ local scenarios = {
 
 local report = {}
 local plugin_order = {
-  "cleanup",
   "deepfilternet",
   "denoiser",
   "deverb",

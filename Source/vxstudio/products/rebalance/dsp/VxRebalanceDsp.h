@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../VxRebalanceTypes.h"
 #include "../../../framework/VxStudioFft.h"
 #include "../../../framework/VxStudioSignalQuality.h"
 #include "../../../framework/VxStudioSpectralHelpers.h"
@@ -14,19 +15,15 @@ namespace vxsuite::rebalance {
 
 class Dsp {
 public:
-    enum class RecordingType : int {
-        studio = 0,
-        live = 1,
-        phoneRough = 2
-    };
+    using RecordingType = vxsuite::rebalance::RecordingType;
+    using DebugSnapshot = vxsuite::rebalance::DebugSnapshot;
+    using AiMaskFrame = vxsuite::rebalance::AiMaskFrame;
 
-    enum SourceIndex {
-        vocalsSource = 0,
-        drumsSource = 1,
-        bassSource = 2,
-        guitarSource = 3,
-        otherSource = 4
-    };
+    static constexpr int vocalsSource = vxsuite::rebalance::vocalsSource;
+    static constexpr int drumsSource = vxsuite::rebalance::drumsSource;
+    static constexpr int bassSource = vxsuite::rebalance::bassSource;
+    static constexpr int guitarSource = vxsuite::rebalance::guitarSource;
+    static constexpr int otherSource = vxsuite::rebalance::otherSource;
 
     struct BandRegion {
         float lo = 0.0f;
@@ -61,15 +58,15 @@ public:
         float lowEndUnityBlendEndHz = 80.0f;
     };
 
-    static constexpr int kSourceCount = 5;
-    static constexpr int kControlCount = 6;
+    static constexpr int kSourceCount = vxsuite::rebalance::kSourceCount;
+    static constexpr int kControlCount = vxsuite::rebalance::kControlCount;
     // Array sizing constants — sized for the 88.2/96 kHz maximum (2048-pt FFT).
     // Processing uses activeBins/activeFftSize/activeHopSize computed in prepare().
-    static constexpr int kFftOrder = 11;
-    static constexpr int kFftSize  = 1 << kFftOrder;   // 2048
-    static constexpr int kHopSize  = kFftSize / 4;     // 512
-    static constexpr int kBins     = kFftSize / 2 + 1; // 1025
-    static constexpr int kDebugBins = 96;
+    static constexpr int kFftOrder = vxsuite::rebalance::kFftOrder;
+    static constexpr int kFftSize  = vxsuite::rebalance::kFftSize;
+    static constexpr int kHopSize  = vxsuite::rebalance::kHopSize;
+    static constexpr int kBins     = vxsuite::rebalance::kBins;
+    static constexpr int kDebugBins = vxsuite::rebalance::kDebugBins;
 
     // Harmonic grouping constants
     static constexpr int kMaxPeaks = 24;
@@ -150,22 +147,6 @@ public:
         float intelligibility = 0.0f;
         float speechPresence = 0.0f;
         float transientRisk = 0.0f;
-    };
-
-    struct DebugSnapshot {
-        std::array<int, kDebugBins> dominantSources {};
-        std::array<float, kDebugBins> confidence {};
-        std::array<float, kDebugBins> dominantMasks {};
-        std::array<float, kDebugBins> otherMasks {};
-        std::array<float, kSourceCount> dominantCoverage {};
-        float overallConfidence = 0.0f;
-        int frameCounter = 0;
-    };
-
-    struct AiMaskFrame {
-        bool available = false;
-        float confidence = 0.0f;
-        std::array<std::array<float, kBins>, kSourceCount> masks {};
     };
 
     void prepare(double sampleRate, int maxBlockSize, int numChannels);

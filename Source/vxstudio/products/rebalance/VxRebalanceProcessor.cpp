@@ -82,8 +82,12 @@ juce::AudioProcessorEditor* VXRebalanceAudioProcessor::createEditor() {
     return new VXRebalanceEditor(*this);
 }
 
-vxsuite::rebalance::Dsp::DebugSnapshot VXRebalanceAudioProcessor::getDebugSnapshot() const noexcept {
+vxsuite::rebalance::DebugSnapshot VXRebalanceAudioProcessor::getDebugSnapshot() const noexcept {
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+    return aiDsp.getDebugSnapshot();
+#else
     return dsp.getDebugSnapshot();
+#endif
 }
 
 #if VXSTUDIO_REBALANCE_AI_VARIANT
@@ -106,7 +110,7 @@ vxsuite::ProductIdentity VXRebalanceAudioProcessor::makeIdentity() {
     id.auxSelectorChoiceLabels = { "Studio", "Live", "Phone / Rough" };
     id.auxSelectorDefaultIndex = 0;
     id.auxSelectorFollowsGeneralMode = false;
-    id.controlBankCount = vxsuite::rebalance::Dsp::kControlCount;
+    id.controlBankCount = vxsuite::rebalance::kControlCount;
     id.controlBankVertical = true;
     id.compactControlBankLayout = true;
     id.controlBankParamIds = kBankParamIds;
@@ -140,12 +144,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout VXRebalanceAudioProcessor::m
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { kAiModeParam.data(), 1 },
         "AI Mode",
-        juce::StringArray { "Classic", "AI Assist", "AI Strong" },
-        1,
+        juce::StringArray { "AI Assist", "AI Strong" },
+        0,
         vxsuite::makeChoiceAttributes("AI Mode")));
 #endif
 
-    for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
+    for (int i = 0; i < vxsuite::rebalance::kSourceCount; ++i) {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { kBankParamIds[static_cast<size_t>(i)].data(), 1 },
             vxsuite::toJuceString(kBankLabels[static_cast<size_t>(i)]),
@@ -169,8 +173,8 @@ juce::String VXRebalanceAudioProcessor::getStatusText() const {
     juce::String status = "Linked-stereo source rebalance  -  " + modeLabel + "  -  latency "
         + juce::String(getLatencySamples()) + " samples";
 #if VXSTUDIO_REBALANCE_AI_VARIANT
-    const int aiMode = vxsuite::readChoiceIndex(parameters, kAiModeParam, 1);
-    const juce::String aiModeLabel = aiMode == 0 ? "Classic" : (aiMode == 2 ? "AI Strong" : "AI Assist");
+    const int aiMode = vxsuite::readChoiceIndex(parameters, kAiModeParam, 0);
+    const juce::String aiModeLabel = aiMode >= 1 ? "AI Strong" : "AI Assist";
     status += "  -  " + aiModeLabel + "  -  " + realtimeSplitter.statusText();
 #endif
     return status;
@@ -179,28 +183,38 @@ juce::String VXRebalanceAudioProcessor::getStatusText() const {
 void VXRebalanceAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentBlockSize = std::max(1, samplesPerBlock);
-    dsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
 #if VXSTUDIO_REBALANCE_AI_VARIANT
+    aiDsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     realtimeSplitter.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
+#else
+    dsp.prepare(currentSampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
 #endif
     outputTrimmer.setCeiling(0.90f);  // Lowered from 0.96f to catch overload earlier
     outputTrimmer.setReleaseSeconds(0.16f);
+    const int processingLatencySamples =
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+        aiDsp.latencySamples();
+#else
+        dsp.latencySamples();
+#endif
     dryDelayLines.assign(static_cast<size_t>(std::max(1, getTotalNumOutputChannels())),
-                         std::vector<float>(static_cast<size_t>(std::max(1, dsp.latencySamples())), 0.0f));
+                         std::vector<float>(static_cast<size_t>(std::max(1, processingLatencySamples)), 0.0f));
     dryDelayWritePos = 0;
 #if VXSTUDIO_REBALANCE_AI_VARIANT
-    setReportedLatencySamples(std::max(dsp.latencySamples(), realtimeSplitter.latencySamples()));
+    setReportedLatencySamples(std::max(processingLatencySamples, realtimeSplitter.latencySamples()));
 #else
-    setReportedLatencySamples(dsp.latencySamples());
+    setReportedLatencySamples(processingLatencySamples);
 #endif
     silenceGuard.prepare();
     resetSuite();
 }
 
 void VXRebalanceAudioProcessor::resetSuite() {
-    dsp.reset();
 #if VXSTUDIO_REBALANCE_AI_VARIANT
+    aiDsp.reset();
     realtimeSplitter.reset();
+#else
+    dsp.reset();
 #endif
     outputTrimmer.reset();
     silenceGuard.reset();
@@ -239,7 +253,7 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
 
     if (silenceGuard.update(buffer)) return;
 
-    std::array<float, vxsuite::rebalance::Dsp::kControlCount> targets {
+    std::array<float, vxsuite::rebalance::kControlCount> targets {
         vxsuite::readNormalized(parameters, kVocalsParam, 0.5f),
         vxsuite::readNormalized(parameters, kDrumsParam, 0.5f),
         vxsuite::readNormalized(parameters, kBassParam, 0.5f),
@@ -248,22 +262,25 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         vxsuite::readNormalized(parameters, kStrengthParam, 1.0f)
     };
 #if VXSTUDIO_REBALANCE_AI_VARIANT
-    const int aiMode = vxsuite::readChoiceIndex(parameters, kAiModeParam, 1);
+    const int aiMode = vxsuite::readChoiceIndex(parameters, kAiModeParam, 0);
 #endif
+#if !VXSTUDIO_REBALANCE_AI_VARIANT
     if (
-#if VXSTUDIO_REBALANCE_AI_VARIANT
-        aiMode == 0 &&
-#endif
         isEffectivelyDualMono(buffer, numSamples)) {
-        for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
+        for (int i = 0; i < vxsuite::rebalance::kSourceCount; ++i) {
             auto& target = targets[static_cast<size_t>(i)];
             target = 0.5f + (target - 0.5f) * 0.65f;
         }
     }
+#endif
 
+    const int recordingType = vxsuite::readChoiceIndex(parameters, kRecordingTypeParam, 0);
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+    const auto recordingTypeEnum = static_cast<vxsuite::rebalance::RecordingType>(juce::jlimit(0, 2, recordingType));
+    aiDsp.setRecordingType(recordingTypeEnum);
+#else
     const auto voiceContext = getVoiceContextSnapshot();
     const auto signalQuality = getSignalQualitySnapshot();
-    const int recordingType = vxsuite::readChoiceIndex(parameters, kRecordingTypeParam, 0);
     dsp.setAnalysisContext({
         voiceContext.vocalDominance,
         voiceContext.intelligibility,
@@ -271,27 +288,29 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         voiceContext.transientRisk
     });
     dsp.setSignalQuality(signalQuality);
-    const auto recordingTypeEnum = static_cast<vxsuite::rebalance::Dsp::RecordingType>(juce::jlimit(0, 2, recordingType));
+    const auto recordingTypeEnum = static_cast<vxsuite::rebalance::RecordingType>(juce::jlimit(0, 2, recordingType));
     dsp.setRecordingType(recordingTypeEnum);
+#endif
 
 #if VXSTUDIO_REBALANCE_AI_VARIANT
-    vxsuite::rebalance::Dsp::AiMaskFrame aiMaskFrame;
-    if (aiMode > 0 && realtimeSplitter.processBlock(buffer, aiMaskFrame)) {
-        if (aiMode >= 2)
-            aiMaskFrame.confidence = 1.0f;
-        else
+    vxsuite::rebalance::AiMaskFrame aiMaskFrame;
+    vxsuite::rebalance::StemFrame stemFrame;
+    if (realtimeSplitter.processBlock(buffer, aiMaskFrame, stemFrame)) {
+        if (aiMode >= 1)
+            stemFrame.confidence = 1.0f;
+        else {
+            stemFrame.confidence = juce::jlimit(0.0f, 0.72f, stemFrame.confidence);
             aiMaskFrame.confidence = juce::jlimit(0.0f, 0.72f, aiMaskFrame.confidence);
-        dsp.setAiMaskFrame(aiMaskFrame);
-    } else {
-        dsp.setAiMaskFrame({});
+        }
+        aiDsp.setStemFrame(stemFrame);
     }
 #endif
 
-    const float strength = targets[static_cast<size_t>(vxsuite::rebalance::Dsp::kControlCount - 1)];
+    const float strength = targets[static_cast<size_t>(vxsuite::rebalance::kControlCount - 1)];
     bool effectivelyNeutral = strength <= 1.0e-4f;
     if (!effectivelyNeutral) {
         effectivelyNeutral = true;
-        for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
+        for (int i = 0; i < vxsuite::rebalance::kSourceCount; ++i) {
             if (std::abs(targets[static_cast<size_t>(i)] - 0.5f) > 1.0e-3f) {
                 effectivelyNeutral = false;
                 break;
@@ -307,17 +326,34 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     }
 
     if (wasNeutral) {
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+        // Do not reset the AI stem queue here: the splitter may just have delivered
+        // the first usable frame after a neutral/waiting pass.
+#else
         dsp.reset();
+#endif
         wasNeutral = false;
     }
 
+#if VXSTUDIO_REBALANCE_AI_VARIANT
+    if (!aiDsp.hasUsableFrame()) {
+        wasNeutral = true;
+        outputTrimPrimed = false;
+        processNeutralWithLatency(buffer);
+        return;
+    }
+
+    aiDsp.setControlTargets(targets);
+    aiDsp.process(buffer);
+#else
     dsp.setControlTargets(targets);
     dsp.process(buffer);
+#endif
 
     const float strengthDrive = juce::jlimit(0.0f, 1.0f, strength);
     float positiveIntentSum = 0.0f;
     float maxPositiveIntent = 0.0f;
-    for (int i = 0; i < vxsuite::rebalance::Dsp::kSourceCount; ++i) {
+    for (int i = 0; i < vxsuite::rebalance::kSourceCount; ++i) {
         const float positiveIntent = juce::jlimit(0.0f, 1.0f,
             (targets[static_cast<size_t>(i)] - 0.5f) * 2.0f);
         positiveIntentSum += positiveIntent;
@@ -345,7 +381,7 @@ void VXRebalanceAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     outputTrimmer.process(buffer, currentSampleRateHz);
 }
 
-#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
+#if !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXRebalanceAudioProcessor();
 }

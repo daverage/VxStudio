@@ -176,7 +176,7 @@ juce::AudioProcessorEditor* VXStudioAnalyserAudioProcessor::createEditor() {
     return new VXStudioAnalyserEditor(*this);
 }
 
-#if !defined(VXSUITE_DISABLE_PLUGIN_ENTRYPOINT) && !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
+#if !defined(VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VXStudioAnalyserAudioProcessor();
 }

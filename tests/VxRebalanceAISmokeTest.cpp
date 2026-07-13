@@ -1,5 +1,7 @@
 #include "../Source/vxstudio/products/rebalance/ai/VxRealtimeStemSplitter.h"
+#include "../Source/vxstudio/products/rebalance/ai/VxAiStemRebalanceDsp.h"
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -25,6 +27,55 @@ juce::AudioBuffer<float> makeSyntheticBlock(const int sampleOffset, const int bl
     return buffer;
 }
 
+double calculateRms(const juce::AudioBuffer<float>& buffer) {
+    double sum = 0.0;
+    int count = 0;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+            const double value = buffer.getSample(ch, sample);
+            sum += value * value;
+            ++count;
+        }
+    }
+
+    return count > 0 ? std::sqrt(sum / static_cast<double>(count)) : 0.0;
+}
+
+double calculateRmsDifference(const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b) {
+    const int channels = std::min(a.getNumChannels(), b.getNumChannels());
+    const int samples = std::min(a.getNumSamples(), b.getNumSamples());
+    double sum = 0.0;
+    int count = 0;
+    for (int ch = 0; ch < channels; ++ch) {
+        for (int sample = 0; sample < samples; ++sample) {
+            const double delta = static_cast<double>(a.getSample(ch, sample)) - static_cast<double>(b.getSample(ch, sample));
+            sum += delta * delta;
+            ++count;
+        }
+    }
+
+    return count > 0 ? std::sqrt(sum / static_cast<double>(count)) : 0.0;
+}
+
+juce::AudioBuffer<float> renderStemFrame(vxsuite::rebalance::StemFrame stemFrame,
+                                         const double sampleRate,
+                                         const std::array<float, vxsuite::rebalance::kControlCount>& targets) {
+    vxsuite::rebalance::ai::StemRebalanceDsp mixer;
+    mixer.prepare(sampleRate, vxsuite::rebalance::kStemFrameSamples, vxsuite::rebalance::kStemFrameChannels);
+    mixer.setRecordingType(vxsuite::rebalance::RecordingType::phoneRough);
+    mixer.setControlTargets(targets);
+
+    juce::AudioBuffer<float> output(vxsuite::rebalance::kStemFrameChannels, vxsuite::rebalance::kStemFrameSamples);
+    for (std::uint64_t sequence = 1; sequence <= 16; ++sequence) {
+        stemFrame.sequenceNumber = sequence;
+        mixer.setStemFrame(stemFrame);
+        output.clear();
+        mixer.process(output);
+    }
+
+    return output;
+}
+
 bool runSplitterAtSampleRate(const double sampleRate) {
     vxsuite::rebalance::ai::RealtimeStemSplitter splitter;
     splitter.prepare(sampleRate,
@@ -37,18 +88,19 @@ bool runSplitterAtSampleRate(const double sampleRate) {
         return false;
     }
 
-    vxsuite::rebalance::Dsp::AiMaskFrame frame;
+    vxsuite::rebalance::AiMaskFrame frame;
+    vxsuite::rebalance::StemFrame stemFrame;
     constexpr int blockSize = vxsuite::rebalance::ai::RealtimeStemSplitter::kOutputChunkSize;
     for (int block = 0; block < 5; ++block) {
         auto input = makeSyntheticBlock(block * blockSize, blockSize, sampleRate);
-        (void) splitter.processBlock(input, frame);
+        (void) splitter.processBlock(input, frame, stemFrame);
         std::this_thread::sleep_for(std::chrono::milliseconds(12));
     }
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(12);
     juce::AudioBuffer<float> pollBuffer(2, 0);
     while (std::chrono::steady_clock::now() < deadline) {
-        if (splitter.processBlock(pollBuffer, frame) && frame.available)
+        if (splitter.processBlock(pollBuffer, frame, stemFrame) && frame.available && stemFrame.available)
             break;
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
@@ -63,8 +115,8 @@ bool runSplitterAtSampleRate(const double sampleRate) {
               << " dropped=" << debug.droppedFrames
               << " confidence=" << debug.latestConfidence << "\n";
 
-    if (!frame.available || !debug.hasFrame || debug.completedFrames == 0) {
-        std::cerr << "[VxRebalanceAISmokeTest] No AI mask frame produced at "
+    if (!frame.available || !stemFrame.available || !debug.hasFrame || debug.completedFrames == 0) {
+        std::cerr << "[VxRebalanceAISmokeTest] No AI stem/mask frame produced at "
                   << sampleRate << " Hz\n";
         return false;
     }
@@ -78,6 +130,53 @@ bool runSplitterAtSampleRate(const double sampleRate) {
     if (frame.confidence <= 0.0f) {
         std::cerr << "[VxRebalanceAISmokeTest] Invalid confidence at "
                   << sampleRate << " Hz\n";
+        return false;
+    }
+
+    std::array<double, vxsuite::rebalance::kSourceCount> stemEnergy {};
+    for (int source = 0; source < vxsuite::rebalance::kSourceCount; ++source) {
+        for (int ch = 0; ch < vxsuite::rebalance::kStemFrameChannels; ++ch) {
+            for (int sample = 0; sample < vxsuite::rebalance::kStemFrameSamples; ++sample) {
+                const float value = stemFrame.stems[static_cast<size_t>(source)][static_cast<size_t>(ch)][static_cast<size_t>(sample)];
+                stemEnergy[static_cast<size_t>(source)] += static_cast<double>(value) * static_cast<double>(value);
+            }
+        }
+    }
+
+    if (stemFrame.sequenceNumber == 0 || stemFrame.confidence <= 0.0f) {
+        std::cerr << "[VxRebalanceAISmokeTest] Invalid stem frame metadata at "
+                  << sampleRate << " Hz\n";
+        return false;
+    }
+
+    if (stemEnergy[static_cast<size_t>(vxsuite::rebalance::vocalsSource)] <= 1.0e-9
+        || stemEnergy[static_cast<size_t>(vxsuite::rebalance::bassSource)] <= 1.0e-9
+        || stemEnergy[static_cast<size_t>(vxsuite::rebalance::guitarSource)] <= 1.0e-12
+        || stemEnergy[static_cast<size_t>(vxsuite::rebalance::otherSource)] <= 1.0e-12) {
+        std::cerr << "[VxRebalanceAISmokeTest] Stem frame missing expected source energy at "
+                  << sampleRate << " Hz\n";
+        return false;
+    }
+
+    std::array<float, vxsuite::rebalance::kControlCount> neutralTargets {
+        0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 1.0f
+    };
+    auto isolateGuitarTargets = neutralTargets;
+    isolateGuitarTargets[static_cast<size_t>(vxsuite::rebalance::vocalsSource)] = 0.0f;
+    isolateGuitarTargets[static_cast<size_t>(vxsuite::rebalance::drumsSource)] = 0.0f;
+    isolateGuitarTargets[static_cast<size_t>(vxsuite::rebalance::bassSource)] = 0.0f;
+    isolateGuitarTargets[static_cast<size_t>(vxsuite::rebalance::guitarSource)] = 1.0f;
+
+    stemFrame.confidence = 1.0f;
+    const auto neutralRender = renderStemFrame(stemFrame, sampleRate, neutralTargets);
+    const auto guitarRender = renderStemFrame(stemFrame, sampleRate, isolateGuitarTargets);
+    const double neutralRms = calculateRms(neutralRender);
+    const double deltaRms = calculateRmsDifference(neutralRender, guitarRender);
+
+    if (neutralRms <= 1.0e-8 || deltaRms <= neutralRms * 0.035) {
+        std::cerr << "[VxRebalanceAISmokeTest] AI stem mixer produced no meaningful audible change at "
+                  << sampleRate << " Hz, neutralRms=" << neutralRms
+                  << " deltaRms=" << deltaRms << "\n";
         return false;
     }
 

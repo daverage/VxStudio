@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
+#include <limits>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -174,7 +175,8 @@ struct RealtimeStemSplitter::Impl {
         if (hostSampleRate > 1000.0)
             resampler = std::make_unique<vxsuite::StreamingResampler<kStemBackendChannelCount, kStemBackendChannelCount>>(
                 hostSampleRate, kModelSampleRate);
-        latestFrame = {};
+        latestMaskFrame = {};
+        latestStemFrame = {};
         submittedFrames.store(0, std::memory_order_release);
         completedFrames.store(0, std::memory_order_release);
         failedFrames.store(0, std::memory_order_release);
@@ -188,7 +190,7 @@ struct RealtimeStemSplitter::Impl {
         }
     }
 
-    bool processBlock(const juce::AudioBuffer<float>& input, Dsp::AiMaskFrame& maskFrame) {
+    bool processBlock(const juce::AudioBuffer<float>& input, AiMaskFrame& maskFrame, StemFrame& stemFrame) {
         const int numSamples = input.getNumSamples();
         const int channels = std::min(input.getNumChannels(), kStemBackendChannelCount);
 
@@ -235,8 +237,9 @@ struct RealtimeStemSplitter::Impl {
         }
 
         if (std::unique_lock<std::mutex> lock { latestMutex, std::try_to_lock }; lock.owns_lock()) {
-            if (latestFrame.available) {
-                maskFrame = latestFrame;
+            if (latestMaskFrame.available && latestStemFrame.available) {
+                maskFrame = latestMaskFrame;
+                stemFrame = latestStemFrame;
                 return true;
             }
         }
@@ -360,13 +363,15 @@ struct RealtimeStemSplitter::Impl {
                 continue;
             }
 
-            auto frame = buildSpectralMaskFrame();
+            auto stemFrame = buildStemFrame(workerRequest);
+            auto maskFrame = buildSpectralMaskFrame(stemFrame);
             completedFrames.fetch_add(1, std::memory_order_acq_rel);
-            latestConfidence.store(frame.confidence, std::memory_order_release);
+            latestConfidence.store(maskFrame.confidence, std::memory_order_release);
             hasLatestFrame.store(true, std::memory_order_release);
             {
                 std::lock_guard<std::mutex> lock { latestMutex };
-                latestFrame = frame;
+                latestStemFrame = stemFrame;
+                latestMaskFrame = maskFrame;
             }
         }
     }
@@ -386,39 +391,66 @@ struct RealtimeStemSplitter::Impl {
         destination.normalizationGain = source.normalizationGain;
     }
 
-    Dsp::AiMaskFrame buildSpectralMaskFrame() {
-        std::array<std::array<float, kMaskBins>, kStemBackendStemCount> stemMagnitudes {};
+    StemFrame buildStemFrame(const Request& request) {
+        StemFrame frame;
+        frame.available = true;
+        frame.sequenceNumber = nextFrameSequence++;
+        const float inverseNormalizationGain = request.normalizationGain > std::numeric_limits<float>::epsilon()
+            ? 1.0f / request.normalizationGain
+            : 1.0f;
 
-        for (int stem = 0; stem < kStemBackendStemCount; ++stem)
-            analyseStemSpectrum(stem, stemMagnitudes[static_cast<size_t>(stem)]);
+        for (int ch = 0; ch < kStemFrameChannels; ++ch) {
+            for (int sample = 0; sample < kStemFrameSamples; ++sample) {
+                frame.mixture[static_cast<size_t>(ch)][static_cast<size_t>(sample)] =
+                    request.input[static_cast<size_t>(ch)][static_cast<size_t>(sample)] * inverseNormalizationGain;
+                frame.stems[static_cast<size_t>(vocalsSource)][static_cast<size_t>(ch)][static_cast<size_t>(sample)] =
+                    outputChunks[static_cast<size_t>(stemVocals)][static_cast<size_t>(ch)][static_cast<size_t>(sample)];
+                frame.stems[static_cast<size_t>(drumsSource)][static_cast<size_t>(ch)][static_cast<size_t>(sample)] =
+                    outputChunks[static_cast<size_t>(stemDrums)][static_cast<size_t>(ch)][static_cast<size_t>(sample)];
+                frame.stems[static_cast<size_t>(bassSource)][static_cast<size_t>(ch)][static_cast<size_t>(sample)] =
+                    outputChunks[static_cast<size_t>(stemBass)][static_cast<size_t>(ch)][static_cast<size_t>(sample)];
+            }
 
-        Dsp::AiMaskFrame frame;
+            splitOtherIntoGuitarAndResidual(ch, frame);
+        }
+
+        frame.confidence = estimateStemFrameConfidence(frame);
+        return frame;
+    }
+
+    AiMaskFrame buildSpectralMaskFrame(const StemFrame& stemFrame) {
+        std::array<std::array<float, kMaskBins>, kSourceCount> stemMagnitudes {};
+
+        for (int source = 0; source < kSourceCount; ++source)
+            analyseStemSpectrum(stemFrame, source, stemMagnitudes[static_cast<size_t>(source)]);
+
+        AiMaskFrame frame;
         frame.available = true;
 
         float confidenceSum = 0.0f;
         float confidenceWeight = 0.0f;
 
-        for (int bin = 0; bin < Dsp::kBins; ++bin) {
+        for (int bin = 0; bin < kBins; ++bin) {
             if (bin >= kMaskBins) {
-                for (int source = 0; source < Dsp::kSourceCount; ++source)
+                for (int source = 0; source < kSourceCount; ++source)
                     frame.masks[static_cast<size_t>(source)][static_cast<size_t>(bin)] = 0.0f;
                 continue;
             }
 
             const float hz = static_cast<float>(bin) * static_cast<float>(kModelSampleRate)
                 / static_cast<float>(kMaskFftSize);
-            const float drums = stemMagnitudes[static_cast<size_t>(stemDrums)][static_cast<size_t>(bin)];
-            const float bass = stemMagnitudes[static_cast<size_t>(stemBass)][static_cast<size_t>(bin)];
-            const float vocals = stemMagnitudes[static_cast<size_t>(stemVocals)][static_cast<size_t>(bin)];
-            const float other = stemMagnitudes[static_cast<size_t>(stemOther)][static_cast<size_t>(bin)];
-            const float guitarShare = guitarShareFromOtherStem(hz);
+            const float drums = stemMagnitudes[static_cast<size_t>(drumsSource)][static_cast<size_t>(bin)];
+            const float bass = stemMagnitudes[static_cast<size_t>(bassSource)][static_cast<size_t>(bin)];
+            const float vocals = stemMagnitudes[static_cast<size_t>(vocalsSource)][static_cast<size_t>(bin)];
+            const float guitar = stemMagnitudes[static_cast<size_t>(guitarSource)][static_cast<size_t>(bin)];
+            const float other = stemMagnitudes[static_cast<size_t>(otherSource)][static_cast<size_t>(bin)];
 
-            std::array<float, Dsp::kSourceCount> sourceEnergy {};
-            sourceEnergy[static_cast<size_t>(Dsp::vocalsSource)] = vocals;
-            sourceEnergy[static_cast<size_t>(Dsp::drumsSource)] = drums;
-            sourceEnergy[static_cast<size_t>(Dsp::bassSource)] = bass;
-            sourceEnergy[static_cast<size_t>(Dsp::guitarSource)] = other * guitarShare;
-            sourceEnergy[static_cast<size_t>(Dsp::otherSource)] = other * (1.0f - guitarShare);
+            std::array<float, kSourceCount> sourceEnergy {};
+            sourceEnergy[static_cast<size_t>(vocalsSource)] = vocals;
+            sourceEnergy[static_cast<size_t>(drumsSource)] = drums;
+            sourceEnergy[static_cast<size_t>(bassSource)] = bass;
+            sourceEnergy[static_cast<size_t>(guitarSource)] = guitar;
+            sourceEnergy[static_cast<size_t>(otherSource)] = other;
 
             float total = kMaskEps;
             float strongest = 0.0f;
@@ -428,7 +460,7 @@ struct RealtimeStemSplitter::Impl {
                 strongest = std::max(strongest, positive);
             }
 
-            for (int source = 0; source < Dsp::kSourceCount; ++source)
+            for (int source = 0; source < kSourceCount; ++source)
                 frame.masks[static_cast<size_t>(source)][static_cast<size_t>(bin)] =
                     juce::jlimit(0.0f, 1.0f, sourceEnergy[static_cast<size_t>(source)] / total);
 
@@ -442,14 +474,13 @@ struct RealtimeStemSplitter::Impl {
         return frame;
     }
 
-    void analyseStemSpectrum(const int stem, std::array<float, kMaskBins>& magnitudes) {
+    void analyseStemSpectrum(const StemFrame& stemFrame, const int source, std::array<float, kMaskBins>& magnitudes) {
         std::fill(maskFftScratch.begin(), maskFftScratch.end(), 0.0f);
 
-        const auto& stemBuffer = outputChunks[static_cast<size_t>(stem)];
         for (int i = 0; i < kOutputChunkSize; ++i) {
             float mono = 0.0f;
             for (int ch = 0; ch < kStemBackendChannelCount; ++ch)
-                mono += stemBuffer[static_cast<size_t>(ch)][static_cast<size_t>(i)];
+                mono += stemFrame.stems[static_cast<size_t>(source)][static_cast<size_t>(ch)][static_cast<size_t>(i)];
             mono *= 0.5f;
             maskFftScratch[static_cast<size_t>(i)] = mono * maskWindow[static_cast<size_t>(i)];
         }
@@ -463,6 +494,54 @@ struct RealtimeStemSplitter::Impl {
                 : maskFftScratch[static_cast<size_t>(2 * bin + 1)];
             magnitudes[static_cast<size_t>(bin)] = std::sqrt(std::max(0.0f, re * re + im * im));
         }
+    }
+
+    void splitOtherIntoGuitarAndResidual(const int channel, StemFrame& frame) {
+        std::fill(maskFftScratch.begin(), maskFftScratch.end(), 0.0f);
+        for (int i = 0; i < kOutputChunkSize; ++i)
+            maskFftScratch[static_cast<size_t>(i)] =
+                outputChunks[static_cast<size_t>(stemOther)][static_cast<size_t>(channel)][static_cast<size_t>(i)];
+
+        maskFft.performForward(maskFftScratch.data());
+        for (int bin = 0; bin < kMaskBins; ++bin) {
+            const float hz = static_cast<float>(bin) * static_cast<float>(kModelSampleRate)
+                / static_cast<float>(kMaskFftSize);
+            const float share = guitarShareFromOtherStem(hz);
+            maskFftScratch[static_cast<size_t>(2 * bin)] *= share;
+            if (bin != 0 && bin != kMaskBins - 1)
+                maskFftScratch[static_cast<size_t>(2 * bin + 1)] *= share;
+        }
+
+        maskFft.performInverse(maskFftScratch.data());
+        for (int i = 0; i < kOutputChunkSize; ++i) {
+            const float originalOther =
+                outputChunks[static_cast<size_t>(stemOther)][static_cast<size_t>(channel)][static_cast<size_t>(i)];
+            const float guitar = maskFftScratch[static_cast<size_t>(i)];
+            frame.stems[static_cast<size_t>(guitarSource)][static_cast<size_t>(channel)][static_cast<size_t>(i)] = guitar;
+            frame.stems[static_cast<size_t>(otherSource)][static_cast<size_t>(channel)][static_cast<size_t>(i)] =
+                originalOther - guitar;
+        }
+    }
+
+    float estimateStemFrameConfidence(const StemFrame& frame) const noexcept {
+        double total = 0.0;
+        double strongest = 0.0;
+        for (int source = 0; source < kSourceCount; ++source) {
+            double energy = 0.0;
+            for (int ch = 0; ch < kStemFrameChannels; ++ch) {
+                for (int sample = 0; sample < kStemFrameSamples; ++sample) {
+                    const float value = frame.stems[static_cast<size_t>(source)][static_cast<size_t>(ch)][static_cast<size_t>(sample)];
+                    energy += static_cast<double>(value) * static_cast<double>(value);
+                }
+            }
+            total += energy;
+            strongest = std::max(strongest, energy);
+        }
+
+        if (total <= 1.0e-12)
+            return 0.0f;
+
+        return juce::jlimit(0.30f, 0.78f, static_cast<float>(0.34 + 0.44 * strongest / total));
     }
 
     static std::unique_ptr<IStemSeparationBackend> createBackend() {
@@ -487,6 +566,7 @@ struct RealtimeStemSplitter::Impl {
     std::array<Request, kRequestQueueSize> requestQueue;
     Request workerRequest;
     StemBuffers outputChunks;
+    std::uint64_t nextFrameSequence = 1;
 
     std::thread worker;
     std::atomic<bool> shouldStop { false };
@@ -503,7 +583,8 @@ struct RealtimeStemSplitter::Impl {
     int queueCount = 0;
 
     std::mutex latestMutex;
-    Dsp::AiMaskFrame latestFrame {};
+    AiMaskFrame latestMaskFrame {};
+    StemFrame latestStemFrame {};
 };
 
 RealtimeStemSplitter::RealtimeStemSplitter() = default;
@@ -551,11 +632,18 @@ RealtimeStemSplitter::DebugSnapshot RealtimeStemSplitter::getDebugSnapshot() con
 }
 
 bool RealtimeStemSplitter::processBlock(const juce::AudioBuffer<float>& input,
-                                        Dsp::AiMaskFrame& maskFrame) noexcept {
+                                        AiMaskFrame& maskFrame) noexcept {
+    StemFrame stemFrame;
+    return processBlock(input, maskFrame, stemFrame);
+}
+
+bool RealtimeStemSplitter::processBlock(const juce::AudioBuffer<float>& input,
+                                        AiMaskFrame& maskFrame,
+                                        StemFrame& stemFrame) noexcept {
     if (!available || !impl)
         return false;
 
-    return impl->processBlock(input, maskFrame);
+    return impl->processBlock(input, maskFrame, stemFrame);
 }
 
 } // namespace vxsuite::rebalance::ai

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../dsp/VxRebalanceDsp.h"
+#include "../VxRebalanceTypes.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
@@ -42,7 +42,10 @@ public:
     [[nodiscard]] DebugSnapshot getDebugSnapshot() const noexcept;
 
     [[nodiscard]] bool processBlock(const juce::AudioBuffer<float>& input,
-                                    Dsp::AiMaskFrame& maskFrame) noexcept;
+                                    vxsuite::rebalance::AiMaskFrame& maskFrame) noexcept;
+    [[nodiscard]] bool processBlock(const juce::AudioBuffer<float>& input,
+                                    vxsuite::rebalance::AiMaskFrame& maskFrame,
+                                    vxsuite::rebalance::StemFrame& stemFrame) noexcept;
 
 private:
     struct Impl;

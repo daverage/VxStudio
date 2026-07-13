@@ -577,7 +577,8 @@ Source/vxstudio/
 │   └── VxStudioParameters.h               ← readNormalized / readMode helpers
 └── products/
     ├── tone/                          ← VXTone example (bass/treble EQ)
-    ├── cleanup/                       ← VXCleanup (spectral trouble removal)
+    ├── speech_clarity/                ← VXSpeechClarity (speech artifact cleanup)
+    ├── tone_refine/                   ← VXToneRefine (tonal refinement)
     ├── deverb/                        ← VXDeverb (spatial reverb reduction)
     ├── finish/                        ← VXFinish (final EQ + warmth)
     ├── subtract/                      ← VXSubtract (sidechain-style subtraction)

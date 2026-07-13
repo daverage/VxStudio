@@ -3,10 +3,13 @@
 #include "../../framework/VxStudioOutputTrimmer.h"
 #include "../../framework/VxStudioSilenceGuard.h"
 #include "../../framework/VxStudioProcessorBase.h"
-#include "dsp/VxRebalanceDsp.h"
+#include "VxRebalanceTypes.h"
 
 #if VXSTUDIO_REBALANCE_AI_VARIANT
+#include "ai/VxAiStemRebalanceDsp.h"
 #include "ai/VxRealtimeStemSplitter.h"
+#else
+#include "dsp/VxRebalanceDsp.h"
 #endif
 
 #include <array>
@@ -18,7 +21,7 @@ public:
     ~VXRebalanceAudioProcessor() override;
     juce::AudioProcessorEditor* createEditor() override;
     juce::String getStatusText() const override;
-    vxsuite::rebalance::Dsp::DebugSnapshot getDebugSnapshot() const noexcept;
+    vxsuite::rebalance::DebugSnapshot getDebugSnapshot() const noexcept;
 #if VXSTUDIO_REBALANCE_AI_VARIANT
     vxsuite::rebalance::ai::RealtimeStemSplitter::DebugSnapshot getAiDebugSnapshot() const noexcept;
     juce::String getAiStatusText() const;
@@ -35,9 +38,11 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParameterLayout();
     void processNeutralWithLatency(juce::AudioBuffer<float>& buffer);
 
-    vxsuite::rebalance::Dsp dsp;
 #if VXSTUDIO_REBALANCE_AI_VARIANT
+    vxsuite::rebalance::ai::StemRebalanceDsp aiDsp;
     vxsuite::rebalance::ai::RealtimeStemSplitter realtimeSplitter;
+#else
+    vxsuite::rebalance::Dsp dsp;
 #endif
     vxsuite::OutputTrimmer outputTrimmer;
     vxsuite::SilenceGuard silenceGuard;
