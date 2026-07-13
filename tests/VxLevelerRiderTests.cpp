@@ -42,14 +42,15 @@ struct BurstSignal {
 BurstSignal makeBurstSignal(const double totalSeconds,
                             const float burstDb,
                             const double burstSeconds = 0.8,
-                            const double gapSeconds = 1.2) {
+                            const double gapSeconds = 1.2,
+                            const float floorDb = -70.0f) {
     BurstSignal signal;
     signal.burstSeconds = burstSeconds;
     signal.gapSeconds = gapSeconds;
     const int numSamples = static_cast<int>(totalSeconds * kSampleRate);
     signal.buffer.setSize(kNumChannels, numSamples);
     const float amp = juce::Decibels::decibelsToGain(burstDb);
-    const float floorAmp = juce::Decibels::decibelsToGain(-70.0f);
+    const float floorAmp = juce::Decibels::decibelsToGain(floorDb);
     std::mt19937 rng(7);
     std::uniform_real_distribution<float> noise(-1.0f, 1.0f);
     const double cycle = burstSeconds + gapSeconds;
@@ -360,6 +361,86 @@ void offlineStateRoundTrip() {
            "startSample " + std::to_string(oldLoader.getOfflineAnalysis().startSample));
 }
 
+// New user controls: Target offsets the ride reference; Gate shifts how
+// eagerly the fader freezes in pauses. Defaults (0 dB) are covered by every
+// other test in this file.
+float lateBurstLevelDb(const juce::AudioBuffer<float>& output, const int delay,
+                       const double cycle, const double burstSeconds) {
+    double sum = 0.0;
+    int count = 0;
+    for (int k = 4; k < 6; ++k) {
+        sum += rmsDb(output,
+                     atSeconds(k * cycle + 0.3) + delay,
+                     atSeconds(k * cycle + burstSeconds - 0.1) + delay);
+        ++count;
+    }
+    return static_cast<float>(sum / count);
+}
+
+void targetOffsetShiftsRide() {
+    auto signal = makeBurstSignal(14.0, -18.0f);
+    const double cycle = signal.burstSeconds + signal.gapSeconds;
+
+    const auto runWithOffset = [&](const float offsetDb) {
+        vxsuite::leveler::Dsp dsp;
+        dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+        vxsuite::leveler::Dsp::Params params {};
+        params.level = 0.8f;
+        params.control = 0.3f;
+        params.voiceMode = true;
+        params.targetOffsetDb = offsetDb;
+        dsp.setParams(params);
+        const auto output = renderVoice(signal.buffer, dsp, signal.burstSeconds, cycle);
+        return lateBurstLevelDb(output, dsp.latencySamples(), cycle, signal.burstSeconds);
+    };
+
+    const float baseDb = runWithOffset(0.0f);
+    const float hotDb = runWithOffset(4.0f);
+    const float quietDb = runWithOffset(-4.0f);
+    expect(std::abs((hotDb - baseDb) - 4.0f) < 1.5f, "targetOffset.up",
+           "+4 dB target moved output by " + std::to_string(hotDb - baseDb) + " dB");
+    expect(std::abs((quietDb - baseDb) + 4.0f) < 1.5f, "targetOffset.down",
+           "-4 dB target moved output by " + std::to_string(quietDb - baseDb) + " dB");
+}
+
+void gateSenseShiftsFreeze() {
+    // A realistic pause floor (16 dB below the bursts, e.g. heavy room tone)
+    // sits inside the trimmed gate band, so the knob decides whether the
+    // rider freezes there or keeps riding it.
+    auto signal = makeBurstSignal(14.0, -18.0f, 0.8, 1.2, -34.0f);
+    const double cycle = signal.burstSeconds + signal.gapSeconds;
+
+    // Worst gap floor rise for a given gate-sensitivity trim.
+    const auto gapRiseWith = [&](const float gateSenseDb) {
+        vxsuite::leveler::Dsp dsp;
+        dsp.prepare(kSampleRate, kBlockSize, kNumChannels);
+        vxsuite::leveler::Dsp::Params params {};
+        params.level = 0.8f;
+        params.control = 0.3f;
+        params.voiceMode = true;
+        params.gateSenseDb = gateSenseDb;
+        dsp.setParams(params);
+        const auto output = renderVoice(signal.buffer, dsp, signal.burstSeconds, cycle);
+        const int delay = dsp.latencySamples();
+        float worst = -120.0f;
+        for (int k = 1; k < 6; ++k) {
+            const int gapA = atSeconds(k * cycle + signal.burstSeconds + 0.6);
+            const int gapB = atSeconds((k + 1) * cycle) - 64;
+            worst = std::max(worst, rmsDb(output, gapA + delay, gapB + delay)
+                                        - rmsDb(signal.buffer, gapA, gapB));
+        }
+        return worst;
+    };
+
+    const float tightRise = gapRiseWith(-8.0f);
+    const float openRise = gapRiseWith(8.0f);
+    expect(tightRise < 1.5f, "gateSense.tightStillFreezes",
+           "gap rise at -8 dB trim " + std::to_string(tightRise) + " dB");
+    expect(openRise > tightRise + 0.5f, "gateSense.openRidesDeeper",
+           "gap rise " + std::to_string(tightRise) + " dB (tight) vs "
+               + std::to_string(openRise) + " dB (open)");
+}
+
 // level=0, control=0 must be a pure 10 ms delay in both modes.
 void neutralIsTransparent() {
     auto signal = makeBurstSignal(6.0, -18.0f);
@@ -397,6 +478,8 @@ int main() {
     offlineCurveFollowsTimeline();
     offlineFallbackOutOfRange();
     offlineStateRoundTrip();
+    targetOffsetShiftsRide();
+    gateSenseShiftsFreeze();
     neutralIsTransparent();
 
     if (failures == 0) {

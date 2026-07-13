@@ -42,6 +42,7 @@ private:
     void updateModelDownloadUi();
     void updateAuxSelectorUi();
     void updateExpertUi();
+    bool lastExtrasAllowed = true;
     void applyTextFit();
 
     SuiteLookAndFeel lookAndFeel;

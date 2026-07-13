@@ -18,6 +18,10 @@ constexpr std::string_view kControlParam = "control";
 constexpr std::string_view kModeParam = "mode";
 constexpr std::string_view kAnalysisModeParam = "analysisMode";
 constexpr std::string_view kAnalyzeParam = "analyze";
+constexpr std::string_view kTargetParam = "target";
+constexpr std::string_view kGateParam = "gate";
+constexpr float kTargetRangeDb = 6.0f;
+constexpr float kGateRangeDb = 8.0f;
 
 } // namespace
 
@@ -45,6 +49,17 @@ vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     identity.secondaryDefaultValue = 0.0f;
     identity.primaryHint = "Ride voice phrases or the full mix toward a more even perceived level.";
     identity.secondaryHint = "Set how firmly peaks and harsh bursts are contained without flattening the take.";
+    identity.tertiaryParamId = kTargetParam;
+    identity.tertiaryLabel = "Target";
+    identity.tertiaryHint = "Ride the vocal hotter or quieter than its learned reference level.";
+    identity.tertiaryDefaultValue = 0.5f;
+    identity.tertiaryCenteredDbRange = kTargetRangeDb;
+    identity.quaternaryParamId = kGateParam;
+    identity.quaternaryLabel = "Gate";
+    identity.quaternaryHint = "Left freezes the fader sooner in pauses; right rides deeper into quiet material.";
+    identity.quaternaryDefaultValue = 0.5f;
+    identity.quaternaryCenteredDbRange = kGateRangeDb;
+    identity.extraControlsFollowVocalMode = true;
     identity.dspVersion = vxsuite::versions::plugins::leveler;
     identity.helpTitle = vxsuite::help::leveler.title;
     identity.helpHtml = vxsuite::help::leveler.html;
@@ -274,6 +289,8 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     params.analysisMode = static_cast<vxsuite::leveler::Dsp::MixAnalysisMode>(
         juce::jlimit(0, 2, vxsuite::readChoiceIndex(parameters, productIdentity.auxSelectorParamId, 1)));
     const auto signalQuality = getSignalQualitySnapshot();
+    params.targetOffsetDb = isVoice ? vxsuite::readCenteredDb(parameters, kTargetParam, kTargetRangeDb) : 0.0f;
+    params.gateSenseDb = isVoice ? vxsuite::readCenteredDb(parameters, kGateParam, kGateRangeDb) : 0.0f;
     params.monoScore = signalQuality.monoScore;
     params.compressionScore = signalQuality.compressionScore;
     params.tiltScore = signalQuality.tiltScore;

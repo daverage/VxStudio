@@ -207,9 +207,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
         identity.secondaryDefaultValue,
         makePercentFloatAttributes()));
     if (identity.supportsTertiaryControl()) {
-        const auto tertiaryAttrs = identity.tertiaryLabel == "Gain"
-            ? makeUnityGainPercentAttributes()
-            : makePercentFloatAttributes();
+        const auto tertiaryAttrs = identity.tertiaryCenteredDbRange > 0.0f
+            ? makeCenteredDecibelFloatAttributes(identity.tertiaryCenteredDbRange)
+            : (identity.tertiaryLabel == "Gain"
+                   ? makeUnityGainPercentAttributes()
+                   : makePercentFloatAttributes());
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { identity.tertiaryParamId.data(), 1 },
             toJuceString(identity.tertiaryLabel),
@@ -218,14 +220,28 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             tertiaryAttrs));
     }
     if (identity.supportsQuaternaryControl()) {
+        const auto quaternaryAttrs = identity.quaternaryCenteredDbRange > 0.0f
+            ? makeCenteredDecibelFloatAttributes(identity.quaternaryCenteredDbRange)
+            : makePercentFloatAttributes();
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { identity.quaternaryParamId.data(), 1 },
             toJuceString(identity.quaternaryLabel),
             juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
             identity.quaternaryDefaultValue,
-            makePercentFloatAttributes()));
+            quaternaryAttrs));
     }
     return layout;
+}
+
+// Reads a 0..1 knob that displays as a centred +/- dB value (0.5 -> 0 dB).
+inline float readCenteredDb(const juce::AudioProcessorValueTreeState& state,
+                            const std::string_view paramId,
+                            const float maxAbsDb) {
+    if (paramId.empty())
+        return 0.0f;
+    if (const auto* raw = state.getRawParameterValue(paramId.data()))
+        return juce::jlimit(-maxAbsDb, maxAbsDb, (raw->load() - 0.5f) * 2.0f * maxAbsDb);
+    return 0.0f;
 }
 
 inline Mode readMode(const juce::AudioProcessorValueTreeState& state, const ProductIdentity& identity) {

@@ -34,6 +34,8 @@ public:
         float compressionScore = 0.0f;
         float tiltScore = 0.0f;
         float separationConfidence = 1.0f;
+        float targetOffsetDb = 0.0f;   // vocal: ride hotter/quieter than the learned reference
+        float gateSenseDb = 0.0f;      // vocal: shifts the ride-gate thresholds (+ = ride quieter material)
         bool voiceMode = false;
         MixAnalysisMode analysisMode = MixAnalysisMode::smartRealtime;
     };

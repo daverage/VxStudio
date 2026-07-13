@@ -198,6 +198,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const int longTargetSettleLimit = juce::roundToInt(static_cast<float>(sr));
     const float rideDeadbandDb = 1.2f - 0.6f * level;
 
+    const float targetOffsetDb = clampf(params.targetOffsetDb, -12.0f, 12.0f);
+    const float gateSenseDb = clampf(params.gateSenseDb, -12.0f, 12.0f);
     const float levelShape = 0.35f + 0.70f * level;
     const float maxUpwardGain = 1.0f + 1.05f * level;
     const float maxDownwardGain = std::max(0.24f, 1.0f - 0.55f * level);
@@ -277,11 +279,11 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         gateEnv = gateEnvCoeff * gateEnv + (1.0f - gateEnvCoeff) * detectorLevel;
         const float envDb = gainToDbFloor(std::max(gateEnv, 1.0e-5f));
         const float anchorDb = gainToDbFloor(safeAnchor);
-        const float gateFromLevel = clamp01((envDb - (anchorDb - 16.0f)) / 8.0f);
+        const float gateFromLevel = clamp01((envDb - (anchorDb - 16.0f - gateSenseDb)) / 8.0f);
         // Wide window: phrase evidence may hold the gate open through soft
         // syllables, but not once the level sits far below the anchor
         // (band-share detectors read room tone as speech).
-        const float gateFromLevelWide = clamp01((envDb - (anchorDb - 24.0f)) / 10.0f);
+        const float gateFromLevelWide = clamp01((envDb - (anchorDb - 24.0f - gateSenseDb)) / 10.0f);
         const float gateFromPhrase = clamp01(detector.phraseActivity / 0.12f);
         const float gateTargetRaw = clamp01(std::max(gateFromLevel * (0.15f + 0.85f * gateFromPhrase),
                                                       0.85f * gateFromPhrase * gateFromLevelWide));
@@ -308,7 +310,8 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
 
         const float rideEnvDb = gainToDbFloor(safeEnv);
         const float refDb = 0.35f * gainToDbFloor(safeAnchor)
-            + 0.65f * gainToDbFloor(std::max(longTargetEnv, 1.0e-5f));
+            + 0.65f * gainToDbFloor(std::max(longTargetEnv, 1.0e-5f))
+            + targetOffsetDb;
         const float safeRef = juce::Decibels::decibelsToGain(refDb);
 
         float targetGain = 1.0f;

@@ -442,10 +442,14 @@ void EditorBase::resized() {
     const auto& identity = processor.getProductIdentity();
     const bool expertEnabled = identity.supportsExpertMode()
         && vxsuite::readBool(processor.getValueTreeState(), identity.expertParamId, identity.expertDefaultValue);
+    const bool extrasAllowed = !identity.extraControlsFollowVocalMode
+        || vxsuite::readMode(processor.getValueTreeState(), identity) == vxsuite::Mode::vocal;
     const bool hasTertiary = identity.supportsTertiaryControl()
-        && (!identity.tertiaryRequiresExpert || expertEnabled);
+        && (!identity.tertiaryRequiresExpert || expertEnabled)
+        && extrasAllowed;
     const bool hasQuaternary = identity.supportsQuaternaryControl()
-        && (!identity.quaternaryRequiresExpert || expertEnabled);
+        && (!identity.quaternaryRequiresExpert || expertEnabled)
+        && extrasAllowed;
     const bool hasControlBank = processor.getProductIdentity().supportsControlBank();
     const bool wrapStatusRow = modeRow.getWidth() < scaled(220);
     if (wrapStatusRow) {
@@ -963,14 +967,32 @@ void EditorBase::updateAuxSelectorUi() {
 
 void EditorBase::updateExpertUi() {
     const auto& identity = processor.getProductIdentity();
-    if (!identity.supportsExpertMode())
+    const bool extrasAllowed = !identity.extraControlsFollowVocalMode
+        || vxsuite::readMode(processor.getValueTreeState(), identity) == vxsuite::Mode::vocal;
+    if (!identity.supportsExpertMode()) {
+        // No expert mode: visibility can still follow the vocal/general mode.
+        if (identity.extraControlsFollowVocalMode && extrasAllowed != lastExtrasAllowed) {
+            lastExtrasAllowed = extrasAllowed;
+            const bool showTertiary = identity.supportsTertiaryControl() && extrasAllowed;
+            const bool showQuaternary = identity.supportsQuaternaryControl() && extrasAllowed;
+            tertiarySlider.setVisible(showTertiary);
+            tertiaryLabel.setVisible(showTertiary);
+            tertiaryHint.setVisible(showTertiary);
+            quaternarySlider.setVisible(showQuaternary);
+            quaternaryLabel.setVisible(showQuaternary);
+            quaternaryHint.setVisible(showQuaternary);
+            resized();
+        }
         return;
+    }
 
     const bool expertEnabled = vxsuite::readBool(processor.getValueTreeState(), identity.expertParamId, identity.expertDefaultValue);
     const bool showTertiary = identity.supportsTertiaryControl()
-        && (!identity.tertiaryRequiresExpert || expertEnabled);
+        && (!identity.tertiaryRequiresExpert || expertEnabled)
+        && extrasAllowed;
     const bool showQuaternary = identity.supportsQuaternaryControl()
-        && (!identity.quaternaryRequiresExpert || expertEnabled);
+        && (!identity.quaternaryRequiresExpert || expertEnabled)
+        && extrasAllowed;
 
     tertiarySlider.setVisible(showTertiary);
     tertiaryLabel.setVisible(showTertiary);
@@ -979,8 +1001,9 @@ void EditorBase::updateExpertUi() {
     quaternaryLabel.setVisible(showQuaternary);
     quaternaryHint.setVisible(showQuaternary);
 
-    if (expertEnabled != lastExpertEnabled) {
+    if (expertEnabled != lastExpertEnabled || extrasAllowed != lastExtrasAllowed) {
         lastExpertEnabled = expertEnabled;
+        lastExtrasAllowed = extrasAllowed;
         resized();
     }
 }

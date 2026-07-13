@@ -70,6 +70,12 @@ struct ProductIdentity {
     bool auxSelectorRequiresExpert = false;
     bool tertiaryRequiresExpert = false;
     bool quaternaryRequiresExpert = false;
+    // Show the tertiary/quaternary knobs only while the vocal mode is active.
+    bool extraControlsFollowVocalMode = false;
+    // > 0: display the knob as a centred +/- dB value with this max magnitude
+    // (0 keeps the default percent display).
+    float tertiaryCenteredDbRange = 0.0f;
+    float quaternaryCenteredDbRange = 0.0f;
     bool expertDefaultValue = false;
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
