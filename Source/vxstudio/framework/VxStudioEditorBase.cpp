@@ -814,6 +814,7 @@ void EditorBase::timerCallback() {
         } else if (++traceMissTicks > 12) {
             levelTraceView.setUnavailable();
         }
+        levelTraceView.pushGainSample(processor.getGainTraceDb(), processor.hasGainTrace());
     }
 
     const auto& id = processor.getProductIdentity();

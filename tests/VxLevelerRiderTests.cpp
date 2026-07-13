@@ -209,6 +209,8 @@ void sectionLevellingPersists() {
 
     const float outVerseDb = sectionBurstDb(0.0);
     const float outChorusDb = sectionBurstDb(sectionSeconds);
+    expect(dsp.getRideGainDb() < -1.0f && dsp.getRideGainDb() > -12.0f,
+           "rideGainReported", "ride gain after chorus " + std::to_string(dsp.getRideGainDb()) + " dB");
     const float inDiff = chorusDb - verseDb;   // 10 dB
     const float outDiff = outChorusDb - outVerseDb;
     expect(outDiff <= 0.55f * inDiff, "sectionLevellingPersists",
@@ -380,6 +382,9 @@ void neutralIsTransparent() {
         expect(maxErr < 1.0e-6f,
                std::string("neutralIsTransparent.") + (voice ? "voice" : "general"),
                "max error " + std::to_string(maxErr));
+        expect(dsp.getRideGainDb() == 0.0f,
+               std::string("neutralRideGainZero.") + (voice ? "voice" : "general"),
+               std::to_string(dsp.getRideGainDb()));
     }
 }
 

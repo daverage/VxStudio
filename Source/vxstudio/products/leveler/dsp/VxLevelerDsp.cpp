@@ -113,6 +113,7 @@ void Dsp::reset() {
     globalTracker.reset();
     offlineProcessedSamples = 0;
     lastOfflineBlockIndex = -1;
+    rideGainDbSnapshot = 0.0f;
     offlineActive = false;
     offlineWaiting = false;
     liftActivity = 0.0f;
@@ -469,6 +470,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         tameActivity = 0.0f;
     }
 
+    rideGainDbSnapshot = neutral ? 0.0f : gainToDbFloor(levellerGain * overrideGain);
     offlineActive = false;
     offlineWaiting = false;
     lastOfflineBlockIndex = -1;
@@ -762,6 +764,10 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
                          gainToDbFloor(generalMomentary),
                          gainToDbFloor(generalShort) > -72.0f,
                          numSamples);
+    rideGainDbSnapshot = neutral
+        ? 0.0f
+        : generalRideGainDb + generalNormalizeGainDb + programRestoreGainDb
+            + gainToDbFloor(std::max(generalSpikeGain, 1.0e-5f));
     offlineActive = offlineMapIndexed;
     offlineWaiting = offlineOutOfRange;
     lastOfflineBlockIndex = offlineMapIndexed ? offlineBlockIndex : -1;

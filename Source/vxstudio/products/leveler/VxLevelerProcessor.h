@@ -6,6 +6,7 @@
 #include "dsp/VxLevelerDsp.h"
 #include "dsp/VxLevelerOfflineAnalyzer.h"
 
+#include <atomic>
 #include <cstdint>
 
 class VXLevelerAudioProcessor final : public vxsuite::ProcessorBase {
@@ -23,6 +24,8 @@ public:
     bool isLearnActive() const noexcept override { return analysisActive; }
     bool isLearnReady() const noexcept override { return analysisReady; }
     bool shouldShowLearnUi() const noexcept override;
+    bool hasGainTrace() const noexcept override { return true; }
+    float getGainTraceDb() const noexcept override { return rideGainDbForUi.load(std::memory_order_relaxed); }
     void setDebugTuning(const vxsuite::leveler::Dsp::Tuning& tuning) noexcept;
     void setOfflineAnalysis(vxsuite::leveler::OfflineAnalysisResult analysis);
     void clearOfflineAnalysis() noexcept;
@@ -63,4 +66,5 @@ private:
     int analysisFrameCursor = 0;
     double analysisEnergy = 0.0;
     std::int64_t analysisStartSample = -1;
+    std::atomic<float> rideGainDbForUi { 0.0f };
 };

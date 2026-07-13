@@ -306,6 +306,7 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                                                    getVoiceContextSnapshot());
     dsp.setParams(params);
     dsp.process(buffer, detectorSnapshot, options);
+    rideGainDbForUi.store(dsp.getRideGainDb(), std::memory_order_relaxed);
 }
 
 bool VXLevelerAudioProcessor::shouldShowLearnUi() const noexcept {

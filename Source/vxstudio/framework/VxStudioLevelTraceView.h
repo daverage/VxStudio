@@ -12,6 +12,8 @@ public:
 
     void setSnapshot(const spectrum::SnapshotView& snapshot);
     void setUnavailable();
+    // Feed the optional gain-trace overlay (one sample per UI tick).
+    void pushGainSample(float gainDb, bool enabled);
     void setZoomSeconds(float seconds);
     [[nodiscard]] float zoomSeconds() const noexcept { return zoomSecondsValue; }
 
@@ -32,6 +34,16 @@ private:
     float zoomSecondsValue = 6.0f;
     std::array<float, spectrum::kLevelTraceSamples> dryTrace {};
     std::array<float, spectrum::kLevelTraceSamples> wetTrace {};
+
+    struct GainSample {
+        double timeMs = 0.0;
+        float gainDb = 0.0f;
+    };
+    static constexpr int kGainTraceSamples = 512;
+    bool gainTraceEnabled = false;
+    int gainTraceWriteIndex = 0;
+    int gainTraceCount = 0;
+    std::array<GainSample, kGainTraceSamples> gainTrace {};
 };
 
 } // namespace vxsuite

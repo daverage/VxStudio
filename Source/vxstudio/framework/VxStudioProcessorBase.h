@@ -53,6 +53,11 @@ public:
     virtual void declineModelDownloadPrompt() {}
     virtual bool hasSidechainActive() const noexcept { return false; }
     virtual MeteringSnapshot getMeteringSnapshot() const noexcept { return {}; }
+    // Optional gain trajectory (e.g. a rider's fader, gain reduction) drawn as
+    // a thin overlay in the shared level-trace view. Return the current gain
+    // in dB; must be safe to call from the UI thread (store atomically).
+    virtual bool hasGainTrace() const noexcept { return false; }
+    virtual float getGainTraceDb() const noexcept { return 0.0f; }
     float getOutputSafetyTrimReductionDb() const noexcept { return outputSafetyTrimmer.getCurrentReductionDb(); }
     float getOutputSafetyTrimMaxReductionDb() const noexcept { return outputSafetyTrimmer.getMaxObservedReductionDb(); }
     float getOutputSafetyTrimActivity() const noexcept { return outputSafetyTrimmer.getCurrentActivity01(); }

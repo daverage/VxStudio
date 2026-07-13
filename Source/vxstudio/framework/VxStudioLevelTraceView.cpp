@@ -30,6 +30,18 @@ void LevelTraceView::setUnavailable() {
     repaint();
 }
 
+void LevelTraceView::pushGainSample(const float gainDb, const bool enabled) {
+    gainTraceEnabled = enabled;
+    if (!enabled) {
+        gainTraceCount = 0;
+        gainTraceWriteIndex = 0;
+        return;
+    }
+    gainTrace[static_cast<size_t>(gainTraceWriteIndex)] = { juce::Time::getMillisecondCounterHiRes(), gainDb };
+    gainTraceWriteIndex = (gainTraceWriteIndex + 1) % kGainTraceSamples;
+    gainTraceCount = std::min(gainTraceCount + 1, kGainTraceSamples);
+}
+
 void LevelTraceView::setZoomSeconds(const float seconds) {
     zoomSecondsValue = juce::jlimit(1.0f, 24.0f, seconds);
     repaint();
@@ -103,6 +115,35 @@ void LevelTraceView::paint(juce::Graphics& g) {
     g.strokePath(dryPath, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     g.setColour(accent.withAlpha(0.92f));
     g.strokePath(wetPath, juce::PathStrokeType(1.9f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Optional gain-trace overlay: the processing gain trajectory (e.g. a
+    // rider's fader), +/-12 dB mapped over the plot height, 0 dB centred.
+    if (gainTraceEnabled && gainTraceCount > 1) {
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        const double windowMs = static_cast<double>(visibleSeconds) * 1000.0;
+        juce::Path gainPath;
+        bool started = false;
+        for (int i = gainTraceCount - 1; i >= 0; --i) {
+            const int index = (gainTraceWriteIndex - 1 - (gainTraceCount - 1 - i) + 2 * kGainTraceSamples) % kGainTraceSamples;
+            const auto& sample = gainTrace[static_cast<size_t>(index)];
+            const double ageMs = nowMs - sample.timeMs;
+            if (ageMs > windowMs)
+                break;
+            const float x = plot.getRight() - static_cast<float>(ageMs / windowMs) * plotWidth;
+            const float gainNorm = juce::jlimit(0.0f, 1.0f, (sample.gainDb + 12.0f) / 24.0f);
+            const float y = plot.getBottom() - gainNorm * plot.getHeight();
+            if (!started) {
+                gainPath.startNewSubPath(x, y);
+                started = true;
+            } else {
+                gainPath.lineTo(x, y);
+            }
+        }
+        if (started) {
+            g.setColour(accent.brighter(0.9f).withAlpha(0.85f));
+            g.strokePath(gainPath, juce::PathStrokeType(1.1f));
+        }
+    }
 
     g.setFont(juce::FontOptions().withHeight(11.0f));
     g.setColour(juce::Colours::white.withAlpha(0.56f));

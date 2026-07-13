@@ -101,6 +101,10 @@ public:
     bool isOfflineWaitingForTimeline() const noexcept { return offlineWaiting; }
     [[nodiscard]] const OfflineAnalysisResult& getOfflineAnalysis() const noexcept { return offlineAnalysis; }
     DebugSnapshot getDebugSnapshot() const noexcept;
+    // Total ride gain applied by the last processed block, in dB
+    // (voice: leveller x override fader; general: ride + normalize +
+    // restore + spike). Cached once per block.
+    [[nodiscard]] float getRideGainDb() const noexcept { return rideGainDbSnapshot; }
 
 private:
     struct MixTargetFrame final {
@@ -196,6 +200,7 @@ private:
     std::int64_t offlineProcessedSamples = 0;
     std::int64_t timelineSample = -1;
     int lastOfflineBlockIndex = -1;
+    float rideGainDbSnapshot = 0.0f;
     bool offlineActive = false;
     bool offlineWaiting = false;
 
