@@ -148,14 +148,21 @@ DetectorSnapshot Detector::analyse(const juce::AudioBuffer<float>& input,
     smoothTransient += (1.0f - alphaScore) * (transient - smoothTransient);
     smoothStereoSpread += (1.0f - alphaScore) * (stereoSpread - smoothStereoSpread);
 
+    // Phrase evidence from the shared voice context is built on band-share
+    // ratios, which are level-independent: broadband room tone / noise floor
+    // still reads as "speech active". Gate it by absolute level so silence
+    // between phrases cannot hold the ride gate open.
+    const float levelDb = juce::Decibels::gainToDecibels(fullEnv, -100.0f);
+    const float silenceGuard = clamp01((levelDb + 58.0f) / 10.0f);
+
     DetectorSnapshot snapshot;
     snapshot.speechPresence = smoothSpeechPresence;
     snapshot.speechDominance = smoothSpeechDominance;
     snapshot.instrumentDominance = smoothInstrumentDominance;
     snapshot.buriedSpeech = smoothBuriedSpeech;
-    snapshot.phraseActivity = voiceContext.phraseActivity;
-    snapshot.phraseStart = voiceContext.phraseStart;
-    snapshot.phraseEnd = voiceContext.phraseEnd;
+    snapshot.phraseActivity = voiceContext.phraseActivity * silenceGuard;
+    snapshot.phraseStart = voiceContext.phraseStart * silenceGuard;
+    snapshot.phraseEnd = voiceContext.phraseEnd * silenceGuard;
     snapshot.intelligibility = voiceContext.intelligibility;
     snapshot.brightness = smoothBrightness;
     snapshot.transientStrength = smoothTransient;

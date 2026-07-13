@@ -5,20 +5,24 @@ project(VxStudio VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(VXSUITE_FRAMEWORK_VERSION "0.2.2")
-set(VXSUITE_PLUGIN_VERSION_VXDEVERB "0.2.1")
-set(VXSUITE_PLUGIN_VERSION_VXPROXIMITY "0.2.1")
-set(VXSUITE_PLUGIN_VERSION_VXProximityClassic "0.1.0")
-set(VXSUITE_PLUGIN_VERSION_VXFINISH "0.3.0")
-set(VXSUITE_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
-set(VXSUITE_PLUGIN_VERSION_VXSUBTRACT "0.2.1")
-set(VXSUITE_PLUGIN_VERSION_VXDENOISER "0.2.1")
-set(VXSUITE_PLUGIN_VERSION_VXDEEPFILTERNET "0.2.2")
-set(VXSUITE_PLUGIN_VERSION_VXTONE "0.2.0")
-set(VXSUITE_PLUGIN_VERSION_VXLEVELER "0.2.0")
-set(VXSUITE_PLUGIN_VERSION_VXREBALANCE "0.2.2")
-set(VXSUITE_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.1")
-set(VXSUITE_PLUGIN_VERSION_VXREPAIR "0.1.1")
+set(VXSTUDIO_FRAMEWORK_VERSION "0.2.2")
+set(VXSTUDIO_PLUGIN_VERSION_VXDEVERB "0.2.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY "0.2.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC "0.1.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXCLEANUP "0.2.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY "0.2.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXFINISH "0.3.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXSUBTRACT "0.2.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXDENOISER "0.2.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXDEEPFILTERNET "0.2.2")
+set(VXSTUDIO_PLUGIN_VERSION_VXTONE "0.2.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXREFINE "0.1.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXLEVELER "0.2.0")
+set(VXSTUDIO_PLUGIN_VERSION_VXREBALANCE "0.2.2")
+set(VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXREPAIR "0.1.1")
+option(VXSTUDIO_ENABLE_REBALANCE_AI "Build the experimental, non-product VxRebalanceAI tool" OFF)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
 configure_file(
@@ -342,8 +346,8 @@ add_custom_target(VXProximityPlugin ALL DEPENDS VXProximity_VST3)
 vxstudio_stage_vst3_bundle(VXProximity_VST3 "VXProximity")
 
 juce_add_plugin(VXProximityClassic
-  VERSION ${VXSUITE_PLUGIN_VERSION_VXProximityClassic}
-  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXProximityClassic}
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxstudio.vxProximityClassic"
@@ -370,12 +374,9 @@ target_link_libraries(VXProximityClassic PRIVATE VxStudioFramework juce::juce_ds
 add_custom_target(VXProximityClassicPlugin ALL DEPENDS VXProximityClassic_VST3)
 vxstudio_stage_vst3_bundle(VXProximityClassic_VST3 "VXProximityClassic")
 
-# VXCleanup archived — replaced by VXClarity and VXRefine. Sources kept for reference.
-# juce_add_plugin(VXCleanup ...)
-
 juce_add_plugin(VXClarity
-  VERSION 0.2.0
-  BUILD_VERSION 0.2.0
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxstudio.vxclarity"
@@ -607,8 +608,8 @@ add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxstudio_stage_vst3_bundle(VXTone_VST3 "VXTone")
 
 juce_add_plugin(VXRefine
-  VERSION 0.1.0
-  BUILD_VERSION 0.1.0
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREFINE}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREFINE}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxstudio.vxrefine"
@@ -699,6 +700,8 @@ target_link_libraries(VXRebalance PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXRebalancePlugin ALL DEPENDS VXRebalance_VST3)
 vxstudio_stage_vst3_bundle(VXRebalance_VST3 "VXRebalance")
 
+set(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED FALSE)
+if(VXSTUDIO_ENABLE_REBALANCE_AI)
 juce_add_plugin(VxRebalanceAI
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREBALANCE}
   BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREBALANCE}
@@ -723,9 +726,9 @@ juce_generate_juce_header(VxRebalanceAI)
 target_sources(VxRebalanceAI PRIVATE
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
   Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxstudio/products/rebalance/ai/VxAiStemRebalanceDsp.cpp
   Source/vxstudio/products/rebalance/ai/OnnxStemgenBackend.cpp
   Source/vxstudio/products/rebalance/ai/VxRealtimeStemSplitter.cpp
-  Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
 )
 target_include_directories(VxRebalanceAI PRIVATE Source)
 target_link_libraries(VxRebalanceAI PRIVATE VxStudioFramework juce::juce_dsp)
@@ -739,7 +742,6 @@ find_library(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY
   PATHS "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/lib"
   NO_DEFAULT_PATH
 )
-set(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED FALSE)
 if(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY
    AND EXISTS "${VXSTUDIO_REBALANCE_AI_ORT_DIR}/include"
    AND EXISTS "${VXSTUDIO_REBALANCE_AI_MODEL_ONNX}"
@@ -839,9 +841,9 @@ if(VXSTUDIO_REBALANCE_AI_ONNXRUNTIME_LIBRARY
             "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3/Contents/Resources/model.onnx.data"
     VERBATIM)
 else()
-  message(STATUS "VxRebalanceAI realtime splitter disabled; install ThirdParty/onnxruntime and ThirdParty/stemgenrt/model")
+  message(FATAL_ERROR "VxRebalanceAI is experimental and requires ONNX Runtime plus ThirdParty/stemgenrt/model/model.onnx and model.onnx.data")
 endif()
-add_custom_target(VxRebalanceAIPlugin ALL DEPENDS VxRebalanceAI_VST3)
+add_custom_target(VxRebalanceAIPlugin DEPENDS VxRebalanceAI_VST3)
 vxstudio_stage_vst3_bundle(VxRebalanceAI_VST3 "VxRebalanceAI")
 if(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED AND APPLE)
   add_custom_command(TARGET VxRebalanceAI_VST3 POST_BUILD
@@ -849,6 +851,9 @@ if(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED AND APPLE)
     COMMAND /usr/bin/codesign --force --sign - "${VXSTUDIO_VST3_STAGE_DIR}/VxRebalanceAI.vst3"
     COMMENT "Signing VxRebalanceAI.vst3 after bundling realtime splitter resources"
     VERBATIM)
+endif()
+else()
+  message(STATUS "VxRebalanceAI experimental tool disabled; set VXSTUDIO_ENABLE_REBALANCE_AI=ON to build it")
 endif()
 
 juce_add_plugin(VXStudioAnalyser
@@ -881,8 +886,8 @@ target_link_libraries(VXStudioAnalyser PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXStudioAnalyserPlugin ALL DEPENDS VXStudioAnalyser_VST3)
 vxstudio_stage_vst3_bundle(VXStudioAnalyser_VST3 "VXStudioAnalyser")
 juce_add_plugin(VXRepair
-  VERSION ${VXSUITE_PLUGIN_VERSION_VXREPAIR}
-  BUILD_VERSION ${VXSUITE_PLUGIN_VERSION_VXREPAIR}
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREPAIR}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREPAIR}
   FORMATS VST3
   COMPANY_NAME "VX Suite"
   BUNDLE_ID "com.vxstudio.vxrepair"
@@ -943,7 +948,6 @@ add_custom_target(VXSuite_VST3
     VXRefine_VST3
     VXLeveler_VST3
     VXRebalance_VST3
-    VxRebalanceAI_VST3
     VXStudioAnalyser_VST3
     VXRepair_VST3
     VXDeverbStage
@@ -958,7 +962,6 @@ add_custom_target(VXSuite_VST3
     VXRefineStage
     VXLevelerStage
     VXRebalanceStage
-    VxRebalanceAIStage
     VXStudioAnalyserStage
     VXRepairStage
   COMMENT "Building all VX Suite VST3 products")
@@ -1031,6 +1034,23 @@ target_link_libraries(VXLevelerTuneSearch PRIVATE
 target_compile_definitions(VXLevelerTuneSearch PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXLevelerTuneSearch)
 
+add_executable(VxLevelerRiderTests
+  tests/VxLevelerRiderTests.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
+)
+target_include_directories(VxLevelerRiderTests PRIVATE Source tests)
+target_link_libraries(VxLevelerRiderTests PRIVATE
+  VxStudioFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VxLevelerRiderTests PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxstudio_add_executable_test(VxLevelerRiderTests)
+
 add_executable(VXRebalanceMeasure
   tests/VXRebalanceMeasure.cpp
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
@@ -1048,11 +1068,22 @@ target_compile_definitions(VXRebalanceMeasure PRIVATE VXSTUDIO_DISABLE_PLUGIN_EN
 vxstudio_add_executable_test(VXRebalanceMeasure)
 
 if(VXSTUDIO_REBALANCE_AI_SPLITTER_ENABLED)
+  add_executable(VxAiStemMixerTests
+    tests/VxAiStemMixerTests.cpp
+    Source/vxstudio/products/rebalance/ai/VxAiStemRebalanceDsp.cpp
+  )
+  target_include_directories(VxAiStemMixerTests PRIVATE Source tests)
+  target_link_libraries(VxAiStemMixerTests PRIVATE
+    VxStudioFramework
+    juce::juce_audio_basics
+  )
+  vxstudio_add_executable_test(VxAiStemMixerTests)
+
   add_executable(VxRebalanceAISmokeTest
     tests/VxRebalanceAISmokeTest.cpp
+    Source/vxstudio/products/rebalance/ai/VxAiStemRebalanceDsp.cpp
     Source/vxstudio/products/rebalance/ai/OnnxStemgenBackend.cpp
     Source/vxstudio/products/rebalance/ai/VxRealtimeStemSplitter.cpp
-    Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
     ThirdParty/stemgenrt/plugin/source/OnnxRuntime.cpp
   )
   target_include_directories(VxRebalanceAISmokeTest PRIVATE
@@ -1252,7 +1283,6 @@ target_link_libraries(VXSuiteProfile PRIVATE
 target_compile_definitions(VXSuiteProfile PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXSuiteProfile)
 
-vxstudio_add_pluginval_test(VXCleanup)
 vxstudio_add_pluginval_test(VXDeepFilterNet)
 vxstudio_add_pluginval_test(VXDenoiser)
 vxstudio_add_pluginval_test(VXDeverb)

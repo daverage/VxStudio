@@ -87,6 +87,8 @@ void Dsp::reset() {
     highTameGain = 1.0f;
     overrideTameGain = 1.0f;
     vocalPhraseAnchor = 0.0f;
+    rideGate = 0.0f;
+    gateEnv = 0.0f;
     activeState = MixState::neutral;
     targetState = MixState::neutral;
     stateTransition = 1.0f;
@@ -179,6 +181,11 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     const float tameRelease = timeCoeff(sr, 0.120f);
     const float overrideAttack = timeCoeff(sr, 0.010f);
     const float overrideRelease = timeCoeff(sr, 0.180f);
+    const float gateOpenCoeff = timeCoeff(sr, 0.015f);
+    const float gateCloseCoeff = timeCoeff(sr, 0.060f);
+    const float gateEnvAttack = timeCoeff(sr, 0.004f);
+    const float gateEnvRelease = timeCoeff(sr, 0.040f);
+    const float gateRelaxCoeff = timeCoeff(sr, 6.0f);
 
     const float levelShape = 0.35f + 0.70f * level;
     const float maxUpwardGain = 1.0f + 1.05f * level;
@@ -230,15 +237,19 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float detectorLevel = std::max(monoAbs, peakAbs * 0.85f);
         const float envCoeff = detectorLevel > levelEnv ? levelEnvAttack : levelEnvRelease;
         levelEnv = envCoeff * levelEnv + (1.0f - envCoeff) * detectorLevel;
-        const float anchorCoeff = levelEnv > anchorEnv ? anchorRiseCoeff : anchorFallCoeff;
-        anchorEnv = anchorCoeff * anchorEnv + (1.0f - anchorCoeff) * levelEnv;
-        if (detector.phraseStart > 0.18f || vocalPhraseAnchor <= 1.0e-6f)
-            vocalPhraseAnchor = levelEnv;
-        const float phraseCoeff = levelEnv > vocalPhraseAnchor ? phraseAnchorRiseCoeff : phraseAnchorFallCoeff;
-        if (detector.phraseActivity > 0.16f)
-            vocalPhraseAnchor = phraseCoeff * vocalPhraseAnchor + (1.0f - phraseCoeff) * levelEnv;
-        else if (detector.phraseEnd > 0.12f)
-            vocalPhraseAnchor = 0.985f * vocalPhraseAnchor + 0.015f * levelEnv;
+
+        const bool gateWasClosed = rideGate < 0.05f;
+        if (!gateWasClosed) {
+            const float anchorCoeff = levelEnv > anchorEnv ? anchorRiseCoeff : anchorFallCoeff;
+            anchorEnv = anchorCoeff * anchorEnv + (1.0f - anchorCoeff) * levelEnv;
+            if (detector.phraseStart > 0.18f || vocalPhraseAnchor <= 1.0e-6f)
+                vocalPhraseAnchor = levelEnv;
+            const float phraseCoeff = levelEnv > vocalPhraseAnchor ? phraseAnchorRiseCoeff : phraseAnchorFallCoeff;
+            if (detector.phraseActivity > 0.16f)
+                vocalPhraseAnchor = phraseCoeff * vocalPhraseAnchor + (1.0f - phraseCoeff) * levelEnv;
+            else if (detector.phraseEnd > 0.12f)
+                vocalPhraseAnchor = 0.985f * vocalPhraseAnchor + 0.015f * levelEnv;
+        }
 
         const float safeEnv = std::max(levelEnv, 1.0e-5f);
         const float safeAnchor = detector.phraseActivity > 0.08f
@@ -248,6 +259,24 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float envUnderAnchor = clamp01((safeAnchor - safeEnv) / (safeAnchor + 1.0e-5f));
         const float hotInstrumentGuard = clamp01((peakAbs - 0.46f) / 0.24f)
             * clamp01(0.62f * detector.instrumentDominance + 0.38f * detector.transientStrength);
+
+        // The gate needs a much faster level detector than the ride envelope,
+        // otherwise the fader pumps up before the gate can close.
+        const float gateEnvCoeff = detectorLevel > gateEnv ? gateEnvAttack : gateEnvRelease;
+        gateEnv = gateEnvCoeff * gateEnv + (1.0f - gateEnvCoeff) * detectorLevel;
+        const float envDb = gainToDbFloor(std::max(gateEnv, 1.0e-5f));
+        const float anchorDb = gainToDbFloor(safeAnchor);
+        const float gateFromLevel = clamp01((envDb - (anchorDb - 16.0f)) / 8.0f);
+        // Wide window: phrase evidence may hold the gate open through soft
+        // syllables, but not once the level sits far below the anchor
+        // (band-share detectors read room tone as speech).
+        const float gateFromLevelWide = clamp01((envDb - (anchorDb - 24.0f)) / 10.0f);
+        const float gateFromPhrase = clamp01(detector.phraseActivity / 0.12f);
+        const float gateTargetRaw = clamp01(std::max(gateFromLevel * (0.15f + 0.85f * gateFromPhrase),
+                                                      0.85f * gateFromPhrase * gateFromLevelWide));
+        const float gateCoeff = gateTargetRaw > rideGate ? gateOpenCoeff : gateCloseCoeff;
+        rideGate = gateCoeff * rideGate + (1.0f - gateCoeff) * gateTargetRaw;
+
         float targetGain = 1.0f;
         if (!neutral) {
             const float levelRatio = safeAnchor / safeEnv;
@@ -269,8 +298,13 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
                                       ratioGain * biasGain);
         }
 
+        const float heldGain = levellerGain;
+        targetGain = heldGain + rideGate * (targetGain - heldGain);
+
         const float levellerCoeff = targetGain < levellerGain ? levelGainAttack : levelGainRelease;
         levellerGain = levellerCoeff * levellerGain + (1.0f - levellerCoeff) * targetGain;
+        if (rideGate < 0.05f)
+            levellerGain = gateRelaxCoeff * levellerGain + (1.0f - gateRelaxCoeff) * 1.0f;
 
         const float overrideZone = clamp01((std::max(level, control) - 0.60f) / 0.40f);
         const float problemWeight = targetState == MixState::voiceBuried
@@ -294,15 +328,17 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
         const float overrideGainCoeff = targetOverrideGain < overrideGain ? overrideAttack : overrideRelease;
         overrideGain = overrideGainCoeff * overrideGain + (1.0f - overrideGainCoeff) * targetOverrideGain;
 
-        const float liftGain = 1.0f + voiceDecision.speechLift * maxLiftAmount * (1.0f - 0.68f * hotInstrumentGuard);
+        const float rawLiftGain = 1.0f + voiceDecision.speechLift * maxLiftAmount * (1.0f - 0.68f * hotInstrumentGuard);
+        const float liftGain = 1.0f + rideGate * (rawLiftGain - 1.0f);
         const float liftCoeff = liftGain > speechLiftGain ? liftAttack : liftRelease;
         speechLiftGain = liftCoeff * speechLiftGain + (1.0f - liftCoeff) * liftGain;
 
-        const float targetOverrideLiftGain = juce::jlimit(1.0f,
-                                                           3.2f,
-                                                           1.0f + overrideZone * speechNeed * overrideTrigger
-                                                                     * (0.14f + 1.35f * level + 0.12f * detector.phraseActivity)
-                                                                     * (1.0f - 0.78f * hotInstrumentGuard));
+        const float rawTargetOverrideLiftGain = juce::jlimit(1.0f,
+                                                              3.2f,
+                                                              1.0f + overrideZone * speechNeed * overrideTrigger
+                                                                        * (0.14f + 1.35f * level + 0.12f * detector.phraseActivity)
+                                                                        * (1.0f - 0.78f * hotInstrumentGuard));
+        const float targetOverrideLiftGain = 1.0f + rideGate * (rawTargetOverrideLiftGain - 1.0f);
         const float overrideLiftCoeff = targetOverrideLiftGain > overrideLiftGain ? overrideAttack : overrideRelease;
         overrideLiftGain = overrideLiftCoeff * overrideLiftGain
             + (1.0f - overrideLiftCoeff) * targetOverrideLiftGain;

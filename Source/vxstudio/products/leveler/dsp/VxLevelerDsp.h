@@ -161,6 +161,8 @@ private:
     float highTameGain = 1.0f;
     float overrideTameGain = 1.0f;
     float vocalPhraseAnchor = 0.0f;
+    float rideGate = 0.0f;
+    float gateEnv = 0.0f;
     MixState activeState = MixState::neutral;
     MixState targetState = MixState::neutral;
     float stateTransition = 1.0f;
