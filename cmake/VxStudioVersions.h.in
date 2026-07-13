@@ -10,7 +10,6 @@ namespace plugins {
 inline constexpr std::string_view deverb = "@VXSTUDIO_PLUGIN_VERSION_VXDEVERB@";
 inline constexpr std::string_view proximity = "@VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY@";
 inline constexpr std::string_view ProximityClassic = "@VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC@";
-inline constexpr std::string_view cleanup = "@VXSTUDIO_PLUGIN_VERSION_VXCLEANUP@";
 inline constexpr std::string_view speech_clarity = "@VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY@";
 inline constexpr std::string_view finish = "@VXSTUDIO_PLUGIN_VERSION_VXFINISH@";
 inline constexpr std::string_view optocomp = "@VXSTUDIO_PLUGIN_VERSION_VXOPTOCOMP@";

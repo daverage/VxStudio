@@ -1,4 +1,3 @@
-#include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxstudio/products/finish/VxFinishProcessor.h"
 #include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
@@ -76,13 +75,6 @@ int main() {
         for (const int blockSize : blockSizes) {
             std::cout << "Block size: " << blockSize << "\n";
 
-            VXCleanupAudioProcessor cleanup;
-            cleanup.prepareToPlay(sr, blockSize);
-            setParamNormalized(cleanup, "cleanup", 0.58f);
-            setParamNormalized(cleanup, "body", 0.42f);
-            setParamNormalized(cleanup, "focus", 0.57f);
-            printProfileRow("  Cleanup", profileProcessor(cleanup, noisy, blockSize, passes), passes, passes * 1.0);
-
             VXProximityAudioProcessor proximity;
             proximity.prepareToPlay(sr, blockSize);
             setParamNormalized(proximity, "closer", 0.24f);
@@ -111,8 +103,7 @@ int main() {
                 const auto chainStart = std::chrono::steady_clock::now();
                 for (int pass = 0; pass < passes; ++pass) {
                     auto afterSubtract = render(subtract, noisy, blockSize);
-                    auto afterCleanup = render(cleanup, afterSubtract, blockSize);
-                    auto afterProximity = render(proximity, afterCleanup, blockSize);
+                    auto afterProximity = render(proximity, afterSubtract, blockSize);
                     auto finalOut = render(finish, afterProximity, blockSize);
                     juce::ignoreUnused(finalOut);
                 }

@@ -1,4 +1,3 @@
-#include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h"
 #include "../Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.h"
 #include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
@@ -111,42 +110,9 @@ bool ensureDeepFilterTestModelsInstalled() {
     return true;
 }
 
-float renderCleanupAndMeasureMaxPlosiveActivity(VXCleanupAudioProcessor& cleanup,
-                                                const juce::AudioBuffer<float>& input,
-                                                const int blockSize = 256) {
-    juce::MidiBuffer midi;
-    float maxActivity = 0.0f;
-    for (int start = 0; start < input.getNumSamples(); start += blockSize) {
-        const int num = std::min(blockSize, input.getNumSamples() - start);
-        juce::AudioBuffer<float> block(input.getNumChannels(), num);
-        for (int ch = 0; ch < input.getNumChannels(); ++ch)
-            block.copyFrom(ch, 0, input, ch, start, num);
-        cleanup.processBlock(block, midi);
-        maxActivity = std::max(maxActivity, cleanup.getActivityLight(2));
-    }
-    return maxActivity;
-}
-
-float renderCleanupAndMeasureMaxActivity(VXCleanupAudioProcessor& cleanup,
-                                         const juce::AudioBuffer<float>& input,
-                                         const int lightIndex,
-                                         const int blockSize = 256) {
-    juce::MidiBuffer midi;
-    float maxActivity = 0.0f;
-    for (int start = 0; start < input.getNumSamples(); start += blockSize) {
-        const int num = std::min(blockSize, input.getNumSamples() - start);
-        juce::AudioBuffer<float> block(input.getNumChannels(), num);
-        for (int ch = 0; ch < input.getNumChannels(); ++ch)
-            block.copyFrom(ch, 0, input, ch, start, num);
-        cleanup.processBlock(block, midi);
-        maxActivity = std::max(maxActivity, cleanup.getActivityLight(lightIndex));
-    }
-    return maxActivity;
-}
-
-juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double sr,
-                                                                   const int blockSize,
-                                                                   const juce::AudioBuffer<float>& input) {
+juce::AudioBuffer<float> renderSubtractProximityFinishChain(const double sr,
+                                                            const int blockSize,
+                                                            const juce::AudioBuffer<float>& input) {
     VXSubtractAudioProcessor subtract;
     subtract.prepareToPlay(sr, blockSize);
     if (!primeSubtractLearn(subtract, sr, blockSize))
@@ -155,18 +121,11 @@ juce::AudioBuffer<float> renderSubtractCleanupProximityFinishChain(const double 
     setParamNormalized(subtract, "protect", 0.48f);
     auto afterSubtract = render(subtract, input, blockSize);
 
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, blockSize);
-    setParamNormalized(cleanup, "cleanup", 0.52f);
-    setParamNormalized(cleanup, "body", 0.44f);
-    setParamNormalized(cleanup, "focus", 0.55f);
-    auto afterCleanup = render(cleanup, afterSubtract, blockSize);
-
     VXProximityAudioProcessor proximity;
     proximity.prepareToPlay(sr, blockSize);
     setParamNormalized(proximity, "closer", 0.24f);
     setParamNormalized(proximity, "air", 0.18f);
-    auto afterProximity = render(proximity, afterCleanup, blockSize);
+    auto afterProximity = render(proximity, afterSubtract, blockSize);
 
     VXFinishAudioProcessor finish;
     finish.prepareToPlay(sr, blockSize);
@@ -325,64 +284,7 @@ juce::AudioBuffer<float> makeRebalanceSyntheticOtherStem(const double sr, const 
     return buffer;
 }
 
-juce::AudioBuffer<float> makeCleanupStressInput(const double sr, const float seconds) {
-    auto buffer = addBuffers(makeSpeechLike(sr, seconds), makeNoise(sr, seconds, 0.06f));
-    const int samples = buffer.getNumSamples();
-    for (int i = 0; i < samples; ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(sr);
-        const float plosiveWindow = (t >= 0.18f && t <= 0.30f)
-            ? std::sin(juce::MathConstants<float>::pi * (t - 0.18f) / 0.12f)
-            : 0.0f;
-        const float sibilantWindow = (t >= 0.52f && t <= 0.66f)
-            ? std::sin(juce::MathConstants<float>::pi * (t - 0.52f) / 0.14f)
-            : 0.0f;
-        const float plosive = 0.42f * plosiveWindow * std::sin(2.0f * juce::MathConstants<float>::pi * 70.0f * t);
-        const float sibilant = 0.18f * sibilantWindow * std::sin(2.0f * juce::MathConstants<float>::pi * 7800.0f * t);
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-            buffer.setSample(ch, i, buffer.getSample(ch, i) + plosive + sibilant);
-    }
-
-    const float peak = peakAbs(buffer);
-    if (peak > 1.0e-6f)
-        buffer.applyGain(0.92f / peak);
-    return buffer;
-}
-
-juce::AudioBuffer<float> makeCleanupVoicedToneInput(const double sr, const float seconds) {
-    auto fundamental = makeSine(sr, seconds, 180.0f, 0.16f);
-    auto formant1 = makeSine(sr, seconds, 720.0f, 0.052f);
-    auto formant2 = makeSine(sr, seconds, 2340.0f, 0.020f);
-    auto buffer = addBuffers(addBuffers(fundamental, formant1), formant2);
-    buffer = addBuffers(buffer, makeNoise(sr, seconds, 0.008f));
-
-    for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(sr);
-        const float env = 0.72f + 0.28f * std::sin(2.0f * juce::MathConstants<float>::pi * 2.3f * t);
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-            buffer.setSample(ch, i, buffer.getSample(ch, i) * env);
-    }
-
-    return buffer;
-}
-
-juce::AudioBuffer<float> makeCleanupVoicedEdgeCaseInput(const double sr, const float seconds) {
-    auto fundamental = makeSine(sr, seconds, 180.0f, 0.22f);
-    auto formant1 = makeSine(sr, seconds, 720.0f, 0.07f);
-    auto formant2 = makeSine(sr, seconds, 2340.0f, 0.035f);
-    auto ess = makeSine(sr, seconds, 6200.0f, 0.05f);
-    auto buffer = addBuffers(addBuffers(fundamental, formant1), addBuffers(formant2, ess));
-
-    for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(sr);
-        const float env = (t > 0.15f && t < (seconds - 0.15f)) ? 1.0f : 0.2f;
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-            buffer.setSample(ch, i, buffer.getSample(ch, i) * env);
-    }
-
-    return buffer;
-}
-
-juce::AudioBuffer<float> makeCleanupHarshContaminatedInput(const double sr, const float seconds) {
+juce::AudioBuffer<float> makeHarshContaminatedInput(const double sr, const float seconds) {
     auto speech = makeSpeechLike(sr, seconds);
     auto harshA = makeSine(sr, seconds, 3600.0f, 0.045f);
     auto harshB = makeSine(sr, seconds, 6100.0f, 0.040f);
@@ -560,25 +462,6 @@ float estimatedTruePeak(const juce::AudioBuffer<float>& buffer) {
         }
     }
     return peak;
-}
-
-bool testCleanupZeroIsIdentity() {
-    constexpr double sr = 48000.0;
-    auto dry = makeSpeechLike(sr, 1.0f);
-
-    VXCleanupAudioProcessor processor;
-    processor.prepareToPlay(sr, 256);
-    setParamNormalized(processor, "cleanup", 0.0f);
-    setParamNormalized(processor, "body", 0.5f);
-    setParamNormalized(processor, "focus", 0.5f);
-
-    const auto out = render(processor, dry);
-    const float diff = maxAbsDiff(dry, out);
-    if (diff > 1.0e-6f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup zero should be identity: diff=" << diff << "\n";
-        return false;
-    }
-    return true;
 }
 
 bool primeSubtractLearn(VXSubtractAudioProcessor& processor, const double sr, const int blockSize) {
@@ -1240,12 +1123,12 @@ bool testSubtractStereoLearnTreatsChannelsIndependently() {
     return true;
 }
 
-bool testCleanupFinishSubtractChainStaysStable() {
+bool testSubtractProximityFinishChainStaysStable() {
     constexpr double sr = 48000.0;
     auto speech = makeSpeechLike(sr, 1.2f);
     auto noise = makeNoise(sr, 1.2f, 0.07f);
     auto noisy = addBuffers(speech, noise);
-    auto finalOut = renderSubtractCleanupProximityFinishChain(sr, 256, noisy);
+    auto finalOut = renderSubtractProximityFinishChain(sr, 256, noisy);
 
     if (!allFinite(finalOut)) {
         std::cerr << "[VXSuitePluginRegression] Combined chain produced non-finite samples\n";
@@ -1363,42 +1246,16 @@ bool testDeverbLateTailIsReducedMoreThanEarlyBody() {
     return true;
 }
 
-bool testCleanupBlockSizeInvariance() {
-    constexpr double sr = 48000.0;
-    auto input = makeSpeechLike(sr, 1.1f);
-
-    VXCleanupAudioProcessor cleanup64;
-    cleanup64.prepareToPlay(sr, 64);
-    setParamNormalized(cleanup64, "cleanup", 0.58f);
-    setParamNormalized(cleanup64, "body", 0.40f);
-    setParamNormalized(cleanup64, "focus", 0.62f);
-    const auto out64 = render(cleanup64, input, 64);
-
-    VXCleanupAudioProcessor cleanup512;
-    cleanup512.prepareToPlay(sr, 512);
-    setParamNormalized(cleanup512, "cleanup", 0.58f);
-    setParamNormalized(cleanup512, "body", 0.40f);
-    setParamNormalized(cleanup512, "focus", 0.62f);
-    const auto out512 = render(cleanup512, input, 512);
-
-    const float corr = bufferCorrelationSkip(out64, out512, 1024);
-    if (corr < 0.985f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup changed too much across host block sizes: corr=" << corr << "\n";
-        return false;
-    }
-    return true;
-}
-
 bool testFullChainBlockSizeInvariance() {
     constexpr double sr = 48000.0;
     auto speech = makeSpeechLike(sr, 0.6f);
     auto noise = makeNoise(sr, 0.6f, 0.07f);
     auto noisy = addBuffers(speech, noise);
 
-    const auto out64 = renderSubtractCleanupProximityFinishChain(sr, 64, noisy);
+    const auto out64 = renderSubtractProximityFinishChain(sr, 64, noisy);
     if (out64.getNumSamples() <= 0)
         return false;
-    const auto out512 = renderSubtractCleanupProximityFinishChain(sr, 512, noisy);
+    const auto out512 = renderSubtractProximityFinishChain(sr, 512, noisy);
     if (out512.getNumSamples() <= 0)
         return false;
 
@@ -1421,282 +1278,17 @@ bool testCombinedChainKeepsSilenceSilent() {
     setParamNormalized(subtract, "protect", 0.40f);
     auto afterSubtract = render(subtract, silence);
 
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.60f);
-    setParamNormalized(cleanup, "body", 0.40f);
-    setParamNormalized(cleanup, "focus", 0.60f);
-    auto afterCleanup = render(cleanup, afterSubtract);
-
     VXFinishAudioProcessor finish;
     finish.prepareToPlay(sr, 256);
     setParamNormalized(finish, "finish", 0.45f);
     setParamNormalized(finish, "body", 0.25f);
     setParamNormalized(finish, "gain", 0.20f);
-    auto finalOut = render(finish, afterCleanup);
+    auto finalOut = render(finish, afterSubtract);
 
     if (rms(finalOut) > 1.0e-5f) {
         std::cerr << "[VXSuitePluginRegression] Combined chain raised silence too far above zero: rms=" << rms(finalOut) << "\n";
         return false;
     }
-    return true;
-}
-
-bool testCleanupStrongSettingIsAudibleButBounded() {
-    constexpr double sr = 48000.0;
-    auto noisy = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.05f));
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.85f);
-    setParamNormalized(cleanup, "body", 0.35f);
-    setParamNormalized(cleanup, "focus", 0.72f);
-    auto out = render(cleanup, noisy, 256);
-
-    const float diff = maxAbsDiffSkip(noisy, out, 1024);
-    if (diff < 0.01f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup strong setting is still too subtle\n";
-        return false;
-    }
-    if (!allFinite(out) || peakAbs(out) > 1.02f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup strong setting clipped or became unstable\n";
-        return false;
-    }
-    return true;
-}
-
-bool testCleanupHighShelfStrongSettingStaysBounded() {
-    constexpr double sr = 48000.0;
-    auto noisy = addBuffers(makeSpeechLike(sr, 1.0f), makeNoise(sr, 1.0f, 0.05f));
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.85f);
-    setParamNormalized(cleanup, "body", 0.35f);
-    setParamNormalized(cleanup, "focus", 0.78f);
-    setParamNormalized(cleanup, "hishelf_on", 1.0f);
-    auto out = render(cleanup, noisy, 256);
-
-    const float diff = maxAbsDiffSkip(noisy, out, 1024);
-    if (diff < 0.01f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup high-shelf strong setting is still too subtle\n";
-        return false;
-    }
-    if (!allFinite(out) || peakAbs(out) > 1.02f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup high-shelf strong setting clipped or became unstable\n";
-        return false;
-    }
-    return true;
-}
-
-bool testCleanupDeEssAndPlosivesStayHeadroomSafe() {
-    constexpr double sr = 48000.0;
-    const auto input = makeCleanupStressInput(sr, 1.0f);
-    const float inputPeak = peakAbs(input);
-
-    auto runCase = [&](const float mode, const float body, const float focus, const bool hiShelfOn) {
-        VXCleanupAudioProcessor cleanup;
-        cleanup.prepareToPlay(sr, 256);
-        setParamNormalized(cleanup, "mode", mode);
-        setParamNormalized(cleanup, "cleanup", 1.0f);
-        setParamNormalized(cleanup, "body", body);
-        setParamNormalized(cleanup, "focus", focus);
-        setParamNormalized(cleanup, "hishelf_on", hiShelfOn ? 1.0f : 0.0f);
-        return render(cleanup, input, 256);
-    };
-
-    const auto plosiveOut = runCase(0.0f, 0.0f, 0.05f, false);
-    const auto deEssOut = runCase(0.0f, 0.25f, 0.95f, true);
-    const auto generalOut = runCase(1.0f, 0.0f, 0.95f, true);
-
-    for (const auto* candidate : { &plosiveOut, &deEssOut, &generalOut }) {
-        if (!allFinite(*candidate) || peakAbs(*candidate) > 0.995f) {
-            std::cerr << "[VXSuitePluginRegression] Cleanup corrective path exceeded safe output headroom: peak="
-                      << peakAbs(*candidate) << "\n";
-            return false;
-        }
-        if (peakAbs(*candidate) > inputPeak + 0.02f) {
-            std::cerr << "[VXSuitePluginRegression] Cleanup corrective path added too much peak level: in="
-                      << inputPeak << " out=" << peakAbs(*candidate) << "\n";
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool testCleanupVoicedMaterialStaysClean() {
-    constexpr double sr = 48000.0;
-    const auto input = makeCleanupVoicedToneInput(sr, 1.0f);
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.90f);
-    setParamNormalized(cleanup, "body", 0.35f);
-    setParamNormalized(cleanup, "focus", 0.82f);
-    setParamNormalized(cleanup, "hishelf_on", 1.0f);
-    const auto out = render(cleanup, input, 256);
-
-    if (!allFinite(out) || peakAbs(out) > 1.02f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup voiced-material case became unstable\n";
-        return false;
-    }
-
-    const float corr = bufferCorrelationSkip(input, out, 2048);
-    if (corr < 0.997f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup damaged voiced-material coherence too much: corr=" << corr << "\n";
-        return false;
-    }
-
-    const float residualRatio = bestGainResidualRatioSkip(input, out, 2048);
-    if (residualRatio > 0.075f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup added too much non-gain harmonic damage on voiced material: residualRatio="
-                  << residualRatio << "\n";
-        return false;
-    }
-
-    return true;
-}
-
-bool testCleanupVoicedEdgeCaseStaysClean() {
-    constexpr double sr = 48000.0;
-    const auto input = makeCleanupVoicedEdgeCaseInput(sr, 1.0f);
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 1.0f);
-    setParamNormalized(cleanup, "body", 0.2f);
-    setParamNormalized(cleanup, "focus", 0.8f);
-    setParamNormalized(cleanup, "hishelf_on", 1.0f);
-    const auto out = render(cleanup, input, 256);
-
-    if (!allFinite(out) || peakAbs(out) > 1.02f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup voiced edge case became unstable\n";
-        return false;
-    }
-
-    const float corr = bufferCorrelationSkip(input, out, 2048);
-    if (corr < 0.994f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup damaged voiced edge-case coherence too much: corr=" << corr << "\n";
-        return false;
-    }
-
-    const float residualRatio = bestGainResidualRatioSkip(input, out, 2048);
-    if (residualRatio > 0.102f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup added too much edge-case harmonic damage: residualRatio="
-                  << residualRatio << "\n";
-        return false;
-    }
-
-    return true;
-}
-
-bool testCleanupFocusPreservesVoicedArticulation() {
-    constexpr double sr = 48000.0;
-    const auto input = makeCleanupVoicedEdgeCaseInput(sr, 1.0f);
-
-    VXCleanupAudioProcessor lowFocus;
-    lowFocus.prepareToPlay(sr, 256);
-    setParamNormalized(lowFocus, "cleanup", 0.95f);
-    setParamNormalized(lowFocus, "body", 0.20f);
-    setParamNormalized(lowFocus, "focus", 0.18f);
-    setParamNormalized(lowFocus, "hishelf_on", 1.0f);
-    const auto lowOut = render(lowFocus, input, 256);
-
-    VXCleanupAudioProcessor highFocus;
-    highFocus.prepareToPlay(sr, 256);
-    setParamNormalized(highFocus, "cleanup", 0.95f);
-    setParamNormalized(highFocus, "body", 0.20f);
-    setParamNormalized(highFocus, "focus", 0.84f);
-    setParamNormalized(highFocus, "hishelf_on", 1.0f);
-    const auto highOut = render(highFocus, input, 256);
-
-    const float lowSpeechCorr = std::abs(speechBandCorrelation(input, lowOut, sr));
-    const float highSpeechCorr = std::abs(speechBandCorrelation(input, highOut, sr));
-    if (highSpeechCorr + 0.003f < lowSpeechCorr) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup focus no longer protects voiced articulation: low="
-                  << lowSpeechCorr << " high=" << highSpeechCorr << "\n";
-        return false;
-    }
-
-    const float highResidualRatio = bestGainResidualRatioSkip(input, highOut, 2048);
-    if (highResidualRatio > 0.11f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup high-focus path still damages voiced articulation too much: residualRatio="
-                  << highResidualRatio << "\n";
-        return false;
-    }
-
-    return true;
-}
-
-bool testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase() {
-    constexpr double sr = 48000.0;
-    const auto input = makeCleanupVoicedEdgeCaseInput(sr, 1.0f);
-
-    VXCleanupAudioProcessor cleanupOff;
-    cleanupOff.prepareToPlay(sr, 256);
-    setParamNormalized(cleanupOff, "cleanup", 1.0f);
-    setParamNormalized(cleanupOff, "body", 0.2f);
-    setParamNormalized(cleanupOff, "focus", 0.8f);
-    const auto outOff = render(cleanupOff, input, 256);
-
-    VXCleanupAudioProcessor cleanupOn;
-    cleanupOn.prepareToPlay(sr, 256);
-    setParamNormalized(cleanupOn, "cleanup", 1.0f);
-    setParamNormalized(cleanupOn, "body", 0.2f);
-    setParamNormalized(cleanupOn, "focus", 0.8f);
-    setParamNormalized(cleanupOn, "hishelf_on", 1.0f);
-    const auto outOn = render(cleanupOn, input, 256);
-
-    const float shelfResidual = bestGainResidualRatioSkip(outOff, outOn, 2048);
-    if (shelfResidual > 0.052f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup high shelf still changes voiced material too aggressively: residualRatio="
-                  << shelfResidual << "\n";
-        return false;
-    }
-
-    const float onResidual = bestGainResidualRatioSkip(input, outOn, 2048);
-    if (onResidual > 0.090f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup high shelf still adds too much voiced edge-case damage: residualRatio="
-                  << onResidual << "\n";
-        return false;
-    }
-
-    return true;
-}
-
-bool testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial() {
-    constexpr double sr = 48000.0;
-
-    VXCleanupAudioProcessor burstCleanup;
-    burstCleanup.prepareToPlay(sr, 256);
-    setParamNormalized(burstCleanup, "cleanup", 1.0f);
-    setParamNormalized(burstCleanup, "body", 0.0f);
-    setParamNormalized(burstCleanup, "focus", 0.05f);
-    const float burstActivity = renderCleanupAndMeasureMaxPlosiveActivity(burstCleanup,
-                                                                          makeCleanupStressInput(sr, 1.0f));
-
-    VXCleanupAudioProcessor voicedCleanup;
-    voicedCleanup.prepareToPlay(sr, 256);
-    setParamNormalized(voicedCleanup, "cleanup", 1.0f);
-    setParamNormalized(voicedCleanup, "body", 0.2f);
-    setParamNormalized(voicedCleanup, "focus", 0.8f);
-    setParamNormalized(voicedCleanup, "hishelf_on", 1.0f);
-    const float voicedActivity = renderCleanupAndMeasureMaxPlosiveActivity(voicedCleanup,
-                                                                           makeCleanupVoicedEdgeCaseInput(sr, 1.0f));
-
-    if (burstActivity < 0.18f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup plosive meter no longer reacts to explicit plosive bursts: activity="
-                  << burstActivity << "\n";
-        return false;
-    }
-
-    if (voicedActivity > 0.12f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup plosive meter still false-triggers too hard on voiced material: activity="
-                  << voicedActivity << "\n";
-        return false;
-    }
-
     return true;
 }
 
@@ -1813,43 +1405,6 @@ bool testSpeechClarityWetPathAndListenDeltaAreAudible() {
                   << wetDeltaRms << " wetDeltaPeak=" << wetDeltaPeak
                   << " listenRms=" << listenRms
                   << " reconstructionError=" << reconstructionError << "\n";
-        return false;
-    }
-
-    return true;
-}
-
-bool testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge() {
-    constexpr double sr = 48000.0;
-
-    VXCleanupAudioProcessor harshCleanup;
-    harshCleanup.prepareToPlay(sr, 256);
-    setParamNormalized(harshCleanup, "cleanup", 1.0f);
-    setParamNormalized(harshCleanup, "body", 0.25f);
-    setParamNormalized(harshCleanup, "focus", 0.88f);
-    setParamNormalized(harshCleanup, "hishelf_on", 1.0f);
-    const float harshActivity = renderCleanupAndMeasureMaxActivity(harshCleanup,
-                                                                   makeCleanupHarshContaminatedInput(sr, 1.0f),
-                                                                   3);
-
-    VXCleanupAudioProcessor voicedCleanup;
-    voicedCleanup.prepareToPlay(sr, 256);
-    setParamNormalized(voicedCleanup, "cleanup", 1.0f);
-    setParamNormalized(voicedCleanup, "body", 0.25f);
-    setParamNormalized(voicedCleanup, "focus", 0.88f);
-    setParamNormalized(voicedCleanup, "hishelf_on", 1.0f);
-    const float voicedActivity = renderCleanupAndMeasureMaxActivity(voicedCleanup,
-                                                                    makeCleanupVoicedEdgeCaseInput(sr, 1.0f),
-                                                                    3);
-
-    if (!(harshActivity > voicedActivity * 1.20f)) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup smooth-trouble model no longer favors clearly harsh contamination over voiced edge material: harshActivity="
-                  << harshActivity << " voicedActivity=" << voicedActivity << "\n";
-        return false;
-    }
-    if (!(voicedActivity < 0.55f)) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup smooth-trouble model still overreacts to voiced edge material: voicedActivity="
-                  << voicedActivity << "\n";
         return false;
     }
 
@@ -2249,20 +1804,6 @@ bool testProductLocalOutputTrimmersStayMostlyIdleOnNominalStrongSettings() {
     if (opto.getLocalOutputTrimMaxReductionDb() > 0.45f) {
         std::cerr << "[VXSuitePluginRegression] OptoComp local output trimmer engaged too heavily: reductionDb="
                   << opto.getLocalOutputTrimMaxReductionDb() << "\n";
-        return false;
-    }
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.85f);
-    setParamNormalized(cleanup, "body", 0.35f);
-    setParamNormalized(cleanup, "focus", 0.78f);
-    setParamNormalized(cleanup, "hishelf_on", 1.0f);
-    const auto cleanupOut = render(cleanup, shapedInput, 256);
-    juce::ignoreUnused(cleanupOut);
-    if (cleanup.getLocalOutputTrimMaxReductionDb() > 0.35f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup local output trimmer engaged too heavily: reductionDb="
-                  << cleanup.getLocalOutputTrimMaxReductionDb() << "\n";
         return false;
     }
 
@@ -2876,7 +2417,7 @@ bool testDenoiserStereoTreatsChannelsIndependently() {
 
 bool testDenoiserHybridCleanupPrefersHarshResidualOverVoicedTone() {
     constexpr double sr = 48000.0;
-    auto harsh = makeCleanupHarshContaminatedInput(sr, 1.0f);
+    auto harsh = makeHarshContaminatedInput(sr, 1.0f);
     auto voiced = makeSpeechLike(sr, 1.0f);
     const auto highBandRatio = [sr](const juce::AudioBuffer<float>& input,
                                     const juce::AudioBuffer<float>& output) {
@@ -3401,8 +2942,8 @@ bool testAnalyserDomainBindingSurvivesMultipleDomains() {
     constexpr int blockSize = 4096;
     const auto input = addBuffers(makeSpeechLike(sr, 0.20f), makeNoise(sr, 0.20f, 0.03f));
 
-    bool cleanupFoundInNewestAnalyserDomain = false;
-    juce::String seenCleanupStages;
+    bool deverbFoundInNewestAnalyserDomain = false;
+    juce::String seenDeverbStages;
     std::uint64_t expectedDomainId = 0;
     {
         VXStudioAnalyserAudioProcessor analyserA;
@@ -3418,16 +2959,13 @@ bool testAnalyserDomainBindingSurvivesMultipleDomains() {
         analyserB.updateTrackProperties(trackB);
         expectedDomainId = analyserB.analysisDomainId();
 
-        VXCleanupAudioProcessor cleanup;
-        cleanup.prepareToPlay(sr, blockSize);
-        cleanup.updateTrackProperties(trackB);
-        setParamNormalized(cleanup, "cleanup", 0.62f);
-        setParamNormalized(cleanup, "body", 0.42f);
-        setParamNormalized(cleanup, "focus", 0.58f);
+        VXDeverbAudioProcessor deverb;
+        deverb.prepareToPlay(sr, blockSize);
+        deverb.updateTrackProperties(trackB);
 
         render(analyserA, input, blockSize);
         render(analyserB, input, blockSize);
-        render(cleanup, input, blockSize);
+        render(deverb, input, blockSize);
 
         for (int slotIndex = 0; slotIndex < vxsuite::analysis::StageRegistry::instance().maxSlots(); ++slotIndex) {
             vxsuite::analysis::StageView stage;
@@ -3436,25 +2974,25 @@ bool testAnalyserDomainBindingSurvivesMultipleDomains() {
             if (!stage.active)
                 continue;
             const auto stageName = fixedLabelToString(stage.telemetry.identity.stageName);
-            if (stageName.containsIgnoreCase("Cleanup")) {
-                seenCleanupStages << "domain=" << juce::String(static_cast<juce::int64>(stage.analysisDomainId))
-                                  << " stageId=" << fixedLabelToString(stage.telemetry.identity.stageId)
-                                  << " instance=" << juce::String(static_cast<juce::int64>(stage.telemetry.identity.instanceId))
-                                  << "; ";
+            if (stageName.containsIgnoreCase("Deverb")) {
+                seenDeverbStages << "domain=" << juce::String(static_cast<juce::int64>(stage.analysisDomainId))
+                                 << " stageId=" << fixedLabelToString(stage.telemetry.identity.stageId)
+                                 << " instance=" << juce::String(static_cast<juce::int64>(stage.telemetry.identity.instanceId))
+                                 << "; ";
             }
             if (stage.analysisDomainId != expectedDomainId)
                 continue;
-            if (stageName.containsIgnoreCase("Cleanup")) {
-                cleanupFoundInNewestAnalyserDomain = true;
+            if (stageName.containsIgnoreCase("Deverb")) {
+                deverbFoundInNewestAnalyserDomain = true;
                 break;
             }
         }
     }
 
-    if (!cleanupFoundInNewestAnalyserDomain) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup stage telemetry did not bind to the active analyser domain when multiple domains existed in the host process\n";
+    if (!deverbFoundInNewestAnalyserDomain) {
+        std::cerr << "[VXSuitePluginRegression] Deverb stage telemetry did not bind to the active analyser domain when multiple domains existed in the host process\n";
         std::cerr << "  expected domain=" << expectedDomainId
-                  << " seen cleanup stages: " << seenCleanupStages << "\n";
+                  << " seen deverb stages: " << seenDeverbStages << "\n";
         return false;
     }
 
@@ -3578,24 +3116,6 @@ bool testListenSemanticsAcrossPlugins() {
     auto noise = makeNoise(sr, 0.9f, 0.06f);
     auto noisy = addBuffers(speech, noise);
 
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.60f);
-    setParamNormalized(cleanup, "body", 0.42f);
-    setParamNormalized(cleanup, "focus", 0.55f);
-    setParamNormalized(cleanup, "listen", 0.0f);
-    const auto cleanupWet = render(cleanup, noisy);
-    cleanup.reset();
-    setParamNormalized(cleanup, "cleanup", 0.60f);
-    setParamNormalized(cleanup, "body", 0.42f);
-    setParamNormalized(cleanup, "focus", 0.55f);
-    setParamNormalized(cleanup, "listen", 1.0f);
-    const auto cleanupListen = render(cleanup, noisy);
-    if (maxAbsDiffSkip(noisy, addBuffers(cleanupWet, cleanupListen), 2048) > 0.08f) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup listen no longer behaves like removed-content audition\n";
-        return false;
-    }
-
     VXProximityAudioProcessor proximity;
     proximity.prepareToPlay(sr, 256);
     setParamNormalized(proximity, "closer", 0.30f);
@@ -3687,7 +3207,7 @@ bool testMultiRateAndBufferCoverage() {
         auto noise = makeNoise(sr, 0.45f, 0.06f);
         auto noisy = addBuffers(speech, noise);
         for (const int blockSize : blockSizes) {
-            auto out = renderSubtractCleanupProximityFinishChain(sr, blockSize, noisy);
+            auto out = renderSubtractProximityFinishChain(sr, blockSize, noisy);
             if (out.getNumSamples() <= 0 || !allFinite(out) || peakAbs(out) > 1.10f) {
                 std::cerr << "[VXSuitePluginRegression] Chain failed sample-rate/buffer coverage at sr="
                           << sr << " block=" << blockSize << "\n";
@@ -3703,19 +3223,17 @@ bool testMonoStereoConsistency() {
     auto stereoInput = makeSpeechLike(sr, 1.0f);
     auto monoInput = makeMonoBuffer(stereoInput);
 
-    VXCleanupAudioProcessor cleanupStereo;
-    cleanupStereo.prepareToPlay(sr, 256);
-    setParamNormalized(cleanupStereo, "cleanup", 0.56f);
-    setParamNormalized(cleanupStereo, "body", 0.46f);
-    setParamNormalized(cleanupStereo, "focus", 0.58f);
-    const auto stereoOut = render(cleanupStereo, stereoInput, 256);
+    VXToneAudioProcessor toneStereo;
+    toneStereo.prepareToPlay(sr, 256);
+    setParamNormalized(toneStereo, "bass", 0.70f);
+    setParamNormalized(toneStereo, "treble", 0.66f);
+    const auto stereoOut = render(toneStereo, stereoInput, 256);
 
-    VXCleanupAudioProcessor cleanupMono;
-    cleanupMono.prepareToPlay(sr, 256);
-    setParamNormalized(cleanupMono, "cleanup", 0.56f);
-    setParamNormalized(cleanupMono, "body", 0.46f);
-    setParamNormalized(cleanupMono, "focus", 0.58f);
-    const auto monoOut = render(cleanupMono, monoInput, 256);
+    VXToneAudioProcessor toneMono;
+    toneMono.prepareToPlay(sr, 256);
+    setParamNormalized(toneMono, "bass", 0.70f);
+    setParamNormalized(toneMono, "treble", 0.66f);
+    const auto monoOut = render(toneMono, monoInput, 256);
 
     juce::AudioBuffer<float> stereoMid(1, stereoOut.getNumSamples());
     for (int i = 0; i < stereoOut.getNumSamples(); ++i)
@@ -3723,7 +3241,7 @@ bool testMonoStereoConsistency() {
 
     const float corr = bufferCorrelationSkip(monoOut, stereoMid, 1024);
     if (corr < 0.98f) {
-        std::cerr << "[VXSuitePluginRegression] Mono/stereo cleanup paths diverged too far: corr=" << corr << "\n";
+        std::cerr << "[VXSuitePluginRegression] Mono/stereo tone paths diverged too far: corr=" << corr << "\n";
         return false;
     }
     return true;
@@ -3750,13 +3268,6 @@ bool testLatencyBearingProcessorsDoNotReportLatencyAsTail() {
     subtract.prepareToPlay(sr, 256);
     if (!(subtract.getLatencySamples() > 0 && subtract.getTailLengthSeconds() == 0.0)) {
         std::cerr << "[VXSuitePluginRegression] Subtract should report latency without pretending it has post-input tail audio\n";
-        return false;
-    }
-
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    if (cleanup.getLatencySamples() != 0 || cleanup.getTailLengthSeconds() != 0.0) {
-        std::cerr << "[VXSuitePluginRegression] Cleanup should remain zero-tail/zero-latency by default\n";
         return false;
     }
 
@@ -3968,14 +3479,6 @@ bool testNoSteadyStateAllocationsOnAudioThread() {
     auto noisy = addBuffers(makeSpeechLike(sr, 0.4f), makeNoise(sr, 0.4f, 0.05f));
     auto speech = makeSpeechLike(sr, 0.4f);
 
-    VXCleanupAudioProcessor cleanup;
-    cleanup.prepareToPlay(sr, 256);
-    setParamNormalized(cleanup, "cleanup", 0.55f);
-    setParamNormalized(cleanup, "body", 0.45f);
-    setParamNormalized(cleanup, "focus", 0.55f);
-    if (!expectNoSteadyStateAllocations("cleanup", cleanup, noisy))
-        return false;
-
     VXDenoiserAudioProcessor denoiser;
     denoiser.prepareToPlay(sr, 256);
     setParamNormalized(denoiser, "clean", 0.70f);
@@ -4092,7 +3595,6 @@ int main(int argc, char* argv[]) {
             std::cerr << "[VXSuitePluginRegression] FAIL " << name << "\n";
         }
     };
-    run("testCleanupZeroIsIdentity", testCleanupZeroIsIdentity);
     run("testSubtractLearnStartsOnFirstPress", testSubtractLearnStartsOnFirstPress);
     run("testSubtractSilentLearnDoesNotCreateProfileOrMuteOutput", testSubtractSilentLearnDoesNotCreateProfileOrMuteOutput);
     run("testSubtractLearnLifecycleMakesSense", testSubtractLearnLifecycleMakesSense);
@@ -4112,18 +3614,9 @@ int main(int argc, char* argv[]) {
     run("testDeverbExtremeBlendStaysStable", testDeverbExtremeBlendStaysStable);
     run("testDeverbStrongSettingActuallyReducesSyntheticRoomTail", testDeverbStrongSettingActuallyReducesSyntheticRoomTail);
     run("testDeverbLateTailIsReducedMoreThanEarlyBody", testDeverbLateTailIsReducedMoreThanEarlyBody);
-    run("testCleanupFinishSubtractChainStaysStable", testCleanupFinishSubtractChainStaysStable);
-    run("testCleanupStrongSettingIsAudibleButBounded", testCleanupStrongSettingIsAudibleButBounded);
-    run("testCleanupHighShelfStrongSettingStaysBounded", testCleanupHighShelfStrongSettingStaysBounded);
-    run("testCleanupFocusPreservesVoicedArticulation", testCleanupFocusPreservesVoicedArticulation);
-    run("testCleanupDeEssAndPlosivesStayHeadroomSafe", testCleanupDeEssAndPlosivesStayHeadroomSafe);
-    run("testCleanupVoicedMaterialStaysClean", testCleanupVoicedMaterialStaysClean);
-    run("testCleanupVoicedEdgeCaseStaysClean", testCleanupVoicedEdgeCaseStaysClean);
-    run("testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase", testCleanupHighShelfDoesNotOverdamageVoicedEdgeCase);
-    run("testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial", testCleanupPlosiveMeterTargetsBurstsNotVoicedMaterial);
+    run("testSubtractProximityFinishChainStaysStable", testSubtractProximityFinishChainStaysStable);
     run("testSpeechClarityDeclickDoesNotAmplifyClicks", testSpeechClarityDeclickDoesNotAmplifyClicks);
     run("testSpeechClarityWetPathAndListenDeltaAreAudible", testSpeechClarityWetPathAndListenDeltaAreAudible);
-    run("testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge", testCleanupTroubleModelPrefersHarshContaminationOverVoicedEdge);
     run("testFinishStrongSettingsAreAudibleButBounded", testFinishStrongSettingsAreAudibleButBounded);
     run("testFinishGainIsBipolarAroundCenter", testFinishGainIsBipolarAroundCenter);
     run("testFinishResetIsDeterministic", testFinishResetIsDeterministic);
@@ -4163,7 +3656,6 @@ int main(int argc, char* argv[]) {
     run("testDeepFilterConcurrentInstancesBothProcess", testDeepFilterConcurrentInstancesBothProcess);
     run("testAnalyserDomainBindingSurvivesMultipleDomains", testAnalyserDomainBindingSurvivesMultipleDomains);
     run("testSubtractZeroKeepsPdcAlignedIdentity", testSubtractZeroKeepsPdcAlignedIdentity);
-    run("testCleanupBlockSizeInvariance", testCleanupBlockSizeInvariance);
     run("testFullChainBlockSizeInvariance", testFullChainBlockSizeInvariance);
     run("testLifecycleAndStateRestore", testLifecycleAndStateRestore);
     run("testSubtractStateRestoreRejectsMismatchedProfileFormat", testSubtractStateRestoreRejectsMismatchedProfileFormat);

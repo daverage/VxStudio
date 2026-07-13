@@ -1,6 +1,5 @@
 #include "../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h"
 #include "../Source/vxstudio/products/analyser/VXStudioAnalyserEditor.h"
-#include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
@@ -32,7 +31,6 @@ bool testDiscoveryWithPreexistingPlugins() {
 
     try {
         // Create processors
-        auto cleanup = std::make_unique<VXCleanupAudioProcessor>();
         auto deverb = std::make_unique<VXDeverbAudioProcessor>();
         auto analyser = std::make_unique<VXStudioAnalyserAudioProcessor>();
 
@@ -40,7 +38,6 @@ bool testDiscoveryWithPreexistingPlugins() {
         const int blockSize = 256;
 
         // Prepare all processors
-        cleanup->prepareToPlay(sr, blockSize);
         deverb->prepareToPlay(sr, blockSize);
         analyser->prepareToPlay(sr, blockSize);
 
@@ -48,21 +45,18 @@ bool testDiscoveryWithPreexistingPlugins() {
         auto testSignal = makeTestSignal(sr, 0.5f);
         juce::MidiBuffer midi;
 
-        // Process through chain in order: Cleanup -> Deverb -> Analyser
-        cleanup->processBlock(testSignal, midi);
+        // Process through chain in order: Deverb -> Analyser
         deverb->processBlock(testSignal, midi);
         analyser->processBlock(testSignal, midi);
 
         // Process for a bit longer to allow discovery
         for (int i = 0; i < 10; ++i) {
             auto signal = makeTestSignal(sr, 0.1f);
-            cleanup->processBlock(signal, midi);
             deverb->processBlock(signal, midi);
             analyser->processBlock(signal, midi);
         }
 
         // Cleanup
-        cleanup->releaseResources();
         deverb->releaseResources();
         analyser->releaseResources();
 
@@ -196,7 +190,7 @@ bool testPluginAddRemoveRapidly() {
             // Insert 5 plugins
             for (int i = 0; i < 5; ++i) {
                 try {
-                    auto plugin = std::make_unique<VXCleanupAudioProcessor>();
+                    auto plugin = std::make_unique<VXDeverbAudioProcessor>();
                     plugin->prepareToPlay(sr, blockSize);
                     analyser->processBlock(testSignal, midi);
                     plugin->releaseResources();
@@ -309,19 +303,19 @@ bool testLiveChainStateTracking() {
             return false;
         }
 
-        auto cleanup = std::make_unique<VXCleanupAudioProcessor>();
-        cleanup->prepareToPlay(sr, blockSize);
+        auto deverb = std::make_unique<VXDeverbAudioProcessor>();
+        deverb->prepareToPlay(sr, blockSize);
 
-        // Give analyser and cleanup the same track identity so track-local filtering works.
+        // Give analyser and deverb the same track identity so track-local filtering works.
         juce::AudioProcessor::TrackProperties trackProps;
         trackProps.channelUID = "test-track-uid";
         analyser->updateTrackProperties(trackProps);
-        cleanup->updateTrackProperties(trackProps);
+        deverb->updateTrackProperties(trackProps);
 
         auto signal = makeTestSignal(sr, 0.1f);
         juce::MidiBuffer midi;
 
-        cleanup->processBlock(signal, midi);
+        deverb->processBlock(signal, midi);
         analyser->processBlock(signal, midi);
         editor->debugRefreshNow();
 
@@ -331,7 +325,7 @@ bool testLiveChainStateTracking() {
         }
 
         signal = makeTestSignal(sr, 0.1f);
-        cleanup->processBlockBypassed(signal, midi);
+        deverb->processBlockBypassed(signal, midi);
         analyser->processBlock(signal, midi);
         editor->debugRefreshNow();
 
@@ -340,7 +334,7 @@ bool testLiveChainStateTracking() {
             return false;
         }
 
-        cleanup.reset();
+        deverb.reset();
         signal = makeTestSignal(sr, 0.1f);
         analyser->processBlock(signal, midi);
         editor->debugRefreshNow();

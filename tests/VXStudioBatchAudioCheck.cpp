@@ -1,4 +1,3 @@
-#include "../Source/vxstudio/products/cleanup/VxCleanupProcessor.h"
 #include "../Source/vxstudio/products/deverb/VxDeverbProcessor.h"
 #include "../Source/vxstudio/products/denoiser/VxDenoiserProcessor.h"
 #include "../Source/vxstudio/products/finish/VxFinishProcessor.h"
@@ -304,19 +303,6 @@ std::vector<ProductSpec> makeProductSpecs() {
         setParamNormalized(processor, "mode", 0.0f);
         setParamNormalized(processor, "level", 1.0f);
         setParamNormalized(processor, "control", 1.0f);
-        return render(processor, input, 256);
-    }});
-
-    specs.push_back({"cleanup", "cleanup",
-    [](const juce::AudioBuffer<float>& input, double) { return input; },
-    [](const juce::AudioBuffer<float>& original, const juce::AudioBuffer<float>&, double) { return original; },
-    [](const juce::AudioBuffer<float>& input, double sr) {
-        VXCleanupAudioProcessor processor;
-        processor.prepareToPlay(sr, 256);
-        setParamNormalized(processor, "mode", 0.0f);
-        setParamNormalized(processor, "cleanup", 1.0f);
-        setParamNormalized(processor, "body", 0.50f);
-        setParamNormalized(processor, "focus", 1.0f);
         return render(processor, input, 256);
     }});
 

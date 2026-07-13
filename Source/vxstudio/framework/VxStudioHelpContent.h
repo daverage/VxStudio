@@ -193,33 +193,6 @@ inline constexpr HelpContent speech_clarity {
     "VXSpeechClarity"
 };
 
-inline constexpr HelpContent cleanup {
-    "VXCleanup Help",
-    R"(
-<h1>VXCleanup</h1>
-<p>Corrective voice cleanup for mud, harshness, breaths, plosives, sibilance, and general tonal trouble. It is subtractive repair before enhancement.</p>
-<h2>How to use it</h2>
-<ul>
-<li>Raise Cleanup until the distracting problems start to fall away.</li>
-<li>Increase Body if the result becomes too thin.</li>
-<li>Use Focus to steer the correction toward low-mid cleanup or more presence/air-region control.</li>
-</ul>
-<h2>Example settings</h2>
-<ul>
-<li>Muddy spoken voice: Cleanup 55%, Body 55%, Focus 45%.</li>
-<li>Harsh, breathy voice: Cleanup 60%, Body 50%, Focus 70%.</li>
-<li>Light corrective tidy-up: Cleanup 35%, Body 55%, Focus 55%.</li>
-</ul>
-<h2>Practical scenarios</h2>
-<ul>
-<li>Dialogue that needs cleanup before any enhancement.</li>
-<li>Speech with boxiness, spit, or low-end bumps.</li>
-<li>Preparation stage before proximity, tone, or final compression.</li>
-</ul>)",
-    "VXCleanup"
-};
-
-
 inline constexpr HelpContent tone {
     "VXTone Help",
     R"(

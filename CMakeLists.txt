@@ -9,7 +9,6 @@ set(VXSTUDIO_FRAMEWORK_VERSION "0.2.2")
 set(VXSTUDIO_PLUGIN_VERSION_VXDEVERB "0.2.1")
 set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY "0.2.1")
 set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC "0.1.0")
-set(VXSTUDIO_PLUGIN_VERSION_VXCLEANUP "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXFINISH "0.3.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
@@ -1126,9 +1125,6 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
-  Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
-  Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -1178,9 +1174,6 @@ add_executable(VXStudioAnalyserTests
   Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
-  Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
-  Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -1225,9 +1218,6 @@ vxstudio_add_executable_test(VXRepairPassthroughCheck)
 
 add_executable(VXStudioBatchAudioCheck
   tests/VXStudioBatchAudioCheck.cpp
-  Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
-  Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
   Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
@@ -1266,9 +1256,6 @@ vxstudio_add_executable_test(VXStudioBatchAudioCheck)
 
 add_executable(VXSuiteProfile
   tests/VXStudioProfile.cpp
-  Source/vxstudio/products/cleanup/VxCleanupProcessor.cpp
-  Source/vxstudio/products/cleanup/dsp/VxCleanupDsp.cpp
-  Source/vxstudio/products/cleanup/dsp/VxClarityDsp.cpp
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
