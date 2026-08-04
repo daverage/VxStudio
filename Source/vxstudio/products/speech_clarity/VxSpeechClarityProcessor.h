@@ -7,9 +7,11 @@
 #include "dsp/VxDePolosiveDsp.h"
 #include "dsp/VxDeBreathDsp.h"
 
-class VXSpeechClarityAudioProcessor final : public vxsuite::ProcessorBase {
+class VXSpeechClarityAudioProcessor final : public vxsuite::ProcessorBase,
+                                            private juce::AsyncUpdater {
 public:
     VXSpeechClarityAudioProcessor();
+    ~VXSpeechClarityAudioProcessor() override { cancelPendingUpdate(); }
 
 protected:
     static vxsuite::ProductIdentity makeIdentity();
@@ -68,6 +70,12 @@ private:
     PreAnalysisMetrics preAnalysisMetrics;
     bool needsPreAnalysis = true;
     vxsuite::Mode lastMode = vxsuite::Mode::vocal;
+
+    // Latency changes triggered by mode switches on the audio thread are
+    // reported to the host from the message thread (JUCE's latency
+    // notification can allocate and call back into the host).
+    void handleAsyncUpdate() override;
+    std::atomic<int> pendingLatencySamples { -1 };
 
     double currentSampleRateHz = 48000.0;
 };

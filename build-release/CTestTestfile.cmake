@@ -1,0 +1,36 @@
+# CMake generated Testfile for 
+# Source directory: /Users/andrzejmarczewski/Documents/GitHub/VxStudio
+# Build directory: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release
+# 
+# This file includes the relevant testing commands required for 
+# testing this directory and lists subdirectories to be tested as well.
+add_test("VxTuneAnalysisTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VxTuneAnalysisTests")
+set_tests_properties("VxTuneAnalysisTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1021;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VxTunePluginTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VxTunePluginTests")
+set_tests_properties("VxTunePluginTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1038;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXDeverbTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXDeverbTests")
+set_tests_properties("VXDeverbTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1054;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXDeverbMeasure" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXDeverbMeasure")
+set_tests_properties("VXDeverbMeasure" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1070;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXLevelerMeasure" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXLevelerMeasure")
+set_tests_properties("VXLevelerMeasure" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1088;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXLevelerTuneSearch" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXLevelerTuneSearch")
+set_tests_properties("VXLevelerTuneSearch" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1106;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VxLevelerRiderTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VxLevelerRiderTests")
+set_tests_properties("VxLevelerRiderTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1124;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXRebalanceMeasure" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXRebalanceMeasure")
+set_tests_properties("VXRebalanceMeasure" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1140;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VxStudioVoiceAnalysisTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VxStudioVoiceAnalysisTests")
+set_tests_properties("VxStudioVoiceAnalysisTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1193;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXStudioPluginRegressionTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXStudioPluginRegressionTests")
+set_tests_properties("VXStudioPluginRegressionTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1249;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXStudioAnalyserTests" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXStudioAnalyserTests")
+set_tests_properties("VXStudioAnalyserTests" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1268;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXRepairPassthroughCheck" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXRepairPassthroughCheck")
+set_tests_properties("VXRepairPassthroughCheck" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1296;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXStudioBatchAudioCheck" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXStudioBatchAudioCheck")
+set_tests_properties("VXStudioBatchAudioCheck" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1333;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+add_test("VXSuiteProfile" "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/VXSuiteProfile")
+set_tests_properties("VXSuiteProfile" PROPERTIES  LABELS "unit" _BACKTRACE_TRIPLES "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cmake/VxStudioValidation.cmake;10;add_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;1391;vxstudio_add_executable_test;/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeLists.txt;0;")
+subdirs("JUCE")
+subdirs("Source/vxstudio/tools/test_host")

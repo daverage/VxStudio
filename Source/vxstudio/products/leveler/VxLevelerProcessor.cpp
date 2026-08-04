@@ -35,7 +35,14 @@ float analysisCoverage(const float observedSeconds) {
 } // namespace
 
 VXLevelerAudioProcessor::VXLevelerAudioProcessor()
-    : ProcessorBase(makeIdentity()) {}
+    : ProcessorBase(makeIdentity()) {
+    startTimerHz(30);
+}
+
+void VXLevelerAudioProcessor::timerCallback() {
+    analysisRunner.runIfPending([this] { finishAnalysisCapture(); });
+    dsp.collectOfflineGarbage();
+}
 
 vxsuite::ProductIdentity VXLevelerAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity identity {};
@@ -151,7 +158,7 @@ void VXLevelerAudioProcessor::setOfflineAnalysis(vxsuite::leveler::OfflineAnalys
     analysisConfidence = analysisReady ? 1.0f : 0.0f;
 }
 
-void VXLevelerAudioProcessor::clearOfflineAnalysis() noexcept {
+void VXLevelerAudioProcessor::clearOfflineAnalysis() {
     dsp.clearOfflineAnalysis();
     analysisReady = false;
     analysisConfidence = 0.0f;
@@ -322,7 +329,9 @@ void VXLevelerAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
     if (!allowAnalysis && analysisActive)
         stopAnalysisCapture();
     if (allowAnalysis) {
-        if (analyzeEnabled && !analyzeToggleLatched)
+        // Don't restart while a deferred analyse() pass still reads the
+        // capture arrays on the message thread — retry next block.
+        if (analyzeEnabled && !analyzeToggleLatched && !analysisRunner.isPending())
             startAnalysisCapture();
         else if (!analyzeEnabled && analyzeToggleLatched)
             stopAnalysisCapture();
@@ -389,7 +398,9 @@ void VXLevelerAudioProcessor::resetAnalysisCapture(const bool keepOfflineMap) no
 }
 
 void VXLevelerAudioProcessor::startAnalysisCapture() {
-    dsp.clearOfflineAnalysis();
+    // Audio thread — no allocation. The old map stops steering immediately and
+    // is replaced (or cleared) when the deferred analysis pass finishes.
+    dsp.suppressOfflineMap();
     analysisStartSample = -1;
     analysisActive = true;
     analysisReady = false;
@@ -398,10 +409,16 @@ void VXLevelerAudioProcessor::startAnalysisCapture() {
     analyzeToggleLatched = true;
 }
 
-void VXLevelerAudioProcessor::stopAnalysisCapture() {
+void VXLevelerAudioProcessor::stopAnalysisCapture() noexcept {
+    // Audio thread — just stop capturing and hand the heavy analyse() pass to
+    // the message thread. The runner's release/acquire pair publishes the
+    // captured analysisBlockDb contents to finishAnalysisCapture().
     analysisActive = false;
     analyzeToggleLatched = false;
+    analysisRunner.signal();
+}
 
+void VXLevelerAudioProcessor::finishAnalysisCapture() {
     if (analysisCapturedBlocks <= 0) {
         analysisReady = false;
         analysisConfidence = 0.0f;

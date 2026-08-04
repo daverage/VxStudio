@@ -12,7 +12,8 @@
 
 #include <atomic>
 
-class VXRepairAudioProcessor final : public vxsuite::ProcessorBase {
+class VXRepairAudioProcessor final : public vxsuite::ProcessorBase,
+                                     private juce::Timer {
 public:
     VXRepairAudioProcessor();
     ~VXRepairAudioProcessor() override = default;
@@ -65,6 +66,10 @@ private:
     static vxsuite::ProductIdentity makeIdentity();
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
 
+    // Message-thread tick: runs the analyser's deferred finalise pass so the
+    // heavy scoring work never lands on the audio thread.
+    void timerCallback() override;
+
     vxsuite::speech_clarity::DeClickDsp   deClickDsp;
     vxsuite::speech_clarity::DeEsserDsp   deEsserDsp;
     vxsuite::speech_clarity::DePolosiveDsp dePlosiveDsp;
@@ -101,7 +106,9 @@ private:
 
     // Two-phase analysis
     std::atomic<int> analysisPhase { 0 };  // AnalysisPhase enum stored as int
-    float savedNoiseScore = 0.0f;          // preserved from Phase 1 for merging
+
+    // Preallocated copy buffer for the Phase 2 denoised analysis feed.
+    juce::AudioBuffer<float> phase2AnalysisBuf;
 
     // Speech clarity real-time artifact detection
     void detectClarityIntensities(const juce::AudioBuffer<float>&, int numSamples) noexcept;

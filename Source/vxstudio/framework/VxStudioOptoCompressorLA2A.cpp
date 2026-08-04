@@ -1,4 +1,5 @@
 #include "VxStudioOptoCompressorLA2A.h"
+#include "VxStudioFastMath.h"
 
 #include <algorithm>
 
@@ -13,6 +14,7 @@ void OptoCompressorLA2A::prepare(const double sampleRate, int /*maxBlockSize*/, 
   shelfLp1.assign(static_cast<size_t>(channels), 0.0f);
   fastDbCh.assign(static_cast<size_t>(channels), 0.0f);
   slowDbCh.assign(static_cast<size_t>(channels), 0.0f);
+  relSlowACh.assign(static_cast<size_t>(channels), 0.0f);
   mem01Ch.assign(static_cast<size_t>(channels), 0.0f);
   detectorDbCh.assign(static_cast<size_t>(channels), -120.0f);
 
@@ -25,6 +27,7 @@ void OptoCompressorLA2A::reset() noexcept {
   std::fill(shelfLp1.begin(), shelfLp1.end(), 0.0f);
   std::fill(fastDbCh.begin(), fastDbCh.end(), 0.0f);
   std::fill(slowDbCh.begin(), slowDbCh.end(), 0.0f);
+  std::fill(relSlowACh.begin(), relSlowACh.end(), 0.0f);
   std::fill(mem01Ch.begin(), mem01Ch.end(), 0.0f);
   std::fill(detectorDbCh.begin(), detectorDbCh.end(), -120.0f);
 
@@ -94,6 +97,19 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
   const float memRiseA = std::exp(-1.0f / (0.40f * static_cast<float>(sr)));
   const float memFallA = std::exp(-1.0f / (18.0f * static_cast<float>(sr)));
 
+  // Block-constant values hoisted out of the sample loop.
+  const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
+  const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
+  const float makeup = dbToGain(p.outputGainDb);
+  auto* const* chData = buffer.getArrayOfWritePointers();
+
+  // The program-dependent slow release has a 0.5–15 s time constant, so its
+  // coefficient is recomputed at control rate (every 16 samples), and the
+  // per-sample dB↔gain conversions use fast approximations (≤ 0.005 dB error
+  // on a smooth envelope). relSlowACh[] carries the coefficient between
+  // control points.
+  constexpr int kControlMask = 15;
+
   float grAcc = 0.0f;
   float detectorAcc = 0.0f;
 
@@ -113,14 +129,15 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
       scAbs /= static_cast<float>(numChannels);
       lfAbs /= static_cast<float>(numChannels);
 
-      const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
-      const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
-      const float lfRatioEstimate = lfAbs / (scAbs + 1.0e-6f);
-      const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
-      const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01Ch[0]) * lfSlowFactor;
-      const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
+      if ((i & kControlMask) == 0) {
+        const float lfRatioEstimate = lfAbs / (scAbs + 1.0e-6f);
+        const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
+        const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01Ch[0]) * lfSlowFactor;
+        relSlowACh[0] = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
+      }
+      const float relSlowA = relSlowACh[0];
 
-      const float scDb = gainToDb(std::max(scAbs, 1.0e-9f));
+      const float scDb = fastGainToDb(std::max(scAbs, 1.0e-9f));
       detectorDbCh[0] = scDb;
       const float drivenDb = scDb + driveDb;
       const float targetGrDb = compressionEnabled
@@ -140,15 +157,14 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
       slowDbCh[0] = aSlow * slowDbCh[0] + (1.0f - aSlow) * targetGrDb;
 
       const float grDb = 0.5f * (fastDbCh[0] + slowDbCh[0]);
-      const float grGain = dbToGain(-grDb);
-      const float makeup = dbToGain(p.outputGainDb);
+      const float grGain = fastDbToGain(-grDb) * makeup;
 
       grAcc += grDb;
       detectorAcc += scDb;
 
       for (int ch = 0; ch < numChannels; ++ch) {
-        auto* d = buffer.getWritePointer(ch);
-        const float x = d[i] * grGain * makeup;
+        float* d = chData[ch];
+        const float x = d[i] * grGain;
         d[i] = x;
         y1[static_cast<size_t>(ch)] = x;
       }
@@ -162,14 +178,15 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
         lf = lfA * lf + (1.0f - lfA) * yPrev;
         lfLp1[idx] = lf;
 
-        const float slowMin = (mode == Mode::limit) ? 1.0f : 0.50f;
-        const float slowMax = (mode == Mode::limit) ? 15.0f : 5.0f;
-        const float lfRatioEstimate = std::abs(lf) / (scAbs + 1.0e-6f);
-        const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
-        const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01Ch[idx]) * lfSlowFactor;
-        const float relSlowA = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
+        if ((i & kControlMask) == 0) {
+          const float lfRatioEstimate = std::abs(lf) / (scAbs + 1.0e-6f);
+          const float lfSlowFactor = 1.0f + 0.70f * clamp01(lfRatioEstimate);
+          const float slowSeconds = (slowMin + (slowMax - slowMin) * mem01Ch[idx]) * lfSlowFactor;
+          relSlowACh[idx] = std::exp(-1.0f / (slowSeconds * static_cast<float>(sr)));
+        }
+        const float relSlowA = relSlowACh[idx];
 
-        const float scDb = gainToDb(std::max(scAbs, 1.0e-9f));
+        const float scDb = fastGainToDb(std::max(scAbs, 1.0e-9f));
         detectorDbCh[idx] = scDb;
         const float drivenDb = scDb + driveDb;
         const float targetGrDb = compressionEnabled
@@ -189,14 +206,13 @@ void OptoCompressorLA2A::process(juce::AudioBuffer<float>& buffer) noexcept {
         slowDbCh[idx] = aSlow * slowDbCh[idx] + (1.0f - aSlow) * targetGrDb;
 
         const float grDb = 0.5f * (fastDbCh[idx] + slowDbCh[idx]);
-        const float grGain = dbToGain(-grDb);
-        const float makeup = dbToGain(p.outputGainDb);
+        const float grGain = fastDbToGain(-grDb) * makeup;
 
         grAcc += grDb;
         detectorAcc += scDb;
 
-        auto* d = buffer.getWritePointer(ch);
-        const float x = d[i] * grGain * makeup;
+        float* d = chData[ch];
+        const float x = d[i] * grGain;
         d[i] = x;
         y1[idx] = x;
       }

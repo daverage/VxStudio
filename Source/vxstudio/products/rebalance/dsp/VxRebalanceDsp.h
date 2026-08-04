@@ -175,6 +175,16 @@ private:
         int olaWritePos = 0;
     };
 
+    // Per-source values constant across all bins of one frame (slider-derived
+    // pow/bias chain, recording mode). Filled once per frame before the bin
+    // loop; buildOwnershipFrameForBin reads them per bin.
+    struct PerSourceFrameConstants {
+        std::array<float, kSourceCount> sliderSigned {};
+        std::array<float, kSourceCount> separationForce {};
+        std::array<float, kSourceCount> ownershipBias {};
+        RecordingType mode = RecordingType::studio;
+    };
+
     struct OwnershipFrame {
         std::array<float, kSourceCount> separationForces {};
         std::array<float, kSourceCount> ownership {};
@@ -357,6 +367,7 @@ private:
     std::vector<ChannelState> channels;
     std::array<std::atomic<float>, kControlCount> targetControlValues {};
     std::array<float, kControlCount> currentControlValues {};
+    PerSourceFrameConstants frameConstants {};
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, kControlCount> controlSmoothers;
     std::atomic<int> targetRecordingType { static_cast<int>(RecordingType::studio) };
     std::atomic<float> targetVocalDominance { 0.0f };

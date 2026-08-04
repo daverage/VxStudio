@@ -42,12 +42,15 @@ void RepairAnalyser::reset() {
     collecting.store(false, std::memory_order_relaxed);
     progress.store(0.0f, std::memory_order_relaxed);
     complete.store(false, std::memory_order_relaxed);
+    finalisePending.store(false, std::memory_order_relaxed);
+    lastNoiseScore.store(0.0f, std::memory_order_relaxed);
+    noiseScoreOverride = -1.0f;
 
     std::lock_guard<std::mutex> lock(assessmentMutex);
     assessment = RepairAssessment{};
 }
 
-void RepairAnalyser::startCollection() {
+void RepairAnalyser::startCollection(const float phase2NoiseScoreOverride) {
     fifoWritePos    = 0;
     hopFill         = 0;
     framesCollected = 0;
@@ -56,7 +59,9 @@ void RepairAnalyser::startCollection() {
     sibBandRatio.clear();
     frameCrestDb.clear();
 
+    noiseScoreOverride = phase2NoiseScoreOverride;
     complete.store(false, std::memory_order_relaxed);
+    finalisePending.store(false, std::memory_order_relaxed);
     progress.store(0.0f, std::memory_order_relaxed);
     collecting.store(true, std::memory_order_release);
 }
@@ -85,8 +90,12 @@ void RepairAnalyser::process(const juce::AudioBuffer<float>& buffer, int numSamp
             processFrame();
 
             if (framesCollected >= targetFrames) {
+                // Collection done — hand the heavy scoring pass to the message
+                // thread (finaliseIfPending). The release store pairs with the
+                // acquire exchange there, publishing the collected vectors.
                 collecting.store(false, std::memory_order_relaxed);
-                finalise();
+                progress.store(1.0f, std::memory_order_relaxed);
+                finalisePending.store(true, std::memory_order_release);
                 return;
             }
 
@@ -197,7 +206,12 @@ void RepairAnalyser::processFrame() noexcept {
     ++framesCollected;
 }
 
-void RepairAnalyser::finalise() noexcept {
+void RepairAnalyser::finaliseIfPending() {
+    if (finalisePending.exchange(false, std::memory_order_acquire))
+        finalise();
+}
+
+void RepairAnalyser::finalise() {
     if (framesCollected == 0) return;
 
     const int n = framesCollected;
@@ -287,19 +301,22 @@ void RepairAnalyser::finalise() noexcept {
     }
 
     // ── Build assessment ──────────────────────────────────────────────────────
+    // Phase 2 runs on denoised audio, so its own noise measurement is
+    // meaningless — merge the Phase 1 score back in instead.
+    const float effectiveNoiseScore = noiseScoreOverride >= 0.0f ? noiseScoreOverride : noiseScore;
     RepairAssessment a;
-    a.noiseScore   = noiseScore;
+    a.noiseScore   = effectiveNoiseScore;
     a.reverbScore  = reverbScore;
     a.humMudScore  = humMudScore;
     a.clickScore   = clickScore;
     a.confidence   = juce::jlimit(0.0f, 1.0f, static_cast<float>(n) / static_cast<float>(std::max(1, targetFrames)));
 
-    a.noiseActive   = noiseScore   >= kActiveThreshold;
+    a.noiseActive   = effectiveNoiseScore >= kActiveThreshold;
     a.reverbActive  = reverbScore  >= kActiveThreshold;
     a.cleanupActive = humMudScore  >= kActiveThreshold;
     a.clickActive   = clickScore   >= kActiveThreshold;
 
-    a.suggestedNoiseStrength   = scoreToStrength(noiseScore);
+    a.suggestedNoiseStrength   = scoreToStrength(effectiveNoiseScore);
     a.suggestedReverbStrength  = scoreToStrength(reverbScore);
     a.suggestedCleanupStrength = scoreToStrength(humMudScore);
     a.suggestedClickStrength   = scoreToStrength(clickScore);
@@ -309,6 +326,7 @@ void RepairAnalyser::finalise() noexcept {
         assessment = a;
     }
 
+    lastNoiseScore.store(effectiveNoiseScore, std::memory_order_relaxed);
     progress.store(1.0f, std::memory_order_relaxed);
     complete.store(true, std::memory_order_release);
 }
@@ -323,6 +341,7 @@ void RepairAnalyser::restoreAssessment(const RepairAssessment& a) noexcept {
         std::lock_guard<std::mutex> lock(assessmentMutex);
         assessment = a;
     }
+    lastNoiseScore.store(a.noiseScore, std::memory_order_relaxed);
     collecting.store(false, std::memory_order_relaxed);
     progress.store(1.0f,    std::memory_order_relaxed);
     complete.store(true,    std::memory_order_release);

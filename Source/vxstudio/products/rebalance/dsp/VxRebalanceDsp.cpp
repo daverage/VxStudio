@@ -2004,9 +2004,7 @@ Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
     OwnershipFrame frame;
     frame.allowHardIsolation = allowHardIsolation;
 
-    const auto mode = static_cast<RecordingType>(
-        juce::jlimit(0, static_cast<int>(kModeProfiles.size()) - 1,
-                     targetRecordingType.load(std::memory_order_relaxed)));
+    const auto mode = frameConstants.mode;
     const int clusterId = binOwningCluster[static_cast<size_t>(bin)];
     const auto* tracked = (clusterId >= 0 && clusterId < kMaxTrackedClusters)
         ? &trackedClusters[static_cast<size_t>(clusterId)]
@@ -2028,28 +2026,14 @@ Dsp::OwnershipFrame Dsp::buildOwnershipFrameForBin(
     const float aiTrust = frame.aiGuided ? juce::jlimit(0.0f, 1.0f, aiMaskFrame.confidence + 0.08f) : 0.0f;
 
     for (int s = 0; s < kSourceCount; ++s) {
-        const float slider = currentControlValues[static_cast<size_t>(s)];
-        const float sliderSigned = (slider - 0.5f) * 2.0f;
-        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
-        const float separation = std::abs(curved) * sourceContributions[static_cast<size_t>(s)];
+        // Frame-constant per-source values were hoisted out of the bin loop.
+        const float sliderSigned = frameConstants.sliderSigned[static_cast<size_t>(s)];
 
-        frame.separationForces[static_cast<size_t>(s)] = separation;
+        frame.separationForces[static_cast<size_t>(s)] = frameConstants.separationForce[static_cast<size_t>(s)];
         frame.contributions[static_cast<size_t>(s)] = sourceContributions[static_cast<size_t>(s)];
 
-        float ownershipBias = 1.0f;
-        if (sliderSigned > 0.0f)
-            ownershipBias = 1.0f + 2.10f * separation;
-        else if (sliderSigned < 0.0f)
-            ownershipBias = std::max(0.54f, 1.0f - 0.46f * separation);
-
-        ownershipBias *= std::sqrt(std::max(0.08f, sourceContributions[static_cast<size_t>(s)]));
-
-        if (s == otherSource)
-            ownershipBias = juce::jlimit(0.08f, 1.35f, ownershipBias);
-        else
-            ownershipBias = juce::jlimit(0.18f, 2.65f, ownershipBias);
-
-        float ownership = smoothedMasks[static_cast<size_t>(s)][static_cast<size_t>(bin)] * ownershipBias;
+        float ownership = smoothedMasks[static_cast<size_t>(s)][static_cast<size_t>(bin)]
+                        * frameConstants.ownershipBias[static_cast<size_t>(s)];
 
         if (tracked != nullptr && tracked->active) {
             ownership *= lerp(0.35f,
@@ -2419,11 +2403,38 @@ void Dsp::buildForegroundBackgroundRender() noexcept
     std::array<float, kSourceCount> sourceContributions {};
     for (int s = 0; s < kSourceCount; ++s) {
         const float slider = currentControlValues[static_cast<size_t>(s)];
-        const float sliderSigned = (slider - 0.5f) * 2.0f;
-        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
-        const float separation = std::abs(curved) * strength * signalTrust;
         const float contribution = computeSourceContributionMultiplier(s, slider, strength, signalTrust);
         sourceContributions[static_cast<size_t>(s)] = contribution;
+    }
+
+    // Hoist the slider-derived per-source chain out of the bin loop — these
+    // values are identical for every bin of the frame (the pow alone would
+    // otherwise run bins × sources times per frame).
+    frameConstants.mode = static_cast<RecordingType>(
+        juce::jlimit(0, static_cast<int>(kModeProfiles.size()) - 1,
+                     targetRecordingType.load(std::memory_order_relaxed)));
+    for (int s = 0; s < kSourceCount; ++s) {
+        const float slider = currentControlValues[static_cast<size_t>(s)];
+        const float sliderSigned = (slider - 0.5f) * 2.0f;
+        const float curved = std::copysign(std::pow(std::abs(sliderSigned), 1.22f), sliderSigned);
+        const float separation = std::abs(curved) * sourceContributions[static_cast<size_t>(s)];
+
+        float ownershipBias = 1.0f;
+        if (sliderSigned > 0.0f)
+            ownershipBias = 1.0f + 2.10f * separation;
+        else if (sliderSigned < 0.0f)
+            ownershipBias = std::max(0.54f, 1.0f - 0.46f * separation);
+
+        ownershipBias *= std::sqrt(std::max(0.08f, sourceContributions[static_cast<size_t>(s)]));
+
+        if (s == otherSource)
+            ownershipBias = juce::jlimit(0.08f, 1.35f, ownershipBias);
+        else
+            ownershipBias = juce::jlimit(0.18f, 2.65f, ownershipBias);
+
+        frameConstants.sliderSigned[static_cast<size_t>(s)] = sliderSigned;
+        frameConstants.separationForce[static_cast<size_t>(s)] = separation;
+        frameConstants.ownershipBias[static_cast<size_t>(s)] = ownershipBias;
     }
 
     std::array<int, kDebugBins> debugDominant {};

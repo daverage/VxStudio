@@ -104,6 +104,9 @@ private:
     // Gain buffers
     std::vector<float> gainTarget, gainSmooth, gainSmoothedFreq;
 
+    // Scratch for the staged gain computation (batched exp/log passes)
+    std::vector<float> scratchExpArg, scratchExpOut, scratchLnGH1, scratchSnrLog10;
+
     // Audio ring FIFOs
     std::vector<float> inQueue, outQueue;
     size_t inQueueCap = 0;

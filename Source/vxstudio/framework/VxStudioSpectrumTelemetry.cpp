@@ -78,8 +78,15 @@ public:
     }
 
     SharedState* state() {
+        // Fast path: after the first successful init the pointer never changes,
+        // so audio-thread publishes skip the CriticalSection entirely.
+        if (auto* cached = cachedState.load(std::memory_order_acquire))
+            return cached;
         initialiseIfNeeded();
-        return reinterpret_cast<SharedState*>(mapping != nullptr ? mapping->getData() : nullptr);
+        auto* shared = reinterpret_cast<SharedState*>(mapping != nullptr ? mapping->getData() : nullptr);
+        if (shared != nullptr)
+            cachedState.store(shared, std::memory_order_release);
+        return shared;
     }
 
     juce::InterProcessLock& processLock() noexcept { return lock; }
@@ -126,12 +133,22 @@ private:
             shared->nextInstanceId = 1;
             shared->nextOrder = 1;
         }
+
+        // Pre-touch every page now (init runs off the audio thread) so first
+        // telemetry writes don't take page faults inside processBlock.
+        {
+            const auto* base = reinterpret_cast<const volatile char*>(shared);
+            for (size_t offset = 0; offset < sizeof(SharedState); offset += 4096)
+                (void) base[offset];
+            (void) base[sizeof(SharedState) - 1];
+        }
     }
 
     juce::CriticalSection localLock;
     juce::InterProcessLock lock { juce::String(kSharedLockName) };
     juce::File sharedFile;
     std::unique_ptr<juce::MemoryMappedFile> mapping;
+    std::atomic<SharedState*> cachedState { nullptr };
 };
 
 SharedSlot* sharedSlotAt(const int slotIndex) noexcept {
@@ -697,8 +714,15 @@ public:
 
     template <typename StateType>
     StateType* state(const std::uint32_t magic, const std::uint32_t version) {
+        // Fast path: pointer is immutable after first successful init, so
+        // audio-thread callers skip the CriticalSection.
+        if (auto* cached = cachedState.load(std::memory_order_acquire))
+            return reinterpret_cast<StateType*>(cached);
         initialiseIfNeeded<StateType>(magic, version);
-        return reinterpret_cast<StateType*>(mapping != nullptr ? mapping->getData() : nullptr);
+        auto* shared = mapping != nullptr ? mapping->getData() : nullptr;
+        if (shared != nullptr)
+            cachedState.store(shared, std::memory_order_release);
+        return reinterpret_cast<StateType*>(shared);
     }
 
     juce::InterProcessLock& processLock() noexcept { return lock; }
@@ -742,6 +766,15 @@ private:
             shared->magic = magic;
             shared->version = version;
         }
+
+        // Pre-touch every page off the audio thread so first writes don't
+        // take page faults inside processBlock.
+        {
+            const auto* base = reinterpret_cast<const volatile char*>(shared);
+            for (size_t offset = 0; offset < sizeof(StateType); offset += 4096)
+                (void) base[offset];
+            (void) base[sizeof(StateType) - 1];
+        }
     }
 
     juce::CriticalSection localLock;
@@ -749,6 +782,7 @@ private:
     const juce::String fileBasename;
     juce::File sharedFile;
     std::unique_ptr<juce::MemoryMappedFile> mapping;
+    std::atomic<void*> cachedState { nullptr };
 };
 
 AnalysisMappedRegion& domainRegion() {

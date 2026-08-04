@@ -28,7 +28,13 @@ constexpr float kRnNoisePcmScale = 32768.0f;
 constexpr float kGuardSpeechBackoff = 0.65f;
 constexpr float kModelPeakLimit = 1.5f;
 
-std::mutex& deepFilterRuntimeMutex() {
+// Serialises runtime create/destroy only. df_create performs one-time global
+// initialisation in the Rust library and loads the model (hundreds of ms), so
+// it must never overlap another create/destroy. Per-frame calls on a live
+// runtime operate on self-contained state (DFState/DF2State/DenoiseState) and
+// are lock-free: within an instance the bundle reader counts guarantee the
+// audio thread and the prepare thread never touch the same runtime.
+std::mutex& deepFilterLifecycleMutex() {
     static std::mutex mutex;
     return mutex;
 }
@@ -232,7 +238,7 @@ void DeepFilterService::releaseBundle(RuntimeBundle& bundle) {
 void* DeepFilterService::createRuntime(const RuntimeApi api,
                                        const juce::String& modelPath,
                                        const float attenuationLimitDb) const {
-    const std::lock_guard lock(deepFilterRuntimeMutex());
+    const std::lock_guard lock(deepFilterLifecycleMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             return df2_create(modelPath.toRawUTF8(), attenuationLimitDb, nullptr);
@@ -251,7 +257,7 @@ void DeepFilterService::destroyRuntime(const RuntimeApi api, void* runtime) cons
     if (runtime == nullptr)
         return;
 
-    const std::lock_guard lock(deepFilterRuntimeMutex());
+    const std::lock_guard lock(deepFilterLifecycleMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             df2_free(static_cast<DF2State*>(runtime));
@@ -289,7 +295,6 @@ void DeepFilterService::setRuntimeAttenuation(const RuntimeApi api, void* runtim
     if (runtime == nullptr)
         return;
 
-    const std::lock_guard lock(deepFilterRuntimeMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             df2_set_atten_lim(static_cast<DF2State*>(runtime), attenuationLimitDb);
@@ -309,7 +314,6 @@ float DeepFilterService::processRuntimeFrame(const RuntimeApi api, void* runtime
     if (runtime == nullptr || input == nullptr || output == nullptr)
         return 0.0f;
 
-    const std::lock_guard lock(deepFilterRuntimeMutex());
     switch (api) {
         case RuntimeApi::dfn2:
             return df2_process_frame(static_cast<DF2State*>(runtime), input, output);
@@ -525,7 +529,9 @@ void DeepFilterService::resetRealtime() {
 }
 
 float DeepFilterService::attenuationLimitForStrength(const float strength) const noexcept {
-    return 6.0f + 54.0f * vxsuite::clamp01(strength);
+    // Front-loaded so early knob travel raises the attenuation ceiling faster
+    // instead of needing to be maxed out before the model can suppress more.
+    return 6.0f + 54.0f * vxsuite::frontLoadedControl(strength, 0.75f);
 }
 
 bool DeepFilterService::processRealtime(juce::AudioBuffer<float>& buffer,

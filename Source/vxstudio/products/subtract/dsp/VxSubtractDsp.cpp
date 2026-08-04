@@ -1,5 +1,6 @@
 #include "VxSubtractDsp.h"
 #include "../../../framework/VxStudioSpectralHelpers.h"
+#include "../../../framework/VxStudioVectorMath.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -270,6 +271,11 @@ void SubtractDsp::prepare(double sampleRate, int maxBlockSize) {
     gainSmooth      .assign(bins, 1.0f);
     gainSmoothedFreq.assign(bins, 1.0f);
 
+    scratchExpArg   .assign(bins, 0.0f);
+    scratchExpOut   .assign(bins, 0.0f);
+    scratchLnGH1    .assign(bins, 0.0f);
+    scratchSnrLog10 .assign(bins, 0.0f);
+
     setQueueSizes(static_cast<int>(blockCap));
     updateSmoothingCoeffs();
     reset();
@@ -370,6 +376,16 @@ float SubtractDsp::getLearnObservedSeconds() const {
 void SubtractDsp::computeGainTargets(const FrameCtx& ctx,
                                      float energyRatio,
                                      bool  learnFrameHasSignal) {
+    // The per-bin work has no cross-bin recursion, so it is staged into three
+    // scalar passes with the transcendentals batched between them (Accelerate
+    // vForce on macOS): exp for the likelihood ratio, log for the H1 gain,
+    // log10 for the local SNR, and one exp that fuses exp(lnG) with the
+    // strength power (exp(lnG)^strength == exp(strength·lnG)).
+    const int binCount = static_cast<int>(bins);
+    const float qRatio = q_absence / (1.0f - q_absence);
+    const float lnGH0 = std::log(gH0_val);
+
+    // Pass A: minimum statistics, learning accumulation, decision-directed SNR.
     for (size_t k = 0; k < bins; ++k) {
         const float p = currPow[k];
 
@@ -388,34 +404,56 @@ void SubtractDsp::computeGainTargets(const FrameCtx& ctx,
         const float xiCand   = std::max(0.0f, 0.97f * (cleanPowPrev[k] / n) + 0.03f * xiInst);
         xiDD[k] = std::isfinite(xiCand) ? xiCand : 0.0f;
 
-        const float gH1     = xiDD[k] / (xiDD[k] + 1.0f);
-        const float vk      = Gamma * gH1;
-        const float LR      = (1.0f + xiDD[k]) * std::exp(-std::min(vk, 30.0f));
-        const float p_H1Raw = 1.0f / (1.0f + (q_absence / (1.0f - q_absence)) * LR);
+        const float gH1 = xiDD[k] / (xiDD[k] + 1.0f);
+        const float vk  = Gamma * gH1;
+        scratchExpArg[k]   = -std::min(vk, 30.0f);
+        scratchLnGH1[k]    = std::max(kEps, gH1);
+        scratchSnrLog10[k] = std::max(1.0f, Gamma);
+    }
+
+    vxsuite::vectorExp(scratchExpOut.data(), scratchExpArg.data(), binCount);       // exp(-vk)
+    vxsuite::vectorLog(scratchLnGH1.data(), scratchLnGH1.data(), binCount);         // ln(gH1)
+    vxsuite::vectorLog10(scratchSnrLog10.data(), scratchSnrLog10.data(), binCount); // log10(Γ)
+
+    // Pass B: presence probability, log-gain, and the fused strength exponent.
+    for (size_t k = 0; k < bins; ++k) {
+        const float LR      = (1.0f + xiDD[k]) * scratchExpOut[k];
+        const float p_H1Raw = 1.0f / (1.0f + qRatio * LR);
         const float p_H1    = std::isfinite(p_H1Raw) ? vxsuite::clamp01(p_H1Raw) : 0.0f;
         const float pCand   = 0.90f * presenceProb[k] + 0.10f * p_H1;
         presenceProb[k]     = std::isfinite(pCand) ? vxsuite::clamp01(pCand) : 0.5f;
 
         const float pSm = presenceProb[k];
-        const float lnG = pSm         * std::log(std::max(kEps, gH1))
-                        + (1.0f - pSm) * std::log(gH0_val);
-        float g = std::exp(lnG);
+        const float lnG = pSm * scratchLnGH1[k] + (1.0f - pSm) * lnGH0;
 
         // Tonalness from neighbours
+        const float p         = currPow[k];
         const float left      = currPow[(k > 0u) ? k - 1u : k];
         const float right     = currPow[(k + 1u < bins) ? k + 1u : k];
         const float tonalness = vxsuite::spectral::tonalnessFromNeighbors(p, left, right);
         tonalnessByBin[k]     = tonalness;
 
         // SNR-weighted strength
-        const float localSNR_dB  = 10.0f * std::log10(std::max(1.0f, Gamma));
+        const float localSNR_dB  = 10.0f * scratchSnrLog10[k];
         const float betaBin       = juce::jlimit(0.30f, 2.5f,
                                         ctx.strengthBaseGlobal / (1.0f + 0.045f * localSNR_dB));
         const bool  binInTransient = barkTransientHold[static_cast<size_t>(binToBark[k])] > 0
                                   || energyRatio > 1.38f;
         const float transientProt  = (ctx.labRaw || !binInTransient) ? 1.0f : 0.55f;
         const float strength       = std::max(0.20f, (betaBin * transientProt) - 0.40f * tonalness);
-        g = std::pow(std::max(0.0f, g), strength);
+        scratchExpArg[k] = strength * lnG;
+    }
+
+    vxsuite::vectorExp(scratchExpOut.data(), scratchExpArg.data(), binCount);       // exp(lnG)^strength
+
+    // Pass C: protection, floors, subtraction, and the final gain target.
+    for (size_t k = 0; k < bins; ++k) {
+        const float p = currPow[k];
+        const float tonalness = tonalnessByBin[k];
+        const bool  binInTransient = barkTransientHold[static_cast<size_t>(binToBark[k])] > 0
+                                  || energyRatio > 1.38f;
+
+        float g = scratchExpOut[k];
         g = lerp(1.0f, g, ctx.wetCore);
         if (!ctx.labRaw && tonalness > 0.0f)
             g = lerp(g, 1.0f, 0.30f * tonalness);
@@ -447,7 +485,7 @@ void SubtractDsp::computeGainTargets(const FrameCtx& ctx,
             g = lerp(g, 1.0f, blindProtect);
         }
 
-        const float maskHead = vxsuite::clamp01(std::log10(std::max(1.0f, Gamma)) / 3.5f);
+        const float maskHead = vxsuite::clamp01(scratchSnrLog10[k] / 3.5f);
         const float minGain  = ctx.labRaw
             ? juce::jlimit(1.0e-4f, 0.10f, lerp(1.0e-3f, 0.05f, maskHead))
             : juce::jlimit(0.015f, 0.18f,  lerp(0.03f, 0.11f, maskHead) * 0.85f);

@@ -230,11 +230,15 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
     const float releaseA = std::exp(-1.0f / (0.050f * static_cast<float>(sr)));
     const float ceiling = juce::Decibels::decibelsToGain(voiceMode ? -1.2f : -1.0f);
 
-    float limiterAccDb = 0.0f;
+    auto* const* chData = buffer.getArrayOfWritePointers();
+
+    // Meter: accumulate the limiter gain linearly and convert to dB once per
+    // block — no per-sample log10 purely for the activity display.
+    float limiterGainAcc = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
         float samplePeak = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
-            samplePeak = std::max(samplePeak, std::abs(buffer.getReadPointer(ch)[i]));
+            samplePeak = std::max(samplePeak, std::abs(chData[ch][i]));
 
         const float envA = samplePeak > limitEnv ? attackA : releaseA;
         limitEnv = envA * limitEnv + (1.0f - envA) * samplePeak;
@@ -251,13 +255,15 @@ void Dsp::processLimiter(juce::AudioBuffer<float>& buffer) {
             limitGain = releaseA * limitGain + (1.0f - releaseA) * targetGain;
         }
 
-        limiterAccDb += std::max(0.0f, -juce::Decibels::gainToDecibels(std::max(limitGain, 1.0e-6f), -120.0f));
+        limiterGainAcc += limitGain;
 
         for (int ch = 0; ch < numChannels; ++ch)
-            buffer.getWritePointer(ch)[i] *= limitGain;
+            chData[ch][i] *= limitGain;
     }
 
-    limiterActivity = juce::jlimit(0.0f, 1.0f, (limiterAccDb / static_cast<float>(numSamples)) / 6.0f);
+    const float meanGain = std::max(limiterGainAcc / static_cast<float>(numSamples), 1.0e-6f);
+    const float meanReductionDb = std::max(0.0f, -juce::Decibels::gainToDecibels(meanGain, -120.0f));
+    limiterActivity = juce::jlimit(0.0f, 1.0f, meanReductionDb / 6.0f);
 }
 
 } // namespace vxsuite::finish

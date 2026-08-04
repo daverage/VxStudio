@@ -65,6 +65,12 @@ public:
     // level trace - shows what the processing is steering toward.
     virtual bool hasReferenceTrace() const noexcept { return false; }
     virtual float getReferenceTraceDb() const noexcept { return -100.0f; }
+    // Pitch trace feed (identity.showPitchTrace): detected and corrected
+    // pitch in cents vs A440, one sample per UI tick. Confidence <= 0 marks
+    // unvoiced. Must be UI-thread safe (store atomically).
+    virtual float getPitchTraceDetectedCents() const noexcept { return 0.0f; }
+    virtual float getPitchTraceCorrectedCents() const noexcept { return 0.0f; }
+    virtual float getPitchTraceConfidence() const noexcept { return 0.0f; }
     float getOutputSafetyTrimReductionDb() const noexcept { return outputSafetyTrimmer.getCurrentReductionDb(); }
     float getOutputSafetyTrimMaxReductionDb() const noexcept { return outputSafetyTrimmer.getMaxObservedReductionDb(); }
     float getOutputSafetyTrimActivity() const noexcept { return outputSafetyTrimmer.getCurrentActivity01(); }

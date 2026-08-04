@@ -67,13 +67,17 @@ void VXProximityAudioProcessor::prepareSuite(const double sampleRate,
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
     proximityDsp.setChannelCount(getTotalNumOutputChannels());
     proximityDsp.prepare(currentSampleRateHz, samplesPerBlock);
+    drynessDsp.setChannelCount(getTotalNumOutputChannels());
+    drynessDsp.prepare(currentSampleRateHz, samplesPerBlock);
     outputTrimmer.setCeiling(0.96f);
     outputTrimmer.setReleaseSeconds(0.16f);
+    setReportedLatencySamples(drynessDsp.getLatencySamples());
     resetSuite();
 }
 
 void VXProximityAudioProcessor::resetSuite() {
     proximityDsp.reset();
+    drynessDsp.reset();
     outputTrimmer.reset();
     const float closer = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.0f);
     const float air    = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
@@ -107,12 +111,40 @@ void VXProximityAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
                          + 0.20f * voiceContext.phraseActivity
                          + 0.20f * voiceContext.transientRisk)
         : 0.0f;
+    // Front-load air: a straight-line knob-to-dB mapping meant early knob
+    // travel produced very little audible change, so the control felt like
+    // it needed to be maxed out to do anything. `closer` and `mud` are
+    // deliberately NOT shaped: `closer` also drives the dryness pre-stage
+    // and feeds proximityGainDb's own clamp, and `mud` feeds outputTrimDb's
+    // compensation — testProximityCloserKeepsLoudnessSteadierAcrossSources /
+    // ...ActsMonotonicallyWithCloser / ...GrowthIsNonlinearWithCloser have
+    // essentially zero margin against either (even shaping `mud`'s *default*
+    // value alone was enough to flip monotonicity by a hair). Front-loading
+    // `closer` properly needs the whole downstream chain (physics clamp,
+    // dryness amount, output trim) reworked together, not just the input -
+    // scoped as separate follow-up, same as the mud-bell issue above.
+    const float shapedAir = vxsuite::frontLoadedControl(smoothedAir, 0.80f);
+
     const float effectiveCloser = isVoice
         ? vxsuite::clamp01(smoothedCloser * (0.96f + 0.14f * voiceContext.buriedSpeech + 0.06f * modePolicy.bodyRecovery))
         : vxsuite::clamp01(smoothedCloser * (0.96f + 0.06f * modePolicy.bodyRecovery));
     const float effectiveAir = isVoice
-        ? vxsuite::clamp01(smoothedAir * (0.94f - 0.10f * vocalPriority + 0.10f * voiceContext.intelligibility))
-        : vxsuite::clamp01(smoothedAir * (0.92f + 0.08f * modePolicy.speechFocus));
+        ? vxsuite::clamp01(shapedAir * (0.94f - 0.10f * vocalPriority + 0.10f * voiceContext.intelligibility))
+        : vxsuite::clamp01(shapedAir * (0.92f + 0.08f * modePolicy.speechFocus));
+
+    // Dryness pre-stage: reduce room/reverberant energy on the raw input so
+    // "closer" also shrinks the direct-to-reverberant ratio, not just the bass
+    // EQ curve. Amount is intentionally gentle (this simulates distance, it
+    // isn't a reverb-removal tool) and tracks the same effectiveCloser used
+    // for the EQ so both cues move together. No separate makeup gain here —
+    // ProximityDsp's own content analysis and adaptive output trim run right
+    // after this and already coordinate loudness across different spectral
+    // balances; a second, independent compensator stacked on top of that
+    // (tried first) broke exactly the invariant it was meant to protect,
+    // because the two systems don't know about each other's gain moves.
+    constexpr float kMaxDrynessAmount = 0.15f;
+    const vxsuite::ProcessOptions drynessOptions {};
+    drynessDsp.processInPlace(buffer, effectiveCloser * kMaxDrynessAmount, drynessOptions);
 
     proximityDsp.processInPlace(buffer, numSamples,
                                 effectiveCloser,

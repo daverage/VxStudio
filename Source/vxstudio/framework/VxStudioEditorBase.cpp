@@ -9,7 +9,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
       lookAndFeel(owner.getProductIdentity().theme),
       tooltipWindow(this, 700),
       levelTraceView(owner.getProductIdentity().theme),
-      gainMeterView(owner.getProductIdentity().theme) {
+      gainMeterView(owner.getProductIdentity().theme),
+      pitchTraceView(owner.getProductIdentity().theme) {
     auto makeMouseTransparent = [](auto& component) {
         component.setInterceptsMouseClicks(false, false);
     };
@@ -157,6 +158,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
             default: levelTraceView.setZoomSeconds(6.0f); break;
         }
     };
+    if (identity.showPitchTrace)
+        addAndMakeVisible(pitchTraceView);
     if (identity.showLevelTrace) {
         addAndMakeVisible(traceZoomBox);
         addAndMakeVisible(levelTraceView);
@@ -497,6 +500,11 @@ void EditorBase::resized() {
         traceZoomBox.setBounds(zoomBounds.removeFromRight(scaled(104)).reduced(0, scaled(2)));
         body.removeFromTop(scaled(6));
     }
+    if (processor.getProductIdentity().showPitchTrace) {
+        const auto pitchBounds = body.removeFromTop(stacked ? scaled(164) : scaled(150)).reduced(scaled(18), scaled(4));
+        pitchTraceView.setBounds(pitchBounds);
+        body.removeFromTop(scaled(6));
+    }
 
     lowShelfIconBounds  = {};
     highShelfIconBounds = {};
@@ -823,6 +831,10 @@ void EditorBase::timerCallback() {
                                       processor.hasGainTrace());
         levelTraceView.setReferenceDb(processor.getReferenceTraceDb(), processor.hasReferenceTrace());
     }
+    if (processor.getProductIdentity().showPitchTrace)
+        pitchTraceView.pushSample(processor.getPitchTraceDetectedCents(),
+                                  processor.getPitchTraceCorrectedCents(),
+                                  processor.getPitchTraceConfidence());
 
     const auto& id = processor.getProductIdentity();
     auto& state    = processor.getValueTreeState();

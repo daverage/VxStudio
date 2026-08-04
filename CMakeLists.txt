@@ -5,9 +5,18 @@ project(VxStudio VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# An unset build type silently compiles at -O0, which makes DSP profiling and
+# realtime headroom checks meaningless (measured ~10× slower than Release).
+# CI always passes -DCMAKE_BUILD_TYPE=Release explicitly; default local builds
+# to the same.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    message(STATUS "VxStudio: CMAKE_BUILD_TYPE was unset — defaulting to Release")
+endif()
+
 set(VXSTUDIO_FRAMEWORK_VERSION "0.2.2")
 set(VXSTUDIO_PLUGIN_VERSION_VXDEVERB "0.2.1")
-set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY "0.2.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY "0.3.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC "0.1.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXFINISH "0.3.0")
@@ -21,6 +30,7 @@ set(VXSTUDIO_PLUGIN_VERSION_VXLEVELER "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXREBALANCE "0.2.2")
 set(VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.1")
 set(VXSTUDIO_PLUGIN_VERSION_VXREPAIR "0.1.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXTUNE "0.1.0")
 option(VXSTUDIO_ENABLE_REBALANCE_AI "Build the experimental, non-product VxRebalanceAI tool" OFF)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
@@ -338,6 +348,9 @@ juce_generate_juce_header(VXProximity)
 target_sources(VXProximity PRIVATE
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
 )
 target_include_directories(VXProximity PRIVATE Source)
 target_link_libraries(VXProximity PRIVATE VxStudioFramework juce::juce_dsp)
@@ -605,6 +618,38 @@ target_include_directories(VXTone PRIVATE Source)
 target_link_libraries(VXTone PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXTonePlugin ALL DEPENDS VXTone_VST3)
 vxstudio_stage_vst3_bundle(VXTone_VST3 "VXTone")
+
+juce_add_plugin(VXTune
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXTUNE}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXTUNE}
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxstudio.vxtune"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXTU"
+)
+target_compile_definitions(VXTune PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXTune)
+target_sources(VXTune PRIVATE
+  Source/vxstudio/products/tune/VxTuneProcessor.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+)
+target_include_directories(VXTune PRIVATE Source)
+target_link_libraries(VXTune PRIVATE VxStudioFramework juce::juce_dsp)
+add_custom_target(VXTunePlugin ALL DEPENDS VXTune_VST3)
+vxstudio_stage_vst3_bundle(VXTune_VST3 "VXTune")
 
 juce_add_plugin(VXRefine
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREFINE}
@@ -965,6 +1010,33 @@ add_custom_target(VXSuite_VST3
     VXRepairStage
   COMMENT "Building all VX Suite VST3 products")
 
+add_executable(VxTuneAnalysisTests
+  tests/VxTuneAnalysisTests.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+)
+target_include_directories(VxTuneAnalysisTests PRIVATE Source tests)
+vxstudio_add_executable_test(VxTuneAnalysisTests)
+
+add_executable(VxTunePluginTests
+  tests/VxTunePluginTests.cpp
+  Source/vxstudio/products/tune/VxTuneProcessor.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+)
+target_include_directories(VxTunePluginTests PRIVATE Source tests)
+target_link_libraries(VxTunePluginTests PRIVATE
+  VxStudioFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+)
+target_compile_definitions(VxTunePluginTests PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxstudio_add_executable_test(VxTunePluginTests)
+
 add_executable(VXDeverbTests
   tests/VXDeverbTests.cpp
   Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
@@ -1150,6 +1222,13 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxstudio/products/tone/VxToneProcessor.cpp
+  Source/vxstudio/products/tone_refine/VxToneRefineProcessor.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxDeHarshnessDsp.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxDeMudDsp.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxIntelligentSmoothDsp.cpp
+  Source/vxstudio/products/repair/VxRepairProcessor.cpp
+  Source/vxstudio/products/repair/VxRepairAnalysis.cpp
+  Source/vxstudio/products/repair/VxRepairEditor.cpp
   Source/vxstudio/products/leveler/VxLevelerProcessor.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerDetector.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
@@ -1259,12 +1338,52 @@ add_executable(VXSuiteProfile
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
+  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
+  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
+  Source/vxstudio/products/tone/VxToneProcessor.cpp
+  Source/vxstudio/products/tone_refine/VxToneRefineProcessor.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxDeHarshnessDsp.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxDeMudDsp.cpp
+  Source/vxstudio/products/tone_refine/dsp/VxIntelligentSmoothDsp.cpp
+  Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
+  Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeEsserDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDePolosiveDsp.cpp
+  Source/vxstudio/products/speech_clarity/dsp/VxDeBreathDsp.cpp
+  Source/vxstudio/products/leveler/VxLevelerProcessor.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerDetector.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
+  Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
+  Source/vxstudio/products/denoiser/VxDenoiserProcessor.cpp
+  Source/vxstudio/products/denoiser/dsp/VxDenoiserDsp.cpp
+  Source/vxstudio/products/deverb/VxDeverbProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbSpectralProcessor.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbRt60Estimator.cpp
+  Source/vxstudio/products/deverb/dsp/VxDeverbWpeStage.cpp
+  Source/vxstudio/products/deepfilternet/VxDeepFilterNetProcessor.cpp
+  Source/vxstudio/products/deepfilternet/dsp/VxDeepFilterNetService.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
+  Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
+  Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
+  Source/vxstudio/products/repair/VxRepairProcessor.cpp
+  Source/vxstudio/products/repair/VxRepairAnalysis.cpp
+  Source/vxstudio/products/repair/VxRepairEditor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
+  Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
 )
 target_include_directories(VXSuiteProfile PRIVATE Source tests)
 target_link_libraries(VXSuiteProfile PRIVATE
   VxStudioFramework
+  VxStudioDeepFilterRuntime
+  VxStudioDeepFilterRuntimeDfn2
+  VxStudioRNNoiseRuntime
+  ${VXSTUDIO_DF_SYSTEM_LIBS}
+  Eigen3::Eigen
   juce::juce_dsp
   juce::juce_audio_processors
 )
@@ -1285,3 +1404,4 @@ vxstudio_add_pluginval_test(VXLeveler)
 
 # Test Host for CPU/Memory Profiling
 add_subdirectory(Source/vxstudio/tools/test_host)
+

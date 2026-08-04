@@ -9,7 +9,8 @@
 #include <atomic>
 #include <cstdint>
 
-class VXLevelerAudioProcessor final : public vxsuite::ProcessorBase {
+class VXLevelerAudioProcessor final : public vxsuite::ProcessorBase,
+                                      private juce::Timer {
 public:
     VXLevelerAudioProcessor();
     ~VXLevelerAudioProcessor() override = default;
@@ -32,7 +33,7 @@ public:
     float getReferenceTraceDb() const noexcept override { return rideReferenceDbForUi.load(std::memory_order_relaxed); }
     void setDebugTuning(const vxsuite::leveler::Dsp::Tuning& tuning) noexcept;
     void setOfflineAnalysis(vxsuite::leveler::OfflineAnalysisResult analysis);
-    void clearOfflineAnalysis() noexcept;
+    void clearOfflineAnalysis();
     [[nodiscard]] const vxsuite::leveler::OfflineAnalysisResult& getOfflineAnalysis() const noexcept {
         return dsp.getOfflineAnalysis();
     }
@@ -49,7 +50,13 @@ private:
     void prepareAnalysisCapture(int maxBlockSize);
     void resetAnalysisCapture(bool keepOfflineMap = true) noexcept;
     void startAnalysisCapture();
-    void stopAnalysisCapture();
+    // Audio thread: stops capture and defers the analysis pass to the message
+    // thread (timerCallback → finishAnalysisCapture).
+    void stopAnalysisCapture() noexcept;
+    // Message thread: runs OfflineAnalyzer::analyse over the captured blocks
+    // and installs (or clears) the offline map.
+    void finishAnalysisCapture();
+    void timerCallback() override;
     void captureAnalysisAudio(const juce::AudioBuffer<float>& buffer, std::int64_t timelineSample) noexcept;
     static vxsuite::ProductIdentity makeIdentity();
 
@@ -70,6 +77,7 @@ private:
     int analysisFrameCursor = 0;
     double analysisEnergy = 0.0;
     std::int64_t analysisStartSample = -1;
+    vxsuite::DeferredAnalysisRunner analysisRunner;
     std::atomic<float> rideGainDbForUi { 0.0f };
     std::atomic<float> rideGateForUi { 1.0f };
     std::atomic<float> rideReferenceDbForUi { -100.0f };

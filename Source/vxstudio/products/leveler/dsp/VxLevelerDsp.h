@@ -2,6 +2,7 @@
 
 #include "../../../framework/VxStudioProduct.h"
 #include "../../../framework/VxStudioProcessOptions.h"
+#include "../../../framework/VxStudioDeferredAnalysis.h"
 #include "VxLevelerDetector.h"
 #include "VxLevelerGlobalLoudnessTracker.h"
 #include "VxLevelerOfflineAnalyzer.h"
@@ -84,8 +85,15 @@ public:
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void setParams(const Params& p) noexcept { params = p; }
     void setTuning(const Tuning& t) noexcept { tuning = t; }
+    // Message thread. The map is handed to the audio thread via a mailbox and
+    // takes effect at the start of the next process() call.
     void setOfflineAnalysis(OfflineAnalysisResult analysis);
-    void clearOfflineAnalysis() noexcept;
+    void clearOfflineAnalysis();
+    // Audio thread: stop the installed map steering until a new one arrives
+    // (used while a fresh Analyze capture is running).
+    void suppressOfflineMap() noexcept { offlineMapSuppressed = true; }
+    // Message thread, periodic: reclaim map storage the audio thread retired.
+    void collectOfflineGarbage() { offlineMailbox.collect(); }
     void setTimelineSample(std::int64_t s) noexcept { timelineSample = s; }
     // Block-level sidechain (music) level for the coming process() call.
     // present = false when no bus is connected/enabled.
@@ -104,12 +112,12 @@ public:
     float getLevelActivity() const noexcept { return levelActivity; }
     float getTameActivity() const noexcept { return tameActivity; }
     float getGlobalConfidence() const noexcept { return globalTracker.getConfidence(); }
-    bool hasOfflineTargetMap() const noexcept { return offlineAnalysis.isValid(); }
+    bool hasOfflineTargetMap() const noexcept { return offlineAnalysisMaster.isValid(); }
     bool isOfflineActive() const noexcept { return offlineActive; }
     // True when an offline map exists but the current timeline position falls
     // outside it, so the fixed global-stats fallback target is in use.
     bool isOfflineWaitingForTimeline() const noexcept { return offlineWaiting; }
-    [[nodiscard]] const OfflineAnalysisResult& getOfflineAnalysis() const noexcept { return offlineAnalysis; }
+    [[nodiscard]] const OfflineAnalysisResult& getOfflineAnalysis() const noexcept { return offlineAnalysisMaster; }
     DebugSnapshot getDebugSnapshot() const noexcept;
     // Total ride gain applied by the last processed block, in dB
     // (voice: leveller x override fader; general: ride + normalize +
@@ -211,7 +219,13 @@ private:
     float generalSpikeGain = 1.0f;
     float generalHighEnv = 0.0f;
     GlobalLoudnessTracker globalTracker;
+    // offlineAnalysis is the audio-thread copy (read only inside process());
+    // offlineAnalysisMaster is the message-thread copy used for state save and
+    // UI queries. Installs travel master → audio via the mailbox.
     OfflineAnalysisResult offlineAnalysis {};
+    OfflineAnalysisResult offlineAnalysisMaster {};
+    RealtimeResultMailbox<OfflineAnalysisResult> offlineMailbox;
+    bool offlineMapSuppressed = false;  // audio-thread flag, cleared on consume
     int preparedBlockSize = 256;
     std::int64_t offlineProcessedSamples = 0;
     std::int64_t timelineSample = -1;

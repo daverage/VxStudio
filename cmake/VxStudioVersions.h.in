@@ -22,6 +22,7 @@ inline constexpr std::string_view leveler = "@VXSTUDIO_PLUGIN_VERSION_VXLEVELER@
 inline constexpr std::string_view rebalance = "@VXSTUDIO_PLUGIN_VERSION_VXREBALANCE@";
 inline constexpr std::string_view analyser = "@VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER@";
 inline constexpr std::string_view repair   = "@VXSTUDIO_PLUGIN_VERSION_VXREPAIR@";
+inline constexpr std::string_view tune     = "@VXSTUDIO_PLUGIN_VERSION_VXTUNE@";
 } // namespace plugins
 
 } // namespace vxsuite::versions

@@ -44,7 +44,7 @@ Framework and plugin DSP versions are tracked independently.
 | VXSubtract | `0.2.1` |
 | VXDeverb | `0.2.1` |
 | VXSpeechClarity | `0.2.0` |
-| VXProximity | `0.2.1` |
+| VXProximity | `0.3.0` |
 | VXProximityClassic | `0.1.0` |
 | VXTone | `0.2.0` |
 | VXToneRefine | `0.1.0` |
@@ -62,6 +62,7 @@ Framework and plugin DSP versions are tracked independently.
 - `15` focused plugins are implemented and shipping in the shared VX Studio shell.
 - VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
 - VXProximityClassic is a new two-control simplified proximity model.
+- VXProximity's `Closer` now also drives a dereverberation pre-stage (shared with VXDeverb) so higher settings thin room tone, not just boost bass; this adds ~16ms of latency at 48kHz (compensated automatically by the host).
 - VXRepair is a new all-in-one guided repair assistant combining noise, clicks, clarity, and deverb in a single analysed workflow.
 - VXCleanup has been removed from the active product set and replaced by VXSpeechClarity for speech artifacts plus VXToneRefine for tonal refinement.
 - VxRebalanceAI exists as an experimental opt-in tool, but it is not a shipping VX Studio product yet.
@@ -284,6 +285,8 @@ Practical scenarios:
 ### VXProximity
 
 Directional microphone proximity model with real-time spectral analysis and adaptive 4-stage cascaded filtering. Simulates the tonal character of moving a microphone closer to a source  -  adding weight, intimacy, and presence  -  without altering spatial location or introducing artifacts.
+
+`Closer` also gently reduces room tone as it rises, via a dereverberation pre-stage shared with `VXDeverb`, so the source pulls forward the way it would if the mic were genuinely closer  -  not just a bass boost. This adds a small amount of latency (~16ms @ 48kHz), compensated automatically by the host.
 
 How to use it:
 
@@ -550,7 +553,7 @@ Prerequisites:
 git clone --recurse-submodules <repo-url>
 cd VxStudio
 cmake -S . -B build
-cmake --build build --parallel
+cmake --build build -j 4
 ```
 
 Build a single plugin:

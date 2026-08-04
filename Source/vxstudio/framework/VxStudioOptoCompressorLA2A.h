@@ -44,6 +44,7 @@ private:
   std::vector<float> shelfLp1;
   std::vector<float> fastDbCh;
   std::vector<float> slowDbCh;
+  std::vector<float> relSlowACh;  // control-rate slow-release coefficient per channel
   std::vector<float> mem01Ch;
   std::vector<float> detectorDbCh;
   float detectorDb = -120.0f;

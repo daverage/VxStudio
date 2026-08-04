@@ -119,9 +119,10 @@ inline constexpr HelpContent proximity {
     R"(
 <h1>VXProximity</h1>
 <p>Directional microphone proximity model with real-time spectral analysis and adaptive filtering. Simulates the tonal character of moving a microphone closer to a source - adding weight, intimacy, and presence - without altering spatial location or introducing artifacts.</p>
+<p>Closer also gently thins room tone as it rises, so the source pulls forward the way it would if the mic were genuinely closer - not just a bass boost. This adds a small amount of processing latency (about 16ms at 48kHz), compensated automatically by your host.</p>
 <h2>How to use it</h2>
 <ul>
-<li>Raise Closer to add weight and intimacy.</li>
+<li>Raise Closer to add weight, intimacy, and a touch of dryness.</li>
 <li>Use Air to stop the sound becoming overly thick or shut in.</li>
 <li>Use Mud to balance bass depth versus low-mid boom, based on the source character.</li>
 <li>Apply it after noise and room problems are already under control.</li>
@@ -417,6 +418,26 @@ inline constexpr HelpContent rebalance {
 <li>Light source-family shaping before final tone and dynamics.</li>
 </ul>)",
     "VXRebalance"
+};
+
+inline constexpr HelpContent tune {
+    "VXTune Help",
+    R"(
+<h1>VXTune</h1>
+<p>Intelligent vocal pitch correction that fixes pitch errors while leaving the performance - vibrato, bends, phrasing - untouched. It corrects the intended note only when it is confident the deviation is an error, and preserves expression by design.</p>
+<h2>How to use it</h2>
+<ul>
+<li>Insert on a monophonic vocal. The status line shows the detected note, its offset in cents, confidence, and whether the engine is intervening.</li>
+<li>Amount sets how much detected pitch error is removed.</li>
+<li>Natural sets how readily movement counts as error rather than expression: left preserves everything human, right is tighter.</li>
+<li>When unsure, the engine does nothing - a missed correction sounds like the singer; a wrong correction sounds like a malfunction.</li>
+</ul>
+<h2>Practical scenarios</h2>
+<ul>
+<li>Transparent intonation cleanup on lead or backing vocals.</li>
+<li>Checking vocal intonation while tracking or comping.</li>
+</ul>)",
+    "VXTune"
 };
 
 } // namespace vxsuite::help

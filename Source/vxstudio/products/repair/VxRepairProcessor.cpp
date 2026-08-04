@@ -29,7 +29,13 @@ constexpr std::string_view kClickListen      = "click_listen";
 } // namespace
 
 VXRepairAudioProcessor::VXRepairAudioProcessor()
-    : ProcessorBase(makeIdentity(), makeParams()) {}
+    : ProcessorBase(makeIdentity(), makeParams()) {
+    startTimerHz(30);
+}
+
+void VXRepairAudioProcessor::timerCallback() {
+    analyser.finaliseIfPending();
+}
 
 vxsuite::ProductIdentity VXRepairAudioProcessor::makeIdentity() {
     vxsuite::ProductIdentity id {};
@@ -243,6 +249,7 @@ void VXRepairAudioProcessor::prepareSuite(double sampleRate, int samplesPerBlock
     // Pre-allocate scratch buffers for advancing idle STFT state in listen mode.
     stftStateScratch.setSize (ch, std::max(1, samplesPerBlock), false, true, true);
     stftStateScratch2.setSize(ch, std::max(1, samplesPerBlock), false, true, true);
+    phase2AnalysisBuf.setSize(ch, std::max(1, samplesPerBlock), false, true, true);
 
     // Pre-allocate pass-through delay lines — each ring is sized to the corresponding
     // stage latency so that when a stage is off the output is the latency-correct dry signal.
@@ -279,7 +286,6 @@ void VXRepairAudioProcessor::resetSuite() {
 void VXRepairAudioProcessor::resetAnalysis() {
     analyser.reset();
     analysisPhase.store(static_cast<int>(AnalysisPhase::Idle), std::memory_order_relaxed);
-    savedNoiseScore = 0.0f;
     sibilanceIntensity.store(0.0f);
     plosiveIntensity.store(0.0f);
     breathIntensity.store(0.0f);
@@ -350,47 +356,49 @@ void VXRepairAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer,
         analysisPhase.store(static_cast<int>(AnalysisPhase::Phase1), std::memory_order_release);
     }
 
-    // Phase transitions (audio thread  -  no allocation)
+    // Phase transitions (audio thread — no allocation, no locks). The heavy
+    // finalise pass runs on the message thread (timerCallback); isComplete()
+    // only turns true once it has finished, and finalNoiseScore() is an atomic.
     const auto phase = getAnalysisPhase();
 
     if (phase == AnalysisPhase::Phase1 && analyser.isComplete()) {
-        const auto a = analyser.getAssessment();
-        if (a.noiseScore >= vxsuite::repair::RepairAnalyser::kActiveThreshold) {
-            // Significant noise found  -  run Phase 2 with denoised audio
-            savedNoiseScore = a.noiseScore;
+        const float noiseScore = analyser.finalNoiseScore();
+        if (noiseScore >= vxsuite::repair::RepairAnalyser::kActiveThreshold) {
+            // Significant noise found  -  run Phase 2 with denoised audio.
+            // The Phase 1 noise score is passed through so finalise() merges it
+            // into the Phase 2 assessment (Phase 2 audio is denoised).
             analyserDenoiserDsp.reset();
-            analyser.startCollection();
+            analyser.startCollection(noiseScore);
             analysisPhase.store(static_cast<int>(AnalysisPhase::Phase2), std::memory_order_release);
         } else {
             // No significant noise  -  single-pass is sufficient
             analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_release);
         }
     } else if (phase == AnalysisPhase::Phase2 && analyser.isComplete()) {
-        // Merge Phase 2 reverb/clarity with Phase 1 noise score
-        auto merged = analyser.getAssessment();
-        merged.noiseScore             = savedNoiseScore;
-        merged.noiseActive            = savedNoiseScore >= vxsuite::repair::RepairAnalyser::kActiveThreshold;
-        merged.suggestedNoiseStrength = vxsuite::repair::RepairAnalyser::scoreToStrengthStatic(savedNoiseScore);
-        analyser.restoreAssessment(merged);
         analysisPhase.store(static_cast<int>(AnalysisPhase::Done), std::memory_order_release);
     }
 
     // Feed analyser  -  Phase 2 uses a denoised copy so reverb/clarity are noise-corrected
     if (analyser.isCollecting()) {
         const auto currentPhase = getAnalysisPhase();
-        if (currentPhase == AnalysisPhase::Phase2) {
-            juce::AudioBuffer<float> analysisBuf;
-            analysisBuf.makeCopyOf(buffer);
+        const int nCh = buffer.getNumChannels();
+        if (currentPhase == AnalysisPhase::Phase2
+            && phase2AnalysisBuf.getNumChannels() >= nCh
+            && phase2AnalysisBuf.getNumSamples() >= numSamples)
+        {
+            juce::AudioBuffer<float> analysisView(phase2AnalysisBuf.getArrayOfWritePointers(), nCh, numSamples);
+            for (int ch = 0; ch < nCh; ++ch)
+                analysisView.copyFrom(ch, 0, buffer, ch, 0, numSamples);
             vxsuite::ProcessOptions noiseOptsForAnalysis {};
             noiseOptsForAnalysis.isVoiceMode     = true;
             noiseOptsForAnalysis.voiceProtect    = 0.75f;
             noiseOptsForAnalysis.speechFocus     = 0.75f;
             // Denoise at a moderate fixed strength so the reverb/clarity scores
             // see a clean signal without over-suppressing residue.
-            analyserDenoiserDsp.processInPlace(analysisBuf,
-                                               juce::jlimit(0.35f, 0.65f, savedNoiseScore * 0.8f),
+            analyserDenoiserDsp.processInPlace(analysisView,
+                                               juce::jlimit(0.35f, 0.65f, analyser.finalNoiseScore() * 0.8f),
                                                noiseOptsForAnalysis);
-            analyser.process(analysisBuf, numSamples);
+            analyser.process(analysisView, numSamples);
         } else {
             analyser.process(buffer, numSamples);
         }

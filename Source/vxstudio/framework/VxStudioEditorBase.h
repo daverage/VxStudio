@@ -4,6 +4,7 @@
 #include "VxStudioLookAndFeel.h"
 #include "VxStudioLevelTraceView.h"
 #include "VxStudioGainMeterView.h"
+#include "VxStudioPitchTraceView.h"
 #include "VxStudioProcessorBase.h"
 
 #include <array>
@@ -96,6 +97,7 @@ private:
     juce::TooltipWindow tooltipWindow;
     LevelTraceView levelTraceView;
     GainMeterView gainMeterView;
+    PitchTraceView pitchTraceView;
     juce::Rectangle<int> activityStripBounds;
     juce::Rectangle<int> gainMeterBounds;
     juce::Rectangle<int> traceViewBounds;

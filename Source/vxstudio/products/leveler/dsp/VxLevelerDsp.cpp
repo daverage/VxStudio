@@ -50,9 +50,14 @@ Dsp::DebugSnapshot Dsp::getDebugSnapshot() const noexcept {
 
 void Dsp::prepare(const double sampleRate, const int maxBlockSize, const int numChannels) {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    // Invalidate offline analysis if sample rate has changed (block timing would be wrong)
-    if (offlineAnalysis.isValid() && std::abs(offlineAnalysis.sampleRate - sr) > 1.0)
+    // Invalidate offline analysis if sample rate has changed (block timing would be wrong).
+    // prepare() never runs concurrently with process(), so both copies can be
+    // cleared directly here.
+    if (offlineAnalysisMaster.isValid() && std::abs(offlineAnalysisMaster.sampleRate - sr) > 1.0) {
         clearOfflineAnalysis();
+        offlineAnalysis = {};
+        offlineProcessedSamples = 0;
+    }
     preparedBlockSize = std::max(1, maxBlockSize);
     channels.assign(static_cast<size_t>(std::max(1, numChannels)), ChannelState{});
     delaySamples = std::max(1, juce::roundToInt(static_cast<float>(sr) * 0.010f));
@@ -65,13 +70,13 @@ void Dsp::prepare(const double sampleRate, const int maxBlockSize, const int num
 }
 
 void Dsp::setOfflineAnalysis(OfflineAnalysisResult analysis) {
-    offlineAnalysis = std::move(analysis);
-    offlineProcessedSamples = 0;
+    offlineAnalysisMaster = analysis;
+    offlineMailbox.publish(std::move(analysis));
 }
 
-void Dsp::clearOfflineAnalysis() noexcept {
-    offlineAnalysis = {};
-    offlineProcessedSamples = 0;
+void Dsp::clearOfflineAnalysis() {
+    offlineAnalysisMaster = {};
+    offlineMailbox.publish({});
 }
 
 void Dsp::reset() {
@@ -128,6 +133,13 @@ void Dsp::reset() {
 void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& detector,
                   const ProcessOptions& options) {
     juce::ScopedNoDenormals noDenormals;
+
+    // Install any offline map published by the message thread (swap only —
+    // no allocation; the displaced map is reclaimed via collectOfflineGarbage()).
+    if (offlineMailbox.consume(offlineAnalysis)) {
+        offlineProcessedSamples = 0;
+        offlineMapSuppressed = false;
+    }
 
     // Framework integration: ProcessOptions provides baseline protection context
     static_cast<void>(options);  // Use for future protection scaling if needed
@@ -198,7 +210,7 @@ void Dsp::process(juce::AudioBuffer<float>& buffer, const DetectorSnapshot& dete
     // median instead of learning it live - the whole performance rides toward
     // one known level, independent of playback position.
     const bool vocalOffline = params.analysisMode == MixAnalysisMode::offline
-        && offlineAnalysis.isValid();
+        && offlineAnalysis.isValid() && !offlineMapSuppressed;
     const float vocalOfflineRefDb = vocalOffline ? offlineAnalysis.activeMedianDb : 0.0f;
 
     // Sidechain (music) envelope: same ballistics as the vocal envelope so
@@ -540,7 +552,8 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
     // Gate knob in mix mode acts as ride sensitivity: right shrinks the
     // deadband (rides deeper into small deviations), left grows it (calmer).
     const float senseDeadbandTrimDb = -0.12f * clampf(params.gateSenseDb, -12.0f, 12.0f);
-    const bool mixOfflineMode = params.analysisMode == MixAnalysisMode::offline && offlineAnalysis.isValid();
+    const bool mixOfflineMode = params.analysisMode == MixAnalysisMode::offline
+        && offlineAnalysis.isValid() && !offlineMapSuppressed;
     bool offlineMapIndexed = false;   // a curve entry is usable for this block
     bool offlineOutOfRange = false;   // map exists but timeline is outside it
     int offlineBlockIndex = 0;

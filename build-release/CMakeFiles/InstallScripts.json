@@ -1,0 +1,12 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/cmake_install.cmake",
+		"/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/JUCE/cmake_install.cmake",
+		"/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/JUCE/modules/cmake_install.cmake",
+		"/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/JUCE/extras/Build/cmake_install.cmake",
+		"/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/JUCE/extras/Build/juceaide/cmake_install.cmake",
+		"/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/Source/vxstudio/tools/test_host/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

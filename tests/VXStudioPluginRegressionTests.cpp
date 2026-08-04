@@ -11,6 +11,9 @@
 #include "../Source/vxstudio/products/speech_clarity/dsp/VxDeClickDsp.h"
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
+#include "../Source/vxstudio/products/tone_refine/VxToneRefineProcessor.h"
+#include "../Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.h"
+#include "../Source/vxstudio/products/repair/VxRepairProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
 #include <atomic>
@@ -3400,6 +3403,126 @@ bool testToneFrequencyResponseRegression() {
     return true;
 }
 
+bool testToneRefineFrequencyResponseAndTransparency() {
+    constexpr double sr = 48000.0;
+    constexpr int skip = 4096;
+
+    auto mud  = makeSine(sr, 0.8f, 300.0f, 0.12f);
+    auto mid  = makeSine(sr, 0.8f, 1000.0f, 0.12f);
+    // Loud enough that the presence-peakiness detector (sample-derivative
+    // threshold 0.1) actually classifies the tone as harsh.
+    auto harsh = makeSine(sr, 0.8f, 3500.0f, 0.40f);
+    auto midLoud = makeSine(sr, 0.8f, 1000.0f, 0.40f);
+
+    // All controls at zero must be near-transparent.
+    {
+        VXToneRefineAudioProcessor refine;
+        refine.prepareToPlay(sr, 256);
+        setParamNormalized(refine, "mud", 0.0f);
+        setParamNormalized(refine, "harshness", 0.0f);
+        setParamNormalized(refine, "smooth", 0.0f);
+        const float ratio = rmsSkip(render(refine, mid, 256), skip) / std::max(rmsSkip(mid, skip), 1.0e-6f);
+        if (!(ratio > 0.90f && ratio < 1.10f)) {
+            std::cerr << "[VXSuitePluginRegression] ToneRefine is not transparent at zero settings: ratio="
+                      << ratio << "\n";
+            return false;
+        }
+    }
+
+    auto bandRatio = [&](const juce::AudioBuffer<float>& input, const float mudAmt, const float harshAmt) {
+        VXToneRefineAudioProcessor refine;
+        refine.prepareToPlay(sr, 256);
+        setParamNormalized(refine, "mud", mudAmt);
+        setParamNormalized(refine, "harshness", harshAmt);
+        setParamNormalized(refine, "smooth", 0.0f);
+        return rmsSkip(render(refine, input, 256), skip) / std::max(rmsSkip(input, skip), 1.0e-6f);
+    };
+
+    // Full Mud must cut the low-mid band more than the 1 kHz reference.
+    const float mudBand = bandRatio(mud, 1.0f, 0.0f);
+    const float mudRef  = bandRatio(mid, 1.0f, 0.0f);
+    if (!(mudBand < 0.97f && mudRef > mudBand * 1.02f)) {
+        std::cerr << "[VXSuitePluginRegression] ToneRefine Mud no longer attenuates low-mids selectively: "
+                  << "band=" << mudBand << " ref=" << mudRef << "\n";
+        return false;
+    }
+
+    // Full Harshness must cut the presence band more than the 1 kHz reference.
+    const float harshBand = bandRatio(harsh, 0.0f, 1.0f);
+    const float harshRef  = bandRatio(midLoud, 0.0f, 1.0f);
+    if (!(harshBand < 0.97f && harshRef > harshBand * 1.02f)) {
+        std::cerr << "[VXSuitePluginRegression] ToneRefine Harshness no longer attenuates presence selectively: "
+                  << "band=" << harshBand << " ref=" << harshRef << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+// Synthetic burst + exponentially-decaying tail (same construction pattern as
+// VXDeverbTests' makePathologicalBurst): a click every 37 samples with a 0.94
+// per-sample feedback tail approximates a reverberant decay the LRSV estimator
+// can act on.
+juce::AudioBuffer<float> makeBurstWithTail(const double sampleRate, const float seconds) {
+    const int samples = static_cast<int>(sampleRate * seconds);
+    juce::AudioBuffer<float> buffer(2, samples);
+    for (int i = 0; i < samples; ++i) {
+        const float burst = ((i % 37) == 0) ? (i % 74 == 0 ? 1.0f : -1.0f) : 0.0f;
+        const float tail = (i > 0 ? buffer.getSample(0, i - 1) * 0.94f : 0.0f);
+        const float sample = 0.15f * (burst + tail);
+        buffer.setSample(0, i, sample);
+        buffer.setSample(1, i, sample);
+    }
+    return buffer;
+}
+
+float tailRmsFrom(const juce::AudioBuffer<float>& buffer, const int startSample) {
+    double energy = 0.0;
+    int count = 0;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        const auto* s = buffer.getReadPointer(ch);
+        for (int i = startSample; i < buffer.getNumSamples(); ++i) {
+            energy += static_cast<double>(s[i]) * s[i];
+            ++count;
+        }
+    }
+    return count > 0 ? static_cast<float>(std::sqrt(energy / count)) : 0.0f;
+}
+
+bool testProximityDrynessReducesReverberantTail() {
+    constexpr double sr = 48000.0;
+    auto burst = makeBurstWithTail(sr, 1.2f);
+    const int tailStart = static_cast<int>(sr * 1.0);
+
+    VXProximityAudioProcessor far;
+    far.prepareToPlay(sr, 256);
+    setParamNormalized(far, "closer", 0.0f);
+    setParamNormalized(far, "air", 0.0f);
+    const float tailFar = tailRmsFrom(render(far, burst, 256), tailStart);
+
+    VXProximityAudioProcessor close;
+    close.prepareToPlay(sr, 256);
+    setParamNormalized(close, "closer", 1.0f);
+    setParamNormalized(close, "air", 0.0f);
+    const float tailClose = tailRmsFrom(render(close, burst, 256), tailStart);
+
+    if (!(tailClose < tailFar * 0.85f)) {
+        std::cerr << "[VXSuitePluginRegression] Proximity 'closer' no longer reduces reverberant "
+                     "tail energy: far=" << tailFar << " close=" << tailClose << "\n";
+        return false;
+    }
+
+    // Latency must actually be reported so hosts PDC-align (render() above
+    // relies on getLatencySamples() to line up the comparison correctly).
+    if (close.getLatencySamples() <= 0) {
+        std::cerr << "[VXSuitePluginRegression] Proximity reports zero latency despite the "
+                     "dryness stage — PDC alignment would be wrong\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool testProximityAndFinishFrequencyResponseRegression() {
     constexpr double sr = 48000.0;
     constexpr int skip = 4096;
@@ -3539,6 +3662,63 @@ bool testNoSteadyStateAllocationsOnAudioThread() {
     if (!expectNoSteadyStateAllocations("leveler", leveler, noisy))
         return false;
 
+    VXProximityClassicAudioProcessor proximityClassic;
+    proximityClassic.prepareToPlay(sr, 256);
+    setParamNormalized(proximityClassic, "closer", 0.55f);
+    setParamNormalized(proximityClassic, "air", 0.35f);
+    if (!expectNoSteadyStateAllocations("proximityClassic", proximityClassic, speech))
+        return false;
+
+    VXToneRefineAudioProcessor toneRefine;
+    toneRefine.prepareToPlay(sr, 256);
+    setParamNormalized(toneRefine, "mud", 0.60f);
+    setParamNormalized(toneRefine, "harshness", 0.60f);
+    setParamNormalized(toneRefine, "smooth", 0.50f);
+    if (!expectNoSteadyStateAllocations("toneRefine", toneRefine, speech))
+        return false;
+
+    VXSpeechClarityAudioProcessor speechClarity;
+    speechClarity.prepareToPlay(sr, 256);
+    setParamNormalized(speechClarity, "sibilance", 0.55f);
+    setParamNormalized(speechClarity, "plosive", 0.55f);
+    setParamNormalized(speechClarity, "breath", 0.55f);
+    setParamNormalized(speechClarity, "click", 0.55f);
+    if (!expectNoSteadyStateAllocations("speechClarity", speechClarity, speech))
+        return false;
+
+    VXRebalanceAudioProcessor rebalance;
+    rebalance.prepareToPlay(sr, 256);
+    setParamNormalized(rebalance, "vocals", 0.80f);
+    setParamNormalized(rebalance, "drums", 0.30f);
+    setParamNormalized(rebalance, "strength", 0.70f);
+    if (!expectNoSteadyStateAllocations("rebalance", rebalance, noisy))
+        return false;
+
+    VXRepairAudioProcessor repair;
+    repair.prepareToPlay(sr, 256);
+    setParamNormalized(repair, "noise_on", 1.0f);
+    setParamNormalized(repair, "reverb_on", 1.0f);
+    setParamNormalized(repair, "clarity_on", 1.0f);
+    setParamNormalized(repair, "click_on", 1.0f);
+    setParamNormalized(repair, "noise_strength", 0.60f);
+    setParamNormalized(repair, "reverb_strength", 0.60f);
+    setParamNormalized(repair, "clarity_strength", 0.60f);
+    setParamNormalized(repair, "click_strength", 0.60f);
+    if (!expectNoSteadyStateAllocations("repair", repair, noisy))
+        return false;
+
+    VXDeepFilterNetAudioProcessor deepFilter;
+    deepFilter.prepareToPlay(sr, 256);
+    setParamNormalized(deepFilter, "clean", 0.60f);
+    setParamNormalized(deepFilter, "guard", 0.40f);
+    if (!expectNoSteadyStateAllocations("deepfilternet", deepFilter, noisy))
+        return false;
+
+    VXStudioAnalyserAudioProcessor analyser;
+    analyser.prepareToPlay(sr, 256);
+    if (!expectNoSteadyStateAllocations("analyser", analyser, speech))
+        return false;
+
     return true;
 }
 
@@ -3667,6 +3847,8 @@ int main(int argc, char* argv[]) {
     run("testLatencyBearingProcessorsDoNotReportLatencyAsTail", testLatencyBearingProcessorsDoNotReportLatencyAsTail);
     run("testTailReportingMatchesRenderedCarryover", testTailReportingMatchesRenderedCarryover);
     run("testToneFrequencyResponseRegression", testToneFrequencyResponseRegression);
+    run("testToneRefineFrequencyResponseAndTransparency", testToneRefineFrequencyResponseAndTransparency);
+    run("testProximityDrynessReducesReverberantTail", testProximityDrynessReducesReverberantTail);
     run("testProximityAndFinishFrequencyResponseRegression", testProximityAndFinishFrequencyResponseRegression);
     run("testNoSteadyStateAllocationsOnAudioThread", testNoSteadyStateAllocationsOnAudioThread);
     run("testCombinedChainKeepsSilenceSilent", testCombinedChainKeepsSilenceSilent);

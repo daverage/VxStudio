@@ -125,6 +125,12 @@ void VXSpeechClarityAudioProcessor::prepareSuite(const double sampleRate, const 
     resetSuite();
 }
 
+void VXSpeechClarityAudioProcessor::handleAsyncUpdate() {
+    const int latency = pendingLatencySamples.exchange(-1, std::memory_order_acquire);
+    if (latency >= 0)
+        setReportedLatencySamples(latency);
+}
+
 void VXSpeechClarityAudioProcessor::resetSuite() {
     sibilanceEnvFollower.reset();
     plosiveEnvFollower.reset();
@@ -294,7 +300,9 @@ void VXSpeechClarityAudioProcessor::processProduct(juce::AudioBuffer<float>& buf
         dePlosiveDsp.setMode(cm);
         deBreathDsp.setMode(cm);
         deEsserDsp.setMode(cm);
-        setReportedLatencySamples(deClickDsp.getLatencySamples());
+        // Audio thread: defer the host latency notification to the message thread.
+        pendingLatencySamples.store(deClickDsp.getLatencySamples(), std::memory_order_release);
+        triggerAsyncUpdate();
         lastMode = currentMode;
     }
 

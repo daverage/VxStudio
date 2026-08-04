@@ -31,9 +31,12 @@ struct RepairAssessment {
 };
 
 // Collects ~5 seconds of audio and produces a RepairAssessment.
-// Call startCollection() from the UI thread, then feed audio via process()
-// on the audio thread. Poll isComplete() / getProgress() from the UI thread.
-// getAssessment() is safe to call from any thread once isComplete() is true.
+// startCollection() and process() are realtime-safe (audio thread). When the
+// collection window fills, process() flags finalise as pending; the heavy
+// scoring pass (sorts, vector copies, assessment lock) runs when the message
+// thread calls finaliseIfPending(). Poll isComplete() / getProgress() from the
+// UI thread. getAssessment() takes a lock — never call it from the audio
+// thread; the audio thread reads finalNoiseScore() instead.
 class RepairAnalyser {
 public:
     static constexpr float kCollectionSeconds = 5.0f;
@@ -41,12 +44,19 @@ public:
 
     void prepare(double sampleRate, int maxBlockSize);
     void reset();
-    void startCollection();
+    // phase2NoiseScoreOverride >= 0 makes finalise() replace the measured noise
+    // score with this value (Phase 2 runs on denoised audio, so its own noise
+    // measurement is meaningless and the Phase 1 score is merged in instead).
+    void startCollection(float phase2NoiseScoreOverride = -1.0f);
     void process(const juce::AudioBuffer<float>& buffer, int numSamples);
+    // Message thread only: runs the deferred finalise pass if one is pending.
+    void finaliseIfPending();
 
     float getProgress()   const noexcept { return progress.load(std::memory_order_relaxed); }
-    bool  isComplete()    const noexcept { return complete.load(std::memory_order_relaxed); }
-    bool  isCollecting()  const noexcept { return collecting.load(std::memory_order_relaxed); }
+    bool  isComplete()    const noexcept { return complete.load(std::memory_order_acquire); }
+    bool  isCollecting()  const noexcept { return collecting.load(std::memory_order_acquire); }
+    // Audio-thread-safe read of the finalised noise score (valid once isComplete()).
+    float finalNoiseScore() const noexcept { return lastNoiseScore.load(std::memory_order_relaxed); }
     RepairAssessment getAssessment() const noexcept;
     // Restore a previously saved assessment (e.g. from plugin state) without re-analysing.
     void restoreAssessment(const RepairAssessment& a) noexcept;
@@ -60,7 +70,7 @@ public:
 
 private:
     void processFrame() noexcept;
-    void finalise()     noexcept;
+    void finalise();
     static float scoreToStrength(float score) noexcept;
 
     static constexpr int kFftOrder    = 11;
@@ -92,9 +102,12 @@ private:
     std::vector<float> frameCrestDb;   // 20*log10(peak/rms) per frame for click detection
     int framesCollected = 0;
 
-    std::atomic<bool>  collecting { false };
-    std::atomic<float> progress   { 0.0f  };
-    std::atomic<bool>  complete   { false  };
+    std::atomic<bool>  collecting      { false };
+    std::atomic<float> progress        { 0.0f  };
+    std::atomic<bool>  complete        { false };
+    std::atomic<bool>  finalisePending { false };
+    std::atomic<float> lastNoiseScore  { 0.0f  };
+    float noiseScoreOverride = -1.0f;  // written before collecting=true, read by finalise()
 
     mutable std::mutex  assessmentMutex;
     RepairAssessment    assessment;

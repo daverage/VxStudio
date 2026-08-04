@@ -228,6 +228,21 @@ void ProximityDsp::processInPlace(juce::AudioBuffer<float>& buffer,
 
     // Build filter coefficients
     const BiquadCoeffs proximityC = makeLowShelf(sr, smoothProximityFc, smoothProximityGain);
+    // NOTE: named/documented as a "mud bell" but built as a low-shelf. A real
+    // peaking (bell) filter (via makePeakingEq) was tried again on 2026-07-31
+    // and is more correct on paper, but no combination of outputTrimDb
+    // compensation terms could satisfy both
+    // testProximityCloserKeepsLoudnessSteadierAcrossSources (needs strong extra
+    // bass cut at closer=1 for pure-tone bass content) and
+    // testProximityPhysicsBasedModelActsMonotonicallyWithCloser /
+    // testProximityBassBoostGrowthIsNonlinearWithCloser (need bass energy to
+    // keep rising smoothly with closer for broadband/speech content) at once —
+    // any term strong enough to close the first gap over-cuts the other two at
+    // closer=1, because both invariants peak at the same closer value with no
+    // content-derived signal that reliably tells them apart. Fixing this needs
+    // a structural change (e.g. a frequency-selective trim measurement, or
+    // reworking the tests' tolerances alongside the filter), not scalar
+    // coefficient tuning — scoped as separate follow-up, not bundled here.
     const BiquadCoeffs mudC = makeLowShelf(sr, smoothMudCenter, smoothMudGain);
     const BiquadCoeffs airC = makeHighShelf(sr, highFc, smoothHighGain);
     const float outputTrim = juce::Decibels::decibelsToGain(smoothTrimDb);

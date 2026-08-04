@@ -289,11 +289,13 @@ void VXDeverbAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, ju
     applyLoudnessCompensation(buffer, dryRms, effectiveReduce, isFirstBlock, finalWetStats.rms, finalWetStats.peak);
 
     // Body: post-deverb low shelf to restore low-end weight lost to subtraction.
-    // 250 Hz shelf, +6 dB max at body=1.0, neutral at body=0.
+    // 250 Hz shelf, +10 dB max at body=1.0, neutral at body=0. Front-loaded
+    // (exponent 0.75) so early knob travel is audible instead of needing to
+    // be maxed out - see vxsuite::frontLoadedControl.
     smoothedBody = vxsuite::smoothBlockValue(smoothedBody, bodyTarget,
                                              currentSampleRateHz, numSamples, 0.120f);
     if (smoothedBody > 1.0e-4f) {
-        const float gainDb = 10.0f * smoothedBody;
+        const float gainDb = 10.0f * vxsuite::frontLoadedControl(smoothedBody, 0.75f);
         const float A   = std::pow(10.0f, gainDb / 40.0f);
         const float w0  = 2.0f * juce::MathConstants<float>::pi * 250.0f
                           / static_cast<float>(currentSampleRateHz);

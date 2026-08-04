@@ -64,7 +64,9 @@ struct ProductIdentity {
     std::array<std::string_view, 3> selectorChoiceLabels {};
     std::string_view auxSelectorLabel;
     std::string_view expertButtonLabel = "Pro";
-    std::array<std::string_view, 3> auxSelectorChoiceLabels {};
+    // Sized for musical selectors (e.g. key/scale lists); products fill as
+    // many leading entries as they need.
+    std::array<std::string_view, 26> auxSelectorChoiceLabels {};
     int auxSelectorDefaultIndex = 0;
     bool auxSelectorFollowsGeneralMode = true;
     bool auxSelectorRequiresExpert = false;
@@ -81,6 +83,9 @@ struct ProductIdentity {
     std::string_view learnButtonLabel;
     bool showLevelTrace = false;
     bool showStereoGainMeter = false;
+    // Scrolling pitch trace (detected vs corrected pitch on a note grid);
+    // requires the ProcessorBase pitch-trace virtuals.
+    bool showPitchTrace = false;
     // Adds a stereo "Sidechain" input bus (disabled until the host routes to
     // it). Detection-only: the framework never writes SC channels to output.
     bool wantsSidechainInput = false;
