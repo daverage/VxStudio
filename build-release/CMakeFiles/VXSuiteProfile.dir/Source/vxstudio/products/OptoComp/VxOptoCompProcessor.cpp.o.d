@@ -1588,6 +1588,7 @@ CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/OptoComp/VxOptoCompProces
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/OptoComp/../../framework/VxStudioGainMeterView.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/OptoComp/../../framework/VxStudioPitchTraceView.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/OptoComp/../../framework/VxStudioProcessorBase.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/OptoComp/../../framework/VxStudioMeteringSnapshot.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/OptoComp/../../framework/VxStudioProcessCoordinator.h \

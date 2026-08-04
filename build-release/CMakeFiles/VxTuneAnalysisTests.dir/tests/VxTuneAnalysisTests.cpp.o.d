@@ -880,6 +880,7 @@ CMakeFiles/VxTuneAnalysisTests.dir/tests/VxTuneAnalysisTests.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstdarg \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneCorrectionEngine.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneTargetEstimator.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTunePitchShifter.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.h \

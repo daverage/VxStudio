@@ -1712,6 +1712,15 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/tests/VXStudioPluginRegressionTests
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tone_refine/dsp/VxDeMudDsp.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tone_refine/dsp/VxDeHarshnessDsp.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tone_refine/dsp/VxIntelligentSmoothDsp.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/VxTuneProcessor.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/../../framework/VxStudioProcessorBase.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneCorrectionEngine.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneTimeline.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneTargetEstimator.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/ProximityClassic/../../framework/VxStudioBlockSmoothedControl.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/ProximityClassic/../../framework/VxStudioBlockSmoothing.h \

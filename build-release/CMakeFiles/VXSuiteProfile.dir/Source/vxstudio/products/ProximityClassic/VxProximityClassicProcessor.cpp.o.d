@@ -1588,6 +1588,7 @@ CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/ProximityClassic/VxProxim
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/ProximityClassic/../../framework/VxStudioGainMeterView.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/ProximityClassic/../../framework/VxStudioPitchTraceView.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/ProximityClassic/../../framework/VxStudioProcessorBase.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/ProximityClassic/../../framework/VxStudioMeteringSnapshot.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/ProximityClassic/../../framework/VxStudioProcessCoordinator.h \

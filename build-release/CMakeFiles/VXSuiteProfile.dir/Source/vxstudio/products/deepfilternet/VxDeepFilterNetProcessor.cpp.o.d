@@ -1588,6 +1588,7 @@ CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/deepfilternet/VxDeepFilte
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deepfilternet/../../framework/VxStudioGainMeterView.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deepfilternet/../../framework/VxStudioPitchTraceView.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deepfilternet/../../framework/VxStudioProcessorBase.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deepfilternet/../../framework/VxStudioMeteringSnapshot.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/deepfilternet/../../framework/VxStudioProcessCoordinator.h \

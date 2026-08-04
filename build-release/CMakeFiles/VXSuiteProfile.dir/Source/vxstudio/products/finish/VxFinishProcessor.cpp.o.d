@@ -1588,6 +1588,7 @@ CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/finish/VxFinishProcessor.
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/finish/../../framework/VxStudioGainMeterView.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/finish/../../framework/VxStudioPitchTraceView.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/finish/../../framework/VxStudioProcessorBase.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/finish/../../framework/VxStudioMeteringSnapshot.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/finish/../../framework/VxStudioProcessCoordinator.h \

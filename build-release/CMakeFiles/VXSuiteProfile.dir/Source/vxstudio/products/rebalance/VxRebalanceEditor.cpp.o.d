@@ -1586,6 +1586,7 @@ CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/rebalance/VxRebalanceEdit
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/rebalance/../../framework/VxStudioGainMeterView.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/rebalance/../../framework/VxStudioPitchTraceView.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/rebalance/../../framework/VxStudioProcessorBase.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/rebalance/../../framework/VxStudioMeteringSnapshot.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/rebalance/../../framework/VxStudioProcessCoordinator.h \

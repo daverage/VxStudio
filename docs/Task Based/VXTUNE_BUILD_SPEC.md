@@ -60,16 +60,62 @@ the repo for A/B tests).
   - unvoiced noise passes through at aligned latency;
   - correction-chain tests re-run green with PSOLA as the renderer.
 
-### F2. Note segmentation + behaviour distributions
-- Files: `products/tune/dsp/VxTuneSegmenter.{h,cpp}`.
-- Fixed-lag segmentation over PitchFrames (horizon a constructor
-  parameter — doc §6); emits/updates `NoteSegment`s (open → finalised).
-- Behaviour: probability vector per doc §5.5, hand-built features
-  (derivative stats, residual modulation 4–7 Hz autocorrelation, duration,
-  onset shape), normalised against singer model when present.
-- Acceptance: synthetic gauntlet — sustain/vibrato/slide/scoop/passing-note
-  clips each classified with the labelled behaviour dominant (>0.5) and
-  no hard flips between adjacent frames (distribution continuity bound).
+### F2. Note segmentation + behaviour distributions — CORE DONE (2026-08-04)
+- File: `products/tune/dsp/VxTuneSegmenter.h` (header-only, matches the
+  other v0/F3 modules' style). `CorrectionEngine` now owns a `Segmenter`
+  alongside its `TargetEstimator`, run independently (segmentation must not
+  depend on which note the target estimator favours — matches the doc's
+  pipeline order, §5.3 before §5.7).
+- Segments open on a sustained deviation from the open segment's own
+  running mean centre, but ONLY once movement has settled (drift below a
+  threshold) - not merely while pitch is far from the mean. Real bug
+  caught building this: without the settle requirement, a continuous
+  glide/portamento re-triggered the boundary every few frames as the slow
+  mean tried to catch up and fell behind again, so it never got to see
+  itself as one continuous slide - only a chain of onsets. Caught by a
+  synthetic glide test, not guessed.
+- Per-segment features, all incremental/O(1) per frame (no allocation, no
+  backward pass): running-mean centre, linear-regression drift (c/s),
+  rolling-window (~460ms) residual zero-crossing rate + extent for vibrato
+  rate/depth, onset flag (reuses the detector's own onsetTransient reason).
+  Combined into `behaviourProb[9]` (sustain/vibrato/bend/slide/scoop/fall/
+  passing-note/onset/unvoiced) via simple interpretable weighted scores,
+  normalised to a distribution (never a hard label - rule 5).
+- Behaviour output is itself SMOOTHED frame-to-frame (not reset at segment
+  boundaries): a genuine onset ramps in over ~2 frames rather than
+  snapping instantly - a hard per-frame jump in the distribution is itself
+  a rule-5 violation, not just the underlying label choice. Caught by the
+  distribution-continuity test (max L1 jump was 1.75/2.0 before this,
+  1.0 after).
+- Wired into `CorrectionEngine`: the old fixed dwell-frame gate (F4 round 6
+  patch) is retired. `behaviourProb[passingNote]` now continuously scales
+  the effective correction amount (`amount * (1 - passingNoteProb)`) -
+  a segment that just opened reads as almost entirely passing-note
+  (near-zero effective amount) and phases back to full amount as that
+  probability decays with held duration. Strictly more principled than the
+  old binary "proven yet?" gate it replaces, and subsumes its behaviour.
+- Verified on real material (the LOAP track that originally exposed the
+  dwell-gate gap): correction still stays near-silent through the fast
+  register-leap passage, now for a legible reason (vibrato/bend/passing-
+  note dominant there) rather than an opaque frame-count. No envelope/
+  audio-quality regression on LOAP or the earlier nf3 track.
+- Acceptance: synthetic gauntlet (`testBehaviourDistribution`) - sustain,
+  vibrato (5.5Hz), a continuous glide (must read slide/bend, not sustain
+  or onset), and a distribution-continuity bound (max L1 jump across
+  adjacent frames < 1.5) reusing the existing brief-leap scenario. All
+  pass. `testIgnoresBriefFastLeap` (round 6's original regression test)
+  still passes unchanged, now exercised through the new behaviour-weighted
+  path instead of the retired dwell gate.
+- Explicitly NOT done (real remainder, deferred): singer-model
+  normalisation of behaviour thresholds (needs the singer model, not
+  built), phrase-level position weighting, bend/slide/scoop-aware
+  convergence-rate softening (today only passing-note softens amount; a
+  genuine in-progress scoop's shape still gets corrected uniformly rather
+  than only-once-settled). Segmentation on genuinely dense/fast real
+  material (LOAP) still over-fires "onset" more than ideal - functional
+  outcome is correct (see above) but the reasoning surfaced isn't always
+  the most musically apt label; a known rough edge, not chased further to
+  avoid the whack-a-mole pattern from earlier PSOLA rounds.
 
 ### F3. Decision layer v1: Bayesian target estimation — CORE DONE (2026-08-04)
 - File: `products/tune/dsp/VxTuneTargetEstimator.h` (header-only, matches
@@ -115,6 +161,21 @@ the repo for A/B tests).
 - Remaining acceptance criteria from the original spec (singer model,
   intervention budget, borrowed-note-overrides-scale-prior) still apply to
   the deferred remainder above, not to this pass.
+- **2026-08-04 fix (score accumulation bug):** found via a real bounce
+  ("pitch slides") that the log-score accumulator had no bound on how
+  negative a candidate's history could get, so a candidate that becomes
+  correct after a real note change could take ~200 frames (over a second)
+  to overtake stale history from the PRIOR held note, even with perfect
+  evidence every frame after landing. Fixed with a cumulative score floor
+  (`kScoreFloor`) plus a constant in-range bonus (`kInRangeBonus`) so
+  "currently plausible" is an active positive signal, not just "not
+  penalised" - a plain Gaussian log-likelihood peaks at 0, so without the
+  bonus, correct-but-freshly-evidenced candidates and stale-but-ignored
+  ones decay identically and never differentiate. Recovery time dropped
+  to 5-10 frames. `CorrectionEngine` also gained a "divergence guard"
+  (give up on a target if its error grows net over a ~70ms window despite
+  active correction) as a complementary safety net for whatever this
+  doesn't cover.
 
 ### F4. Real-vocal debugging pass
 After F1: run real vocal takes (REAPER + trace + Listen), fix what breaks.
@@ -134,10 +195,17 @@ runs. Keep fixes as new regression clips in the corpus (S4 tooling).
   on the processor (chromatic = flat). F3 consumes it; until F3 lands the
   engine may ignore it. Test: parameter round-trips through state save/load.
 
-### S2. Profile + allocation coverage
-- Add VXTune to `VXSuiteProfile` (all SR/block combos like other plugins)
-  and to the allocation test in the regression suite. Must pass the CI
-  realtime threshold; no steady-state allocations.
+### S2. Profile + allocation coverage — DONE (2026-08-04)
+- Added to `VXSuiteProfile` (tests/VXStudioProfile.cpp + CMakeLists.txt
+  source list) at all SR/block combos, and to
+  `testNoSteadyStateAllocationsOnAudioThread` in the regression suite
+  (tests/VXStudioPluginRegressionTests.cpp + CMakeLists.txt source list).
+  Both targets needed VXTune's DSP .cpp files added to their CMake source
+  lists (weren't there before - VXTune was never in either target).
+- Measured: 0.04-0.33x realtime across all SR/block combos, well under the
+  CI x0.5 threshold at 48k/512; no steady-state allocations. Full
+  `VXSuiteProfile` run exits 0, "All plugins within x0.5 realtime at
+  48k/512" including Tune. Regression suite still 76/77 (baseline).
 
 ### S3. Pitch-trace polish
 - Zoom selector for the pitch trace (reuse the level-trace zoom pattern);

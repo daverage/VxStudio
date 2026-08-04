@@ -30081,6 +30081,7 @@ CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.c
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneTargetEstimator.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneTimeline.h \
   generated/VxStudioVersions.h
@@ -35097,6 +35098,7 @@ CMakeFiles/VxTunePluginTests.dir/tests/VxTunePluginTests.cpp.o: /Users/andrzejma
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneTargetEstimator.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneTimeline.h
 
@@ -40754,6 +40756,8 @@ generated/VxStudioVersions.h:
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_formats/juce_audio_formats.mm:
 
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/containers/juce_FixedSizeFunction.h:
+
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h:
 
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_basics/keyboard/juce_SystemClipboard.h:
 

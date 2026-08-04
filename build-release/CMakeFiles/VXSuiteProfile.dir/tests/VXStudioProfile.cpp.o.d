@@ -1588,6 +1588,7 @@ CMakeFiles/VXSuiteProfile.dir/tests/VXStudioProfile.cpp.o: \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/deepfilternet/../../framework/VxStudioGainMeterView.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/deepfilternet/../../framework/VxStudioPitchTraceView.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/deepfilternet/../../framework/VxStudioProcessorBase.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/deepfilternet/../../framework/VxStudioMeteringSnapshot.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/deepfilternet/../../framework/VxStudioProcessCoordinator.h \
@@ -1726,6 +1727,15 @@ CMakeFiles/VXSuiteProfile.dir/tests/VXStudioProfile.cpp.o: \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tone_refine/dsp/VxDeMudDsp.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tone_refine/dsp/VxDeHarshnessDsp.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tone_refine/dsp/VxIntelligentSmoothDsp.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/VxTuneProcessor.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/../../framework/VxStudioProcessorBase.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneCorrectionEngine.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneTimeline.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneTargetEstimator.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/analyser/../../framework/VxStudioProduct.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/../Source/vxstudio/products/analyser/../../framework/VxStudioSignalQuality.h \

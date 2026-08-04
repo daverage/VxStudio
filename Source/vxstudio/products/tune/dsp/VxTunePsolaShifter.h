@@ -48,7 +48,8 @@ private:
     void trackEpochs() noexcept;
     void placeGrains(int numChannels) noexcept;
     void placeOneGrain(std::int64_t synthCentre, std::int64_t analysisEpoch,
-                       int halfLength, float gain, int numChannels) noexcept;
+                       float subSampleShift, int halfLength, float gain,
+                       int numChannels) noexcept;
     void emitOutput(float* const* channels, int numChannels,
                     int offset, int count) noexcept;
 
@@ -60,6 +61,12 @@ private:
 
     std::vector<std::vector<float>> inRing;   // per channel
     std::vector<std::vector<float>> outRing;  // per channel, overlap-add
+    // Overlap-add gain normalisation: Hann windows at 2T grain / T hop are
+    // COLA-exact (sum to 1) only at ratio 1. At any other ratio the
+    // synthesis spacing is no longer T, so the window sum drifts from
+    // unity and the output level pulses with it. This tracks the actual
+    // window-sum-so-far per sample so emitOutput can divide it back out.
+    std::vector<float> weightRing;
     std::vector<float> lpRing;                // mono low-passed, epoch search
     float lp1 = 0.0f, lp2 = 0.0f;             // low-pass state
     // Cutoff tracks ~2.2x the detected fundamental (clamped to [150, 900]

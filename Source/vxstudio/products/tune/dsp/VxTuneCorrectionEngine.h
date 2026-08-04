@@ -1,21 +1,31 @@
 #pragma once
 
+#include "VxTuneSegmenter.h"
 #include "VxTuneTargetEstimator.h"
 #include "VxTuneTimeline.h"
+
+#include <array>
 
 namespace vxsuite::tune {
 
 // Correction decision (architecture doc §5.8): a Bayesian target estimator
 // (VxTuneTargetEstimator, build spec F3) decides which note the singer
 // intends, evidence-weighted over time rather than re-decided from scratch
-// every frame. This engine then decides whether/how hard to chase that
-// target: corrected only when the error clears a Natural-dependent dead
-// zone, approached at a slew-limited rate so the correction trajectory can
-// bend but never jump (rule 3). Low decomposition confidence collapses the
-// decision toward "do nothing" (rule 1).
+// every frame. A segmenter (VxTuneSegmenter, build spec F2) independently
+// tracks note segments and a behaviour PROBABILITY DISTRIBUTION (sustain,
+// vibrato, bend, slide, scoop, fall, passing-note, onset) over the same
+// stream. This engine then decides whether/how hard to chase the
+// estimated target: corrected only when the error clears a Natural-
+// dependent dead zone, approached at a slew-limited rate so the correction
+// trajectory can bend but never jump (rule 3), and scaled by how much the
+// behaviour distribution currently reads as "passing note" rather than a
+// held one - a continuous, evidence-based replacement for what used to be
+// a fixed dwell-frame count (see targetEffectiveAmount below). Low
+// decomposition confidence collapses the decision toward "do nothing"
+// (rule 1).
 //
-// Behaviour interpolation and the intervention budget replace the dead-zone/
-// slew internals later behind this same frame-rate interface.
+// The intervention budget replaces the dead-zone/slew internals later
+// behind this same frame-rate interface.
 class CorrectionEngine {
 public:
     struct Config {
@@ -34,18 +44,20 @@ public:
         // intentional (chromatic passing tone against the scale): do
         // nothing rather than yank it more than a semitone.
         float maxErrorCents = 120.0f;
-        // A candidate target must be the estimator's top pick for this many
-        // CONSECUTIVE frames before correction is allowed to engage/switch
-        // onto it. Without this, a fast run/leap/ad-lib that only passes
-        // near a chromatic note for a handful of frames gets treated as a
-        // held note worth correcting to - measured directly on real
-        // material where the correction chased a genuine fast vocal swing
-        // as if it were a target, producing audible mis-tracking. Shrinks
-        // toward Tight like the dead zone (decide faster, more willing to
-        // treat brief evidence as real).
-        float targetHoldFramesMax = 10.0f;  // at full Natural
-        float targetHoldFramesMin = 3.0f;   // at full Tight
+        // If the (engaged) error has grown by more than this many cents
+        // over the last kDivergenceWindowFrames despite active correction,
+        // the target is stale - give up on it rather than keep chasing.
+        // A net-over-a-window comparison (not a strict consecutive-frame
+        // streak) so ordinary pitch jitter, which briefly interrupts an
+        // otherwise real divergence, can't reset the count and let it
+        // continue almost indefinitely. Measured directly: a real,
+        // sustained upward glide left the estimator's locked target
+        // behind; the error grew smoothly and correction actively
+        // pitch-bent the real, correct singing in the wrong direction for
+        // ~400ms before maxErrorCents would eventually have caught it.
+        float maxErrorGrowthCents = 15.0f;
     };
+    static constexpr int kDivergenceWindowFrames = 12;
 
     static constexpr std::uint16_t kChromaticMask = TargetEstimator::kChromaticMask;
     // Dead-zone hysteresis: once engaged, the error must fall back inside
@@ -62,6 +74,7 @@ public:
         if (errorAlpha > 1.0f)
             errorAlpha = 1.0f;
         estimator.prepare(frameRateHz, {});
+        segmenter.prepare(frameRateHz, {});
         reset();
     }
 
@@ -71,9 +84,11 @@ public:
         haveError = false;
         engaged = false;
         invalidRun = 0;
-        lastTargetMidi = -1;
-        targetHoldFrames = 0;
+        aeHistory.fill(0.0f);
+        aeHistoryPos = 0;
+        aeHistoryFull = false;
         estimator.reset();
+        segmenter.reset();
     }
 
     // One call per analysis frame. amount/natural are the two user controls
@@ -91,63 +106,79 @@ public:
         float desired = 0.0f;
         const bool validFrame = target.valid
             && frame.decompConfidence >= cfg.minDecompConfidence;
+        // Segmenter runs alongside the estimator (independently - it must
+        // not depend on which note the estimator favours, see file
+        // header). unvoiced/near-unvoiced frames close the segment via the
+        // same grace period as everything else below, not on every blip.
+        const NoteSegment* segment = nullptr;
+        if (target.valid)
+            segment = &segmenter.process(frame);
+
         if (validFrame) {
             invalidRun = 0;
-
-            if (target.midiNote != lastTargetMidi) {
-                lastTargetMidi = target.midiNote;
-                targetHoldFrames = 1;
-            } else if (targetHoldFrames < 1000000) {
-                ++targetHoldFrames;
-            }
-            const float requiredHold = cfg.targetHoldFramesMax
-                + (cfg.targetHoldFramesMin - cfg.targetHoldFramesMax) * natural;
-            const bool targetProven =
-                static_cast<float>(targetHoldFrames) >= requiredHold;
-
-            if (targetProven) {
-                const float error = target.errorCents;
-                // Track only the slow error component; snap on
-                // discontinuities (new note) instead of gliding across
-                // them.
-                if (!haveError || absf(error - smoothedError) > 100.0f) {
-                    smoothedError = error;
-                    haveError = true;
-                } else {
-                    smoothedError += errorAlpha * (error - smoothedError);
-                }
-                const float deadZone = cfg.deadZoneMaxCents
-                    + (cfg.deadZoneMinCents - cfg.deadZoneMaxCents) * natural;
-                // Engage/disengage with hysteresis (exit well inside the
-                // entry threshold): a single hard threshold flickers every
-                // frame the error hovers near the boundary, which is
-                // audible as the correction snapping on and off many times
-                // a second on real (noisy) pitch estimates. Hysteresis plus
-                // the hold-through below (invalidRun) are what make that
-                // boundary sticky.
-                const float ae = absf(smoothedError);
-                if (ae <= cfg.maxErrorCents) {
-                    if (engaged) {
-                        if (ae < deadZone * kDeadZoneExitFactor)
-                            engaged = false;
-                    } else if (ae > deadZone) {
-                        engaged = true;
-                    }
-                } else {
-                    engaged = false;
-                }
-                if (engaged)
-                    desired = -smoothedError * amount;
+            const float error = target.errorCents;
+            // Track only the slow error component; snap on discontinuities
+            // (new note) instead of gliding across them.
+            if (!haveError || absf(error - smoothedError) > 100.0f) {
+                smoothedError = error;
+                haveError = true;
             } else {
-                // Not yet proven: ride out whatever the last PROVEN target
-                // was doing rather than reacting to a candidate that has
-                // only just appeared. haveError is dropped so that once
-                // this (or the next) target does clear the hold, it snaps
-                // fresh from the settled pitch instead of gliding in from a
-                // stale reference computed against a different note.
+                smoothedError += errorAlpha * (error - smoothedError);
+            }
+            const float deadZone = cfg.deadZoneMaxCents
+                + (cfg.deadZoneMinCents - cfg.deadZoneMaxCents) * natural;
+            // Engage/disengage with hysteresis (exit well inside the entry
+            // threshold): a single hard threshold flickers every frame the
+            // error hovers near the boundary, which is audible as the
+            // correction snapping on and off many times a second on real
+            // (noisy) pitch estimates. Hysteresis plus the hold-through
+            // below (invalidRun) are what make that boundary sticky.
+            const float ae = absf(smoothedError);
+            if (ae <= cfg.maxErrorCents) {
+                if (engaged) {
+                    if (ae < deadZone * kDeadZoneExitFactor)
+                        engaged = false;
+                } else if (ae > deadZone) {
+                    engaged = true;
+                }
+            } else {
+                engaged = false;
+            }
+
+            // Divergence guard: if the (engaged) error has grown net over
+            // the last kDivergenceWindowFrames despite active correction,
+            // the target is stale - a genuine glide has moved past
+            // whatever note we locked onto, and continuing to chase it
+            // means actively pitch-bending real, correct singing in the
+            // wrong direction. haveError is also dropped so the next
+            // valid frame re-evaluates fresh instead of gliding in from
+            // the abandoned reference.
+            if (engaged && aeHistoryFull
+                && (ae - aeHistory[aeHistoryPos]) > cfg.maxErrorGrowthCents) {
+                engaged = false;
                 haveError = false;
-                if (engaged)
-                    desired = -smoothedError * amount;
+            }
+            aeHistory[aeHistoryPos] = ae;
+            aeHistoryPos = (aeHistoryPos + 1) % kDivergenceWindowFrames;
+            if (aeHistoryPos == 0)
+                aeHistoryFull = true;
+
+            if (engaged) {
+                // Behaviour-weighted amount (F2, replaces the old fixed
+                // dwell-frame count): the segmenter's passing-note
+                // probability continuously scales how hard correction
+                // commits, rather than a binary "proven yet?" gate. A
+                // segment that just opened reads almost entirely as
+                // passing-note (effective amount near zero); as it holds,
+                // that probability decays and full amount phases back in.
+                // Measured directly on real material: a fast vocal run/leap
+                // that only grazes a chromatic note for a handful of frames
+                // no longer gets chased as if it were a held target.
+                const float passingNoteProb = segment != nullptr
+                    ? segment->behaviourProb[static_cast<int>(Behaviour::passingNote)]
+                    : 0.0f;
+                const float effectiveAmount = amount * (1.0f - passingNoteProb);
+                desired = -smoothedError * effectiveAmount;
             }
         } else {
             // A single low-confidence/unvoiced frame is normal mid-word
@@ -159,6 +190,7 @@ public:
             if (++invalidRun > kInvalidHoldFrames) {
                 haveError = false;
                 engaged = false;
+                segmenter.closeSegment();
             } else if (engaged) {
                 desired = -smoothedError * amount;
             }
@@ -181,6 +213,7 @@ public:
     }
 
     float currentCorrectionCents() const noexcept { return correctionCents; }
+    const NoteSegment& currentSegment() const noexcept { return segmenter.currentSegment(); }
 
 private:
     static float absf(const float x) noexcept { return x < 0.0f ? -x : x; }
@@ -193,9 +226,11 @@ private:
     bool haveError = false;
     bool engaged = false;
     int invalidRun = 0;
-    int lastTargetMidi = -1;
-    int targetHoldFrames = 0;
+    std::array<float, kDivergenceWindowFrames> aeHistory {};
+    int aeHistoryPos = 0;
+    bool aeHistoryFull = false;
     TargetEstimator estimator;
+    Segmenter segmenter;
 };
 
 } // namespace vxsuite::tune

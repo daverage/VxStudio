@@ -12,6 +12,7 @@
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "../Source/vxstudio/products/tone_refine/VxToneRefineProcessor.h"
+#include "../Source/vxstudio/products/tune/VxTuneProcessor.h"
 #include "../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
@@ -162,6 +163,11 @@ int main() {
             runProfile<VXLevelerAudioProcessor>("Leveler", speech, sr, blockSize, passes, [](auto& p) {
                 setParamNormalized(p, "level", 0.60f);
                 setParamNormalized(p, "control", 0.50f);
+            });
+
+            runProfile<VXTuneAudioProcessor>("Tune", speech, sr, blockSize, passes, [](auto& p) {
+                setParamNormalized(p, "amount", 0.60f);
+                setParamNormalized(p, "natural", 0.50f);
             });
 
             runProfile<VXDenoiserAudioProcessor>("Denoiser", noisy, sr, blockSize, passes, [](auto& p) {

@@ -1234,6 +1234,11 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp
   Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp
+  Source/vxstudio/products/tune/VxTuneProcessor.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
 )
 target_include_directories(VXStudioPluginRegressionTests PRIVATE Source tests)
 target_link_libraries(VXStudioPluginRegressionTests PRIVATE
@@ -1375,6 +1380,11 @@ add_executable(VXSuiteProfile
   Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserController.cpp
   Source/vxstudio/products/analyser/VXStudioAnalyserEditor.cpp
+  Source/vxstudio/products/tune/VxTuneProcessor.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
 )
 target_include_directories(VXSuiteProfile PRIVATE Source tests)
 target_link_libraries(VXSuiteProfile PRIVATE

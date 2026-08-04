@@ -12,6 +12,7 @@
 #include "../Source/vxstudio/products/subtract/VxSubtractProcessor.h"
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "../Source/vxstudio/products/tone_refine/VxToneRefineProcessor.h"
+#include "../Source/vxstudio/products/tune/VxTuneProcessor.h"
 #include "../Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.h"
 #include "../Source/vxstudio/products/repair/VxRepairProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
@@ -3717,6 +3718,13 @@ bool testNoSteadyStateAllocationsOnAudioThread() {
     VXStudioAnalyserAudioProcessor analyser;
     analyser.prepareToPlay(sr, 256);
     if (!expectNoSteadyStateAllocations("analyser", analyser, speech))
+        return false;
+
+    VXTuneAudioProcessor tune;
+    tune.prepareToPlay(sr, 256);
+    setParamNormalized(tune, "amount", 0.60f);
+    setParamNormalized(tune, "natural", 0.50f);
+    if (!expectNoSteadyStateAllocations("tune", tune, speech))
         return false;
 
     return true;

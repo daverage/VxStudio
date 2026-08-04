@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+using vxsuite::tune::Behaviour;
 using vxsuite::tune::CorrectionEngine;
 using vxsuite::tune::EstimateReason;
 using vxsuite::tune::PerformanceDecomposition;
@@ -392,6 +393,40 @@ void testPsolaParkAndUnvoiced() {
     }
 }
 
+void testPsolaDoesNotSmearVoiceIntoGaps() {
+    std::printf("PSOLA voiced-to-gap cleanup:\n");
+    const double sr = 48000.0;
+    const int n = static_cast<int>(sr * 1.4);
+    std::vector<float> audio(static_cast<size_t>(n), 0.0f);
+    double phase = 0.0;
+    for (int i = 0; i < n; ++i) {
+        const float t = static_cast<float>(i / sr);
+        phase += kTwoPi * 220.0 / sr;
+        const bool voiced = t < 0.50f || (t >= 0.82f && t < 1.25f);
+        if (voiced) {
+            float s = 0.0f;
+            for (int h = 1; h <= 3; ++h)
+                s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
+            audio[static_cast<size_t>(i)] = 0.25f * s;
+        }
+    }
+
+    const auto out = runPsola(audio, sr, 50.0f);
+    const int d = 600;
+    double gapSq = 0.0;
+    int gapSamples = 0;
+    for (int i = static_cast<int>(0.58 * sr); i < static_cast<int>(0.74 * sr); ++i) {
+        const float v = out[static_cast<size_t>(i + d)];
+        gapSq += v * v;
+        ++gapSamples;
+    }
+    const float gapRms = gapSamples > 0
+        ? static_cast<float>(std::sqrt(gapSq / gapSamples)) : 1.0f;
+    check(gapRms < 0.002f,
+          "voiced epochs do not smear into the silent gap (rms "
+              + std::to_string(gapRms) + ")");
+}
+
 void testPsolaTortureTransitions() {
     std::printf("PSOLA transition torture (tones/silence/jump/glide):\n");
     const double sr = 48000.0;
@@ -589,6 +624,7 @@ void testPsolaHighHarmonicPreservation() {
 struct CorrectionRun {
     std::vector<float> output;
     float maxCorrectionStepCents = 0.0f;   // largest frame-to-frame change
+    float maxAbsCorrectionCents = 0.0f;    // largest |correction| reached
     int latencySamples = 0;
 };
 
@@ -623,6 +659,7 @@ CorrectionRun runCorrectionChain(const std::vector<float>& audio, const double s
             const float c = engine.process(decomposition.process(o), amount, natural, scaleMask);
             run.maxCorrectionStepCents =
                 std::max(run.maxCorrectionStepCents, std::abs(c - previousCorrection));
+            run.maxAbsCorrectionCents = std::max(run.maxAbsCorrectionCents, std::abs(c));
             previousCorrection = c;
         }
         shifter.setShiftCents(engine.currentCorrectionCents());
@@ -714,6 +751,43 @@ void testIgnoresBriefFastLeap() {
               + std::to_string(afterCents) + "c)");
 }
 
+void testDivergenceGuardStopsChasingAGlide() {
+    std::printf("Correction gives up chasing a sustained glide rather than "
+                "fighting it (A3 held, then a 400ms glide up 4 semitones):\n");
+    // Reproduces a real bug found on real material: a held note gives the
+    // target estimator a strong, sticky evidence lock (by design - that is
+    // what target-lock persistence is for); when the singer then glides
+    // continuously away from it, the OLD lock can outlast the glide's own
+    // duration, so the engine keeps computing an ever-growing error against
+    // a target the singer has already left. Measured directly: a real
+    // ~400ms glide produced a correction smoothly ramping to -73c, actively
+    // pitch-bending the singer's real, correct movement in the wrong
+    // direction. The divergence guard (CorrectionEngine) must give up on a
+    // target once the error is clearly growing rather than closing, long
+    // before maxErrorCents would eventually catch it.
+    const double sr = 48000.0;
+    const auto audio = renderTone(sr, 2.5f, 0.25f, 3, [](const float t) {
+        if (t < 1.0f) return 220.0f;                              // sustain A3
+        if (t < 1.4f) {                                            // 400ms glide
+            const float cents = 400.0f * ((t - 1.0f) / 0.4f);
+            return 220.0f * std::exp2(cents / 1200.0f);
+        }
+        return 220.0f * std::exp2(400.0f / 1200.0f);               // land + sustain
+    });
+
+    const auto run = runCorrectionChain(audio, sr, 1.0f, 0.5f);
+    // 60c, not near-zero: the estimator fix (score floor + in-range bonus,
+    // see VxTuneTargetEstimator.h) cut recovery from ~1s (a genuine,
+    // severe bug - stale evidence from the held note outweighed fresh,
+    // perfect evidence for the new one) down to ~50ms, but a real 400c/
+    // 400ms glide still has a brief, bounded correction transient while
+    // decomposition's centre line and the estimator both catch up - that
+    // is expected lag, not a regression.
+    check(run.maxAbsCorrectionCents < 60.0f,
+          "correction transient during the glide stays bounded (got "
+              + std::to_string(run.maxAbsCorrectionCents) + "c)");
+}
+
 void testDoesNotTouchInTune() {
     std::printf("Do-nothing proof (in-tune A3, amount=1):\n");
     const double sr = 48000.0;
@@ -769,6 +843,113 @@ void testPsolaRealisticVoiceStability() {
         const float outCents = medianCentsAfter(run.output, sr, 1.0f) - hzToCents(220.0f);
         check(std::abs(outCents) < 12.0f,
               "correction still lands near A3 (got " + std::to_string(outCents) + "c)");
+    }
+}
+
+// Runs detector -> decomposition -> engine on `audio` and returns the
+// dominant behaviour + its probability at the LAST analysed frame -
+// i.e. after the whole clip has been seen, matching how a real-time
+// listener would judge "what does this current moment look like".
+struct BehaviourResult {
+    Behaviour dominant = Behaviour::unvoiced;
+    float probability = 0.0f;
+    float maxFrameToFrameJump = 0.0f;   // distribution-continuity check
+};
+
+BehaviourResult analyseBehaviour(const std::vector<float>& audio, const double sr) {
+    PitchDetector detector;
+    detector.prepare(sr, PitchDetector::Config {});
+    PerformanceDecomposition decomposition;
+    decomposition.prepare(sr / detector.hopSamples(), PerformanceDecomposition::Config {});
+    CorrectionEngine engine;
+    engine.prepare(sr / detector.hopSamples(), CorrectionEngine::Config {});
+
+    BehaviourResult result;
+    float previous[static_cast<int>(Behaviour::count)] = {};
+    bool havePrevious = false;
+    PitchObservation obs[64];
+    const int block = 512;
+    for (size_t offset = 0; offset < audio.size(); offset += block) {
+        const int n = static_cast<int>(std::min<size_t>(block, audio.size() - offset));
+        const int produced = detector.process(audio.data() + offset, n, obs, 64);
+        for (int i = 0; i < produced; ++i) {
+            const auto frame = decomposition.process(obs[i]);
+            engine.process(frame, 1.0f, 0.5f);
+            const auto& seg = engine.currentSegment();
+
+            float jump = 0.0f;
+            if (havePrevious) {
+                for (int b = 0; b < static_cast<int>(Behaviour::count); ++b)
+                    jump += std::abs(seg.behaviourProb[b] - previous[b]);
+            }
+            result.maxFrameToFrameJump = std::max(result.maxFrameToFrameJump, jump);
+            for (int b = 0; b < static_cast<int>(Behaviour::count); ++b)
+                previous[b] = seg.behaviourProb[b];
+            havePrevious = true;
+
+            int best = 0;
+            for (int b = 1; b < static_cast<int>(Behaviour::count); ++b)
+                if (seg.behaviourProb[b] > seg.behaviourProb[best])
+                    best = b;
+            result.dominant = static_cast<Behaviour>(best);
+            result.probability = seg.behaviourProb[best];
+        }
+    }
+    return result;
+}
+
+void testBehaviourDistribution() {
+    std::printf("Behaviour distribution (F2 segmenter) classifies gesture type:\n");
+    const double sr = 48000.0;
+
+    // Sustain: long held steady tone.
+    {
+        const auto audio = renderTone(sr, 1.5f, 0.25f, 3, [](float) { return 220.0f; });
+        const auto r = analyseBehaviour(audio, sr);
+        check(r.dominant == Behaviour::sustain && r.probability > 0.5f,
+              "steady held tone reads as sustain (got behaviour index "
+                  + std::to_string(static_cast<int>(r.dominant))
+                  + " p=" + std::to_string(r.probability) + ")");
+    }
+
+    // Vibrato: steady centre with a clean 5.5 Hz +/-40c modulation.
+    {
+        const auto audio = renderTone(sr, 1.5f, 0.25f, 3, [](const float t) {
+            const float vibrato = 40.0f * std::sin(kTwoPi * 5.5f * t);
+            return 220.0f * std::exp2(vibrato / 1200.0f);
+        });
+        const auto r = analyseBehaviour(audio, sr);
+        check(r.dominant == Behaviour::vibrato && r.probability > 0.5f,
+              "5.5 Hz +/-40c modulation reads as vibrato (got behaviour index "
+                  + std::to_string(static_cast<int>(r.dominant))
+                  + " p=" + std::to_string(r.probability) + ")");
+    }
+
+    // Slide: a continuous glide from one note toward another, evaluated
+    // mid-glide (not after it has settled).
+    {
+        const auto audio = renderTone(sr, 1.0f, 0.25f, 3, [](const float t) {
+            const float cents = 400.0f * (t / 1.0f);   // ramps 0 -> 400c over 1s
+            return 220.0f * std::exp2(cents / 1200.0f);
+        });
+        const auto r = analyseBehaviour(audio, sr);
+        check(r.dominant == Behaviour::slide || r.dominant == Behaviour::bend,
+              "continuous glide reads as slide/bend, not sustain (got behaviour index "
+                  + std::to_string(static_cast<int>(r.dominant)) + ")");
+    }
+
+    // Distribution continuity (rule 5): no hard flip between adjacent
+    // frames, even across the segmenter's own boundary transitions.
+    {
+        const auto audio = renderTone(sr, 2.0f, 0.25f, 3, [](const float t) {
+            return (t >= 0.9f && t < 0.96f)
+                ? 220.0f * std::exp2(1200.0f / 1200.0f)
+                : 220.0f;
+        });
+        const auto r = analyseBehaviour(audio, sr);
+        check(r.maxFrameToFrameJump < 1.5f,
+              "behaviour distribution never flips hard frame-to-frame (max L1 jump "
+                  + std::to_string(r.maxFrameToFrameJump) + ")");
     }
 }
 
@@ -859,13 +1040,16 @@ int main() {
     testPsolaRatioAccuracy();
     testPsolaFormantPreservation();
     testPsolaParkAndUnvoiced();
+    testPsolaDoesNotSmearVoiceIntoGaps();
     testPsolaTortureTransitions();
     testPsolaRealisticVoiceStability();
     testPsolaHighHarmonicPreservation();
 
     testCorrectsSharpNote();
     testIgnoresBriefFastLeap();
+    testDivergenceGuardStopsChasingAGlide();
     testDoesNotTouchInTune();
+    testBehaviourDistribution();
     testScaleAwareTargets();
     testVibratoSurvivesCorrection();
 

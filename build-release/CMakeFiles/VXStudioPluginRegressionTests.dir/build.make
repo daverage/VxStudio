@@ -646,10 +646,80 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/ds
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp.s
 
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.cpp
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_42) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.cpp
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.cpp > CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.cpp -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_43) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp > CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_44) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp > CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_45) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp > CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_46) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp > CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
+
+CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp -o CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
+
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors/juce_audio_processors.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_42) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_47) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors/juce_audio_processors.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i: cmake_force
@@ -663,7 +733,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_43) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_48) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i: cmake_force
@@ -677,7 +747,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gu
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_44) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_49) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i: cmake_force
@@ -691,7 +761,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_g
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_45) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_50) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i: cmake_force
@@ -705,7 +775,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_gra
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_46) "Building C object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_51) "Building C object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i: cmake_force
@@ -719,7 +789,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_gra
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_47) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_52) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i: cmake_force
@@ -733,7 +803,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_graphics/juce_gra
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_events/juce_events.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_48) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_53) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_events/juce_events.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_events.mm.i: cmake_force
@@ -747,7 +817,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_events/juce_event
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core_CompilationTime.cpp
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_49) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_54) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core_CompilationTime.cpp
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i: cmake_force
@@ -761,7 +831,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core_Co
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_50) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_55) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm.i: cmake_force
@@ -775,7 +845,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_core/juce_core.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_data_structures/juce_data_structures.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_51) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_56) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_data_structures/juce_data_structures.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i: cmake_force
@@ -789,7 +859,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_data_structures/j
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_52) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_57) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i: cmake_force
@@ -803,7 +873,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_53) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_58) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i: cmake_force
@@ -817,7 +887,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_54) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_59) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i: cmake_force
@@ -831,7 +901,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors_
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_basics/juce_audio_basics.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_55) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_60) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_basics/juce_audio_basics.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i: cmake_force
@@ -845,7 +915,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_basics/juce
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/juce_dsp.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_56) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_61) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/juce_dsp.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i: cmake_force
@@ -859,7 +929,7 @@ CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/flags.make
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_formats/juce_audio_formats.mm
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o: CMakeFiles/VXStudioPluginRegressionTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_57) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_62) "Building CXX object CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o -MF CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o.d -o CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_formats/juce_audio_formats.mm
 
 CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i: cmake_force
@@ -913,6 +983,11 @@ VXStudioPluginRegressionTests_OBJECTS = \
 "CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp.o" \
 "CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp.o" \
 "CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp.o" \
+"CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o" \
+"CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o" \
+"CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o" \
+"CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o" \
+"CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o" \
 "CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o" \
 "CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o" \
 "CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o" \
@@ -974,6 +1049,11 @@ VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Sour
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerDsp.cpp.o
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerGlobalLoudnessTracker.cpp.o
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/leveler/dsp/VxLevelerOfflineAnalyzer.cpp.o
+VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
+VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
+VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
+VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
+VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
@@ -996,7 +1076,7 @@ VXStudioPluginRegressionTests: cargo/libdf/release/libdf.a
 VXStudioPluginRegressionTests: cargo/libdf_dfn2/release/libdf.a
 VXStudioPluginRegressionTests: libVxStudioRNNoiseRuntime.a
 VXStudioPluginRegressionTests: CMakeFiles/VXStudioPluginRegressionTests.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_58) "Linking CXX executable VXStudioPluginRegressionTests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_63) "Linking CXX executable VXStudioPluginRegressionTests"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/VXStudioPluginRegressionTests.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

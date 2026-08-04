@@ -6199,6 +6199,8 @@ Source/vxstudio/products/tune/VxTuneProcessor.o: Source/vxstudio/products/tune/V
 Source/vxstudio/products/tune/VxTuneProcessor.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 .PHONY : Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 
 Source/vxstudio/products/tune/VxTuneProcessor.i: Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
@@ -6208,6 +6210,8 @@ Source/vxstudio/products/tune/VxTuneProcessor.i: Source/vxstudio/products/tune/V
 Source/vxstudio/products/tune/VxTuneProcessor.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 .PHONY : Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 
 Source/vxstudio/products/tune/VxTuneProcessor.s: Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
@@ -6217,6 +6221,8 @@ Source/vxstudio/products/tune/VxTuneProcessor.s: Source/vxstudio/products/tune/V
 Source/vxstudio/products/tune/VxTuneProcessor.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 .PHONY : Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 
 Source/vxstudio/products/tune/dsp/VxTuneDecomposition.o: Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
@@ -6227,6 +6233,8 @@ Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 .PHONY : Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 
 Source/vxstudio/products/tune/dsp/VxTuneDecomposition.i: Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
@@ -6237,6 +6245,8 @@ Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 .PHONY : Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 
 Source/vxstudio/products/tune/dsp/VxTuneDecomposition.s: Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
@@ -6247,6 +6257,8 @@ Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 .PHONY : Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 
 Source/vxstudio/products/tune/dsp/VxTunePitchDetector.o: Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
@@ -6257,6 +6269,8 @@ Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 
 Source/vxstudio/products/tune/dsp/VxTunePitchDetector.i: Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
@@ -6267,6 +6281,8 @@ Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 
 Source/vxstudio/products/tune/dsp/VxTunePitchDetector.s: Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
@@ -6277,6 +6293,8 @@ Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 
 Source/vxstudio/products/tune/dsp/VxTunePitchShifter.o: Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
@@ -6287,6 +6305,8 @@ Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
 
 Source/vxstudio/products/tune/dsp/VxTunePitchShifter.i: Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
@@ -6297,6 +6317,8 @@ Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
 
 Source/vxstudio/products/tune/dsp/VxTunePitchShifter.s: Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
@@ -6307,6 +6329,8 @@ Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
 
 Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.o: Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
@@ -6317,6 +6341,8 @@ Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
 
 Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.i: Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
@@ -6327,6 +6353,8 @@ Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
 
 Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.s: Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
@@ -6337,6 +6365,8 @@ Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
 
 ThirdParty/rnnoise/src/celt_lpc.o: ThirdParty/rnnoise/src/celt_lpc.c.o

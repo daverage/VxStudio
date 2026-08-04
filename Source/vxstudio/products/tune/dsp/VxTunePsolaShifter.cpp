@@ -8,6 +8,7 @@ namespace vxsuite::tune {
 namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr float kRenderConfidence = 0.6f;
 
 int nextPowerOfTwo(int value) {
     int p = 1;
@@ -32,6 +33,7 @@ void PsolaShifter::prepare(const double sampleRate, const int maxBlockSamples,
                   std::vector<float>(static_cast<size_t>(ringSize), 0.0f));
     outRing.assign(static_cast<size_t>(channelsPrepared),
                    std::vector<float>(static_cast<size_t>(ringSize), 0.0f));
+    weightRing.assign(static_cast<size_t>(ringSize), 0.0f);
     lpRing.assign(static_cast<size_t>(ringSize), 0.0f);
 
     // Default (pre-detection / unvoiced) cutoff; retuned per-hint once a
@@ -47,6 +49,7 @@ void PsolaShifter::reset() {
         std::fill(ring.begin(), ring.end(), 0.0f);
     for (auto& ring : outRing)
         std::fill(ring.begin(), ring.end(), 0.0f);
+    std::fill(weightRing.begin(), weightRing.end(), 0.0f);
     std::fill(lpRing.begin(), lpRing.end(), 0.0f);
     lp1 = lp2 = 0.0f;
     inputCount = 0;
@@ -73,7 +76,9 @@ void PsolaShifter::reset() {
 
 void PsolaShifter::setPeriodHint(const float periodSamples,
                                  const float voicedConfidence) noexcept {
-    if (voicedConfidence >= 0.6f && periodSamples > 0.0f) {
+    if (voicedConfidence >= kRenderConfidence && periodSamples > 0.0f) {
+        const bool returningFromUncertainGap = softHops >= 2 || hardHops > 0;
+
         // Rate-limit the period so a single octave-error frame cannot
         // scatter the epoch grid.
         float period = periodSamples;
@@ -100,12 +105,17 @@ void PsolaShifter::setPeriodHint(const float periodSamples,
         const float cutoff = std::clamp(2.2f * f0, 150.0f, 900.0f);
         lpCoeff = 1.0f - std::exp(-2.0f * kPi * cutoff / static_cast<float>(sr));
         // Returning from a gap: re-seed the grid rather than marching epoch
-        // searches across unvoiced audio.
-        if (!voicedActive
+        // searches across unvoiced/uncertain audio. A few medium-confidence
+        // hops are enough for old vowel epochs to smear into consonants on
+        // real vocals, so drop the continuity chain before rendering resumes.
+        if ((!voicedActive || returningFromUncertainGap)
             && epochPhase >= 0.0
             && epochPhase < static_cast<double>(inputCount) - 2.0 * hintPeriod) {
+            epochCount = 0;
             epochPhase = -1.0;
             smoothedPeriod = hintPeriod;   // don't glide in from a stale pre-gap value
+            lastConfirmedEpochPos = -1;
+            lastUsedEpochPos = -1;
         }
         voicedActive = true;
         softHops = 0;
@@ -156,7 +166,7 @@ void PsolaShifter::appendInput(const float* const* channels, const int numChanne
 }
 
 void PsolaShifter::trackEpochs() noexcept {
-    if (!voicedActive || hintPeriod <= 0.0f)
+    if (!voicedActive || hintPeriod <= 0.0f || hintConfidence < kRenderConfidence)
         return;
     // advancePeriod steps the grid and MUST track the true instantaneous
     // period tightly (smoothing this drifts the grid away from real peaks
@@ -206,7 +216,7 @@ void PsolaShifter::trackEpochs() noexcept {
     // wrong-lobe candidate win on an unlucky cycle; capping at a few
     // samples keeps the worst case bounded and the highest rendered
     // harmonics coherent.
-    const bool correcting = hintConfidence >= 0.6f;
+    const bool correcting = hintConfidence >= kRenderConfidence;
     const double maxNudge = std::min(3.0, advancePeriod * 0.02);
     while (epochPhase + search + halfLen < static_cast<double>(inputCount)) {
         const std::int64_t predicted =
@@ -248,20 +258,54 @@ void PsolaShifter::trackEpochs() noexcept {
 
 void PsolaShifter::placeOneGrain(const std::int64_t synthCentre,
                                  const std::int64_t analysisEpoch,
+                                 const float subSampleShift,
                                  const int halfLength, const float gain,
                                  const int numChannels) noexcept {
     const float invHalf = 1.0f / static_cast<float>(halfLength);
+    // The true (fractional) synthesis centre was rounded to synthCentre to
+    // index the ring buffer; subSampleShift is that rounding error
+    // (writePos_int - true centre). Shifting the READ position by the
+    // opposite amount, with cubic interpolation, reconstructs the grain
+    // as if it had been written at its true fractional position instead
+    // of snapping to the nearest sample - the error is small per grain
+    // (<=0.5 samples) but compounds audibly at higher pitches, where half
+    // a sample is a much larger fraction of the period (confirmed by the
+    // review: "even a one-sample error is a significant fraction of the
+    // pitch period" at high frequencies). Cubic (Catmull-Rom), not linear:
+    // linear interpolation is a mild low-pass filter, and applying it to
+    // every grain sample measurably cost high-harmonic preservation
+    // (worse than plain integer reads on the harmonic-preservation test).
+    // Catmull-Rom has a much flatter passband for the same 1-sample-or-
+    // better timing accuracy.
     for (int k = -halfLength; k < halfLength; ++k) {
         const std::int64_t writePos = synthCentre + k;
         if (writePos < emitCursor)         // never touch emitted samples
             continue;
         const float window = 0.5f * (1.0f + std::cos(kPi * static_cast<float>(k) * invHalf));
-        const int readSlot = static_cast<int>((analysisEpoch + k) & mask);
+        const float readPosF = static_cast<float>(analysisEpoch + k) - subSampleShift;
+        const std::int64_t readBase = static_cast<std::int64_t>(std::floor(readPosF));
+        const float frac = readPosF - static_cast<float>(readBase);
+        const int readSlotM1 = static_cast<int>((readBase - 1) & mask);
+        const int readSlot0 = static_cast<int>(readBase & mask);
+        const int readSlot1 = static_cast<int>((readBase + 1) & mask);
+        const int readSlot2 = static_cast<int>((readBase + 2) & mask);
         const int writeSlot = static_cast<int>(writePos & mask);
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (int ch = 0; ch < numChannels; ++ch) {
+            auto& in = inRing[static_cast<size_t>(ch)];
+            const float ym1 = in[static_cast<size_t>(readSlotM1)];
+            const float y0 = in[static_cast<size_t>(readSlot0)];
+            const float y1 = in[static_cast<size_t>(readSlot1)];
+            const float y2 = in[static_cast<size_t>(readSlot2)];
+            // Catmull-Rom cubic Hermite spline.
+            const float a0 = -0.5f * ym1 + 1.5f * y0 - 1.5f * y1 + 0.5f * y2;
+            const float a1 = ym1 - 2.5f * y0 + 2.0f * y1 - 0.5f * y2;
+            const float a2 = -0.5f * ym1 + 0.5f * y1;
+            const float a3 = y0;
+            const float sample = ((a0 * frac + a1) * frac + a2) * frac + a3;
             outRing[static_cast<size_t>(ch)][static_cast<size_t>(writeSlot)] +=
-                gain * window
-                * inRing[static_cast<size_t>(ch)][static_cast<size_t>(readSlot)];
+                gain * window * sample;
+        }
+        weightRing[static_cast<size_t>(writeSlot)] += window;
     }
     coverEnd = std::max(coverEnd, synthCentre + halfLength - 1);
 }
@@ -337,7 +381,7 @@ void PsolaShifter::placeGrains(const int numChannels) noexcept {
 
     while (true) {
         const Epoch* chosen = nullptr;
-        if (voicedActive && epochCount > 0) {
+        if (voicedActive && hintConfidence >= kRenderConfidence && epochCount > 0) {
             const double guessPeriod = smoothedPeriod > 0.0f ? smoothedPeriod
                                                              : static_cast<double>(pseudo);
             chosen = chooseEpoch(
@@ -350,12 +394,18 @@ void PsolaShifter::placeGrains(const int numChannels) noexcept {
                 break;
 
             std::int64_t centre = static_cast<std::int64_t>(std::llround(nextSynthCentre));
+            float subSampleShift =
+                static_cast<float>(static_cast<double>(centre) - nextSynthCentre);
             if (parked) {
                 // Snap onto the analysis grid so equal-period Hann grains
                 // tile to exactly one: transparent delayed passthrough.
+                // No sub-sample compensation here - this path must stay
+                // bit-exact, not merely close.
                 const std::int64_t snapped = chosen->position + latency;
-                if (snapped >= centre - static_cast<std::int64_t>(period) / 2)
+                if (snapped >= centre - static_cast<std::int64_t>(period) / 2) {
                     centre = snapped;
+                    subSampleShift = 0.0f;
+                }
                 nextSynthCentre = static_cast<double>(centre) + period;
             } else {
                 nextSynthCentre += std::max(8.0, period / ratio);
@@ -363,7 +413,8 @@ void PsolaShifter::placeGrains(const int numChannels) noexcept {
 
             const int half = std::max(8, static_cast<int>(
                 std::min(chosen->period, static_cast<float>(latency))));
-            placeOneGrain(centre, chosen->position, half, 1.0f / ratio, numChannels);
+            placeOneGrain(centre, chosen->position, subSampleShift, half,
+                         1.0f / ratio, numChannels);
             lastUsedEpochPos = chosen->position;
         } else {
             const int half = std::max(8, static_cast<int>(pseudo));
@@ -371,7 +422,10 @@ void PsolaShifter::placeGrains(const int numChannels) noexcept {
                 break;
             const std::int64_t centre =
                 static_cast<std::int64_t>(std::llround(nextSynthCentre));
-            placeOneGrain(centre, centre - latency, half, 1.0f, numChannels);
+            const float subSampleShift =
+                static_cast<float>(static_cast<double>(centre) - nextSynthCentre);
+            placeOneGrain(centre, centre - latency, subSampleShift, half, 1.0f,
+                         numChannels);
             nextSynthCentre += half;
         }
     }
@@ -390,15 +444,34 @@ void PsolaShifter::emitOutput(float* const* channels, const int numChannels,
         // before coverage exists at stream start.
         const float target = (!dryPark && x <= coverEnd) ? 1.0f : 0.0f;
         mix += std::clamp(target - mix, -mixStep, mixStep);
+        // Overlap-add normalisation: the window sum accumulated at this
+        // sample is only guaranteed to be 1 (COLA) at ratio 1. Dividing it
+        // back out keeps level stable as synthesis spacing varies with
+        // the correction ratio, instead of pulsing with it. The Hann
+        // window itself tapers to 0 at a grain's edges, so right at
+        // coverage boundaries (stream start, a genuine gap, a transition
+        // where only one grain's tail lands on a sample instead of the
+        // usual two overlapping grains) the accumulated weight can be
+        // small without being absent. A low fixed threshold here is a
+        // real bug: dividing by e.g. 0.06 is a 16x gain spike, audible as
+        // a click/glitch exactly at transitions - measured directly (a
+        // fast register-break moment introduced a brief dropout/garbled
+        // read that wasn't present before this normalisation was added).
+        // Flooring the divisor caps the worst-case boost instead of
+        // leaving it unbounded; low-coverage samples get quieter, which
+        // is a far safer failure mode than an amplification spike.
+        const float weight = weightRing[static_cast<size_t>(outSlot)];
+        const float normalise = 1.0f / std::max(weight, 0.3f);
         for (int ch = 0; ch < numChannels; ++ch) {
             auto& out = outRing[static_cast<size_t>(ch)];
-            const float wet = out[static_cast<size_t>(outSlot)];
+            const float wet = out[static_cast<size_t>(outSlot)] * normalise;
             const float dry = x >= latency
                 ? inRing[static_cast<size_t>(ch)][static_cast<size_t>(drySlot)]
                 : 0.0f;
             channels[ch][offset + i] = mix * wet + (1.0f - mix) * dry;
             out[static_cast<size_t>(outSlot)] = 0.0f;   // slot free for reuse
         }
+        weightRing[static_cast<size_t>(outSlot)] = 0.0f;
     }
     emitCursor += count;
 }

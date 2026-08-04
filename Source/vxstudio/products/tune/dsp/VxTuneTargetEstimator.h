@@ -2,6 +2,7 @@
 
 #include "VxTuneTimeline.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace vxsuite::tune {
@@ -46,6 +47,12 @@ public:
 
     static constexpr std::uint16_t kChromaticMask = 0x0FFF;
     static constexpr int kMaxCandidates = 24;
+    // Bounds how deep any candidate's accumulated score can go, regardless
+    // of how long or how badly it has scored. See addEvidence() for why
+    // this matters: unbounded accumulation makes "wrong for a long time"
+    // outweigh "correct, but only just started being reinforced" for far
+    // too long after a real note change.
+    static constexpr float kScoreFloor = -20.0f;
 
     void prepare(const double frameRateHz, const Config& config) noexcept {
         cfg = config;
@@ -85,7 +92,7 @@ public:
         const float decay = std::exp(-frameDur / (memory > 0.01f ? memory : 0.01f));
 
         for (int i = 0; i < count; ++i)
-            candidates[i].score *= decay;
+            candidates[i].score = std::max(candidates[i].score * decay, kScoreFloor);
 
         const float nearestChromatic = std::round(centreCents / 100.0f);
         for (int offset = -cfg.searchSemitones; offset <= cfg.searchSemitones; ++offset) {
@@ -95,7 +102,23 @@ public:
                 continue;
             const float error = centreCents - 100.0f * static_cast<float>(midi - 69);
             const float z = error / sigma;
-            addEvidence(midi, -0.5f * z * z * decompConfidence);
+            // kInRangeBonus: a plain Gaussian log-likelihood peaks at
+            // exactly 0 (z=0) and is negative everywhere else, which
+            // means the best a candidate can ever do is "stop getting
+            // worse" - it never actively grows. A candidate that is
+            // currently NOT being evidenced at all (out of the +/-6
+            // semitone search window, e.g. the previous note after a real
+            // change) only decays, and decaying a floored score toward 0
+            // is the exact same trajectory as a perfectly-matching but
+            // unrewarded in-range candidate doing nothing but decay too -
+            // they tie forever, so the correct new target can never
+            // actually overtake stale history no matter how well it
+            // matches. The bonus makes "currently plausible" an active,
+            // positive signal instead of merely "not being penalised",
+            // which is what actually lets fresh, correct evidence win
+            // within a handful of frames instead of never.
+            constexpr float kInRangeBonus = 3.0f;
+            addEvidence(midi, (kInRangeBonus - 0.5f * z * z) * decompConfidence);
         }
 
         if (count == 0)
@@ -132,21 +155,34 @@ private:
     };
 
     void addEvidence(const int midi, const float logLikelihood) noexcept {
+        // Score is floored (see kScoreFloor) so accumulated history - good
+        // or bad - can never dig deeper than a bounded worst case. Without
+        // this, a candidate that scored badly for a long stretch (even at
+        // a shallow per-frame rate) ends up far more negative than a
+        // candidate that just appeared and scored badly for one frame
+        // only, even though the long-standing bad candidate is no more
+        // "wrong" musically - it is just older evidence. That let stale
+        // history from a previous note outweigh fresh, perfect evidence
+        // for the new one for a very long time (measured: ~1s to recover
+        // from a single held note's worth of baggage after a 4-semitone
+        // jump).
         for (int i = 0; i < count; ++i) {
             if (candidates[i].midi == midi) {
-                candidates[i].score += logLikelihood;
+                candidates[i].score =
+                    std::max(candidates[i].score + logLikelihood, kScoreFloor);
                 return;
             }
         }
+        const float initialScore = std::max(logLikelihood, kScoreFloor);
         if (count < kMaxCandidates) {
-            candidates[count++] = { midi, logLikelihood };
+            candidates[count++] = { midi, initialScore };
             return;
         }
         int weakest = 0;
         for (int i = 1; i < count; ++i)
             if (candidates[i].score < candidates[weakest].score)
                 weakest = i;
-        candidates[weakest] = { midi, logLikelihood };
+        candidates[weakest] = { midi, initialScore };
     }
 
     Config cfg {};
