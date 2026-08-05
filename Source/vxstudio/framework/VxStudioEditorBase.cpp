@@ -192,16 +192,42 @@ EditorBase::EditorBase(ProcessorBase& owner)
     traceZoomBox.addItem("12 s", 4);
     traceZoomBox.setSelectedId(3, juce::dontSendNotification);
     traceZoomBox.onChange = [this] {
+        float seconds = 6.0f;
         switch (traceZoomBox.getSelectedId()) {
-            case 1: levelTraceView.setZoomSeconds(1.5f); break;
-            case 2: levelTraceView.setZoomSeconds(3.0f); break;
-            case 4: levelTraceView.setZoomSeconds(12.0f); break;
+            case 1: seconds = 1.5f; break;
+            case 2: seconds = 3.0f; break;
+            case 4: seconds = 12.0f; break;
             case 3:
-            default: levelTraceView.setZoomSeconds(6.0f); break;
+            default: seconds = 6.0f; break;
+        }
+        if (processor.getProductIdentity().showLevelTrace)
+            levelTraceView.setZoomSeconds(seconds);
+        if (processor.getProductIdentity().showPitchTrace)
+            pitchTraceView.setZoomSeconds(seconds);
+    };
+
+    // Vertical (cents) zoom - pitch trace only. Width zoom (traceZoomBox,
+    // above) already covers the pitch trace's time axis.
+    pitchZoomYBox.addItem("+/-1.5 st", 1);
+    pitchZoomYBox.addItem("+/-3.5 st", 2);
+    pitchZoomYBox.addItem("+/-7 st", 3);
+    pitchZoomYBox.addItem("+/-12 st", 4);
+    pitchZoomYBox.setSelectedId(2, juce::dontSendNotification);
+    pitchZoomYBox.onChange = [this] {
+        switch (pitchZoomYBox.getSelectedId()) {
+            case 1: pitchTraceView.setZoomCents(150.0f); break;
+            case 3: pitchTraceView.setZoomCents(700.0f); break;
+            case 4: pitchTraceView.setZoomCents(1200.0f); break;
+            case 2:
+            default: pitchTraceView.setZoomCents(350.0f); break;
         }
     };
-    if (identity.showPitchTrace)
+
+    if (identity.showPitchTrace) {
         addAndMakeVisible(pitchTraceView);
+        addAndMakeVisible(traceZoomBox);
+        addAndMakeVisible(pitchZoomYBox);
+    }
     if (identity.showLevelTrace) {
         addAndMakeVisible(traceZoomBox);
         addAndMakeVisible(levelTraceView);
@@ -244,6 +270,22 @@ EditorBase::EditorBase(ProcessorBase& owner)
         auxSelectorAttachment = std::make_unique<ComboAttachment>(state, identity.auxSelectorParamId.data(), auxSelectorBox);
     if (identity.supportsAuxSelector2())
         auxSelector2Attachment = std::make_unique<ComboAttachment>(state, identity.auxSelector2ParamId.data(), auxSelector2Box);
+
+    // VX Tune's Ignore key choice is a convenience action: initialise Scale to
+    // Chromatic, but leave the Scale selector editable afterwards.
+    if (identity.auxSelectorParamId == "keyroot"
+        && identity.auxSelector2ParamId == "scale") {
+        auxSelectorBox.onChange = [this] {
+            if (auxSelectorBox.getSelectedItemIndex() != 13)
+                return;
+            auto& tuneState = processor.getValueTreeState();
+            if (auto* scale = tuneState.getParameter("scale")) {
+                scale->beginChangeGesture();
+                scale->setValueNotifyingHost(scale->convertTo0to1(1.0f));
+                scale->endChangeGesture();
+            }
+        };
+    }
     if (identity.supportsExpertMode())
         expertAttachment = std::make_unique<ButtonAttachment>(state, identity.expertParamId.data(), expertButton);
     if (identity.supportsListenMode())
@@ -566,7 +608,11 @@ void EditorBase::resized() {
         body.removeFromTop(scaled(6));
     }
     if (processor.getProductIdentity().showPitchTrace) {
-        const auto pitchBounds = body.removeFromTop(stacked ? scaled(164) : scaled(150)).reduced(scaled(18), scaled(4));
+        auto pitchBounds = body.removeFromTop(stacked ? scaled(240) : scaled(220)).reduced(scaled(18), scaled(4));
+        auto pitchZoomBounds = pitchBounds.removeFromTop(scaled(26));
+        pitchZoomYBox.setBounds(pitchZoomBounds.removeFromRight(scaled(96)).reduced(0, scaled(2)));
+        pitchZoomBounds.removeFromRight(scaled(6));
+        traceZoomBox.setBounds(pitchZoomBounds.removeFromRight(scaled(96)).reduced(0, scaled(2)));
         pitchTraceView.setBounds(pitchBounds);
         body.removeFromTop(scaled(6));
     }

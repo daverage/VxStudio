@@ -3,6 +3,7 @@
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxTuneCorrectionEngine.h"
 #include "dsp/VxTuneDecomposition.h"
+#include "dsp/VxTuneKeyProfiles.h"
 #include "dsp/VxTunePitchDetector.h"
 #include "dsp/VxTunePitchRenderer.h"
 #include "dsp/VxTuneTimeline.h"
@@ -42,6 +43,27 @@ public:
     // Latest analysis frame, for tests and the future dev overlay.
     vxsuite::tune::PitchFrame latestFrameForTests() const noexcept;
 
+    struct AutoKeyStateForTests {
+        int root = 0;
+        int scale = 2;
+        float confidence = 0.0f;
+        int frames = 0;
+    };
+    AutoKeyStateForTests autoKeyStateForTests() const noexcept {
+        return {
+            lastAutoKeyRoot.load(std::memory_order_relaxed),
+            lastAutoKeyScale.load(std::memory_order_relaxed),
+            lastAutoKeyConfidence.load(std::memory_order_relaxed),
+            lastAutoKeyFrames.load(std::memory_order_relaxed),
+        };
+    }
+
+    // True if the best-correlated mode for a user-pinned root is major.
+    bool bestModeForFixedRootForTests(const int root) noexcept { return bestModeForFixedRoot(root); }
+    // Best-correlated root for a user-pinned mode.
+    int bestRootForFixedModeForTests(const bool isMajor) noexcept { return bestRootForFixedMode(isMajor); }
+    std::uint16_t appliedScaleMaskForTests() const noexcept { return appliedScaleMask; }
+
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
     void resetSuite() override;
@@ -55,8 +77,19 @@ private:
                                std::uint16_t scaleMask,
                                float correction);
     void flushDebugTrace();
-    void updateAutoKeyEstimate(const vxsuite::tune::PitchFrame& frame) noexcept;
-    std::uint16_t currentScaleMask(int keyChoice, int scaleChoice) const noexcept;
+    void resetAutoKeyState();
+    void updateAutoKeyEstimate(const vxsuite::tune::PitchFrame& frame,
+                               const vxsuite::tune::NoteSegment& segment) noexcept;
+    std::uint16_t currentScaleMask(int keyChoice, int scaleChoice) noexcept;
+    // Best-correlated mode (major=true) for a user-pinned root, and
+    // best-correlated root for a user-pinned mode. The free joint pick
+    // (autoDetectedRoot, autoDetectedScale) is only ever validated as a
+    // pair for the histogram's own preferred root - reusing one half of it
+    // against a root/mode the user chose independently pairs data the
+    // algorithm never actually evaluated together.
+    bool bestModeForFixedRoot(int root) noexcept;
+    int bestRootForFixedMode(bool isMajor) noexcept;
+    juce::String autoKeyStatusText() const;
 
     vxsuite::tune::PitchDetector detector;
     vxsuite::tune::PerformanceDecomposition decomposition;
@@ -128,6 +161,35 @@ private:
     int autoDetectedRoot = 0;
     int autoDetectedScale = 2;
     float autoKeyConfidence = 0.0f;
+    // Persistent major/minor mode decision with hysteresis (see
+    // updateAutoKeyEstimate): the winning 7-note collection is stable, but
+    // the major-vs-relative-minor tie-break sits near 50/50 for long
+    // stretches and flips on noise without a hysteresis band.
+    bool autoKeyIsMajor = true;
+    // Sample-rate-independent, derived in prepareSuite() from the actual
+    // analysis frame rate (hop size is fixed in samples, so frame rate -
+    // and therefore a fixed per-frame decay/count - scales with sample
+    // rate otherwise).
+    float autoKeyDecayPerFrame = 0.9995f;
+    int autoKeyMinFrames = 96;
+    // Hysteresis state for the constrained sub-problems in
+    // bestModeForFixedRoot()/bestRootForFixedMode() (only one root or one
+    // mode is free, the other is pinned by the user) - kept separate from
+    // the free joint pick (autoDetectedRoot/autoKeyIsMajor above) since a
+    // pinned choice can legitimately want a different mode/root than the
+    // unconstrained estimate would pick on its own.
+    int autoModeForFixedRootHeldRoot = -1;
+    bool autoModeForFixedRootIsMajor = true;
+    bool autoRootForFixedModeHeldIsMajor = true;
+    int autoRootForFixedMode = 0;
+    // The mask actually fed to CorrectionEngine. Deliberately only updated
+    // between notes (silence/octave-suspect frames), not every frame:
+    // TargetEstimator holds its target as accumulated evidence, and
+    // narrowing/widening the valid note set mid-sustain would make the
+    // currently-held target stop being reinforced while an alternative
+    // starts accumulating - a spurious retarget driven by the key updating
+    // rather than by the singer's pitch actually moving.
+    std::uint16_t appliedScaleMask = vxsuite::tune::CorrectionEngine::kChromaticMask;
 
     // Published to the message thread (status text) without locks.
     std::atomic<float> lastF0Hz { 0.0f };
@@ -136,4 +198,8 @@ private:
     std::atomic<float> lastResidualCents { 0.0f };
     std::atomic<int>   lastReason { 0 };
     std::atomic<float> lastCorrectionCents { 0.0f };
+    std::atomic<int> lastAutoKeyRoot { 0 };
+    std::atomic<int> lastAutoKeyScale { 2 };
+    std::atomic<float> lastAutoKeyConfidence { 0.0f };
+    std::atomic<int> lastAutoKeyFrames { 0 };
 };

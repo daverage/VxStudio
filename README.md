@@ -29,6 +29,7 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXRebalance | Confidence-driven source-family rebalance | `Vocals`, `Drums`, `Bass`, `Guitar`, `Other`, `Strength` | Broad mix moves without stems |
 | VXRepair | All-in-one guided voice repair | `Noise`, `Speech Clarity`, `Clicks`, `Reverb` | Automatic problem detection and one-step correction |
 | VXStudioAnalyser | Chain-aware dry-vs-wet analyser | `Avg Time`, `Smoothing` | Inspecting stage impact and whole-chain tone |
+| VXTune | Confidence-gated vocal pitch correction | `Amount`, `Natural`, `Speed`, `Focus`, `Key`, `Scale` | Pitch correction with a live sung-vs-tuned trace |
 
 ---
 
@@ -54,12 +55,14 @@ Framework and plugin DSP versions are tracked independently.
 | VXRebalance | `0.2.2` |
 | VXRepair | `0.1.1` |
 | VXStudioAnalyser | `0.2.1` |
+| VXTune | `0.1.0` |
 
 ---
 
 ## Current status
 
-- `15` focused plugins are implemented and shipping in the shared VX Studio shell.
+- `16` focused plugins are implemented and shipping in the shared VX Studio shell.
+- VXTune is a new confidence-gated vocal pitch correction plugin: performance decomposition separates sung centre pitch from expression (vibrato, bends, slides), a Bayesian target estimator picks the intended note, and a PSOLA-based shifter renders the correction with a live sung-vs-tuned pitch trace.
 - VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
 - VXProximityClassic is a new two-control simplified proximity model.
 - VXProximity's `Closer` now also drives a dereverberation pre-stage (shared with VXDeverb) so higher settings thin room tone, not just boost bass; this adds ~16ms of latency at 48kHz (compensated automatically by the host).
@@ -88,7 +91,7 @@ On the latest clean run, `VXStudioPluginRegressionTests` completed with exit cod
 VX Studio is designed around composability. When a recording has multiple problems, this order is usually the best starting point:
 
 ```text
-VXDeepFilterNet / VXDenoiser / VXSubtract -> VXDeverb -> VXSpeechClarity -> VXProximity -> VXTone / VXToneRefine -> VXFinish / VXOptoComp -> VXStudioAnalyser
+VXDeepFilterNet / VXDenoiser / VXSubtract -> VXDeverb -> VXSpeechClarity -> VXTune -> VXProximity -> VXTone / VXToneRefine -> VXFinish / VXOptoComp -> VXStudioAnalyser
 ```
 
 Why this order:
@@ -96,10 +99,11 @@ Why this order:
 1. Remove noise first so later stages do not react to or enhance the noise floor.
 2. Remove room tail before enhancement so proximity and tone moves do not lift reverberant smear.
 3. Do corrective cleanup (sibilance, plosive, breath) before additive shaping.
-4. Add closeness after cleanup.
-5. Shape tone after proximity.
-6. Finish or compress last.
-7. Put VXStudioAnalyser at the end when you want to inspect the whole chain or an individual VX stage.
+4. Correct pitch before tonal and proximity shaping so those stages work on the final pitched signal.
+5. Add closeness after cleanup.
+6. Shape tone after proximity.
+7. Finish or compress last.
+8. Put VXStudioAnalyser at the end when you want to inspect the whole chain or an individual VX stage.
 
 For a fully guided single-plugin workflow, use **VXRepair**  -  it analyses, selects, and applies noise, clarity, click, and reverb reduction automatically.
 
@@ -516,6 +520,32 @@ Practical scenarios:
 - Comparing whole-chain tone before and after processing
 - Debugging over-bright, over-thin, or over-damped processing decisions
 
+### VXTune
+
+Intelligent vocal pitch correction that fixes pitch errors while leaving the performance - vibrato, bends, phrasing - untouched. It corrects the intended note only when it is confident the deviation is an error, and preserves expression by design: when unsure, it does nothing rather than risk a wrong or audible correction. A live sung-vs-tuned trace on a note grid shows the detected note, its offset, confidence, and whether the engine is intervening.
+
+How to use it:
+
+- Insert on a monophonic vocal.
+- `Amount` sets how much detected pitch error is removed.
+- `Natural` sets how readily movement counts as error rather than expression: left preserves everything human, right is tighter.
+- `Speed` sets how quickly the correction glides toward the target once it engages.
+- `Focus` sets how assertively the engine commits to a correction versus holding back when uncertain.
+- Set `Key` and `Scale` to match the song, or leave them on `Chromatic` if the key is unknown or modulates.
+- Start from the `Natural`, `Balanced`, `Tight`, or `Hard Tune` presets and adjust from there.
+
+Example settings:
+
+- Transparent intonation cleanup: `Amount 35%`, `Natural` low, `Speed` and `Focus` centred
+- Studio vocal correction with preserved vibrato: `Amount 50%`, `Natural 65%`, `Speed 30%`, `Focus 60%`
+- Hard-tune effect: `Amount 100%`, `Natural 100%`, `Speed 100%`, `Focus 100%`
+
+Practical scenarios:
+
+- Transparent intonation cleanup on lead or backing vocals
+- Checking vocal intonation while tracking or comping
+- Creative hard-tune effect for stylized vocals
+
 ---
 
 ## REAPER preset pack
@@ -614,6 +644,7 @@ Useful plugin targets:
 | `VXRebalance_VST3` | Rebalance plugin |
 | `VXRepair_VST3` | Repair plugin |
 | `VXStudioAnalyser_VST3` | Studio analyser plugin |
+| `VXTune_VST3` | Tune pitch correction plugin |
 
 Experimental opt-in target:
 
@@ -645,6 +676,7 @@ Source/
       rebalance/      VXRebalance processor, DSP, and diagnostics UI
       repair/         VXRepair processor (embeds denoiser/deverb/speech_clarity DSP)
       analyser/       VXStudioAnalyser processor and custom analyser UI
+      tune/           VXTune processor and DSP (pitch detection, decomposition, correction, PSOLA shifter)
 tests/                Measurement and behaviour tests
 tools/                Utility scripts and fixture builders
 assets/               Models, REAPER presets, and related resources
@@ -658,6 +690,6 @@ tasks/                Working plans, reports, and lessons
 
 - macOS VST3 builds are confirmed and staged.
 - Windows build generation is present and the release workflow can publish Windows assets without a local Windows machine, but broader end-to-end host validation is still pending.
-- All 15 plugins build on macOS from the current tree.
+- All 16 plugins build on macOS from the current tree.
 - VXDeepFilterNet is the only shipping plugin with extra runtime model dependencies. VxRebalanceAI has additional ONNX/model dependencies because it is experimental and opt-in.
 - VXRepair embeds DSP from VXDenoiser, VXDeverb, and VXSpeechClarity  -  modifying those DSP files requires re-testing VXRepair.

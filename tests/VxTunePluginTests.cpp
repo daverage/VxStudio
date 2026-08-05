@@ -4,6 +4,7 @@
 
 #include "../Source/vxstudio/products/tune/VxTuneProcessor.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -108,6 +109,266 @@ void testListenPlaysChangesOnly() {
     }
 }
 
+// Feeds `melodyHz`, cycling one note per `noteSeconds`, for a total of
+// `totalSeconds`. After every note, records the auto-key state so callers
+// can check convergence speed and (in)stability over the run.
+std::vector<VXTuneAudioProcessor::AutoKeyStateForTests> runMelodyAndTraceAutoKey(
+        VXTuneAudioProcessor& p, const std::vector<float>& melodyHz,
+        const float noteSeconds, const float totalSeconds) {
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> block(2, kBlock);
+    const int blocksPerNote = std::max(1, static_cast<int>(noteSeconds * kSampleRate / kBlock));
+    const int totalBlocks = static_cast<int>(totalSeconds * kSampleRate / kBlock);
+    std::vector<VXTuneAudioProcessor::AutoKeyStateForTests> trace;
+    double phase = 0.0;
+    for (int b = 0; b < totalBlocks; ++b) {
+        const size_t noteIndex = static_cast<size_t>(b / blocksPerNote) % melodyHz.size();
+        const float hz = melodyHz[noteIndex];
+        for (int i = 0; i < kBlock; ++i) {
+            phase += kTwoPi * hz / kSampleRate;
+            float s = 0.0f;
+            for (int h = 1; h <= 3; ++h)
+                s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
+            block.setSample(0, i, 0.25f * s);
+            block.setSample(1, i, 0.25f * s);
+        }
+        p.processBlock(block, midi);
+        if (b % blocksPerNote == blocksPerNote - 1)
+            trace.push_back(p.autoKeyStateForTests());
+    }
+    return trace;
+}
+
+int countKeyTransitions(const std::vector<VXTuneAudioProcessor::AutoKeyStateForTests>& trace) {
+    int transitions = 0;
+    for (size_t i = 1; i < trace.size(); ++i)
+        if (trace[i].root != trace[i - 1].root || trace[i].scale != trace[i - 1].scale)
+            ++transitions;
+    return transitions;
+}
+
+// Regression for two bugs found on real material: the confidence metric
+// used to compare major/minor "rivals" that always shared the same 7 notes
+// (near-zero margin by construction), so it almost never cleared the
+// commit threshold; and the major/minor tie-break had no hysteresis, so it
+// flickered on noise even once the right note collection was found (see a
+// ~4 minute vocal take that correctly found the G/Em note collection 86% of
+// the time but whose major/minor label flipped 24 times).
+void testAutoKeyLocksOntoScaleAndHolds() {
+    std::printf("Auto-key: converges and holds on an unambiguous melody:\n");
+    // All 7 scale degrees of C major (C D E F G A B), tonic/dominant
+    // emphasised. Touching every degree is required to uniquely identify
+    // the note collection - a melody using only e.g. C/E/G/A leaves the
+    // scoring genuinely tied between C major, F major and G major (all
+    // three contain that subset), which is correct behaviour, not a bug,
+    // but not what this test is checking.
+    const std::vector<float> cMajorMelody = {
+        261.63f, 293.66f, 329.63f, 349.23f, 392.00f,
+        261.63f, 440.00f, 392.00f, 493.88f, 261.63f,
+    };
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+    const auto trace = runMelodyAndTraceAutoKey(p, cMajorMelody, 0.35f, 20.0f);
+
+    const auto convergedAt = std::find_if(trace.begin(), trace.end(),
+        [](const VXTuneAudioProcessor::AutoKeyStateForTests& s) {
+            return s.confidence >= 0.15f && s.root == 0 && s.scale == 2;
+        });
+    check(convergedAt != trace.end(), "commits to C major within the run");
+
+    if (convergedAt != trace.end()) {
+        const int transitionsAfterLock = countKeyTransitions(
+            { convergedAt, trace.end() });
+        check(transitionsAfterLock == 0,
+              "holds C major with no further flip-flopping (got "
+                  + std::to_string(transitionsAfterLock) + " transition(s))");
+    }
+}
+
+// Measures how long a genuine, permanent key change takes to be recognised:
+// lock onto C major, then modulate to F# major (a tritone away - the
+// maximally distant key, sharing zero pitch classes) and time how much new
+// material it takes before the display updates. This is governed by the
+// histogram's 45s half-life plus the hysteresis margin, not any fixed
+// "refresh rate" - the estimate recomputes every audio frame, but a stale
+// key only flips once fresh evidence clearly outweighs the old key's
+// decaying-but-still-present histogram mass.
+void testAutoKeyAdaptsToModulationWithinBoundedLag() {
+    std::printf("Auto-key: adapts to a real modulation within a bounded lag:\n");
+    const std::vector<float> cMajorMelody = {
+        261.63f, 293.66f, 329.63f, 349.23f, 392.00f,
+        261.63f, 440.00f, 392.00f, 493.88f, 261.63f,
+    };
+    const std::vector<float> fSharpMajorMelody = {
+        369.99f, 415.30f, 466.16f, 493.88f, 554.37f,
+        369.99f, 622.25f, 554.37f, 698.46f, 369.99f,
+    };
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+
+    runMelodyAndTraceAutoKey(p, cMajorMelody, 0.35f, 60.0f);
+    const auto locked = p.autoKeyStateForTests();
+    check(locked.root == 0 && locked.scale == 2, "locks onto C major before the modulation");
+
+    const auto trace = runMelodyAndTraceAutoKey(p, fSharpMajorMelody, 0.35f, 90.0f);
+    const auto adaptedAt = std::find_if(trace.begin(), trace.end(),
+        [](const VXTuneAudioProcessor::AutoKeyStateForTests& s) {
+            return s.root == 6 && s.scale == 2; // F# = pitch class 6
+        });
+    check(adaptedAt != trace.end(), "eventually recognises the modulation to F# major");
+    if (adaptedAt != trace.end()) {
+        const auto index = std::distance(trace.begin(), adaptedAt);
+        const float lagSeconds = static_cast<float>(index) * 0.35f;
+        std::printf("    modulation recognised after ~%.1fs of new material\n", lagSeconds);
+        check(lagSeconds < 60.0f, "adapts within a reasonable time (<60s) of the modulation");
+    }
+}
+
+// A melody balanced between a major tonic (G) and its relative minor tonic
+// (E) pushes the mode tie-break toward 50/50 - exactly the regime that used
+// to flip on every frame. The hysteresis band should keep transitions rare
+// even under this adversarial balance, not eliminate them outright.
+void testAutoKeyModeHysteresisBoundsFlicker() {
+    std::printf("Auto-key: mode hysteresis bounds flicker near a 50/50 tie:\n");
+    const std::vector<float> gMajEMinBalanced = {
+        392.00f, 329.63f, 392.00f, 329.63f, 293.66f, 246.94f, 392.00f, 329.63f,
+    };
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+    const auto trace = runMelodyAndTraceAutoKey(p, gMajEMinBalanced, 0.35f, 24.0f);
+
+    const int transitions = countKeyTransitions(trace);
+    check(transitions <= 4,
+          "stays bounded under a near-tied mode (got " + std::to_string(transitions)
+              + " transition(s) over " + std::to_string(trace.size()) + " notes)");
+}
+
+// Regression for a bug found live in a DAW: resetSuite() (reached from
+// AudioProcessor::reset(), which hosts call on transport stop/rewind and on
+// every loop-region wraparound) used to wipe the learned key histogram. A
+// user looping a section while tuning would never accumulate the ~2s of
+// continuous evidence needed to commit, because the loop kept erasing
+// progress before it got there - the key would never settle, even though
+// the same melody rendered offline in one continuous pass converged fine.
+void testAutoKeySurvivesTransportResetBetweenLoopIterations() {
+    std::printf("Auto-key: learned key survives reset() across loop iterations:\n");
+    const std::vector<float> cMajorMelody = {
+        261.63f, 293.66f, 329.63f, 349.23f, 392.00f,
+        261.63f, 440.00f, 392.00f, 493.88f, 261.63f,
+    };
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+
+    // Simulate a host looping a ~1.5s region: too short on its own to clear
+    // the auto-key commit gate, with reset() firing between iterations the
+    // way a DAW does on loop wraparound.
+    bool committed = false;
+    for (int loopIteration = 0; loopIteration < 12 && !committed; ++loopIteration) {
+        const auto trace = runMelodyAndTraceAutoKey(p, cMajorMelody, 0.15f, 1.5f);
+        if (!trace.empty()) {
+            const auto& s = trace.back();
+            committed = s.confidence >= 0.15f && s.root == 0 && s.scale == 2;
+        }
+        p.reset();
+    }
+    check(committed,
+          "key commits across repeated short loop iterations despite reset() between them");
+}
+
+void setChoice(VXTuneAudioProcessor& p, const char* id, const int index) {
+    if (auto* param = p.getValueTreeState().getParameter(id))
+        param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(index)));
+}
+
+// Regression: pinning a root while leaving Scale on Auto (or vice versa)
+// used to reuse the free joint pick's other half regardless of whether it
+// applied to the pinned value - a pairing the algorithm never validated
+// together. Lock the free pick onto G major (root=7), then pin a root
+// whose correct mode genuinely differs from G major's: E is G major's
+// relative minor tonic, so the SAME 7 notes correlate far better as E
+// minor than E major. The old code would have blindly reported "major"
+// (G major's mode) for root E; the fix must independently find minor.
+void testFixedRootPicksItsOwnModeNotTheFreePicksMode() {
+    std::printf("Auto-key: a pinned root gets its own mode, not the free pick's:\n");
+    const std::vector<float> gMajorMelody = {
+        392.00f, 440.00f, 493.88f, 523.25f, 587.33f,
+        392.00f, 659.25f, 587.33f, 739.99f, 392.00f,
+    };
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+    runMelodyAndTraceAutoKey(p, gMajorMelody, 0.35f, 20.0f);
+    const auto free = p.autoKeyStateForTests();
+    check(free.root == 7 && free.scale == 2, "free pick locks onto G major");
+
+    const bool modeForE = p.bestModeForFixedRootForTests(4); // E = pitch class 4
+    check(!modeForE, "root E is independently found to be minor, not G major's major");
+}
+
+// Mirror case: pinning the mode should pick its own best root, not reuse
+// the free pick's root. Locked onto G major, pinning minor mode should
+// find E (the relative minor tonic) rather than reusing root G.
+void testFixedModePicksItsOwnRootNotTheFreePicksRoot() {
+    std::printf("Auto-key: a pinned mode gets its own root, not the free pick's:\n");
+    const std::vector<float> gMajorMelody = {
+        392.00f, 440.00f, 493.88f, 523.25f, 587.33f,
+        392.00f, 659.25f, 587.33f, 739.99f, 392.00f,
+    };
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+    runMelodyAndTraceAutoKey(p, gMajorMelody, 0.35f, 20.0f);
+    const auto free = p.autoKeyStateForTests();
+    check(free.root == 7 && free.scale == 2, "free pick locks onto G major");
+
+    const int rootForMinor = p.bestRootForFixedModeForTests(false);
+    check(rootForMinor == 4, "minor mode is independently rooted at E, not G ("
+              + std::to_string(rootForMinor) + ")");
+}
+
+// Regression: the mask fed to CorrectionEngine used to update every frame,
+// which could retarget TargetEstimator's held note mid-sustain purely
+// because the key/scale changed, not because the singer's pitch moved.
+// It should only update between notes.
+void testAppliedScaleMaskHoldsThroughAnUninterruptedSustain() {
+    std::printf("Applied scale mask: holds through a sustain, updates between notes:\n");
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+    setChoice(p, "keyroot", 1); // C
+    setChoice(p, "scale", 2);   // Major
+
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> block(2, kBlock);
+    double phase = 0.0;
+    const int blocksPerSecond = static_cast<int>(kSampleRate) / kBlock;
+    const auto feedTone = [&](const float hz, const int blocks) {
+        for (int b = 0; b < blocks; ++b) {
+            for (int i = 0; i < kBlock; ++i) {
+                phase += kTwoPi * hz / kSampleRate;
+                float s = 0.0f;
+                for (int h = 1; h <= 3; ++h)
+                    s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
+                block.setSample(0, i, 0.25f * s);
+                block.setSample(1, i, 0.25f * s);
+            }
+            p.processBlock(block, midi);
+        }
+    };
+
+    feedTone(261.63f, blocksPerSecond); // ~1s of C4, let the mask settle
+    const std::uint16_t maskBeforeSwitch = p.appliedScaleMaskForTests();
+
+    setChoice(p, "keyroot", 8); // switch to G mid-sustain, no gap
+    feedTone(261.63f, blocksPerSecond);
+    check(p.appliedScaleMaskForTests() == maskBeforeSwitch,
+          "applied mask holds steady through an uninterrupted sustain");
+
+    block.clear();
+    for (int b = 0; b < 10; ++b)
+        p.processBlock(block, midi);
+    feedTone(261.63f, blocksPerSecond);
+    check(p.appliedScaleMaskForTests() != maskBeforeSwitch,
+          "applied mask updates once the note actually ends");
+}
+
 void testPitchTraceFeed() {
     std::printf("Pitch trace feed:\n");
     const float sharpHz = 220.0f * std::exp2(30.0f / 1200.0f);
@@ -143,6 +404,13 @@ int main() {
     std::printf("VX Tune plugin tests\n");
     testLatencyReported();
     testListenPlaysChangesOnly();
+    testAutoKeyLocksOntoScaleAndHolds();
+    testAutoKeyAdaptsToModulationWithinBoundedLag();
+    testAutoKeyModeHysteresisBoundsFlicker();
+    testAutoKeySurvivesTransportResetBetweenLoopIterations();
+    testFixedRootPicksItsOwnModeNotTheFreePicksMode();
+    testFixedModePicksItsOwnRootNotTheFreePicksRoot();
+    testAppliedScaleMaskHoldsThroughAnUninterruptedSustain();
     testPitchTraceFeed();
     if (failures == 0) {
         std::printf("All VX Tune plugin tests passed\n");

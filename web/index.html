@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
             name="description"
-            content="VX Studio - 15 focused realtime audio plugins for voice, mix cleanup, tonal shaping, levelling, and chain-aware analysis."
+            content="VX Studio - 16 focused realtime audio plugins for voice, mix cleanup, tonal shaping, pitch correction, levelling, and chain-aware analysis."
         />
         <meta
             name="keywords"
@@ -23,11 +23,11 @@
 
         <meta property="og:type" content="website" />
         <meta property="og:title" content="VX Studio — Professional Audio Processing Plugins" />
-        <meta property="og:description" content="15 focused realtime-safe plugins for voice cleanup, tonal shaping, levelling, and chain-aware analysis. VST3 for macOS and Windows." />
+        <meta property="og:description" content="16 focused realtime-safe plugins for voice cleanup, tonal shaping, pitch correction, levelling, and chain-aware analysis. VST3 for macOS and Windows." />
         <meta property="og:image" content="assets/images/favicon-512.png" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="VX Studio" />
-        <meta name="twitter:description" content="15 focused realtime-safe audio plugins for voice, mix cleanup, and finishing." />
+        <meta name="twitter:description" content="16 focused realtime-safe audio plugins for voice, mix cleanup, and finishing." />
 
         <link rel="stylesheet" href="assets/css/style.css?v=0.2.1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -82,7 +82,7 @@
                     Realtime-safe audio tools for decisive cleanup and finish
                     work
                 </p>
-                <h1>15 Focused Plugins. One Shared Studio Workflow.</h1>
+                <h1>16 Focused Plugins. One Shared Studio Workflow.</h1>
                 <p>
                     VX Studio brings cleanup, control, finishing, and analysis
                     into one deliberately compact suite for spoken-word and mix
@@ -104,7 +104,7 @@
                 </div>
                 <div class="hero-stats">
                     <div class="hero-stat">
-                        <strong>15</strong>
+                        <strong>16</strong>
                         <span>focused plugins</span>
                     </div>
                     <div class="hero-stat">
@@ -151,7 +151,7 @@
                     <p class="section-label">The Platform</p>
                     <h2>The Suite</h2>
                     <p>
-                        15 specialized tools for modern voice and mix processing
+                        16 specialized tools for modern voice and mix processing
                     </p>
                 </div>
 
@@ -644,6 +644,40 @@
                             >
                         </div>
                     </div>
+
+                    <!-- Tune -->
+                    <div class="product-card" data-color="blue">
+                        <div
+                            class="product-icon"
+                            style="
+                                background: linear-gradient(
+                                    135deg,
+                                    #3b82f6 0%,
+                                    #1d4ed8 100%
+                                );
+                            "
+                        >
+                            ♪
+                        </div>
+                        <h3>Tune</h3>
+                        <p>
+                            Confidence-gated vocal pitch correction. Fixes
+                            pitch errors while leaving vibrato, bends, and
+                            phrasing untouched, with a live sung-vs-tuned
+                            trace.
+                        </p>
+                        <div class="card-actions">
+                            <a
+                                href="downloads/"
+                                download
+                                class="btn btn-sm btn-primary"
+                                >Download</a
+                            >
+                            <a href="#product-tune" class="learn-more"
+                                >Learn More →</a
+                            >
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -783,6 +817,15 @@
                             inspecting.
                         </p>
                     </article>
+                    <article id="product-tune" class="detail-card">
+                        <h3>Tune</h3>
+                        <p>
+                            Confidence-gated vocal pitch correction that
+                            preserves vibrato, bends, and phrasing. Corrects
+                            only when it is confident a deviation is an
+                            error, with a live sung-vs-tuned trace.
+                        </p>
+                    </article>
                 </div>
             </div>
         </section>
@@ -810,11 +853,15 @@
                         <p>Use Speech Clarity for sibilance, plosives, breath, and click control. Corrective work before any additive processing.</p>
                     </article>
                     <article class="detail-card">
-                        <h3>4 → Proximity &amp; Tone</h3>
+                        <h3>4 → Pitch Correction</h3>
+                        <p>Run Tune before proximity and tonal shaping so those stages work on the final pitched signal, not the raw take.</p>
+                    </article>
+                    <article class="detail-card">
+                        <h3>5 → Proximity &amp; Tone</h3>
                         <p>Add closeness with Proximity, then shape with Tone or ToneRefine. These work best on already-cleaned material.</p>
                     </article>
                     <article class="detail-card">
-                        <h3>5 → Finish / Dynamics</h3>
+                        <h3>6 → Finish / Dynamics</h3>
                         <p>Apply Finish, OptoComp, or Leveler last. Compress and limit after tone is settled to avoid pumping artifacts from upstream noise.</p>
                     </article>
                     <article class="detail-card">
@@ -963,6 +1010,13 @@
                             <p>Smaller variant with the same four artifact-removal controls.</p>
                         </figcaption>
                     </figure>
+                    <figure class="screen-card">
+                        <img src="assets/screens/vx-studio-tune.png" alt="VX Studio Tune interface" loading="lazy" decoding="async" />
+                        <figcaption class="screen-card-body">
+                            <h3>Tune</h3>
+                            <p>Confidence-gated pitch correction with a live sung-vs-tuned trace.</p>
+                        </figcaption>
+                    </figure>
                 </div>
             </div>
         </section>
@@ -1067,7 +1121,7 @@
                         Download VX Studio
                     </a>
                     <p class="download-note">
-                        15 plugins • Latest regression pass complete • Open
+                        16 plugins • Latest regression pass complete • Open
                         source
                     </p>
                 </div>
@@ -1198,7 +1252,7 @@
                             Professional audio processing plugins for realtime
                             production.
                         </p>
-                        <p class="footer-version">v0.1.0 • 15 Plugins</p>
+                        <p class="footer-version">v0.1.0 • 16 Plugins</p>
                     </div>
                     <div class="footer-section">
                         <h4>Resources</h4>

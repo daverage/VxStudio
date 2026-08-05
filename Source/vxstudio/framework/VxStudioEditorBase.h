@@ -65,6 +65,7 @@ private:
     double modelDownloadUi = 0.0;
     juce::ProgressBar modelDownloadBar { modelDownloadUi };
     juce::ComboBox traceZoomBox;
+    juce::ComboBox pitchZoomYBox;
     juce::ComboBox modeBox;
     juce::ComboBox auxSelectorBox;
     juce::ComboBox auxSelector2Box;

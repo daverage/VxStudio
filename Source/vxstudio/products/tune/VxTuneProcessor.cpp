@@ -28,8 +28,21 @@ const char* noteNameForMidi(const int midi) noexcept {
     return names[((midi % 12) + 12) % 12];
 }
 
-constexpr std::array<std::string_view, 13> kKeyRootLabels = {
-    "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+constexpr int kIgnoreKeyChoice = 13;
+
+// Pearson correlation against a Krumhansl-Schmuckler profile (see
+// VxTuneKeyProfiles.h) is bounded to [-1, 1] and, unlike the old
+// score-margin ratio, is directly usable as a confidence value. This
+// threshold is a reasoned starting point (real correlations on vocal-only
+// material, after ornamental down-weighting, run lower than a full-mix
+// chromagram would) - validated against a known-key vocal take, not yet
+// against a broad corpus.
+constexpr float kAutoKeyConfidenceGate = 0.15f;
+
+// Keep Auto at index 0 so existing sessions retain their meaning. Ignore is
+// appended as a new choice and deliberately forces chromatic correction.
+constexpr std::array<std::string_view, 14> kKeyRootLabels = {
+    "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "Ignore",
 };
 
 constexpr std::array<std::string_view, 6> kScaleLabels = {
@@ -63,8 +76,14 @@ int midiPitchClassFromCents(const float cents) noexcept {
     return ((midi % 12) + 12) % 12;
 }
 
-bool maskContainsPitchClass(const std::uint16_t mask, const int pitchClass) noexcept {
-    return (mask & (1u << (((pitchClass % 12) + 12) % 12))) != 0;
+std::string_view keyRootLabel(const int root) noexcept {
+    const int index = std::clamp(root + 1, 1, 12);
+    return kKeyRootLabels[static_cast<size_t>(index)];
+}
+
+std::string_view scaleLabel(const int scaleChoice) noexcept {
+    const int index = std::clamp(scaleChoice, 0, static_cast<int>(kScaleLabels.size()) - 1);
+    return kScaleLabels[static_cast<size_t>(index)];
 }
 
 } // namespace
@@ -243,7 +262,7 @@ vxsuite::ProductIdentity VXTuneAudioProcessor::makeIdentity() {
 juce::String VXTuneAudioProcessor::getStatusText() const {
     const float f0 = lastF0Hz.load(std::memory_order_relaxed);
     if (f0 <= 0.0f)
-        return "Listening - no pitched voice detected";
+        return "Listening - no pitched voice detected" + autoKeyStatusText();
 
     const float conf = lastConfidence.load(std::memory_order_relaxed);
     const float centreCents = lastCentreCents.load(std::memory_order_relaxed);
@@ -258,10 +277,47 @@ juce::String VXTuneAudioProcessor::getStatusText() const {
     text += std::abs(correction) >= 1.0f
         ? juce::String::formatted("  correcting %+.0fc", correction)
         : juce::String("  not intervening");
+    text += autoKeyStatusText();
     return text;
 }
 
+juce::String VXTuneAudioProcessor::autoKeyStatusText() const {
+    const int keyChoice = vxsuite::readChoiceIndex(parameters, kKeyRootParam, 0);
+    const int scaleChoice = vxsuite::readChoiceIndex(parameters, kScaleParam, 0);
+    if (keyChoice == kIgnoreKeyChoice && scaleChoice == 1)
+        return "  key ignored (chromatic)";
+    if (keyChoice == kIgnoreKeyChoice)
+        return "  key auto root " + vxsuite::toJuceString(scaleLabel(scaleChoice));
+    const bool autoKey = keyChoice <= 0;
+    const bool autoScale = scaleChoice <= 0;
+    if (!autoKey && !autoScale)
+        return {};
+
+    const int frames = lastAutoKeyFrames.load(std::memory_order_relaxed);
+    const float confidence = lastAutoKeyConfidence.load(std::memory_order_relaxed);
+    if (frames < autoKeyMinFrames || confidence < kAutoKeyConfidenceGate)
+        return "  key learning";
+
+    const int root = autoKey
+        ? lastAutoKeyRoot.load(std::memory_order_relaxed)
+        : std::clamp(keyChoice - 1, 0, 11);
+    const int scale = autoScale
+        ? lastAutoKeyScale.load(std::memory_order_relaxed)
+        : scaleChoice;
+
+    return "  key " + vxsuite::toJuceString(keyRootLabel(root))
+        + " " + vxsuite::toJuceString(scaleLabel(scale))
+        + juce::String::formatted(" %.0f%%", confidence * 100.0f);
+}
+
 void VXTuneAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
+    // Flush whatever the previous configuration collected before
+    // configureDebugTrace() clears the row buffer. This is the only place
+    // the (blocking) flush is safe to run: prepareToPlay is always called
+    // from the message thread, whereas resetSuite() can also be reached
+    // from AudioProcessor::reset(), which some hosts call on the audio
+    // thread (e.g. transport-loop restarts).
+    flushDebugTrace();
     configureDebugTrace(sampleRate);
 
     vxsuite::tune::PitchDetector::Config detectorConfig;
@@ -270,6 +326,16 @@ void VXTuneAudioProcessor::prepareSuite(const double sampleRate, const int sampl
     const double frameRate = sampleRate / detector.hopSamples();
     decomposition.prepare(frameRate, vxsuite::tune::PerformanceDecomposition::Config {});
     correctionEngine.prepare(frameRate, vxsuite::tune::CorrectionEngine::Config {});
+
+    // Auto-key memory/commit-gate in real time, not frame count: the hop
+    // size is fixed in samples, so frame rate (and an uncorrected per-frame
+    // decay/count) would otherwise scale with sample rate.
+    constexpr float kAutoKeyHalfLifeSeconds = 45.0f;
+    constexpr float kAutoKeyMinSeconds = 2.0f;
+    autoKeyDecayPerFrame = std::pow(0.5f,
+        1.0f / std::max(1.0f, static_cast<float>(frameRate) * kAutoKeyHalfLifeSeconds));
+    autoKeyMinFrames = std::max(16,
+        static_cast<int>(std::lround(frameRate * kAutoKeyMinSeconds)));
 
     const int block = std::max(64, samplesPerBlock);
     vxsuite::tune::VxTunePitchRenderer::PrepareSpec rendererSpec;
@@ -280,12 +346,38 @@ void VXTuneAudioProcessor::prepareSuite(const double sampleRate, const int sampl
     setReportedLatencySamples(pitchRenderer->latencySamples());
 
     monoScratch.assign(static_cast<size_t>(block), 0.0f);
+    resetAutoKeyState();
     resetSuite();
 }
 
-void VXTuneAudioProcessor::resetSuite() {
-    flushDebugTrace();
+// The learned key/scale is session-level knowledge about the song, built up
+// over many seconds - it should survive transport stops, rewinds, and loop
+// wraparounds, not be wiped by them. resetSuite() runs on every one of those
+// (via AudioProcessor::reset()/releaseResources()), so this only runs from
+// prepareSuite(): a genuine reconfiguration (first load or a sample-rate/
+// block-size change), never a mid-session transport event. Getting this
+// wrong meant the histogram never accumulated the ~2s of continuous
+// evidence needed to clear the confidence gate in any DAW that resets on
+// loop (which is most of them) - it looked fine offline only because batch
+// rendering never calls reset() mid-file.
+void VXTuneAudioProcessor::resetAutoKeyState() {
+    autoKeyHistogram.fill(0.0f);
+    autoKeyFrameCount = 0;
+    autoDetectedRoot = 0;
+    autoDetectedScale = 2;
+    autoKeyConfidence = 0.0f;
+    autoKeyIsMajor = true;
+    autoModeForFixedRootHeldRoot = -1;
+    autoModeForFixedRootIsMajor = true;
+    autoRootForFixedModeHeldIsMajor = true;
+    autoRootForFixedMode = 0;
+    lastAutoKeyRoot.store(autoDetectedRoot, std::memory_order_relaxed);
+    lastAutoKeyScale.store(autoDetectedScale, std::memory_order_relaxed);
+    lastAutoKeyConfidence.store(autoKeyConfidence, std::memory_order_relaxed);
+    lastAutoKeyFrames.store(autoKeyFrameCount, std::memory_order_relaxed);
+}
 
+void VXTuneAudioProcessor::resetSuite() {
     detector.reset();
     decomposition.reset();
     correctionEngine.reset();
@@ -293,11 +385,7 @@ void VXTuneAudioProcessor::resetSuite() {
     renderTargetCents = 0.0f;
     renderProcessCents = 0.0f;
     renderGateMisses = 0;
-    autoKeyHistogram.fill(0.0f);
-    autoKeyFrameCount = 0;
-    autoDetectedRoot = 0;
-    autoDetectedScale = 2;
-    autoKeyConfidence = 0.0f;
+    appliedScaleMask = vxsuite::tune::CorrectionEngine::kChromaticMask;
     lastCorrectionCents.store(0.0f, std::memory_order_relaxed);
     lastF0Hz.store(0.0f, std::memory_order_relaxed);
     lastConfidence.store(0.0f, std::memory_order_relaxed);
@@ -344,15 +432,29 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
         for (int i = 0; i < produced; ++i) {
             const auto& observation = observationScratch[static_cast<size_t>(i)];
             const auto frame = decomposition.process(observation);
-            updateAutoKeyEstimate(frame);
-            const std::uint16_t scaleMask = currentScaleMask(keyChoice, scaleChoice);
+            const std::uint16_t rawScaleMask = currentScaleMask(keyChoice, scaleChoice);
             // Veto rendering hints that disagree wildly with the intent
             // line (octave-error frames): one bad period must not scatter
             // the shifter's epoch grid. Legitimate note jumps re-anchor the
             // centre within a frame, so the veto is momentary.
             const bool octaveSuspect =
                 frame.centreHz > 0.0f && std::abs(frame.residualCents) > 350.0f;
-            const float correction = correctionEngine.process(frame, amount, natural, scaleMask, speed, focus);
+            // Only let a changed scale mask take effect between notes
+            // (unvoiced or octave-suspect frames): TargetEstimator holds its
+            // target as accumulated evidence, so narrowing/widening the
+            // valid note set mid-sustain would make the currently-held
+            // target stop being reinforced while an alternative starts
+            // accumulating - a retarget driven by the key updating, not by
+            // the singer's pitch actually moving.
+            if (frame.f0Hz.value <= 0.0f || octaveSuspect)
+                appliedScaleMask = rawScaleMask;
+            const float correction =
+                correctionEngine.process(frame, amount, natural, appliedScaleMask, speed, focus);
+            // Runs after correctionEngine.process() so the segmenter (owned
+            // by CorrectionEngine, independent of the key/scale mask) has
+            // already updated for this frame - auto-key voting can then use
+            // its behaviour probabilities to down-weight ornamental motion.
+            updateAutoKeyEstimate(frame, correctionEngine.currentSegment());
             vxsuite::tune::VxTunePitchRenderer::FrameInfo renderInfo;
             renderInfo.correctionCents = correction;
             renderInfo.detectedF0Hz = frame.f0Hz.value;
@@ -392,7 +494,7 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
             if (std::abs(renderTargetCents) < 0.5f)
                 renderTargetCents = 0.0f;
 
-            appendDebugTraceFrame(frame, amount, natural, speed, focus, scaleMask, correction);
+            appendDebugTraceFrame(frame, amount, natural, speed, focus, appliedScaleMask, correction);
 
             lastF0Hz.store(frame.f0Hz.value, std::memory_order_relaxed);
             lastConfidence.store(frame.f0Hz.confidence, std::memory_order_relaxed);
@@ -416,7 +518,8 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     }
 }
 
-void VXTuneAudioProcessor::updateAutoKeyEstimate(const vxsuite::tune::PitchFrame& frame) noexcept {
+void VXTuneAudioProcessor::updateAutoKeyEstimate(const vxsuite::tune::PitchFrame& frame,
+                                                  const vxsuite::tune::NoteSegment& segment) noexcept {
     const bool reliable =
         frame.f0Hz.value > 0.0f
         && frame.f0Hz.reason == vxsuite::tune::EstimateReason::nominal
@@ -426,11 +529,27 @@ void VXTuneAudioProcessor::updateAutoKeyEstimate(const vxsuite::tune::PitchFrame
     if (!reliable)
         return;
 
-    for (auto& bin : autoKeyHistogram)
-        bin *= 0.9995f;
+    // Down-weight ornamental motion: a passing/chromatic note or a fresh
+    // note onset is a real event but weak evidence for the song's key
+    // compared to a held, settled note. Continuous weighting (not a hard
+    // gate) mirrors how CorrectionEngine treats the same probabilities.
+    using vxsuite::tune::Behaviour;
+    const float passingNoteProb = segment.behaviourProb[static_cast<int>(Behaviour::passingNote)];
+    const float onsetProb = segment.behaviourProb[static_cast<int>(Behaviour::onset)];
+    const float ornamentalWeight = std::clamp(
+        1.0f - std::max(passingNoteProb, 0.6f * onsetProb), 0.0f, 1.0f);
+    if (ornamentalWeight <= 0.02f)
+        return;
 
-    const int pitchClass = midiPitchClassFromCents(frame.centreCents + frame.residualCents);
-    const float weight = std::clamp(frame.f0Hz.confidence * frame.decompConfidence, 0.0f, 1.0f);
+    for (auto& bin : autoKeyHistogram)
+        bin *= autoKeyDecayPerFrame;
+
+    // Pitch class from the decomposed note centre only: residualCents is
+    // the fast expressive layer (vibrato/bends/scoops) and can cross a
+    // semitone boundary even while the underlying note stays diatonic.
+    const int pitchClass = midiPitchClassFromCents(frame.centreCents);
+    const float weight = ornamentalWeight
+        * std::clamp(frame.f0Hz.confidence * frame.decompConfidence, 0.0f, 1.0f);
     autoKeyHistogram[static_cast<size_t>(pitchClass)] += weight;
     autoKeyFrameCount = std::min(autoKeyFrameCount + 1, 2000000);
 
@@ -440,53 +559,141 @@ void VXTuneAudioProcessor::updateAutoKeyEstimate(const vxsuite::tune::PitchFrame
     if (total <= 0.0001f)
         return;
 
-    float bestScore = -1.0f;
-    float secondScore = -1.0f;
-    int bestRoot = 0;
-    int bestScale = 2;
-    for (int root = 0; root < 12; ++root) {
-        for (int scale = 2; scale <= 3; ++scale) {
-            const auto mask = maskForRootAndScale(root, scale);
-            float inScale = 0.0f;
-            float outScale = 0.0f;
-            for (int pc = 0; pc < 12; ++pc) {
-                if (maskContainsPitchClass(mask, pc))
-                    inScale += autoKeyHistogram[static_cast<size_t>(pc)];
-                else
-                    outScale += autoKeyHistogram[static_cast<size_t>(pc)];
-            }
-            const float tonicWeight = autoKeyHistogram[static_cast<size_t>(root)];
-            const int dominant = (root + 7) % 12;
-            const float dominantWeight = autoKeyHistogram[static_cast<size_t>(dominant)];
-            const float score = inScale - 0.42f * outScale + 0.18f * tonicWeight + 0.08f * dominantWeight;
-            if (score > bestScore) {
-                secondScore = bestScore;
-                bestScore = score;
-                bestRoot = root;
-                bestScale = scale;
-            } else if (score > secondScore) {
-                secondScore = score;
+    // Krumhansl-Schmuckler profile correlation across all 24 major/minor
+    // candidates in one pass (see VxTuneKeyProfiles.h) - replaces the old
+    // two-stage "which 7 notes, then major/minor tie-break" scoring. That
+    // scheme scored relative major/minor as separate rivals sharing an
+    // identical in/out-of-scale mask, so the real margin was buried under a
+    // near-zero tie; a graded profile tells them apart directly and gives a
+    // score that's already bounded to [-1, 1], usable as confidence as-is.
+    const auto match = vxsuite::tune::findBestKeyProfile(autoKeyHistogram);
+
+    // Hysteresis on which candidate we hold, mirroring CorrectionEngine's
+    // engage/disengage pattern: only switch away from the currently-held
+    // key once a challenger's correlation clearly exceeds the held
+    // candidate's own correlation against the *current* histogram, so noise
+    // near a tie doesn't flip the display every update (verified against a
+    // full vocal take, where the note-collection choice was correct ~86% of
+    // the time but an un-hysteresised major/minor decision still flipped
+    // 24 times across the song).
+    const float heldCorrelation = vxsuite::tune::keyProfileCorrelation(
+        autoKeyHistogram,
+        autoKeyIsMajor ? vxsuite::tune::kKsMajorProfile : vxsuite::tune::kKsMinorProfile,
+        autoDetectedRoot);
+    constexpr float kKeyHysteresisMargin = 0.05f;
+    float displayedCorrelation = heldCorrelation;
+    if ((match.root != autoDetectedRoot || match.isMajor != autoKeyIsMajor)
+        && match.correlation > heldCorrelation + kKeyHysteresisMargin) {
+        autoDetectedRoot = match.root;
+        autoKeyIsMajor = match.isMajor;
+        displayedCorrelation = match.correlation;
+    }
+
+    autoDetectedScale = autoKeyIsMajor ? 2 : 3;
+    autoKeyConfidence = std::clamp(displayedCorrelation, 0.0f, 1.0f);
+    lastAutoKeyRoot.store(autoDetectedRoot, std::memory_order_relaxed);
+    lastAutoKeyScale.store(autoDetectedScale, std::memory_order_relaxed);
+    lastAutoKeyConfidence.store(autoKeyConfidence, std::memory_order_relaxed);
+    lastAutoKeyFrames.store(autoKeyFrameCount, std::memory_order_relaxed);
+}
+
+bool VXTuneAudioProcessor::bestModeForFixedRoot(const int root) noexcept {
+    if (root != autoModeForFixedRootHeldRoot) {
+        // The pinned root changed - the previous hysteresis decision was
+        // about a different root and doesn't apply; reseed from scratch.
+        autoModeForFixedRootHeldRoot = root;
+        autoModeForFixedRootIsMajor =
+            vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, vxsuite::tune::kKsMajorProfile, root)
+            >= vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, vxsuite::tune::kKsMinorProfile, root);
+    }
+    const float majorCorr =
+        vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, vxsuite::tune::kKsMajorProfile, root);
+    const float minorCorr =
+        vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, vxsuite::tune::kKsMinorProfile, root);
+    constexpr float kMargin = 0.05f;
+    if (autoModeForFixedRootIsMajor) {
+        if (minorCorr > majorCorr + kMargin)
+            autoModeForFixedRootIsMajor = false;
+    } else {
+        if (majorCorr > minorCorr + kMargin)
+            autoModeForFixedRootIsMajor = true;
+    }
+    return autoModeForFixedRootIsMajor;
+}
+
+int VXTuneAudioProcessor::bestRootForFixedMode(const bool isMajor) noexcept {
+    const auto& profile = isMajor ? vxsuite::tune::kKsMajorProfile : vxsuite::tune::kKsMinorProfile;
+    if (isMajor != autoRootForFixedModeHeldIsMajor) {
+        // The pinned mode changed - re-seed from the outright best root for
+        // the new mode rather than carrying over a root chosen for the
+        // other mode.
+        autoRootForFixedModeHeldIsMajor = isMajor;
+        autoRootForFixedMode = 0;
+        float best = -2.0f;
+        for (int r = 0; r < 12; ++r) {
+            const float c = vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, profile, r);
+            if (c > best) {
+                best = c;
+                autoRootForFixedMode = r;
             }
         }
     }
-
-    autoDetectedRoot = bestRoot;
-    autoDetectedScale = bestScale;
-    autoKeyConfidence = std::clamp((bestScore - secondScore) / std::max(total, 0.001f), 0.0f, 1.0f);
+    const float heldCorr =
+        vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, profile, autoRootForFixedMode);
+    int bestRoot = autoRootForFixedMode;
+    float bestCorr = heldCorr;
+    for (int r = 0; r < 12; ++r) {
+        const float c = vxsuite::tune::keyProfileCorrelation(autoKeyHistogram, profile, r);
+        if (c > bestCorr) {
+            bestCorr = c;
+            bestRoot = r;
+        }
+    }
+    constexpr float kMargin = 0.05f;
+    if (bestRoot != autoRootForFixedMode && bestCorr > heldCorr + kMargin)
+        autoRootForFixedMode = bestRoot;
+    return autoRootForFixedMode;
 }
 
-std::uint16_t VXTuneAudioProcessor::currentScaleMask(const int keyChoice, const int scaleChoice) const noexcept {
+std::uint16_t VXTuneAudioProcessor::currentScaleMask(const int keyChoice, const int scaleChoice) noexcept {
     if (scaleChoice == 1)
         return vxsuite::tune::CorrectionEngine::kChromaticMask;
 
-    const bool needsAutoKey = keyChoice <= 0;
+    // Ignore is the initial no-key shortcut. If the user subsequently chooses
+    // a non-chromatic scale, use the learned root so that scale choice remains
+    // useful without requiring another key selection.
+    const bool needsAutoKey = keyChoice <= 0 || keyChoice == kIgnoreKeyChoice;
     const bool needsAutoScale = scaleChoice <= 0;
     if ((needsAutoKey || needsAutoScale)
-        && (autoKeyFrameCount < 96 || autoKeyConfidence < 0.035f))
+        && (autoKeyFrameCount < autoKeyMinFrames || autoKeyConfidence < kAutoKeyConfidenceGate))
         return vxsuite::tune::CorrectionEngine::kChromaticMask;
 
-    const int root = needsAutoKey ? autoDetectedRoot : std::clamp(keyChoice - 1, 0, 11);
-    const int scale = needsAutoScale ? autoDetectedScale : scaleChoice;
+    int root;
+    int scale;
+    if (needsAutoKey && needsAutoScale) {
+        // Free joint pick: already validated as a pair by findBestKeyProfile.
+        root = autoDetectedRoot;
+        scale = autoDetectedScale;
+    } else if (!needsAutoKey && needsAutoScale) {
+        // Root pinned, mode free: pick the best-correlated mode for THAT
+        // root, not whatever mode happened to win for the (possibly
+        // different) free auto root.
+        root = std::clamp(keyChoice - 1, 0, 11);
+        scale = bestModeForFixedRoot(root) ? 2 : 3;
+    } else if (needsAutoKey && !needsAutoScale) {
+        // Mode pinned, root free: pick the best-correlated root for THAT
+        // mode. Harmonic/melodic minor share the natural-minor profile's
+        // root preference closely enough to use it here too - a dedicated
+        // profile for those variants isn't available and would be
+        // over-scoped for root selection alone.
+        const bool wantsMajor = scaleChoice == 2;
+        root = bestRootForFixedMode(wantsMajor);
+        scale = scaleChoice;
+    } else {
+        // Both pinned - fully manual, no auto involvement.
+        root = std::clamp(keyChoice - 1, 0, 11);
+        scale = scaleChoice;
+    }
     return maskForRootAndScale(root, scale);
 }
 

@@ -258,8 +258,13 @@ and `100%` requests roughly double the previous ceiling.
 ### Key And Scale Direction
 
 Current implementation: VX Tune exposes separate `Key` and `Scale` selectors.
-`Key` offers `Auto` plus C..B. `Scale` offers `Auto`, `Chromatic`, `Major`,
+`Key` offers `Auto`, C..B, and `Ignore`. `Scale` offers `Auto`, `Chromatic`, `Major`,
 `Natural Minor`, `Harmonic Minor`, and `Melodic Minor`.
+
+`Key: Ignore` is the explicit no-key mode. It forces the effective scale mask to
+Chromatic when selected, and also resets the Scale selector to Chromatic as a
+starting point. The Scale selector remains editable: choosing another scale
+uses the learned root while Key remains `Ignore`.
 
 Auto key/scale is section-based, not first-note based. It accumulates confident
 voiced pitch classes over time, scores major and natural-minor candidates, and

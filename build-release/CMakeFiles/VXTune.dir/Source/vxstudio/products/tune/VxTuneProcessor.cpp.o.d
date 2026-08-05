@@ -1595,6 +1595,7 @@ CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o: \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneTimeline.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneTargetEstimator.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneKeyProfiles.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/ThirdParty/signalsmith-stretch/include/signalsmith-stretch/signalsmith-stretch.h \

@@ -30,6 +30,11 @@ void PitchTraceView::setZoomSeconds(const float seconds) {
     repaint();
 }
 
+void PitchTraceView::setZoomCents(const float halfSpanCents) {
+    halfSpanCentsValue = juce::jlimit(50.0f, 1200.0f, halfSpanCents);
+    repaint();
+}
+
 juce::String PitchTraceView::noteNameForCents(const float cents) {
     static const char* names[12] = { "C", "C#", "D", "D#", "E", "F",
                                      "F#", "G", "G#", "A", "A#", "B" };
@@ -86,7 +91,7 @@ void PitchTraceView::paint(juce::Graphics& g) {
         g.drawText("listening for pitch...", getLocalBounds(), juce::Justification::centred);
         return;
     }
-    const float halfSpan = 350.0f;
+    const float halfSpan = halfSpanCentsValue;
     const float top = viewCentreCents + halfSpan;
     const float bottom = viewCentreCents - halfSpan;
 

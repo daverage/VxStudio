@@ -19,6 +19,7 @@ public:
 
     void pushSample(float detectedCents, float correctedCents, float confidence);
     void setZoomSeconds(float seconds);
+    void setZoomCents(float halfSpanCents);
 
     void paint(juce::Graphics&) override;
 
@@ -41,6 +42,7 @@ private:
     int writeIndex = 0;
     int count = 0;
     float zoomSecondsValue = 6.0f;
+    float halfSpanCentsValue = 350.0f;
 
     // Fixed-span window that follows the voice: melodies span octaves, and
     // fitting the whole visible range crushes cent-level detail to nothing.

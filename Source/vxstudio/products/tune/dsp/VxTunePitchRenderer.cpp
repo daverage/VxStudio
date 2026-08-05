@@ -1,5 +1,6 @@
 #include "VxTunePitchRenderer.h"
 
+#include <cassert>
 #include <cmath>
 
 namespace vxsuite::tune {
@@ -75,21 +76,20 @@ void SignalsmithPitchRenderer::process(const float* const* input, float* const* 
     if (usedChannels <= 0 || numSamples <= 0)
         return;
 
-    for (int ch = 0; ch < usedChannels; ++ch) {
-        auto& in = inputScratch[static_cast<size_t>(ch)];
-        auto& out = outputScratch[static_cast<size_t>(ch)];
-        if (static_cast<int>(in.size()) < numSamples)
-            in.assign(static_cast<size_t>(numSamples), 0.0f);
-        if (static_cast<int>(out.size()) < numSamples)
-            out.assign(static_cast<size_t>(numSamples), 0.0f);
-    }
+    // Scratch buffers are sized to PrepareSpec::maximumBlockSize in prepare().
+    // A host handing us a larger block than it negotiated would force an
+    // allocation here, on the audio thread - fail loudly in debug builds and
+    // clamp in release instead of silently growing.
+    assert(static_cast<int>(inputScratch[0].size()) >= numSamples
+        && static_cast<int>(outputScratch[0].size()) >= numSamples);
+    const int clampedSamples = std::min(numSamples, static_cast<int>(inputScratch[0].size()));
 
     constexpr int kControlChunk = 64;
     int offset = 0;
-    while (offset < numSamples) {
-        const int n = std::min(kControlChunk, numSamples - offset);
-        const float t = numSamples > 1
-            ? static_cast<float>(offset) / static_cast<float>(numSamples - 1)
+    while (offset < clampedSamples) {
+        const int n = std::min(kControlChunk, clampedSamples - offset);
+        const float t = clampedSamples > 1
+            ? static_cast<float>(offset) / static_cast<float>(clampedSamples - 1)
             : 1.0f;
         appliedCents = startCents + t * (endCents - startCents);
         stretch.setTransposeSemitones(appliedCents / 100.0f);
