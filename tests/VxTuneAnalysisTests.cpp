@@ -5,8 +5,7 @@
 #include "../Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h"
 #include "../Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h"
 #include "../Source/vxstudio/products/tune/dsp/VxTuneCorrectionEngine.h"
-#include "../Source/vxstudio/products/tune/dsp/VxTunePitchShifter.h"
-#include "../Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.h"
+#include "../Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,8 +22,8 @@ using vxsuite::tune::PerformanceDecomposition;
 using vxsuite::tune::PitchDetector;
 using vxsuite::tune::PitchFrame;
 using vxsuite::tune::PitchObservation;
-using vxsuite::tune::PitchShifter;
-using vxsuite::tune::PsolaShifter;
+using vxsuite::tune::VxTunePitchRenderer;
+using vxsuite::tune::createPitchRenderer;
 
 namespace {
 
@@ -231,394 +230,7 @@ void testNoteChangeSnap() {
           "centre within 20c of C4 from 150 ms after the note change");
 }
 
-// ---- PSOLA shifter tests (build spec F1) ----
-
-// Runs audio through detector-driven PSOLA at a fixed shift.
-std::vector<float> runPsola(const std::vector<float>& audio, const double sr,
-                            const float shiftCents, const int block = 512) {
-    PitchDetector detector;
-    detector.prepare(sr, PitchDetector::Config {});
-    PsolaShifter shifter;
-    shifter.prepare(sr, block, 1);
-    shifter.setShiftCents(shiftCents);
-
-    std::vector<float> out(audio);
-    PitchObservation obs[64];
-    for (size_t offset = 0; offset < audio.size();
-         offset += static_cast<size_t>(block)) {
-        const int n = static_cast<int>(std::min<size_t>(
-            static_cast<size_t>(block), audio.size() - offset));
-        const int produced = detector.process(audio.data() + offset, n, obs, 64);
-        for (int i = 0; i < produced; ++i) {
-            const auto& o = obs[i];
-            shifter.setPeriodHint(
-                o.f0Hz.value > 0.0f ? static_cast<float>(sr) / o.f0Hz.value : 0.0f,
-                o.f0Hz.confidence);
-        }
-        float* chans[1] = { out.data() + offset };
-        shifter.process(chans, 1, n);
-    }
-    return out;
-}
-
-// Envelope-weighted spectral centroid over a band, via direct DFT of a
-// steady 8192-sample window — harmonic-quantisation-robust formant probe.
-float bandCentroidHz(const std::vector<float>& audio, const double sr,
-                     const float fromHz, const float toHz) {
-    const int n = 8192;
-    const size_t start = audio.size() > static_cast<size_t>(n) + 48000
-        ? audio.size() - static_cast<size_t>(n) - 1000 : 0;
-    double num = 0.0, den = 0.0;
-    for (float hz = fromHz; hz <= toHz; hz += 12.0f) {
-        double re = 0.0, im = 0.0;
-        for (int i = 0; i < n; ++i) {
-            const double w = 0.5 * (1.0 - std::cos(2.0 * 3.14159265358979 * i / n));
-            const double ph = 2.0 * 3.14159265358979 * hz * i / sr;
-            const double v = w * audio[start + static_cast<size_t>(i)];
-            re += v * std::cos(ph);
-            im += v * std::sin(ph);
-        }
-        const double mag = std::sqrt(re * re + im * im);
-        num += mag * hz;
-        den += mag;
-    }
-    return den > 0.0 ? static_cast<float>(num / den) : 0.0f;
-}
-
-void testPsolaRatioAccuracy() {
-    std::printf("PSOLA ratio accuracy:\n");
-    const double sr = 48000.0;
-    const struct { float hz; int harmonics; float shift; } cases[] = {
-        { 220.0f, 1, 100.0f }, { 220.0f, 1, -50.0f },
-        { 196.0f, 10, 25.0f }, { 196.0f, 10, -100.0f },
-        { 110.0f, 6, 50.0f },
-    };
-    for (const auto& c : cases) {
-        const auto audio = renderTone(sr, 2.0f, 0.25f, c.harmonics,
-                                      [&](float) { return c.hz; });
-        const auto out = runPsola(audio, sr, c.shift);
-        const auto frames = settled(analyse(out, sr), 120);
-        const float got = frames.empty() ? -1.0e9f : medianDetectedCents(frames);
-        const float want = hzToCents(c.hz) + c.shift;
-        check(std::abs(got - want) < 5.0f,
-              std::to_string(c.hz) + " Hz shifted " + std::to_string(c.shift)
-                  + "c -> error " + std::to_string(got - want) + "c");
-    }
-}
-
-void testPsolaFormantPreservation() {
-    std::printf("PSOLA formant preservation (vowel-like, +100c):\n");
-    const double sr = 48000.0;
-    // 150 Hz voice with a fixed spectral-envelope peak near 1 kHz.
-    const int harmonics = 14;
-    std::vector<float> audio(static_cast<size_t>(sr * 2.5));
-    double phase = 0.0;
-    for (size_t i = 0; i < audio.size(); ++i) {
-        phase += 2.0 * 3.14159265358979 * 150.0 / sr;
-        float s = 0.0f;
-        for (int h = 1; h <= harmonics; ++h) {
-            const float hz = 150.0f * static_cast<float>(h);
-            const float envelope = std::exp(-0.5f * std::pow((hz - 1000.0f) / 350.0f, 2.0f))
-                                 + 0.05f;
-            s += envelope * std::sin(static_cast<float>(phase) * h);
-        }
-        audio[i] = 0.12f * s;
-    }
-
-    const float inCentroid = bandCentroidHz(audio, sr, 500.0f, 1700.0f);
-
-    const auto psolaOut = runPsola(audio, sr, 100.0f);
-    const float psolaCentroid = bandCentroidHz(psolaOut, sr, 500.0f, 1700.0f);
-    const float psolaShiftPct = 100.0f * (psolaCentroid / inCentroid - 1.0f);
-
-    // Contrast: the dual-tap resampling shifter moves the envelope by the
-    // full ratio (+5.9% at +100c).
-    std::vector<float> dualOut(audio);
-    {
-        PitchShifter dual;
-        dual.prepare(sr, 512);
-        dual.setShiftCents(100.0f);
-        for (size_t offset = 0; offset < dualOut.size(); offset += 512) {
-            const int n = static_cast<int>(std::min<size_t>(512, dualOut.size() - offset));
-            dual.process(dualOut.data() + offset, n);
-        }
-    }
-    const float dualCentroid = bandCentroidHz(dualOut, sr, 500.0f, 1700.0f);
-    const float dualShiftPct = 100.0f * (dualCentroid / inCentroid - 1.0f);
-
-    check(std::abs(psolaShiftPct) < 2.0f,
-          "PSOLA keeps the envelope (centroid moved "
-              + std::to_string(psolaShiftPct) + "%)");
-    check(dualShiftPct > 3.5f,
-          "dual-tap moves the envelope as expected (contrast: "
-              + std::to_string(dualShiftPct) + "%)");
-}
-
-void testPsolaParkAndUnvoiced() {
-    std::printf("PSOLA park transparency and unvoiced passthrough:\n");
-    const double sr = 48000.0;
-
-    {
-        const auto audio = renderTone(sr, 2.0f, 0.25f, 3, [](float) { return 220.0f; });
-        const auto out = runPsola(audio, sr, 0.0f);
-        const int d = 600;   // ceil(48000/80)
-        double num = 0.0, den = 0.0;
-        for (size_t i = 48000; i + d < audio.size(); ++i) {
-            const float delta = out[i + d] - audio[i];
-            num += delta * delta;
-            den += audio[i] * audio[i];
-        }
-        const float db = 10.0f * std::log10(static_cast<float>(num / std::max(den, 1e-12)));
-        check(db < -60.0f, "zero shift is a pure aligned delay ("
-                               + std::to_string(db) + " dB)");
-    }
-
-    {
-        std::mt19937 rng(77);
-        std::uniform_real_distribution<float> dist(-0.1f, 0.1f);
-        std::vector<float> noise(96000);
-        for (auto& s : noise)
-            s = dist(rng);
-        const auto out = runPsola(noise, sr, 100.0f);
-        const int d = 600;
-        double num = 0.0, den = 0.0;
-        for (size_t i = 24000; i + d < noise.size(); ++i) {
-            const float delta = out[i + d] - noise[i];
-            num += delta * delta;
-            den += noise[i] * noise[i];
-        }
-        const float db = 10.0f * std::log10(static_cast<float>(num / std::max(den, 1e-12)));
-        check(db < -60.0f, "unvoiced input passes through aligned ("
-                               + std::to_string(db) + " dB)");
-    }
-}
-
-void testPsolaDoesNotSmearVoiceIntoGaps() {
-    std::printf("PSOLA voiced-to-gap cleanup:\n");
-    const double sr = 48000.0;
-    const int n = static_cast<int>(sr * 1.4);
-    std::vector<float> audio(static_cast<size_t>(n), 0.0f);
-    double phase = 0.0;
-    for (int i = 0; i < n; ++i) {
-        const float t = static_cast<float>(i / sr);
-        phase += kTwoPi * 220.0 / sr;
-        const bool voiced = t < 0.50f || (t >= 0.82f && t < 1.25f);
-        if (voiced) {
-            float s = 0.0f;
-            for (int h = 1; h <= 3; ++h)
-                s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
-            audio[static_cast<size_t>(i)] = 0.25f * s;
-        }
-    }
-
-    const auto out = runPsola(audio, sr, 50.0f);
-    const int d = 600;
-    double gapSq = 0.0;
-    int gapSamples = 0;
-    for (int i = static_cast<int>(0.58 * sr); i < static_cast<int>(0.74 * sr); ++i) {
-        const float v = out[static_cast<size_t>(i + d)];
-        gapSq += v * v;
-        ++gapSamples;
-    }
-    const float gapRms = gapSamples > 0
-        ? static_cast<float>(std::sqrt(gapSq / gapSamples)) : 1.0f;
-    check(gapRms < 0.002f,
-          "voiced epochs do not smear into the silent gap (rms "
-              + std::to_string(gapRms) + ")");
-}
-
-void testPsolaTortureTransitions() {
-    std::printf("PSOLA transition torture (tones/silence/jump/glide):\n");
-    const double sr = 48000.0;
-    const int n = static_cast<int>(sr * 2.3);
-
-    // Phase-continuous multi-segment vocal stand-in with 10 ms fades so the
-    // input itself is click-free; every discontinuity in the output is ours.
-    const auto freqAt = [](const float t) {
-        if (t < 0.62f) return 220.0f;
-        if (t < 1.10f) return 261.63f;
-        if (t < 1.60f) return 180.0f + 40.0f * (t - 1.10f) / 0.5f;   // glide
-        return 220.0f;
-    };
-    const auto ampAt = [](const float t) {
-        const auto fade = [](const float x) {   // 10 ms raised-cosine edge
-            const float u = std::clamp(x / 0.010f, 0.0f, 1.0f);
-            return 0.5f - 0.5f * std::cos(3.14159265f * u);
-        };
-        float a = 0.0f;
-        if (t < 0.50f) a = fade(t) * fade(0.50f - t);
-        else if (t >= 0.62f && t < 1.60f) a = fade(t - 0.62f) * fade(1.60f - t);
-        else if (t >= 1.80f) a = fade(t - 1.80f) * fade(2.30f - t);
-        return 0.25f * a;
-    };
-    std::vector<float> audio(static_cast<size_t>(n));
-    double phase = 0.0;
-    for (int i = 0; i < n; ++i) {
-        const float t = static_cast<float>(i / sr);
-        phase += kTwoPi * freqAt(t) / sr;
-        float s = 0.0f;
-        for (int h = 1; h <= 3; ++h)
-            s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
-        audio[static_cast<size_t>(i)] = ampAt(t) * s;
-    }
-
-    float inPeak = 0.0f, inMaxDiff = 0.0f;
-    for (int i = 1; i < n; ++i) {
-        inPeak = std::max(inPeak, std::abs(audio[static_cast<size_t>(i)]));
-        inMaxDiff = std::max(inMaxDiff,
-            std::abs(audio[static_cast<size_t>(i)] - audio[static_cast<size_t>(i - 1)]));
-    }
-
-    const struct { float shift; int block; } runs[] = {
-        { 0.0f, 512 }, { 50.0f, 512 }, { 50.0f, 128 }, { -50.0f, 96 },
-    };
-    for (const auto& r : runs) {
-        const float shift = r.shift;
-        const auto out = runPsola(audio, sr, shift, r.block);
-        bool finite = true;
-        float outPeak = 0.0f, outMaxDiff = 0.0f;
-        for (size_t i = 1; i < out.size(); ++i) {
-            if (!std::isfinite(out[i]))
-                finite = false;
-            outPeak = std::max(outPeak, std::abs(out[i]));
-            outMaxDiff = std::max(outMaxDiff, std::abs(out[i] - out[i - 1]));
-        }
-        const std::string tag = "shift " + std::to_string(shift) + "c block "
-            + std::to_string(r.block) + ": ";
-        check(finite, tag + "output finite");
-        check(outPeak < 1.4f * inPeak,
-              tag + "no level blowup (peak x" + std::to_string(outPeak / inPeak) + ")");
-        check(outMaxDiff < 3.0f * inMaxDiff,
-              tag + "no clicks (max diff x" + std::to_string(outMaxDiff / inMaxDiff) + ")");
-
-        // Level sanity inside the second tone segment (0.75-1.05 s).
-        double inSq = 0.0, outSq = 0.0;
-        const int d = 600;
-        for (int i = static_cast<int>(0.75 * sr); i < static_cast<int>(1.05 * sr); ++i) {
-            inSq += audio[static_cast<size_t>(i)] * audio[static_cast<size_t>(i)];
-            outSq += out[static_cast<size_t>(i + d)] * out[static_cast<size_t>(i + d)];
-        }
-        const float rmsDb = 10.0f * std::log10(static_cast<float>(outSq / std::max(inSq, 1e-12)));
-        check(std::abs(rmsDb) < 3.5f,
-              tag + "held-note level within 3.5 dB (" + std::to_string(rmsDb) + " dB)");
-    }
-}
-
-// Vocal stand-in with the properties that break naive PSOLA on real voices:
-// cycle-level pitch jitter, amplitude shimmer, vibrato, and breath noise.
-std::vector<float> renderRealisticVoice(const double sr, const float seconds,
-                                        const float baseHz, const unsigned seed) {
-    std::mt19937 rng(seed);
-    std::normal_distribution<float> gauss(0.0f, 1.0f);
-    const int n = static_cast<int>(sr * seconds);
-    std::vector<float> out(static_cast<size_t>(n));
-    double phase = 0.0;
-    float jitterCents = 0.0f, shimmerDb = 0.0f, breathLp = 0.0f;
-    for (int i = 0; i < n; ++i) {
-        const float t = static_cast<float>(i / sr);
-        jitterCents = 0.999f * jitterCents + 0.06f * gauss(rng);
-        jitterCents = std::clamp(jitterCents, -10.0f, 10.0f);
-        const float cents = jitterCents + 20.0f * std::sin(kTwoPi * 4.5f * t);
-        phase += kTwoPi * baseHz * std::exp2(cents / 1200.0f) / sr;
-        shimmerDb = 0.9995f * shimmerDb + 0.01f * gauss(rng);
-        shimmerDb = std::clamp(shimmerDb, -1.5f, 1.5f);
-        float s = 0.0f;
-        for (int h = 1; h <= 3; ++h)
-            s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
-        breathLp += 0.05f * (0.5f * gauss(rng) - breathLp);
-        out[static_cast<size_t>(i)] =
-            0.22f * s * std::pow(10.0f, shimmerDb / 20.0f) + 0.004f * breathLp;
-    }
-    return out;
-}
-
-// Bubble metric: modulation depth of the 10 ms RMS envelope. Grain-schedule
-// irregularities read as envelope modulation at 5-50 Hz.
-float envelopeModulationIndex(const std::vector<float>& x, const double sr,
-                              const float fromSec, const float toSec) {
-    const int win = static_cast<int>(0.010 * sr);
-    std::vector<float> rms;
-    for (int start = static_cast<int>(fromSec * sr);
-         start + win < static_cast<int>(toSec * sr)
-             && start + win < static_cast<int>(x.size()); start += win) {
-        double sq = 0.0;
-        for (int i = 0; i < win; ++i)
-            sq += x[static_cast<size_t>(start + i)] * x[static_cast<size_t>(start + i)];
-        rms.push_back(static_cast<float>(std::sqrt(sq / win)));
-    }
-    if (rms.size() < 8)
-        return 0.0f;
-    double mean = 0.0;
-    for (const float v : rms)
-        mean += v;
-    mean /= static_cast<double>(rms.size());
-    double var = 0.0;
-    for (const float v : rms)
-        var += (v - mean) * (v - mean);
-    return mean > 1.0e-9
-        ? static_cast<float>(std::sqrt(var / rms.size()) / mean) : 0.0f;
-}
-
-// High-harmonic preservation on a formant-rich voice, at 157 Hz (the
-// fundamental measured on the user-reported "bubbles" vocal). A fixed 900 Hz
-// epoch-search low-pass still passes ~6 harmonics at this pitch, so a
-// vowel's formant structure gives the peak search multiple similar-height
-// candidates per period; picking a different one cycle-to-cycle is a small
-// epoch position error that is a large phase error at high harmonics on
-// overlap-add. Regression guard for that mechanism (build spec F4 round 4).
-void testPsolaHighHarmonicPreservation() {
-    std::printf("PSOLA high-harmonic preservation (157 Hz formant-rich voice):\n");
-    const double sr = 44100.0;
-    const float f0 = 157.0f;
-    const int harmonics = 18;
-    std::vector<float> audio(static_cast<size_t>(sr * 1.0));
-    double phase = 0.0;
-    for (size_t i = 0; i < audio.size(); ++i) {
-        phase += kTwoPi * f0 / sr;
-        float s = 0.0f;
-        for (int h = 1; h <= harmonics; ++h) {
-            const float hz = f0 * static_cast<float>(h);
-            // Two formant bumps (roughly /a/-ish) so a single period has
-            // more than one locally-strong lobe, like a real vowel.
-            const float env = std::exp(-0.5f * std::pow((hz - 800.0f) / 300.0f, 2.0f))
-                            + 0.7f * std::exp(-0.5f * std::pow((hz - 1900.0f) / 400.0f, 2.0f))
-                            + 0.05f;
-            s += env * std::sin(static_cast<float>(phase) * h);
-        }
-        audio[i] = 0.15f * s;
-    }
-
-    const auto out = runPsola(audio, sr, 40.0f);   // realistic correction-sized shift
-
-    const auto spectrumPeak = [&](const std::vector<float>& x, const float hz) {
-        const int n = 4096;
-        const size_t start = x.size() > static_cast<size_t>(n) + 4000
-            ? x.size() - static_cast<size_t>(n) - 2000 : 0;
-        double re = 0.0, im = 0.0;
-        for (int i = 0; i < n; ++i) {
-            const double w = 0.5 * (1.0 - std::cos(kTwoPi * i / n));
-            const double v = w * x[start + static_cast<size_t>(i)];
-            re += v * std::cos(kTwoPi * hz * i / sr);
-            im += v * std::sin(kTwoPi * hz * i / sr);
-        }
-        return std::sqrt(re * re + im * im);
-    };
-
-    const float ratio = std::exp2(40.0f / 1200.0f);   // matches the shift above
-    float worstLossDb = 0.0f;
-    for (int h = 8; h <= 16; ++h) {
-        const float hz = f0 * static_cast<float>(h);
-        const float dryMag = spectrumPeak(audio, hz);
-        const float wetMag = spectrumPeak(out, hz * ratio);   // harmonics moved with the shift
-        const float lossDb = 20.0f * std::log10((wetMag + 1e-9f) / (dryMag + 1e-9f));
-        worstLossDb = std::min(worstLossDb, lossDb);
-    }
-    check(worstLossDb > -2.0f,
-          "harmonics 8-16 lose <2 dB from grain phase error (worst "
-              + std::to_string(worstLossDb) + " dB)");
-}
-
-// ---- Correction-path tests: detector -> decomposition -> engine -> shifter,
+// ---- Correction-path tests: detector -> decomposition -> engine -> renderer,
 // with the output pitch measured by a second, independent detector pass.
 
 struct CorrectionRun {
@@ -638,33 +250,40 @@ CorrectionRun runCorrectionChain(const std::vector<float>& audio, const double s
     decomposition.prepare(sr / detector.hopSamples(), PerformanceDecomposition::Config {});
     CorrectionEngine engine;
     engine.prepare(sr / detector.hopSamples(), CorrectionEngine::Config {});
-    PsolaShifter shifter;
-    shifter.prepare(sr, 512, 1);
+    auto renderer = createPitchRenderer(VxTunePitchRenderer::Backend::Signalsmith);
+    renderer->prepare(VxTunePitchRenderer::PrepareSpec { sr, 512, 1 });
 
     CorrectionRun run;
-    run.output = audio;
-    run.latencySamples = shifter.latencySamples();
+    run.output.assign(audio.size(), 0.0f);
+    run.latencySamples = renderer->latencySamples();
 
     PitchObservation obs[64];
     float previousCorrection = 0.0f;
+    float blockStartCents = 0.0f;
+    float blockEndCents = 0.0f;
     const int block = 512;
     for (size_t offset = 0; offset < audio.size(); offset += block) {
         const int n = static_cast<int>(std::min<size_t>(block, audio.size() - offset));
         const int produced = detector.process(audio.data() + offset, n, obs, 64);
         for (int i = 0; i < produced; ++i) {
-            const auto& o = obs[i];
-            shifter.setPeriodHint(
-                o.f0Hz.value > 0.0f ? static_cast<float>(sr) / o.f0Hz.value : 0.0f,
-                o.f0Hz.confidence);
-            const float c = engine.process(decomposition.process(o), amount, natural, scaleMask);
+            const auto frame = decomposition.process(obs[i]);
+            const float c = engine.process(frame, amount, natural, scaleMask);
+            renderer->setFrameInfo(VxTunePitchRenderer::FrameInfo {
+                c,
+                frame.f0Hz.value,
+                frame.f0Hz.confidence,
+                frame.f0Hz.value > 0.0f,
+            });
             run.maxCorrectionStepCents =
                 std::max(run.maxCorrectionStepCents, std::abs(c - previousCorrection));
             run.maxAbsCorrectionCents = std::max(run.maxAbsCorrectionCents, std::abs(c));
             previousCorrection = c;
+            blockEndCents = c;
         }
-        shifter.setShiftCents(engine.currentCorrectionCents());
-        float* chans[1] = { run.output.data() + offset };
-        shifter.process(chans, 1, n);
+        const float* inChans[1] = { audio.data() + offset };
+        float* outChans[1] = { run.output.data() + offset };
+        renderer->process(inChans, outChans, 1, n, blockStartCents, blockEndCents);
+        blockStartCents = blockEndCents;
     }
     return run;
 }
@@ -687,15 +306,15 @@ void testCorrectsSharpNote() {
     check(std::abs(inputCents - 30.0f) < 3.0f,
           "input measures +30c sharp (got " + std::to_string(inputCents) + "c)");
 
-    const auto full = runCorrectionChain(audio, sr, 1.0f, 0.5f);
+    const auto full = runCorrectionChain(audio, sr, 0.5f, 0.5f);
     const float fullCents = medianCentsAfter(full.output, sr, 0.8f) - hzToCents(220.0f);
     check(std::abs(fullCents) < 8.0f,
-          "amount=1 output within 8c of A3 (got " + std::to_string(fullCents) + "c)");
+          "amount=0.5 output within 8c of A3 (got " + std::to_string(fullCents) + "c)");
 
-    const auto half = runCorrectionChain(audio, sr, 0.5f, 0.5f);
+    const auto half = runCorrectionChain(audio, sr, 0.25f, 0.5f);
     const float halfCents = medianCentsAfter(half.output, sr, 0.8f) - hzToCents(220.0f);
     check(std::abs(halfCents - 15.0f) < 6.0f,
-          "amount=0.5 removes about half the error (got " + std::to_string(halfCents) + "c)");
+          "amount=0.25 removes about half the error (got " + std::to_string(halfCents) + "c)");
 
     const auto off = runCorrectionChain(audio, sr, 0.0f, 0.5f);
     const float offCents = medianCentsAfter(off.output, sr, 0.8f) - hzToCents(220.0f);
@@ -814,36 +433,59 @@ void testDoesNotTouchInTune() {
               + std::to_string(deltaDb) + " dB)");
 }
 
-void testPsolaRealisticVoiceStability() {
-    std::printf("PSOLA realistic-voice stability (jitter/shimmer/vibrato/breath):\n");
-    const double sr = 48000.0;
+PitchFrame syntheticFrame(const float hz, const float offsetCents,
+                          const float confidence,
+                          const EstimateReason reason = EstimateReason::nominal) {
+    PitchFrame frame;
+    frame.f0Hz.value = hz * std::exp2(offsetCents / 1200.0f);
+    frame.f0Hz.confidence = confidence;
+    frame.f0Hz.reason = reason;
+    frame.f0Hz.stability = reason == EstimateReason::nominal ? 1.0f : 0.3f;
+    frame.voicedProb = confidence;
+    frame.centreHz = frame.f0Hz.value;
+    frame.centreCents = hzToCents(frame.centreHz);
+    frame.decompConfidence = confidence;
+    frame.levelDb = -18.0f;
+    return frame;
+}
 
-    // Shifted render must not add significant envelope modulation (bubble).
-    {
-        const auto voice = renderRealisticVoice(sr, 3.0f, 220.0f, 42);
-        const float inMod = envelopeModulationIndex(voice, sr, 1.0f, 2.8f);
-        const auto out = runPsola(voice, sr, 30.0f);
-        const float outMod = envelopeModulationIndex(out, sr, 1.0f, 2.8f);
-        check(outMod < inMod * 1.4f + 0.02f,
-              "shifted render adds no bubble (in " + std::to_string(inMod)
-                  + ", out " + std::to_string(outMod) + ")");
+float runDirectEngine(const float offsetCents, const float confidence,
+                      const EstimateReason reason, const int frames,
+                      const float natural = 0.5f) {
+    constexpr double frameRate = 48000.0 / 256.0;
+    CorrectionEngine engine;
+    engine.prepare(frameRate, CorrectionEngine::Config {});
+    float correction = 0.0f;
+    for (int i = 0; i < frames; ++i) {
+        auto frame = syntheticFrame(220.0f, offsetCents, confidence, reason);
+        frame.timeSamples = static_cast<std::int64_t>(i * 256);
+        correction = engine.process(frame, 1.0f, natural);
     }
+    return correction;
+}
 
-    // Full correction chain on a sharp realistic voice: same bound, plus the
-    // correction itself must still land.
-    {
-        const float sharpHz = 220.0f * std::exp2(30.0f / 1200.0f);
-        const auto voice = renderRealisticVoice(sr, 3.0f, sharpHz, 7);
-        const float inMod = envelopeModulationIndex(voice, sr, 1.0f, 2.8f);
-        const auto run = runCorrectionChain(voice, sr, 1.0f, 0.5f);
-        const float outMod = envelopeModulationIndex(run.output, sr, 1.0f, 2.8f);
-        check(outMod < inMod * 1.4f + 0.02f,
-              "corrected render adds no bubble (in " + std::to_string(inMod)
-                  + ", out " + std::to_string(outMod) + ")");
-        const float outCents = medianCentsAfter(run.output, sr, 1.0f) - hzToCents(220.0f);
-        check(std::abs(outCents) < 12.0f,
-              "correction still lands near A3 (got " + std::to_string(outCents) + "c)");
-    }
+void testMusicalAuthorityProtectsUnstableFrames() {
+    std::printf("Musical authority backs off uncertain/onset frames:\n");
+
+    const float settled = std::abs(runDirectEngine(35.0f, 0.95f,
+                                                   EstimateReason::nominal, 140));
+    check(settled > 24.0f,
+          "confident held note still earns strong correction (got "
+              + std::to_string(settled) + "c)");
+
+    const float onset = std::abs(runDirectEngine(35.0f, 0.95f,
+                                                 EstimateReason::onsetTransient, 24));
+    check(onset < settled * 0.45f,
+          "onset transient is protected from hard correction (onset "
+              + std::to_string(onset) + "c vs settled "
+              + std::to_string(settled) + "c)");
+
+    const float lowConfidence = std::abs(runDirectEngine(35.0f, 0.45f,
+                                                        EstimateReason::sparseEvidence, 140));
+    check(lowConfidence < settled * 0.65f,
+          "low-confidence frames receive less correction authority (low-confidence "
+              + std::to_string(lowConfidence) + "c vs settled "
+              + std::to_string(settled) + "c)");
 }
 
 // Runs detector -> decomposition -> engine on `audio` and returns the
@@ -961,14 +603,14 @@ void testScaleAwareTargets() {
                                   [inputHz](float) { return inputHz; });
 
     // Chromatic: nearest note is F#4 (-45c away) -> pulled UP to F#4 (-300c).
-    const auto chromatic = runCorrectionChain(audio, sr, 1.0f, 0.5f);
+    const auto chromatic = runCorrectionChain(audio, sr, 0.5f, 0.5f);
     const float chromaticCents = medianCentsAfter(chromatic.output, sr, 0.8f);
     check(std::abs(chromaticCents - (-300.0f)) < 8.0f,
           "chromatic pulls to F#4 (got " + std::to_string(chromaticCents) + "c)");
 
     // C Major (no F#): nearest allowed note is F4 -> pulled DOWN to F4 (-400c).
     constexpr std::uint16_t cMajor = 0x0AB5;   // C D E F G A B
-    const auto scaled = runCorrectionChain(audio, sr, 1.0f, 0.5f, cMajor);
+    const auto scaled = runCorrectionChain(audio, sr, 0.5f, 0.5f, cMajor);
     const float scaledCents = medianCentsAfter(scaled.output, sr, 0.8f);
     check(std::abs(scaledCents - (-400.0f)) < 8.0f,
           "C Major pulls to F4 (got " + std::to_string(scaledCents) + "c)");
@@ -981,7 +623,7 @@ void testVibratoSurvivesCorrection() {
         const float cents = 30.0f + 50.0f * std::sin(kTwoPi * 5.5f * t);
         return 220.0f * std::exp2(cents / 1200.0f);
     });
-    const auto run = runCorrectionChain(audio, sr, 1.0f, 0.5f);
+    const auto run = runCorrectionChain(audio, sr, 0.5f, 0.5f);
 
     const auto inFrames = settled(analyse(audio, sr), 150);
     const auto outFrames = settled(analyse(run.output, sr), 150);
@@ -1037,18 +679,11 @@ int main() {
     testVibrato();
     testNoteChangeSnap();
 
-    testPsolaRatioAccuracy();
-    testPsolaFormantPreservation();
-    testPsolaParkAndUnvoiced();
-    testPsolaDoesNotSmearVoiceIntoGaps();
-    testPsolaTortureTransitions();
-    testPsolaRealisticVoiceStability();
-    testPsolaHighHarmonicPreservation();
-
     testCorrectsSharpNote();
     testIgnoresBriefFastLeap();
     testDivergenceGuardStopsChasingAGlide();
     testDoesNotTouchInTune();
+    testMusicalAuthorityProtectsUnstableFrames();
     testBehaviourDistribution();
     testScaleAwareTargets();
     testVibratoSurvivesCorrection();

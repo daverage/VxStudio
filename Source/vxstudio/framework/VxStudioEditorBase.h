@@ -42,6 +42,7 @@ private:
     void updateLearnUi();
     void updateModelDownloadUi();
     void updateAuxSelectorUi();
+    void applyUiPreset(int presetIndex);
     void updateExpertUi();
     bool lastExtrasAllowed = true;
     void applyTextFit();
@@ -55,6 +56,8 @@ private:
     juce::Label productLabel;
     juce::Label modeLabel;
     juce::Label auxSelectorLabel;
+    juce::Label auxSelector2Label;
+    juce::Label presetSelectorLabel;
     juce::Label statusLabel;
     juce::Label learnMeterLabel;
     juce::Label modelDownloadLabel;
@@ -64,6 +67,8 @@ private:
     juce::ComboBox traceZoomBox;
     juce::ComboBox modeBox;
     juce::ComboBox auxSelectorBox;
+    juce::ComboBox auxSelector2Box;
+    juce::ComboBox presetSelectorBox;
     juce::ToggleButton expertButton;
     HelpButton helpButton;
     juce::TextButton modelButton;
@@ -91,6 +96,7 @@ private:
     std::array<std::unique_ptr<SliderAttachment>, ProductIdentity::maxControlBankControls> bankAttachments;
     std::unique_ptr<ComboAttachment> modeAttachment;
     std::unique_ptr<ComboAttachment> auxSelectorAttachment;
+    std::unique_ptr<ComboAttachment> auxSelector2Attachment;
     std::unique_ptr<ButtonAttachment> expertAttachment;
     std::unique_ptr<ButtonAttachment> listenAttachment;
     std::unique_ptr<ButtonAttachment> learnAttachment;

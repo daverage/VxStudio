@@ -1499,6 +1499,19 @@ VxTuneAnalysisTests/fast:
 .PHONY : VxTuneAnalysisTests/fast
 
 #=============================================================================
+# Target rules for targets named VxTuneRendererTests
+
+# Build rule for target.
+VxTuneRendererTests: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VxTuneRendererTests
+.PHONY : VxTuneRendererTests
+
+# fast build rule for target.
+VxTuneRendererTests/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/build
+.PHONY : VxTuneRendererTests/fast
+
+#=============================================================================
 # Target rules for targets named VxTunePluginTests
 
 # Build rule for target.
@@ -1510,6 +1523,32 @@ VxTunePluginTests: cmake_check_build_system
 VxTunePluginTests/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/build
 .PHONY : VxTunePluginTests/fast
+
+#=============================================================================
+# Target rules for targets named VxTuneBatchHarness
+
+# Build rule for target.
+VxTuneBatchHarness: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VxTuneBatchHarness
+.PHONY : VxTuneBatchHarness
+
+# fast build rule for target.
+VxTuneBatchHarness/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/build
+.PHONY : VxTuneBatchHarness/fast
+
+#=============================================================================
+# Target rules for targets named VxTuneCompareReference
+
+# Build rule for target.
+VxTuneCompareReference: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VxTuneCompareReference
+.PHONY : VxTuneCompareReference
+
+# fast build rule for target.
+VxTuneCompareReference/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/build
+.PHONY : VxTuneCompareReference/fast
 
 #=============================================================================
 # Target rules for targets named VXDeverbTests
@@ -1703,6 +1742,8 @@ JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
@@ -1740,6 +1781,8 @@ JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i
@@ -1777,6 +1820,8 @@ JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s
@@ -1813,6 +1858,8 @@ JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
@@ -1848,6 +1895,8 @@ JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i
@@ -1883,6 +1932,8 @@ JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.s
@@ -2747,6 +2798,8 @@ JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
@@ -2784,6 +2837,8 @@ JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i
@@ -2821,6 +2876,8 @@ JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.s
@@ -2858,6 +2915,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
@@ -2895,6 +2954,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i
@@ -2932,6 +2993,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.s
@@ -2969,6 +3032,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.c
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
@@ -3006,6 +3071,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.c
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i
@@ -3043,6 +3110,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.c
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.s
@@ -3080,6 +3149,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_l
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
@@ -3117,6 +3188,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_l
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i
@@ -3154,6 +3227,8 @@ JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_l
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.s
@@ -3191,6 +3266,8 @@ JUCE/modules/juce_core/juce_core.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_core/juce_core.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_core/juce_core.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_core/juce_core.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_core/juce_core.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_core/juce_core.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_core/juce_core.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_core/juce_core.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_core/juce_core.mm.o
@@ -3228,6 +3305,8 @@ JUCE/modules/juce_core/juce_core.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_core/juce_core.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_core/juce_core.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_core/juce_core.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_core/juce_core.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_core/juce_core.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_core/juce_core.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_core/juce_core.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_core/juce_core.mm.i
@@ -3265,6 +3344,8 @@ JUCE/modules/juce_core/juce_core.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_core/juce_core.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_core/juce_core.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_core/juce_core.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_core/juce_core.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_core/juce_core.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_core/juce_core.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_core/juce_core.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_core/juce_core.mm.s
@@ -3302,6 +3383,8 @@ JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
@@ -3339,6 +3422,8 @@ JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i
@@ -3376,6 +3461,8 @@ JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s
@@ -3413,6 +3500,8 @@ JUCE/modules/juce_data_structures/juce_data_structures.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
@@ -3450,6 +3539,8 @@ JUCE/modules/juce_data_structures/juce_data_structures.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i
@@ -3487,6 +3578,8 @@ JUCE/modules/juce_data_structures/juce_data_structures.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.s
@@ -3523,6 +3616,7 @@ JUCE/modules/juce_dsp/juce_dsp.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
@@ -3558,6 +3652,7 @@ JUCE/modules/juce_dsp/juce_dsp.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i
@@ -3593,6 +3688,7 @@ JUCE/modules/juce_dsp/juce_dsp.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s
@@ -3629,6 +3725,8 @@ JUCE/modules/juce_events/juce_events.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_events/juce_events.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_events/juce_events.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_events/juce_events.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_events/juce_events.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_events/juce_events.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_events/juce_events.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_events/juce_events.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_events/juce_events.mm.o
@@ -3666,6 +3764,8 @@ JUCE/modules/juce_events/juce_events.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_events/juce_events.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_events/juce_events.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_events/juce_events.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_events/juce_events.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_events/juce_events.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_events/juce_events.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_events/juce_events.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_events/juce_events.mm.i
@@ -3703,6 +3803,8 @@ JUCE/modules/juce_events/juce_events.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_events/juce_events.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_events/juce_events.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_events/juce_events.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_events/juce_events.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_events/juce_events.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_events/juce_events.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_events/juce_events.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_events/juce_events.mm.s
@@ -3740,6 +3842,8 @@ JUCE/modules/juce_graphics/juce_graphics.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
@@ -3777,6 +3881,8 @@ JUCE/modules/juce_graphics/juce_graphics.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i
@@ -3814,6 +3920,8 @@ JUCE/modules/juce_graphics/juce_graphics.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s
@@ -3851,6 +3959,8 @@ JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
@@ -3888,6 +3998,8 @@ JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i
@@ -3925,6 +4037,8 @@ JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s
@@ -3962,6 +4076,8 @@ JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
@@ -3999,6 +4115,8 @@ JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i
@@ -4036,6 +4154,8 @@ JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s
@@ -4073,6 +4193,8 @@ JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
@@ -4110,6 +4232,8 @@ JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i
@@ -4147,6 +4271,8 @@ JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s
@@ -4184,6 +4310,8 @@ JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
@@ -4221,6 +4349,8 @@ JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i
@@ -4258,6 +4388,8 @@ JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioAnalyser.dir/build.make CMakeFiles/VXStudioAnalyser.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbTests.dir/build.make CMakeFiles/VXDeverbTests.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverbMeasure.dir/build.make CMakeFiles/VXDeverbMeasure.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXLevelerMeasure.dir/build.make CMakeFiles/VXLevelerMeasure.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
@@ -6199,6 +6331,7 @@ Source/vxstudio/products/tune/VxTuneProcessor.o: Source/vxstudio/products/tune/V
 Source/vxstudio/products/tune/VxTuneProcessor.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 .PHONY : Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
@@ -6210,6 +6343,7 @@ Source/vxstudio/products/tune/VxTuneProcessor.i: Source/vxstudio/products/tune/V
 Source/vxstudio/products/tune/VxTuneProcessor.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
 .PHONY : Source/vxstudio/products/tune/VxTuneProcessor.cpp.i
@@ -6221,6 +6355,7 @@ Source/vxstudio/products/tune/VxTuneProcessor.s: Source/vxstudio/products/tune/V
 Source/vxstudio/products/tune/VxTuneProcessor.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
 .PHONY : Source/vxstudio/products/tune/VxTuneProcessor.cpp.s
@@ -6233,6 +6368,8 @@ Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
 .PHONY : Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
@@ -6245,6 +6382,8 @@ Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
 .PHONY : Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.i
@@ -6257,6 +6396,8 @@ Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 .PHONY : Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
@@ -6268,7 +6409,10 @@ Source/vxstudio/products/tune/dsp/VxTunePitchDetector.o: Source/vxstudio/product
 Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
@@ -6280,7 +6424,10 @@ Source/vxstudio/products/tune/dsp/VxTunePitchDetector.i: Source/vxstudio/product
 Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.i
@@ -6292,82 +6439,55 @@ Source/vxstudio/products/tune/dsp/VxTunePitchDetector.s: Source/vxstudio/product
 Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 .PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.s
 
-Source/vxstudio/products/tune/dsp/VxTunePitchShifter.o: Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.o
+Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.o: Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.o
 
 # target to build an object file
-Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
+Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
+.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
 
-Source/vxstudio/products/tune/dsp/VxTunePitchShifter.i: Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.i
-
-# target to preprocess a source file
-Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
-
-Source/vxstudio/products/tune/dsp/VxTunePitchShifter.s: Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.s
-
-# target to generate assembly for a file
-Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-
-Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.o: Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.o
-
-# target to build an object file
-Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
-
-Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.i: Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.i
+Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.i: Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.i
 
 # target to preprocess a source file
-Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
+Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
+.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
 
-Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.s: Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.s
+Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.s: Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.s
 
 # target to generate assembly for a file
-Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
-.PHONY : Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
+Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTune.dir/build.make CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneAnalysisTests.dir/build.make CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
+.PHONY : Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
 
 ThirdParty/rnnoise/src/celt_lpc.o: ThirdParty/rnnoise/src/celt_lpc.c.o
 .PHONY : ThirdParty/rnnoise/src/celt_lpc.o
@@ -6945,6 +7065,78 @@ tests/VxTunePluginTests.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTunePluginTests.dir/build.make CMakeFiles/VxTunePluginTests.dir/tests/VxTunePluginTests.cpp.s
 .PHONY : tests/VxTunePluginTests.cpp.s
 
+tests/VxTuneRendererTests.o: tests/VxTuneRendererTests.cpp.o
+.PHONY : tests/VxTuneRendererTests.o
+
+# target to build an object file
+tests/VxTuneRendererTests.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/tests/VxTuneRendererTests.cpp.o
+.PHONY : tests/VxTuneRendererTests.cpp.o
+
+tests/VxTuneRendererTests.i: tests/VxTuneRendererTests.cpp.i
+.PHONY : tests/VxTuneRendererTests.i
+
+# target to preprocess a source file
+tests/VxTuneRendererTests.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/tests/VxTuneRendererTests.cpp.i
+.PHONY : tests/VxTuneRendererTests.cpp.i
+
+tests/VxTuneRendererTests.s: tests/VxTuneRendererTests.cpp.s
+.PHONY : tests/VxTuneRendererTests.s
+
+# target to generate assembly for a file
+tests/VxTuneRendererTests.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneRendererTests.dir/build.make CMakeFiles/VxTuneRendererTests.dir/tests/VxTuneRendererTests.cpp.s
+.PHONY : tests/VxTuneRendererTests.cpp.s
+
+tools/VxTuneBatchHarness.o: tools/VxTuneBatchHarness.cpp.o
+.PHONY : tools/VxTuneBatchHarness.o
+
+# target to build an object file
+tools/VxTuneBatchHarness.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/tools/VxTuneBatchHarness.cpp.o
+.PHONY : tools/VxTuneBatchHarness.cpp.o
+
+tools/VxTuneBatchHarness.i: tools/VxTuneBatchHarness.cpp.i
+.PHONY : tools/VxTuneBatchHarness.i
+
+# target to preprocess a source file
+tools/VxTuneBatchHarness.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/tools/VxTuneBatchHarness.cpp.i
+.PHONY : tools/VxTuneBatchHarness.cpp.i
+
+tools/VxTuneBatchHarness.s: tools/VxTuneBatchHarness.cpp.s
+.PHONY : tools/VxTuneBatchHarness.s
+
+# target to generate assembly for a file
+tools/VxTuneBatchHarness.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneBatchHarness.dir/build.make CMakeFiles/VxTuneBatchHarness.dir/tools/VxTuneBatchHarness.cpp.s
+.PHONY : tools/VxTuneBatchHarness.cpp.s
+
+tools/VxTuneCompareReference.o: tools/VxTuneCompareReference.cpp.o
+.PHONY : tools/VxTuneCompareReference.o
+
+# target to build an object file
+tools/VxTuneCompareReference.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/tools/VxTuneCompareReference.cpp.o
+.PHONY : tools/VxTuneCompareReference.cpp.o
+
+tools/VxTuneCompareReference.i: tools/VxTuneCompareReference.cpp.i
+.PHONY : tools/VxTuneCompareReference.i
+
+# target to preprocess a source file
+tools/VxTuneCompareReference.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/tools/VxTuneCompareReference.cpp.i
+.PHONY : tools/VxTuneCompareReference.cpp.i
+
+tools/VxTuneCompareReference.s: tools/VxTuneCompareReference.cpp.s
+.PHONY : tools/VxTuneCompareReference.s
+
+# target to generate assembly for a file
+tools/VxTuneCompareReference.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxTuneCompareReference.dir/build.make CMakeFiles/VxTuneCompareReference.dir/tools/VxTuneCompareReference.cpp.s
+.PHONY : tools/VxTuneCompareReference.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -7073,7 +7265,10 @@ help:
 	@echo "... VxStudioTestHost"
 	@echo "... VxStudioVoiceAnalysisTests"
 	@echo "... VxTuneAnalysisTests"
+	@echo "... VxTuneBatchHarness"
+	@echo "... VxTuneCompareReference"
 	@echo "... VxTunePluginTests"
+	@echo "... VxTuneRendererTests"
 	@echo "... JUCE/modules/juce_audio_basics/juce_audio_basics.o"
 	@echo "... JUCE/modules/juce_audio_basics/juce_audio_basics.i"
 	@echo "... JUCE/modules/juce_audio_basics/juce_audio_basics.s"
@@ -7347,12 +7542,9 @@ help:
 	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchDetector.o"
 	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchDetector.i"
 	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchDetector.s"
-	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchShifter.o"
-	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchShifter.i"
-	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchShifter.s"
-	@echo "... Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.o"
-	@echo "... Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.i"
-	@echo "... Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.s"
+	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.o"
+	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.i"
+	@echo "... Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.s"
 	@echo "... ThirdParty/rnnoise/src/celt_lpc.o"
 	@echo "... ThirdParty/rnnoise/src/celt_lpc.i"
 	@echo "... ThirdParty/rnnoise/src/celt_lpc.s"
@@ -7425,6 +7617,15 @@ help:
 	@echo "... tests/VxTunePluginTests.o"
 	@echo "... tests/VxTunePluginTests.i"
 	@echo "... tests/VxTunePluginTests.s"
+	@echo "... tests/VxTuneRendererTests.o"
+	@echo "... tests/VxTuneRendererTests.i"
+	@echo "... tests/VxTuneRendererTests.s"
+	@echo "... tools/VxTuneBatchHarness.o"
+	@echo "... tools/VxTuneBatchHarness.i"
+	@echo "... tools/VxTuneBatchHarness.s"
+	@echo "... tools/VxTuneCompareReference.o"
+	@echo "... tools/VxTuneCompareReference.i"
+	@echo "... tools/VxTuneCompareReference.s"
 .PHONY : help
 
 

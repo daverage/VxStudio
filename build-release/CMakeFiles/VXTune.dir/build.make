@@ -118,38 +118,24 @@ CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: CMakeFiles/VXTune.dir/flags.make
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o -MF CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o.d -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o: CMakeFiles/VXTune.dir/flags.make
+CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o -MF CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o.d -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp > CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
+CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp > CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
 
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: CMakeFiles/VXTune.dir/flags.make
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o -MF CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o.d -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
-
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp > CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-
-CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
+CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp -o CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors/juce_audio_processors.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors/juce_audio_processors.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i: cmake_force
@@ -163,7 +149,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.m
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i: cmake_force
@@ -177,7 +163,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s: cmake_for
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i: cmake_force
@@ -191,7 +177,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.s: cmake_f
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i: cmake_force
@@ -205,7 +191,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.s: c
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building C object CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building C object CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i: cmake_force
@@ -219,7 +205,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.s: cm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i: cmake_force
@@ -233,7 +219,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s: cmake_force
 CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_events/juce_events.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_events/juce_events.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.i: cmake_force
@@ -247,7 +233,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_events/juce_events.mm.s: cmake_force
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core_CompilationTime.cpp
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core_CompilationTime.cpp
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i: cmake_force
@@ -261,7 +247,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.s: cm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.i: cmake_force
@@ -275,7 +261,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_core/juce_core.mm.s: cmake_force
 CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_data_structures/juce_data_structures.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_data_structures/juce_data_structures.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i: cmake_force
@@ -289,7 +275,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i: cmake_force
@@ -303,7 +289,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_pro
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i: cmake_force
@@ -317,7 +303,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_pro
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i: cmake_force
@@ -331,7 +317,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_pro
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_basics/juce_audio_basics.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_basics/juce_audio_basics.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i: cmake_force
@@ -345,7 +331,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.s: cma
 CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/juce_dsp.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_dsp/juce_dsp.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.i: cmake_force
@@ -359,7 +345,7 @@ CMakeFiles/VXTune.dir/JUCE/modules/juce_dsp/juce_dsp.mm.s: cmake_force
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o: CMakeFiles/VXTune.dir/flags.make
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_formats/juce_audio_formats.mm
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o: CMakeFiles/VXTune.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o -MF CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o.d -o CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_formats/juce_audio_formats.mm
 
 CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.i: cmake_force
@@ -375,8 +361,7 @@ VXTune_OBJECTS = \
 "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o" \
 "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o" \
 "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o" \
-"CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o" \
-"CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o" \
+"CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o" \
 "CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o" \
 "CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o" \
 "CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o" \
@@ -400,8 +385,7 @@ VXTune_EXTERNAL_OBJECTS =
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
-VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
+VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
@@ -420,7 +404,7 @@ VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/JUCE/modu
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/build.make
 VXTune_artefacts/Release/libVXTune_SharedCode.a: CMakeFiles/VXTune.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Linking CXX static library VXTune_artefacts/Release/libVXTune_SharedCode.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Linking CXX static library VXTune_artefacts/Release/libVXTune_SharedCode.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/VXTune.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/VXTune.dir/link.txt --verbose=$(VERBOSE)
 

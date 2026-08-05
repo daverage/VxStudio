@@ -7,9 +7,10 @@ involve DSP debugging from numeric traces or design decisions with rewrite
 cost. S-items are self-contained, fully specified here, and safe for Sonnet:
 the test suite is the referee.**
 
-State as of 2026-08-03: detector + decomposition + correction engine v0 +
-dual-tap shifter + pitch trace UI + Listen all landed and tested
-(VxTuneAnalysisTests 33/33, VxTunePluginTests 8/8). See tasks/todo.md.
+State as of 2026-08-04: detector + decomposition + correction engine +
+Signalsmith renderer abstraction + pitch trace UI + Listen all landed and
+tested. The earlier dual-tap and PSOLA renderers were removed from active code;
+Phase 2 quality work is tracked in `VXTUNE_PHASE_2.md`.
 
 Ground rules for every item:
 - Realtime rules from `docs/VX_SUITE_FRAMEWORK.md` are non-negotiable.
@@ -22,43 +23,19 @@ Ground rules for every item:
 
 ## F-tier (Fable/Opus sessions)
 
-### F1. Epoch-synchronous TD-PSOLA shifter  — DONE, hardened through F4 rounds 1-5 (2026-08-03/04)
-Initial pass (2026-08-03) met synthetic acceptance criteria (ratio ≤1c,
-formant drift 0.4%, park/unvoiced bit-exact, latency 600 @48k) but had
-never been validated against real vocal material. Real-vocal listening
-(F4) surfaced 5 rounds of genuine bugs the synthetic suite couldn't catch
-— see F4 log below. Current epoch-marking method: **waveform-similarity
-(normalized cross-correlation) against the previously confirmed cycle**,
-not amplitude peak-picking — this is the technique that finally closed
-the gap; see F4 round 5.
-Replaces the dual-tap shifter as the product render path (dual-tap stays in
-the repo for A/B tests).
+### F1. Renderer replacement  — SUPERSEDED BY PHASE 2 (2026-08-04)
+The epoch-synchronous TD-PSOLA attempt met several synthetic acceptance tests
+but failed real vocal renders with persistent popping/bubbling. It is no longer
+the production direction and its implementation has been deleted rather than
+archived in-tree.
 
-- File: `products/tune/dsp/VxTunePsolaShifter.{h,cpp}`. Same interface as
-  `PitchShifter` (`prepare/reset/process/latencySamples`) plus
-  `setPeriodHint(float periodSamples, float voicedConfidence)` fed from the
-  detector each hop.
-- Analysis epochs: predicted spacing = period hint, aligned to the waveform
-  peak of a ~1 kHz low-passed copy within ±T/5 of prediction.
-- Synthesis: Hann windows of 2T centred on epochs, overlap-add; synthesis
-  epoch spacing = T / ratio; each synthesis epoch reuses the nearest
-  analysis epoch (2T Hann at hop T satisfies COLA, so epoch-reuse at
-  ratio 1 reconstructs exactly).
-- Formants: intrinsically preserved by TD-PSOLA (windows are re-spaced, not
-  resampled). No separate envelope stage below ±1 semitone.
-- Unvoiced/low-confidence input: latency-aligned passthrough, ~5 ms
-  crossfade between modes. Zero shift: park on exact epoch reuse.
-- Latency: fixed `ceil(sr / 80)` samples (12.5 ms @48k); periods longer
-  than the budget get truncated windows (rare below 80 Hz).
-- Acceptance (extend VxTuneAnalysisTests):
-  - ratio accuracy: sine + 10-harmonic tones, shifts ±25/±50/±100c, output
-    pitch within ±5c of input × ratio;
-  - formant proof: vowel-like tone (fixed spectral-envelope peak), shift
-    ±100c → envelope peak frequency moves <2% (dual-tap moves it ~5.9%;
-    assert PSOLA beats it decisively);
-  - transparency at zero shift (voiced) better than −40 dB delta;
-  - unvoiced noise passes through at aligned latency;
-  - correction-chain tests re-run green with PSOLA as the renderer.
+The active renderer work is now Phase 2:
+
+- `VxTunePitchRenderer` is the product abstraction.
+- `SignalsmithPitchRenderer` is the production baseline.
+- `VxTuneRendererTests` owns backend-neutral renderer acceptance.
+- Rubber Band remains a benchmark/comparator candidate only until licensing is
+  explicitly resolved.
 
 ### F2. Note segmentation + behaviour distributions — CORE DONE (2026-08-04)
 - File: `products/tune/dsp/VxTuneSegmenter.h` (header-only, matches the

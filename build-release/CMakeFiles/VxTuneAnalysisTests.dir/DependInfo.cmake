@@ -10,8 +10,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o" "gcc" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o.d"
   "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o" "gcc" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o.d"
-  "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o" "gcc" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o.d"
-  "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o" "gcc" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o.d"
+  "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o" "gcc" "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o.d"
   "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/tests/VxTuneAnalysisTests.cpp" "CMakeFiles/VxTuneAnalysisTests.dir/tests/VxTuneAnalysisTests.cpp.o" "gcc" "CMakeFiles/VxTuneAnalysisTests.dir/tests/VxTuneAnalysisTests.cpp.o.d"
   )
 

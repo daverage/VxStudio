@@ -27,8 +27,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.cpp" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o" "gcc" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/VxTuneProcessor.cpp.o.d"
   "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o" "gcc" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o.d"
   "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o" "gcc" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o.d"
-  "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o" "gcc" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o.d"
-  "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o" "gcc" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o.d"
+  "/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o" "gcc" "CMakeFiles/VXTune.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

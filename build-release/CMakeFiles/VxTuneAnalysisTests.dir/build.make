@@ -114,41 +114,26 @@ CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecom
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.s
 
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: CMakeFiles/VxTuneAnalysisTests.dir/flags.make
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o: CMakeFiles/VxTuneAnalysisTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o -MF CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o.d -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
+CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o: CMakeFiles/VxTuneAnalysisTests.dir/flags.make
+CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o: CMakeFiles/VxTuneAnalysisTests.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o -MF CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o.d -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp > CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.i
+CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp > CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.i
 
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.s
-
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: CMakeFiles/VxTuneAnalysisTests.dir/flags.make
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o: CMakeFiles/VxTuneAnalysisTests.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o -MF CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o.d -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
-
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp > CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.i
-
-CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.s
+CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp -o CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.s
 
 # Object files for target VxTuneAnalysisTests
 VxTuneAnalysisTests_OBJECTS = \
 "CMakeFiles/VxTuneAnalysisTests.dir/tests/VxTuneAnalysisTests.cpp.o" \
 "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o" \
 "CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o" \
-"CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o" \
-"CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o"
+"CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o"
 
 # External object files for target VxTuneAnalysisTests
 VxTuneAnalysisTests_EXTERNAL_OBJECTS =
@@ -156,11 +141,10 @@ VxTuneAnalysisTests_EXTERNAL_OBJECTS =
 VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/tests/VxTuneAnalysisTests.cpp.o
 VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp.o
 VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp.o
-VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp.o
-VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp.o
+VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp.o
 VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/build.make
 VxTuneAnalysisTests: CMakeFiles/VxTuneAnalysisTests.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Linking CXX executable VxTuneAnalysisTests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable VxTuneAnalysisTests"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/VxTuneAnalysisTests.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

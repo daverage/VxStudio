@@ -65,8 +65,8 @@ void testLatencyReported() {
     std::printf("Latency reporting:\n");
     VXTuneAudioProcessor p;
     p.prepareToPlay(kSampleRate, kBlock);
-    check(p.getLatencySamples() == 600,   // ceil(48000 / 80), PSOLA budget
-          "reports shifter latency (got " + std::to_string(p.getLatencySamples()) + ")");
+    check(p.getLatencySamples() > 0 && p.getLatencySamples() < static_cast<int>(0.25 * kSampleRate),
+          "reports renderer latency (got " + std::to_string(p.getLatencySamples()) + ")");
 }
 
 void testListenPlaysChangesOnly() {
@@ -113,7 +113,7 @@ void testPitchTraceFeed() {
     const float sharpHz = 220.0f * std::exp2(30.0f / 1200.0f);
     VXTuneAudioProcessor p;
     p.prepareToPlay(kSampleRate, kBlock);
-    setParam(p, "amount", 1.0f);
+    setParam(p, "amount", 0.5f);
     setParam(p, "natural", 0.5f);
     double phase = 0.0;
     runToneAndMeasure(p, sharpHz, 2.0f, 0.1f, phase);

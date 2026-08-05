@@ -63,6 +63,24 @@ EditorBase::EditorBase(ProcessorBase& owner)
         addAndMakeVisible(auxSelectorLabel);
     }
 
+    auxSelector2Label.setFont(juce::FontOptions().withHeight(14.0f).withKerningFactor(0.08f));
+    auxSelector2Label.setMinimumHorizontalScale(0.72f);
+    makeMouseTransparent(auxSelector2Label);
+    if (identity.supportsAuxSelector2()) {
+        auxSelector2Label.setText(toJuceString(identity.auxSelector2Label.empty() ? "Option" : identity.auxSelector2Label),
+                                  juce::dontSendNotification);
+        addAndMakeVisible(auxSelector2Label);
+    }
+
+    presetSelectorLabel.setFont(juce::FontOptions().withHeight(14.0f).withKerningFactor(0.08f));
+    presetSelectorLabel.setMinimumHorizontalScale(0.72f);
+    makeMouseTransparent(presetSelectorLabel);
+    if (identity.supportsPresetSelector()) {
+        presetSelectorLabel.setText(toJuceString(identity.presetSelectorLabel.empty() ? "Preset" : identity.presetSelectorLabel),
+                                    juce::dontSendNotification);
+        addAndMakeVisible(presetSelectorLabel);
+    }
+
     statusLabel.setJustificationType(juce::Justification::centredRight);
     statusLabel.setFont(juce::FontOptions().withHeight(13.0f));
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.62f));
@@ -124,6 +142,30 @@ EditorBase::EditorBase(ProcessorBase& owner)
             auxSelectorBox.addItem(auxChoices[i], i + 1);
         auxSelectorBox.setWantsKeyboardFocus(true);
         addAndMakeVisible(auxSelectorBox);
+    }
+
+    if (identity.supportsAuxSelector2()) {
+        for (size_t i = 0; i < identity.auxSelector2ChoiceLabels.size(); ++i) {
+            const auto label = identity.auxSelector2ChoiceLabel(i);
+            if (!label.empty())
+                auxSelector2Box.addItem(toJuceString(label), static_cast<int>(i) + 1);
+        }
+        auxSelector2Box.setWantsKeyboardFocus(true);
+        addAndMakeVisible(auxSelector2Box);
+    }
+
+    if (identity.supportsPresetSelector()) {
+        presetSelectorBox.addItem("Manual", 1);
+        for (int i = 0; i < identity.clampedPresetChoiceCount(); ++i)
+            presetSelectorBox.addItem(toJuceString(identity.presetChoiceLabel(static_cast<size_t>(i))), i + 2);
+        presetSelectorBox.setSelectedId(1, juce::dontSendNotification);
+        presetSelectorBox.setWantsKeyboardFocus(true);
+        presetSelectorBox.onChange = [this] {
+            const int presetIndex = presetSelectorBox.getSelectedId() - 2;
+            if (presetIndex >= 0)
+                applyUiPreset(presetIndex);
+        };
+        addAndMakeVisible(presetSelectorBox);
     }
 
     expertButton.setWantsKeyboardFocus(true);
@@ -200,6 +242,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
         modeAttachment = std::make_unique<ComboAttachment>(state, identity.modeParamId.data(), modeBox);
     if (identity.supportsAuxSelector())
         auxSelectorAttachment = std::make_unique<ComboAttachment>(state, identity.auxSelectorParamId.data(), auxSelectorBox);
+    if (identity.supportsAuxSelector2())
+        auxSelector2Attachment = std::make_unique<ComboAttachment>(state, identity.auxSelector2ParamId.data(), auxSelector2Box);
     if (identity.supportsExpertMode())
         expertAttachment = std::make_unique<ButtonAttachment>(state, identity.expertParamId.data(), expertButton);
     if (identity.supportsListenMode())
@@ -390,6 +434,11 @@ void EditorBase::resized() {
         && (!headerIdentity.supportsModeSwitch()
             || !headerIdentity.auxSelectorFollowsGeneralMode
             || vxsuite::readMode(processor.getValueTreeState(), headerIdentity) != Mode::vocal);
+    const bool showAuxSelector2InHeader = headerIdentity.supportsAuxSelector2()
+        && (!headerIdentity.auxSelector2RequiresExpert || expertEnabledForHeader)
+        && (!headerIdentity.supportsModeSwitch()
+            || !headerIdentity.auxSelector2FollowsGeneralMode
+            || vxsuite::readMode(processor.getValueTreeState(), headerIdentity) != Mode::vocal);
     // Right-priority items first so they are never pushed off-screen by left items.
     if (processor.getProductIdentity().hasHelpContent()) {
         helpButton.setBounds(modeRow.removeFromRight(scaled(92)).reduced(0, scaled(2)));
@@ -401,14 +450,18 @@ void EditorBase::resized() {
     // rather than overflowing and hiding the right-side items above.
     const bool hasModeForRow = processor.getProductIdentity().supportsModeSwitch();
     const bool hasAuxForRow  = showAuxSelectorInHeader;
+    const bool hasAux2ForRow = showAuxSelector2InHeader;
     int fixedLeftWidth = 0;
     if (hasModeForRow)                                            fixedLeftWidth += scaled(96 + 8 + 16);
     if (hasAuxForRow)                                             fixedLeftWidth += scaled(84 + 8 + 16);
+    if (hasAux2ForRow)                                            fixedLeftWidth += scaled(64 + 8 + 16);
+    if (processor.getProductIdentity().supportsPresetSelector())   fixedLeftWidth += scaled(64 + 8 + 16);
     if (processor.getProductIdentity().supportsExpertMode())      fixedLeftWidth += scaled(92 + 12);
     if (processor.getProductIdentity().supportsListenMode())      fixedLeftWidth += scaled(116 + 12);
     if (processor.getProductIdentity().supportsLearnButton())     fixedLeftWidth += scaled(110 + 12);
     if (processor.supportsModelDownloadUi())                      fixedLeftWidth += scaled(156 + 12);
-    const int comboCount = (hasModeForRow ? 1 : 0) + (hasAuxForRow ? 1 : 0);
+    const bool hasPresetForRow = processor.getProductIdentity().supportsPresetSelector();
+    const int comboCount = (hasModeForRow ? 1 : 0) + (hasAuxForRow ? 1 : 0) + (hasAux2ForRow ? 1 : 0) + (hasPresetForRow ? 1 : 0);
     const int comboWidth  = comboCount > 0
         ? juce::jmin(scaled(180), juce::jmax(scaled(80), (modeRow.getWidth() - fixedLeftWidth) / comboCount))
         : 0;
@@ -423,6 +476,18 @@ void EditorBase::resized() {
         auxSelectorLabel.setBounds(modeRow.removeFromLeft(scaled(84)));
         modeRow.removeFromLeft(scaled(8));
         auxSelectorBox.setBounds(modeRow.removeFromLeft(comboWidth).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(16));
+    }
+    if (hasAux2ForRow) {
+        auxSelector2Label.setBounds(modeRow.removeFromLeft(scaled(64)));
+        modeRow.removeFromLeft(scaled(8));
+        auxSelector2Box.setBounds(modeRow.removeFromLeft(comboWidth).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(16));
+    }
+    if (hasPresetForRow) {
+        presetSelectorLabel.setBounds(modeRow.removeFromLeft(scaled(64)));
+        modeRow.removeFromLeft(scaled(8));
+        presetSelectorBox.setBounds(modeRow.removeFromLeft(comboWidth).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(16));
     }
     if (processor.getProductIdentity().supportsExpertMode()) {
@@ -764,6 +829,46 @@ void EditorBase::showTransientStatus(const juce::String& text) {
     statusLabel.setText(transientStatusText, juce::dontSendNotification);
 }
 
+void EditorBase::applyUiPreset(const int presetIndex) {
+    const auto& identity = processor.getProductIdentity();
+    if (!identity.supportsPresetSelector()
+        || presetIndex < 0
+        || presetIndex >= identity.clampedPresetChoiceCount())
+        return;
+
+    auto& state = processor.getValueTreeState();
+    auto setParameterValue = [&state](const std::string_view paramId, const float plainValue) {
+        if (paramId.empty())
+            return;
+        if (auto* param = state.getParameter(paramId.data())) {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->convertTo0to1(plainValue));
+            param->endChangeGesture();
+        }
+    };
+
+    const auto index = static_cast<size_t>(presetIndex);
+    setParameterValue(identity.primaryParamId, identity.presetPrimaryValues[index]);
+    setParameterValue(identity.secondaryParamId, identity.presetSecondaryValues[index]);
+    if (identity.supportsTertiaryControl())
+        setParameterValue(identity.tertiaryParamId, identity.presetTertiaryValues[index]);
+    if (identity.supportsQuaternaryControl())
+        setParameterValue(identity.quaternaryParamId, identity.presetQuaternaryValues[index]);
+
+    if (identity.supportsAuxSelector()) {
+        const int auxIndex = identity.presetAuxSelectorIndexes[index];
+        if (auxIndex >= 0)
+            setParameterValue(identity.auxSelectorParamId, static_cast<float>(auxIndex));
+    }
+    if (identity.supportsAuxSelector2()) {
+        const int aux2Index = identity.presetAuxSelector2Indexes[index];
+        if (aux2Index >= 0)
+            setParameterValue(identity.auxSelector2ParamId, static_cast<float>(aux2Index));
+    }
+
+    showTransientStatus("Preset: " + toJuceString(identity.presetChoiceLabel(index)));
+}
+
 void EditorBase::mouseDown(const juce::MouseEvent& e) {
     const auto& id  = processor.getProductIdentity();
     auto& state     = processor.getValueTreeState();
@@ -966,7 +1071,8 @@ void EditorBase::updateModelDownloadUi() {
 }
 
 void EditorBase::updateAuxSelectorUi() {
-    if (!processor.getProductIdentity().supportsAuxSelector())
+    if (!processor.getProductIdentity().supportsAuxSelector()
+        && !processor.getProductIdentity().supportsAuxSelector2())
         return;
 
     const auto& identity = processor.getProductIdentity();
@@ -978,6 +1084,15 @@ void EditorBase::updateAuxSelectorUi() {
         || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) != Mode::vocal);
     auxSelectorLabel.setVisible(show);
     auxSelectorBox.setVisible(show);
+
+    const bool expert2Enabled = !identity.auxSelector2RequiresExpert
+        || !identity.supportsExpertMode()
+        || vxsuite::readBool(processor.getValueTreeState(), identity.expertParamId, identity.expertDefaultValue);
+    const bool show2 = expert2Enabled && (!identity.supportsModeSwitch()
+        || !processor.getProductIdentity().auxSelector2FollowsGeneralMode
+        || vxsuite::readMode(processor.getValueTreeState(), processor.getProductIdentity()) != Mode::vocal);
+    auxSelector2Label.setVisible(show2);
+    auxSelector2Box.setVisible(show2);
 }
 
 void EditorBase::updateExpertUi() {

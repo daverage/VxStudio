@@ -68,3 +68,4 @@ tests/fixtures/rebalance/listening_cases/*/
 # musdb preview dataset
 tests/fixtures/rebalance/musdb_preview/
 /distribution
+data/

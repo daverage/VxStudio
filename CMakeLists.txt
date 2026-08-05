@@ -643,10 +643,12 @@ target_sources(VXTune PRIVATE
   Source/vxstudio/products/tune/VxTuneProcessor.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 )
-target_include_directories(VXTune PRIVATE Source)
+target_include_directories(VXTune PRIVATE
+  Source
+  ThirdParty/signalsmith-stretch/include
+)
 target_link_libraries(VXTune PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXTunePlugin ALL DEPENDS VXTune_VST3)
 vxstudio_stage_vst3_bundle(VXTune_VST3 "VXTune")
@@ -1014,21 +1016,39 @@ add_executable(VxTuneAnalysisTests
   tests/VxTuneAnalysisTests.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 )
-target_include_directories(VxTuneAnalysisTests PRIVATE Source tests)
+target_include_directories(VxTuneAnalysisTests PRIVATE
+  Source
+  tests
+  ThirdParty/signalsmith-stretch/include
+)
 vxstudio_add_executable_test(VxTuneAnalysisTests)
+
+add_executable(VxTuneRendererTests
+  tests/VxTuneRendererTests.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+)
+target_include_directories(VxTuneRendererTests PRIVATE
+  Source
+  tests
+  ThirdParty/signalsmith-stretch/include
+)
+vxstudio_add_executable_test(VxTuneRendererTests)
 
 add_executable(VxTunePluginTests
   tests/VxTunePluginTests.cpp
   Source/vxstudio/products/tune/VxTuneProcessor.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 )
-target_include_directories(VxTunePluginTests PRIVATE Source tests)
+target_include_directories(VxTunePluginTests PRIVATE
+  Source
+  tests
+  ThirdParty/signalsmith-stretch/include
+)
 target_link_libraries(VxTunePluginTests PRIVATE
   VxStudioFramework
   juce::juce_dsp
@@ -1036,6 +1056,40 @@ target_link_libraries(VxTunePluginTests PRIVATE
 )
 target_compile_definitions(VxTunePluginTests PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VxTunePluginTests)
+
+add_executable(VxTuneBatchHarness
+  tools/VxTuneBatchHarness.cpp
+  Source/vxstudio/products/tune/VxTuneProcessor.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+)
+target_include_directories(VxTuneBatchHarness PRIVATE
+  Source
+  tests
+  ThirdParty/signalsmith-stretch/include
+)
+target_link_libraries(VxTuneBatchHarness PRIVATE
+  VxStudioFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VxTuneBatchHarness PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
+
+add_executable(VxTuneCompareReference
+  tools/VxTuneCompareReference.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
+)
+target_include_directories(VxTuneCompareReference PRIVATE
+  Source
+  tests
+)
+target_link_libraries(VxTuneCompareReference PRIVATE
+  VxStudioFramework
+  juce::juce_audio_formats
+)
 
 add_executable(VXDeverbTests
   tests/VXDeverbTests.cpp
@@ -1237,10 +1291,13 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/tune/VxTuneProcessor.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 )
-target_include_directories(VXStudioPluginRegressionTests PRIVATE Source tests)
+target_include_directories(VXStudioPluginRegressionTests PRIVATE
+  Source
+  tests
+  ThirdParty/signalsmith-stretch/include
+)
 target_link_libraries(VXStudioPluginRegressionTests PRIVATE
   VxStudioFramework
   VxStudioDeepFilterRuntime
@@ -1383,10 +1440,13 @@ add_executable(VXSuiteProfile
   Source/vxstudio/products/tune/VxTuneProcessor.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePitchShifter.cpp
-  Source/vxstudio/products/tune/dsp/VxTunePsolaShifter.cpp
+  Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
 )
-target_include_directories(VXSuiteProfile PRIVATE Source tests)
+target_include_directories(VXSuiteProfile PRIVATE
+  Source
+  tests
+  ThirdParty/signalsmith-stretch/include
+)
 target_link_libraries(VXSuiteProfile PRIVATE
   VxStudioFramework
   VxStudioDeepFilterRuntime
@@ -1414,4 +1474,3 @@ vxstudio_add_pluginval_test(VXLeveler)
 
 # Test Host for CPU/Memory Profiling
 add_subdirectory(Source/vxstudio/tools/test_host)
-

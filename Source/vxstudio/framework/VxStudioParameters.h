@@ -138,6 +138,16 @@ inline juce::StringArray makeAuxSelectorChoiceLabels(const ProductIdentity& iden
     return labels;
 }
 
+inline juce::StringArray makeAuxSelector2ChoiceLabels(const ProductIdentity& identity) {
+    juce::StringArray labels;
+    for (size_t i = 0; i < identity.auxSelector2ChoiceLabels.size(); ++i) {
+        const auto label = identity.auxSelector2ChoiceLabel(i);
+        if (!label.empty())
+            labels.add(toJuceString(label));
+    }
+    return labels;
+}
+
 inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameterLayout(const ProductIdentity& identity) {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     if (identity.supportsModeSwitch()) {
@@ -157,6 +167,17 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
                 choices,
                 juce::jlimit(0, choices.size() - 1, identity.auxSelectorDefaultIndex),
                 makeChoiceAttributes(identity.auxSelectorLabel.empty() ? "Option" : identity.auxSelectorLabel)));
+        }
+    }
+    if (identity.supportsAuxSelector2()) {
+        auto choices = makeAuxSelector2ChoiceLabels(identity);
+        if (choices.size() > 0) {
+            layout.add(std::make_unique<juce::AudioParameterChoice>(
+                juce::ParameterID { identity.auxSelector2ParamId.data(), 1 },
+                toJuceString(identity.auxSelector2Label.empty() ? "Option" : identity.auxSelector2Label),
+                choices,
+                juce::jlimit(0, choices.size() - 1, identity.auxSelector2DefaultIndex),
+                makeChoiceAttributes(identity.auxSelector2Label.empty() ? "Option" : identity.auxSelector2Label)));
         }
     }
     if (identity.supportsExpertMode()) {

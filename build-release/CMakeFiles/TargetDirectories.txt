@@ -100,7 +100,10 @@
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VXRepairStage.dir
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VXSuite_VST3.dir
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VxTuneAnalysisTests.dir
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VxTuneRendererTests.dir
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VxTunePluginTests.dir
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VxTuneBatchHarness.dir
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VxTuneCompareReference.dir
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VXDeverbTests.dir
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VXDeverbMeasure.dir
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/build-release/CMakeFiles/VXLevelerMeasure.dir

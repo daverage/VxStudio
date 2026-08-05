@@ -30,6 +30,7 @@ struct ProductTheme {
 
 struct ProductIdentity {
     static constexpr size_t maxControlBankControls = 6;
+    static constexpr size_t maxUiPresets = 6;
 
     std::string_view suiteName = "VX Suite";
     std::string_view productName;
@@ -42,6 +43,7 @@ struct ProductIdentity {
     std::string_view quaternaryParamId;
     std::string_view modeParamId;
     std::string_view auxSelectorParamId;
+    std::string_view auxSelector2ParamId;
     std::string_view expertParamId;
     std::string_view listenParamId;
     std::string_view primaryLabel;
@@ -63,13 +65,27 @@ struct ProductIdentity {
     std::string_view selectorLabel = "Mode";
     std::array<std::string_view, 3> selectorChoiceLabels {};
     std::string_view auxSelectorLabel;
+    std::string_view auxSelector2Label;
+    std::string_view presetSelectorLabel;
     std::string_view expertButtonLabel = "Pro";
     // Sized for musical selectors (e.g. key/scale lists); products fill as
     // many leading entries as they need.
     std::array<std::string_view, 26> auxSelectorChoiceLabels {};
+    std::array<std::string_view, 26> auxSelector2ChoiceLabels {};
     int auxSelectorDefaultIndex = 0;
+    int auxSelector2DefaultIndex = 0;
+    int presetChoiceCount = 0;
+    std::array<std::string_view, maxUiPresets> presetChoiceLabels {};
+    std::array<float, maxUiPresets> presetPrimaryValues {};
+    std::array<float, maxUiPresets> presetSecondaryValues {};
+    std::array<float, maxUiPresets> presetTertiaryValues {};
+    std::array<float, maxUiPresets> presetQuaternaryValues {};
+    std::array<int, maxUiPresets> presetAuxSelectorIndexes { -1, -1, -1, -1, -1, -1 };
+    std::array<int, maxUiPresets> presetAuxSelector2Indexes { -1, -1, -1, -1, -1, -1 };
     bool auxSelectorFollowsGeneralMode = true;
+    bool auxSelector2FollowsGeneralMode = true;
     bool auxSelectorRequiresExpert = false;
+    bool auxSelector2RequiresExpert = false;
     bool tertiaryRequiresExpert = false;
     bool quaternaryRequiresExpert = false;
     // Show the tertiary/quaternary knobs only while the vocal mode is active.
@@ -137,6 +153,22 @@ struct ProductIdentity {
         return !auxSelectorParamId.empty();
     }
 
+    bool supportsAuxSelector2() const noexcept {
+        return !auxSelector2ParamId.empty();
+    }
+
+    bool supportsPresetSelector() const noexcept {
+        return presetChoiceCount > 0 && !primaryParamId.empty() && !secondaryParamId.empty();
+    }
+
+    int clampedPresetChoiceCount() const noexcept {
+        return presetChoiceCount < 0
+            ? 0
+            : (presetChoiceCount > static_cast<int>(maxUiPresets)
+                ? static_cast<int>(maxUiPresets)
+                : presetChoiceCount);
+    }
+
     bool supportsExpertMode() const noexcept {
         return !expertParamId.empty();
     }
@@ -163,6 +195,14 @@ struct ProductIdentity {
 
     std::string_view auxSelectorChoiceLabel(const size_t index) const noexcept {
         return index < auxSelectorChoiceLabels.size() ? auxSelectorChoiceLabels[index] : std::string_view{};
+    }
+
+    std::string_view auxSelector2ChoiceLabel(const size_t index) const noexcept {
+        return index < auxSelector2ChoiceLabels.size() ? auxSelector2ChoiceLabels[index] : std::string_view{};
+    }
+
+    std::string_view presetChoiceLabel(const size_t index) const noexcept {
+        return index < presetChoiceLabels.size() ? presetChoiceLabels[index] : std::string_view{};
     }
 
 };
