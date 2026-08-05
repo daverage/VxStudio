@@ -2149,8 +2149,8 @@ CMakeFiles/VxStudioRNNoiseRuntime.dir/clean:
 # Target rules for target CMakeFiles/VXDeepFilterNet.dir
 
 # All Build rule for target.
-CMakeFiles/VXDeepFilterNet.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXDeepFilterNet.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXDeepFilterNet.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXDeepFilterNet.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXDeepFilterNet.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeepFilterNet.dir/build.make CMakeFiles/VXDeepFilterNet.dir/depend
@@ -2216,8 +2216,8 @@ CMakeFiles/VXDeepFilterNet_All.dir/clean:
 # Target rules for target CMakeFiles/VXDeepFilterNet_VST3.dir
 
 # All Build rule for target.
-CMakeFiles/VXDeepFilterNet_VST3.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXDeepFilterNet_VST3.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXDeepFilterNet_VST3.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXDeepFilterNet_VST3.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXDeepFilterNet_VST3.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 CMakeFiles/VXDeepFilterNet_VST3.dir/all: CMakeFiles/VXDeepFilterNet.dir/all
@@ -3513,8 +3513,8 @@ CMakeFiles/VXStudioAnalyserStage.dir/clean:
 # Target rules for target CMakeFiles/VXRepair.dir
 
 # All Build rule for target.
-CMakeFiles/VXRepair.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXRepair.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXRepair.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXRepair.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXRepair.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/depend
@@ -3580,8 +3580,8 @@ CMakeFiles/VXRepair_All.dir/clean:
 # Target rules for target CMakeFiles/VXRepair_VST3.dir
 
 # All Build rule for target.
-CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/VXRepair.dir/all
@@ -4185,8 +4185,8 @@ CMakeFiles/VxStudioVoiceAnalysisTests.dir/clean:
 # Target rules for target CMakeFiles/VXStudioPluginRegressionTests.dir
 
 # All Build rule for target.
-CMakeFiles/VXStudioPluginRegressionTests.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXStudioPluginRegressionTests.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXStudioPluginRegressionTests.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXStudioPluginRegressionTests.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXStudioPluginRegressionTests.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXStudioPluginRegressionTests.dir/build.make CMakeFiles/VXStudioPluginRegressionTests.dir/depend
@@ -4252,8 +4252,8 @@ CMakeFiles/VXStudioAnalyserTests.dir/clean:
 # Target rules for target CMakeFiles/VXRepairPassthroughCheck.dir
 
 # All Build rule for target.
-CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepairPassthroughCheck.dir/build.make CMakeFiles/VXRepairPassthroughCheck.dir/depend
@@ -4319,8 +4319,8 @@ CMakeFiles/VXStudioBatchAudioCheck.dir/clean:
 # Target rules for target CMakeFiles/VXSuiteProfile.dir
 
 # All Build rule for target.
-CMakeFiles/VXSuiteProfile.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXSuiteProfile.dir/all: CMakeFiles/build_vxstudio_libdf_dfn2.dir/all
+CMakeFiles/VXSuiteProfile.dir/all: CMakeFiles/build_vxstudio_libdf.dir/all
 CMakeFiles/VXSuiteProfile.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXSuiteProfile.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXSuiteProfile.dir/build.make CMakeFiles/VXSuiteProfile.dir/depend

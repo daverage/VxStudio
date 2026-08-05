@@ -55,7 +55,7 @@ Framework and plugin DSP versions are tracked independently.
 | VXRebalance | `0.2.2` |
 | VXRepair | `0.1.1` |
 | VXStudioAnalyser | `0.2.1` |
-| VXTune | `0.1.0` |
+| VXTune | `0.1.1` |
 
 ---
 
