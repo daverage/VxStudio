@@ -30132,6 +30132,7 @@ CMakeFiles/VxTuneBatchHarness.dir/Source/vxstudio/products/tune/VxTuneProcessor.
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneCorrectionEngine.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneKeyProfiles.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
@@ -34497,6 +34498,7 @@ CMakeFiles/VxTuneBatchHarness.dir/tools/VxTuneBatchHarness.cpp.o: /Users/andrzej
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/VxTuneProcessor.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneCorrectionEngine.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneDecomposition.h \
+  /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneKeyProfiles.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchDetector.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.h \
   /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneSegmenter.h \
@@ -39249,6 +39251,8 @@ generated/VxStudioVersions.h:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/queue:
 
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/files/juce_WildcardFileFilter.h:
+
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/products/tune/dsp/VxTuneKeyProfiles.h:
 
 /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/image_formats/jpglib/jfdctflt.c:
 

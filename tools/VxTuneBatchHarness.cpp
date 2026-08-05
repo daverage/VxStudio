@@ -416,7 +416,11 @@ RenderArtifacts renderCase(const Case& c, const Preset& preset, const juce::File
     artifacts.inputChannels = input.getNumChannels();
     artifacts.inputSamples = input.getNumSamples();
 
+#if defined(_WIN32)
+    _putenv_s("VXTUNE_DEBUG_CSV", artifacts.debugPath.getFullPathName().toRawUTF8());
+#else
     setenv("VXTUNE_DEBUG_CSV", artifacts.debugPath.getFullPathName().toRawUTF8(), 1);
+#endif
 
     VXTuneAudioProcessor processor;
     processor.prepareToPlay(sampleRate, blockSize);
