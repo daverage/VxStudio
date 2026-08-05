@@ -635,6 +635,7 @@ a:hover {
     border: 1px solid var(--border-soft);
     background: rgba(255, 255, 255, 0.78);
     box-shadow: var(--shadow-sm);
+    scroll-margin-top: 181px;
 }
 
 .detail-card p {

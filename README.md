@@ -62,7 +62,7 @@ Framework and plugin DSP versions are tracked independently.
 ## Current status
 
 - `16` focused plugins are implemented and shipping in the shared VX Studio shell.
-- VXTune is a new confidence-gated vocal pitch correction plugin: performance decomposition separates sung centre pitch from expression (vibrato, bends, slides), a Bayesian target estimator picks the intended note, and a PSOLA-based shifter renders the correction with a live sung-vs-tuned pitch trace.
+- VXTune is a new confidence-gated vocal pitch correction plugin: performance decomposition separates sung centre pitch from expression (vibrato, bends, slides), a Bayesian target estimator picks the intended note, and a Signalsmith Stretch-based shifter renders the correction with a live sung-vs-tuned pitch trace. Round-trip latency is ~30-45ms, low enough to monitor through while tracking.
 - VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
 - VXProximityClassic is a new two-control simplified proximity model.
 - VXProximity's `Closer` now also drives a dereverberation pre-stage (shared with VXDeverb) so higher settings thin room tone, not just boost bass; this adds ~16ms of latency at 48kHz (compensated automatically by the host).
@@ -522,7 +522,7 @@ Practical scenarios:
 
 ### VXTune
 
-Intelligent vocal pitch correction that fixes pitch errors while leaving the performance - vibrato, bends, phrasing - untouched. It corrects the intended note only when it is confident the deviation is an error, and preserves expression by design: when unsure, it does nothing rather than risk a wrong or audible correction. A live sung-vs-tuned trace on a note grid shows the detected note, its offset, confidence, and whether the engine is intervening.
+Intelligent vocal pitch correction that fixes pitch errors while leaving the performance - vibrato, bends, phrasing - untouched. It corrects the intended note only when it is confident the deviation is an error, and preserves expression by design: when unsure, it does nothing rather than risk a wrong or audible correction. A live sung-vs-tuned trace on a note grid shows the detected note, its offset, confidence, and whether the engine is intervening. Round-trip latency is ~30-45ms at 48kHz (host plugin-delay-compensated), low enough to monitor through while tracking without the timing confusion a longer delay would cause.
 
 How to use it:
 
@@ -676,7 +676,7 @@ Source/
       rebalance/      VXRebalance processor, DSP, and diagnostics UI
       repair/         VXRepair processor (embeds denoiser/deverb/speech_clarity DSP)
       analyser/       VXStudioAnalyser processor and custom analyser UI
-      tune/           VXTune processor and DSP (pitch detection, decomposition, correction, PSOLA shifter)
+      tune/           VXTune processor and DSP (pitch detection, decomposition, correction, Signalsmith Stretch shifter)
 tests/                Measurement and behaviour tests
 tools/                Utility scripts and fixture builders
 assets/               Models, REAPER presets, and related resources

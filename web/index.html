@@ -29,7 +29,7 @@
         <meta name="twitter:title" content="VX Studio" />
         <meta name="twitter:description" content="16 focused realtime-safe audio plugins for voice, mix cleanup, and finishing." />
 
-        <link rel="stylesheet" href="assets/css/style.css?v=0.2.1" />
+        <link rel="stylesheet" href="assets/css/style.css?v=0.2.4" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
@@ -712,8 +712,12 @@
                         <h3>Denoiser</h3>
                         <p>
                             Broadband denoise for hiss, fan noise, and steady
-                            background beds. GR meter shows active noise
-                            reduction in real time.
+                            background beds. Runs a classic spectral noise
+                            floor estimate rather than a neural model, so CPU
+                            use stays low enough for dozens of tracks at once.
+                            GR meter shows active noise reduction in real
+                            time; use it to confirm the reduction amount
+                            before trusting a strong setting by ear alone.
                         </p>
                     </article>
                     <article id="product-deverb" class="detail-card">
@@ -727,8 +731,12 @@
                     <article id="product-finish" class="detail-card">
                         <h3>Finish</h3>
                         <p>
-                            Final polish, recovery lift, and safer shared
-                            finishing with true-peak-aware behavior.
+                            Final-stage polish combining a Recovery lift
+                            stage with true-peak-aware limiting, so it can
+                            add perceived loudness back after corrective
+                            processing without letting inter-sample peaks
+                            clip downstream. Meant to be the last plugin in
+                            the chain, after tone and dynamics are settled.
                         </p>
                     </article>
                     <article id="product-optocomp" class="detail-card">
@@ -780,16 +788,23 @@
                         <h3>DeepFilterNet</h3>
                         <p>
                             ML-backed denoise for heavier or more complex
-                            interference. Guard control now active with
-                            artifact-aware blending.
+                            interference than a spectral denoiser can track
+                            cleanly - traffic, chatter, non-stationary beds.
+                            The Guard control blends the model's output back
+                            toward the dry signal when the network starts
+                            producing artifacts, trading some noise removal
+                            for a more natural result on hard material.
                         </p>
                     </article>
                     <article id="product-rebalance" class="detail-card">
                         <h3>Rebalance</h3>
                         <p>
-                            Confidence-driven source-family rebalance for
-                            vocals, drums, bass, guitar, and other mix content
-                            without stems.
+                            Separates a stereo mix into Vocals, Drums, Bass,
+                            Guitar, and Other on the fly and lets you push
+                            each family up or down, no stems required. A
+                            confidence signal scales how hard each move is
+                            allowed to push, so an uncertain separation eases
+                            off automatically instead of smearing the mix.
                         </p>
                     </article>
                     <article id="product-tone-refine" class="detail-card">
@@ -803,27 +818,39 @@
                     <article id="product-repair" class="detail-card">
                         <h3>Repair</h3>
                         <p>
-                            All-in-one guided repair. Analyses the audio and
-                            suggests settings for noise, click repair, speech
-                            clarity, and reverb. Scale each of the four stages
-                            independently.
+                            All-in-one guided repair built on the same
+                            embedded DSP as Denoiser, Deverb, and Speech
+                            Clarity. Analyses the audio and suggests settings
+                            per stage - Noise, Click, Clarity, Reverb - rather
+                            than one global amount, and a scale control on
+                            each stage lets you dial an individual suggestion
+                            back without redoing the analysis.
                         </p>
                     </article>
                     <article id="product-analyser" class="detail-card">
                         <h3>Studio Analyser</h3>
                         <p>
-                            Track-local chain analysis that follows only the
-                            active upstream path feeding the instance you are
-                            inspecting.
+                            Chain-wide spectrum and gain-reduction view that
+                            follows only the active upstream path feeding the
+                            instance you are inspecting, so it stays correct
+                            even when other tracks route through the same
+                            plugin chain. Drop it anywhere in the signal
+                            path to compare input against output at that
+                            exact point, not just at the very end of the
+                            chain.
                         </p>
                     </article>
                     <article id="product-tune" class="detail-card">
                         <h3>Tune</h3>
                         <p>
-                            Confidence-gated vocal pitch correction that
-                            preserves vibrato, bends, and phrasing. Corrects
-                            only when it is confident a deviation is an
-                            error, with a live sung-vs-tuned trace.
+                            Confidence-gated vocal pitch correction: instead
+                            of snapping every note to the nearest scale
+                            degree, it checks whether a deviation looks like
+                            an error or an intentional bend/vibrato before
+                            acting, so expressive performance detail survives
+                            correction. The live sung-vs-tuned trace lets you
+                            see exactly what it changed, note by note, rather
+                            than trusting the setting by ear.
                         </p>
                     </article>
                 </div>
@@ -1291,6 +1318,6 @@
             </div>
         </footer>
 
-        <script src="assets/js/script.js"></script>
+        <script src="assets/js/script.js?v=0.2.2"></script>
     </body>
 </html>

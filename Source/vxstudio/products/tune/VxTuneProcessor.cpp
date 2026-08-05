@@ -342,6 +342,11 @@ void VXTuneAudioProcessor::prepareSuite(const double sampleRate, const int sampl
     rendererSpec.sampleRate = sampleRate;
     rendererSpec.maximumBlockSize = block;
     rendererSpec.numChannels = 2;
+    // Live keeps round-trip latency low enough to monitor through while
+    // tracking (~30-45ms vs Studio's ~150ms); there is no user-facing
+    // control to choose Studio's higher-latency/higher-quality STFT window,
+    // so default to the profile this product is actually meant for.
+    rendererSpec.qualityProfile = vxsuite::tune::VxTunePitchRenderer::QualityProfile::Live;
     pitchRenderer->prepare(rendererSpec);
     setReportedLatencySamples(pitchRenderer->latencySamples());
 

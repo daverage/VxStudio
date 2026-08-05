@@ -23,10 +23,19 @@ void SignalsmithPitchRenderer::prepare(const PrepareSpec& spec) {
     sampleRate = spec.sampleRate;
     channelsPrepared = std::max(1, spec.numChannels);
     qualityProfile = spec.qualityProfile;
-    if (qualityProfile == QualityProfile::Live)
-        stretch.presetCheaper(channelsPrepared, static_cast<float>(sampleRate), true);
-    else
+    if (qualityProfile == QualityProfile::Live) {
+        // presetCheaper() (0.10*sr block) still latency-matches presetDefault
+        // (0.12*sr) to within ~10ms - useless as a low-latency monitoring
+        // option. Configure directly with a much smaller STFT block: enough
+        // to resolve a couple of periods down near the detector's 70Hz floor
+        // (~14ms/period) without collapsing pitch/formant quality, small
+        // enough to land well under 40ms round-trip instead of ~140ms.
+        const int liveBlock = std::max(64, static_cast<int>(sampleRate * 0.035));
+        const int liveInterval = std::max(16, liveBlock / 4);
+        stretch.configure(channelsPrepared, liveBlock, liveInterval, true);
+    } else {
         stretch.presetDefault(channelsPrepared, static_cast<float>(sampleRate), true);
+    }
     stretch.setFormantFactor(1.0f, false);
     reset();
 
