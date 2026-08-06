@@ -436,6 +436,12 @@ inline constexpr HelpContent tune {
 <ul>
 <li>Transparent intonation cleanup on lead or backing vocals.</li>
 <li>Checking vocal intonation while tracking or comping.</li>
+</ul>
+<h2>Sidechain (optional)</h2>
+<p>Route an instrumental into the sidechain input to help Key/Scale detection - VXTune learns the song's key faster and more reliably from full chord content than from the vocal alone. This is detection-only: the sidechain audio is never mixed into VXTune's output.</p>
+<ul>
+<li>Some hosts build a multichannel track (e.g. 4 channels: 2 for the vocal, 2 received from another track for the sidechain). If your track's master/parent send is set wider than stereo to match, those extra channels can reach your mix downstream of the plugin. Set the track's master/parent send to stereo (2 channels) unless you specifically intend to route more.</li>
+<li>VXTune adds real processing latency for the pitch-shift itself (shown as the plugin's reported latency). If your host does not fully delay-compensate a sidechain feed the way it does a plain signal chain, a track feeding the sidechain can drift out of time-alignment with the corrected vocal once both are audible together. If you hear phasing/timing artifacts only when both the vocal and the sidechain source are playing (and not when either is soloed), check your host's delay compensation for that specific routing, or the receive/send point (post-fader is usually safer than pre-fader/pre-FX).</li>
 </ul>)",
     "VXTune"
 };

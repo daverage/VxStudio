@@ -128,6 +128,21 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuf
         juce::AudioBuffer<float> blockView(channelPointers, mainChannels, start, num);
         processPreparedBlock(blockView, midi);
         activeSidechain = nullptr;
+        if (hasSidechainBus) {
+            // Sidechain is detection-only by contract - processPreparedBlock
+            // never writes to sidechainView, so whatever raw audio the host
+            // placed there (e.g. a receive feeding the sidechain pins) is
+            // still sitting in that region of the buffer, untouched, when
+            // this call returns. Some hosts pass channels beyond a plugin's
+            // declared output bus straight through unprocessed; if anything
+            // downstream of this plugin treats those as live track audio,
+            // that raw, un-delayed copy can reach the mix alongside the
+            // plugin's own (latency-delayed) output and phase against the
+            // real source. Zero it explicitly so no host's channel
+            // pass-through convention can ever leak it, regardless of how
+            // that host wires extra track channels after this plugin.
+            sidechainView.clear();
+        }
     }
 }
 

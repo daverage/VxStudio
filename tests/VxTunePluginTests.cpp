@@ -513,6 +513,43 @@ void testSidechainBusConnectedButSilentDoesNotReportActive() {
               "report sidechain active");
 }
 
+// Regression for the real mechanism behind a reported "phasing" bug: VST3
+// hosts can pass channels beyond a plugin's declared output bus straight
+// through unprocessed. Sidechain is detection-only by contract, so nothing
+// in this plugin ever writes to those channels - meaning, without an
+// explicit clear, the RAW pre-plugin sidechain audio (e.g. a receive
+// feeding the sidechain pins, undelayed by this plugin's own latency)
+// would still be sitting in the host buffer when processBlock returns. If
+// a host then treats those channels as live track audio downstream, that
+// raw copy can reach the mix alongside this plugin's (latency-delayed)
+// output and phase against the real source. The framework must zero the
+// sidechain region of the buffer in place, not just avoid reading it.
+void testSidechainChannelsAreClearedInPlaceAfterProcessing() {
+    std::printf("Sidechain: buffer channels are cleared in place after "
+                "processing (host pass-through protection):\n");
+    VXTuneAudioProcessor p;
+    auto block = prepareWithSidechainBus(p);
+    juce::MidiBuffer midi;
+    double phase = 0.0;
+    float maxSidechainAfter = 0.0f;
+    for (int b = 0; b < 20; ++b) {
+        block.clear();
+        for (int i = 0; i < kBlock; ++i) {
+            phase += kTwoPi * 261.63f / kSampleRate;
+            const float sc = 0.4f * std::sin(static_cast<float>(phase));
+            block.setSample(2, i, sc);
+            block.setSample(3, i, sc);
+        }
+        p.processBlock(block, midi);
+        for (int ch = 2; ch < 4; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                maxSidechainAfter = std::max(maxSidechainAfter, std::abs(block.getSample(ch, i)));
+    }
+    check(maxSidechainAfter < 1.0e-6f,
+          "sidechain channels read 0.4 amplitude in, silent after processBlock "
+              "returns (max " + std::to_string(maxSidechainAfter) + ")");
+}
+
 // Feeds silence on the main (vocal) input and a repeating C-major melody
 // on the sidechain input; traces auto-key state the same way
 // runMelodyAndTraceAutoKey() does for the vocal-only path.
@@ -591,6 +628,7 @@ int main() {
     testPitchTraceFeed();
     testSidechainBusExistsAndNeverLeaksToOutput();
     testSidechainBusConnectedButSilentDoesNotReportActive();
+    testSidechainChannelsAreClearedInPlaceAfterProcessing();
     testSidechainAloneEstablishesKeyWithNoVocal();
     if (failures == 0) {
         std::printf("All VX Tune plugin tests passed\n");
