@@ -167,6 +167,11 @@ vxsuite::ProductIdentity VXTuneAudioProcessor::makeIdentity() {
     id.quaternaryParamId  = kFocusParam;
     id.listenParamId      = kListenParam;   // shared delta audition: wet - aligned dry
     id.showPitchTrace     = true;
+    // Optional: an instrumental sidechain feeds full-chord harmonic
+    // evidence into auto Key/Scale (see updateAutoKeyFromSidechain()).
+    // Detection-only, never routed to output; the framework's own "SC"
+    // badge shows when a connected bus has real signal.
+    id.wantsSidechainInput = true;
     id.auxSelectorParamId = kKeyRootParam;
     id.auxSelectorLabel   = "Key";
     id.auxSelectorFollowsGeneralMode = false;   // no mode switch on this product
@@ -351,6 +356,8 @@ void VXTuneAudioProcessor::prepareSuite(const double sampleRate, const int sampl
     setReportedLatencySamples(pitchRenderer->latencySamples());
 
     monoScratch.assign(static_cast<size_t>(block), 0.0f);
+    sidechainMonoScratch.assign(static_cast<size_t>(block), 0.0f);
+    harmonicContext.prepare(sampleRate, block);
     resetAutoKeyState();
     resetSuite();
 }
@@ -387,6 +394,8 @@ void VXTuneAudioProcessor::resetSuite() {
     decomposition.reset();
     correctionEngine.reset();
     pitchRenderer->reset();
+    harmonicContext.reset();
+    sidechainActive = false;
     renderTargetCents = 0.0f;
     renderProcessCents = 0.0f;
     renderGateMisses = 0;
@@ -411,6 +420,26 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     const float focus = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.5f);
     const int keyChoice = vxsuite::readChoiceIndex(parameters, kKeyRootParam, 0);
     const int scaleChoice = vxsuite::readChoiceIndex(parameters, kScaleParam, 0);
+
+    if (const auto* sc = getSidechainBuffer();
+        sc != nullptr && sc->getNumChannels() > 0 && sc->getNumSamples() > 0) {
+        sidechainActive = true;
+        const int scSamples = sc->getNumSamples();
+        if (static_cast<int>(sidechainMonoScratch.size()) < scSamples)
+            sidechainMonoScratch.assign(static_cast<size_t>(scSamples), 0.0f);
+        const float* scLeft = sc->getReadPointer(0);
+        if (sc->getNumChannels() > 1) {
+            const float* scRight = sc->getReadPointer(1);
+            for (int i = 0; i < scSamples; ++i)
+                sidechainMonoScratch[static_cast<size_t>(i)] = 0.5f * (scLeft[i] + scRight[i]);
+        } else {
+            std::copy(scLeft, scLeft + scSamples, sidechainMonoScratch.begin());
+        }
+        harmonicContext.process(sidechainMonoScratch.data(), scSamples);
+        updateAutoKeyFromSidechain();
+    } else {
+        sidechainActive = false;
+    }
 
     // Keep analysis and rendering marching together. Offline hosts may hand us
     // very large blocks; analysing the whole block before rendering would make
@@ -451,7 +480,24 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
             // target stop being reinforced while an alternative starts
             // accumulating - a retarget driven by the key updating, not by
             // the singer's pitch actually moving.
-            if (frame.f0Hz.value <= 0.0f || octaveSuspect)
+            //
+            // Real bug found on real material: auto-key's major/minor mode
+            // can flip mid-note (the mode tie-break settling after the note
+            // already started) right after a boundary froze the OLD mode's
+            // mask, which can exclude the pitch class the singer is
+            // currently on for the rest of that note - forcing correction
+            // onto the nearest note the stale mask still allows, a full
+            // semitone off, for as long as the note lasts. Unlike a general
+            // mid-note narrowing/widening (unsafe, per above), specifically
+            // ADDING BACK the pitch class already being sung is safe: it
+            // cannot destabilise whatever TargetEstimator is currently
+            // reinforcing, it only lets the correct candidate start
+            // accumulating evidence again instead of staying locked out for
+            // the rest of the note.
+            const bool currentPitchClassNewlyAllowed = frame.centreHz > 0.0f
+                && (appliedScaleMask & (1u << midiPitchClassFromCents(frame.centreCents))) == 0
+                && (rawScaleMask & (1u << midiPitchClassFromCents(frame.centreCents))) != 0;
+            if (frame.f0Hz.value <= 0.0f || octaveSuspect || currentPitchClassNewlyAllowed)
                 appliedScaleMask = rawScaleMask;
             const float correction =
                 correctionEngine.process(frame, amount, natural, appliedScaleMask, speed, focus);
@@ -557,7 +603,40 @@ void VXTuneAudioProcessor::updateAutoKeyEstimate(const vxsuite::tune::PitchFrame
         * std::clamp(frame.f0Hz.confidence * frame.decompConfidence, 0.0f, 1.0f);
     autoKeyHistogram[static_cast<size_t>(pitchClass)] += weight;
     autoKeyFrameCount = std::min(autoKeyFrameCount + 1, 2000000);
+    finalizeAutoKeyEstimate();
+}
 
+void VXTuneAudioProcessor::updateAutoKeyFromSidechain() noexcept {
+    const float presence = harmonicContext.presence();
+    // Below this, the analysed window is closer to noise floor than real
+    // instrumental signal - don't let near-silence chroma pollute the
+    // histogram (a Fourier transform of noise/hum still produces SOME
+    // pitch-class energy, it just isn't harmony).
+    constexpr float kPresenceGate = 0.12f;
+    if (presence < kPresenceGate)
+        return;
+
+    // Sidechain evidence does NOT decay the histogram itself (only the
+    // vocal path does, in updateAutoKeyEstimate() above) - an instrumental
+    // often plays alone before the vocal enters, and un-decayed
+    // accumulation during that stretch is exactly what lets the key be
+    // known by the time singing starts, matching the "section-based, not
+    // first-note-based" auto-key design already in place for the vocal.
+    //
+    // Weight chosen so a clear, sustained chord accumulates influence
+    // comparable to several seconds of confident vocal evidence (weight
+    // up to ~1.0 per hop there) rather than instantly overwhelming it -
+    // the instrumental is a richer signal but a single FFT window is still
+    // one noisy observation, not ground truth.
+    constexpr float kSidechainWeight = 0.6f;
+    const auto& chroma = harmonicContext.chroma();
+    const float scale = kSidechainWeight * presence;
+    for (int i = 0; i < 12; ++i)
+        autoKeyHistogram[static_cast<size_t>(i)] += chroma[static_cast<size_t>(i)] * scale;
+    finalizeAutoKeyEstimate();
+}
+
+void VXTuneAudioProcessor::finalizeAutoKeyEstimate() noexcept {
     float total = 0.0f;
     for (const float value : autoKeyHistogram)
         total += value;

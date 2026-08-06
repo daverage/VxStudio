@@ -3,6 +3,7 @@
 #include "../../framework/VxStudioProcessorBase.h"
 #include "dsp/VxTuneCorrectionEngine.h"
 #include "dsp/VxTuneDecomposition.h"
+#include "dsp/VxTuneHarmonicContext.h"
 #include "dsp/VxTuneKeyProfiles.h"
 #include "dsp/VxTunePitchDetector.h"
 #include "dsp/VxTunePitchRenderer.h"
@@ -63,6 +64,7 @@ public:
     // Best-correlated root for a user-pinned mode.
     int bestRootForFixedModeForTests(const bool isMajor) noexcept { return bestRootForFixedMode(isMajor); }
     std::uint16_t appliedScaleMaskForTests() const noexcept { return appliedScaleMask; }
+    bool hasSidechainActive() const noexcept override { return sidechainActive; }
 
 protected:
     void prepareSuite(double sampleRate, int samplesPerBlock) override;
@@ -80,6 +82,17 @@ private:
     void resetAutoKeyState();
     void updateAutoKeyEstimate(const vxsuite::tune::PitchFrame& frame,
                                const vxsuite::tune::NoteSegment& segment) noexcept;
+    // Feeds the sidechain's chroma into the SAME histogram/profile-match
+    // pipeline updateAutoKeyEstimate() uses - a richer, full-chord evidence
+    // source for the song's key, not a separate correction mechanism. See
+    // VxTuneHarmonicContext.h for why this reuses the existing auto-key
+    // machinery rather than adding a new fusion path into the estimator.
+    void updateAutoKeyFromSidechain() noexcept;
+    // Shared tail of updateAutoKeyEstimate()/updateAutoKeyFromSidechain():
+    // profile-correlates the (now-updated) histogram and applies the
+    // held-candidate hysteresis. Both callers only differ in how they add
+    // evidence to autoKeyHistogram beforehand.
+    void finalizeAutoKeyEstimate() noexcept;
     std::uint16_t currentScaleMask(int keyChoice, int scaleChoice) noexcept;
     // Best-correlated mode (major=true) for a user-pinned root, and
     // best-correlated root for a user-pinned mode. The free joint pick
@@ -95,8 +108,11 @@ private:
     vxsuite::tune::PerformanceDecomposition decomposition;
     vxsuite::tune::CorrectionEngine correctionEngine;
     std::unique_ptr<vxsuite::tune::VxTunePitchRenderer> pitchRenderer;
+    vxsuite::tune::HarmonicContextAnalyzer harmonicContext;
 
     std::vector<float> monoScratch;
+    std::vector<float> sidechainMonoScratch;
+    bool sidechainActive = false;
     std::array<vxsuite::tune::PitchObservation, 64> observationScratch {};
 
     struct DebugTraceRow {

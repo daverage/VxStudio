@@ -369,6 +369,57 @@ void testAppliedScaleMaskHoldsThroughAnUninterruptedSustain() {
           "applied mask updates once the note actually ends");
 }
 
+// Regression for a real bug found on real material: auto-key's major/minor
+// mode can flip mid-note (the tie-break settling slightly after the note
+// already started), and the mask captured at the note's own boundary can
+// therefore exclude the pitch class the singer is actually on for the rest
+// of that note - forcing correction onto the nearest note the stale mask
+// still allows, a full semitone off, until the note ends. Manually pinning
+// Key/Scale here (rather than waiting on auto-key's own hysteresis) to
+// reproduce the exact mask-membership transition deterministically: Bb
+// Natural Minor excludes D, Bb Major includes it.
+void testAppliedScaleMaskRecoversMidNoteWhenPitchClassNewlyAllowed() {
+    std::printf("Applied scale mask: recovers mid-note once the sung pitch "
+                "class becomes newly allowed:\n");
+    VXTuneAudioProcessor p;
+    p.prepareToPlay(kSampleRate, kBlock);
+    setChoice(p, "keyroot", 11); // Bb
+    setChoice(p, "scale", 3);    // Natural Minor - excludes D
+
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> block(2, kBlock);
+    double phase = 0.0;
+    const int blocksPerSecond = static_cast<int>(kSampleRate) / kBlock;
+    const auto feedTone = [&](const float hz, const int blocks) {
+        for (int b = 0; b < blocks; ++b) {
+            for (int i = 0; i < kBlock; ++i) {
+                phase += kTwoPi * hz / kSampleRate;
+                float s = 0.0f;
+                for (int h = 1; h <= 3; ++h)
+                    s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
+                block.setSample(0, i, 0.25f * s);
+                block.setSample(1, i, 0.25f * s);
+            }
+            p.processBlock(block, midi);
+        }
+    };
+
+    block.clear();
+    for (int b = 0; b < 10; ++b)
+        p.processBlock(block, midi); // genuine silence, lets the mask capture once
+    const float d5Hz = 440.0f * std::exp2(5.0f / 12.0f); // D5, pitch class D
+    feedTone(d5Hz, blocksPerSecond); // ~1s, settle on Bb Natural Minor
+    const std::uint16_t maskBeforeSwitch = p.appliedScaleMaskForTests();
+    check((maskBeforeSwitch & (1u << 2)) == 0,
+          "Bb Natural Minor excludes D before the switch");
+
+    setChoice(p, "scale", 2); // Major mid-sustain, no gap - now includes D
+    feedTone(d5Hz, blocksPerSecond);
+    check((p.appliedScaleMaskForTests() & (1u << 2)) != 0,
+          "mask recovers D mid-note once the update would newly allow the "
+              "pitch actually being sung, without waiting for the note to end");
+}
+
 void testPitchTraceFeed() {
     std::printf("Pitch trace feed:\n");
     const float sharpHz = 220.0f * std::exp2(30.0f / 1200.0f);
@@ -398,6 +449,110 @@ void testPitchTraceFeed() {
     check(silent.getPitchTraceConfidence() <= 0.0f, "silence yields zero-confidence trace");
 }
 
+// Enables the (opt-in) sidechain bus and returns a 4-channel buffer
+// (main L/R + sidechain L/R), mirroring VXLeveler's own sidechain-bus test
+// pattern (tests/VxLevelerRiderTests.cpp::processorSidechainBus).
+juce::AudioBuffer<float> prepareWithSidechainBus(VXTuneAudioProcessor& p) {
+    auto layout = p.getBusesLayout();
+    layout.inputBuses.set(1, juce::AudioChannelSet::stereo());
+    const bool ok = p.setBusesLayout(layout);
+    p.prepareToPlay(kSampleRate, kBlock);
+    (void) ok;
+    return juce::AudioBuffer<float>(4, kBlock);
+}
+
+void testSidechainBusExistsAndNeverLeaksToOutput() {
+    std::printf("Sidechain: bus exists and is detection-only (never reaches output):\n");
+    VXTuneAudioProcessor p;
+    const bool hasScBus = p.getBusCount(true) > 1;
+    check(hasScBus, "opts into a sidechain input bus");
+    if (!hasScBus)
+        return;
+
+    auto block = prepareWithSidechainBus(p);
+    juce::MidiBuffer midi;
+    float maxMainOut = 0.0f;
+    double phase = 0.0;
+    for (int b = 0; b < 60; ++b) {
+        block.clear();
+        for (int i = 0; i < kBlock; ++i) {
+            phase += kTwoPi * 261.63f / kSampleRate;
+            const float sc = 0.3f * std::sin(static_cast<float>(phase));
+            block.setSample(2, i, sc);
+            block.setSample(3, i, sc);
+        }
+        p.processBlock(block, midi);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                maxMainOut = std::max(maxMainOut, std::abs(block.getSample(ch, i)));
+    }
+    check(maxMainOut < 1.0e-6f,
+          "silent main input stays silent with sidechain signal present (max "
+              + std::to_string(maxMainOut) + ")");
+    check(p.hasSidechainActive(), "reports sidechain active while fed a real signal");
+}
+
+// Feeds silence on the main (vocal) input and a repeating C-major melody
+// on the sidechain input; traces auto-key state the same way
+// runMelodyAndTraceAutoKey() does for the vocal-only path.
+std::vector<VXTuneAudioProcessor::AutoKeyStateForTests> runSidechainMelodyAndTraceAutoKey(
+        VXTuneAudioProcessor& p, juce::AudioBuffer<float>& block,
+        const std::vector<float>& melodyHz, const float noteSeconds, const float totalSeconds) {
+    juce::MidiBuffer midi;
+    const int blocksPerNote = std::max(1, static_cast<int>(noteSeconds * kSampleRate / kBlock));
+    const int totalBlocks = static_cast<int>(totalSeconds * kSampleRate / kBlock);
+    std::vector<VXTuneAudioProcessor::AutoKeyStateForTests> trace;
+    double phase = 0.0;
+    for (int b = 0; b < totalBlocks; ++b) {
+        const size_t noteIndex = static_cast<size_t>(b / blocksPerNote) % melodyHz.size();
+        const float hz = melodyHz[noteIndex];
+        block.clear();
+        for (int i = 0; i < kBlock; ++i) {
+            phase += kTwoPi * hz / kSampleRate;
+            float s = 0.0f;
+            for (int h = 1; h <= 3; ++h)
+                s += std::sin(static_cast<float>(phase) * h) / static_cast<float>(h);
+            const float sc = 0.3f * s;
+            block.setSample(2, i, sc);
+            block.setSample(3, i, sc);
+        }
+        p.processBlock(block, midi);
+        if (b % blocksPerNote == blocksPerNote - 1)
+            trace.push_back(p.autoKeyStateForTests());
+    }
+    return trace;
+}
+
+// The real acceptance test for the feature: a silent vocal (no melody at
+// all - as if the instrumental is playing an intro before the singer
+// enters) still lets VX Tune establish the song's key, purely from the
+// sidechain's harmonic content, via the same histogram/profile-correlation
+// machinery the vocal itself uses (VxTuneHarmonicContext.h feeds the
+// identical autoKeyHistogram bins). Uses the same C-major content and the
+// same 0.15 confidence gate as testAutoKeyLocksOntoScaleAndHolds() so the
+// two are directly comparable: vocal-only needs a sung melody to reach
+// this; here there is no vocal at all.
+void testSidechainAloneEstablishesKeyWithNoVocal() {
+    std::printf("Sidechain: establishes the key from the instrumental alone, no vocal singing:\n");
+    const std::vector<float> cMajorMelody = {
+        261.63f, 293.66f, 329.63f, 349.23f, 392.00f,
+        261.63f, 440.00f, 392.00f, 493.88f, 261.63f,
+    };
+    VXTuneAudioProcessor p;
+    auto block = prepareWithSidechainBus(p);
+
+    const auto initial = p.autoKeyStateForTests();
+    check(initial.confidence < 0.15f, "starts unconverged before any signal");
+
+    const auto trace = runSidechainMelodyAndTraceAutoKey(p, block, cMajorMelody, 0.35f, 20.0f);
+    const auto convergedAt = std::find_if(trace.begin(), trace.end(),
+        [](const VXTuneAudioProcessor::AutoKeyStateForTests& s) {
+            return s.confidence >= 0.15f && s.root == 0 && s.scale == 2;
+        });
+    check(convergedAt != trace.end(),
+          "locks onto C major from sidechain content alone (main input silent throughout)");
+}
+
 } // namespace
 
 int main() {
@@ -411,7 +566,10 @@ int main() {
     testFixedRootPicksItsOwnModeNotTheFreePicksMode();
     testFixedModePicksItsOwnRootNotTheFreePicksRoot();
     testAppliedScaleMaskHoldsThroughAnUninterruptedSustain();
+    testAppliedScaleMaskRecoversMidNoteWhenPitchClassNewlyAllowed();
     testPitchTraceFeed();
+    testSidechainBusExistsAndNeverLeaksToOutput();
+    testSidechainAloneEstablishesKeyWithNoVocal();
     if (failures == 0) {
         std::printf("All VX Tune plugin tests passed\n");
         return 0;

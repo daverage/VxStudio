@@ -644,6 +644,7 @@ target_sources(VXTune PRIVATE
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
 )
 target_include_directories(VXTune PRIVATE
   Source
@@ -1017,12 +1018,14 @@ add_executable(VxTuneAnalysisTests
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
 )
 target_include_directories(VxTuneAnalysisTests PRIVATE
   Source
   tests
   ThirdParty/signalsmith-stretch/include
 )
+target_link_libraries(VxTuneAnalysisTests PRIVATE juce::juce_dsp)
 vxstudio_add_executable_test(VxTuneAnalysisTests)
 
 add_executable(VxTuneRendererTests
@@ -1043,6 +1046,7 @@ add_executable(VxTunePluginTests
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
 )
 target_include_directories(VxTunePluginTests PRIVATE
   Source
@@ -1063,6 +1067,7 @@ add_executable(VxTuneBatchHarness
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
 )
 target_include_directories(VxTuneBatchHarness PRIVATE
   Source
@@ -1292,6 +1297,7 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
 )
 target_include_directories(VXStudioPluginRegressionTests PRIVATE
   Source
@@ -1441,6 +1447,7 @@ add_executable(VXSuiteProfile
   Source/vxstudio/products/tune/dsp/VxTunePitchDetector.cpp
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
+  Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
 )
 target_include_directories(VXSuiteProfile PRIVATE
   Source
