@@ -396,6 +396,7 @@ void VXTuneAudioProcessor::resetSuite() {
     pitchRenderer->reset();
     harmonicContext.reset();
     sidechainActive = false;
+    sidechainPresenceSmoothed = 0.0f;
     renderTargetCents = 0.0f;
     renderProcessCents = 0.0f;
     renderGateMisses = 0;
@@ -423,7 +424,6 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
 
     if (const auto* sc = getSidechainBuffer();
         sc != nullptr && sc->getNumChannels() > 0 && sc->getNumSamples() > 0) {
-        sidechainActive = true;
         const int scSamples = sc->getNumSamples();
         if (static_cast<int>(sidechainMonoScratch.size()) < scSamples)
             sidechainMonoScratch.assign(static_cast<size_t>(scSamples), 0.0f);
@@ -437,8 +437,26 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
         }
         harmonicContext.process(sidechainMonoScratch.data(), scSamples);
         updateAutoKeyFromSidechain();
+        // A structurally-connected bus (host negotiated the channels) is not
+        // the same thing as a genuinely wired sidechain send - some hosts
+        // reuse/copy a plugin's bus layout across instances, which can leave
+        // an instance's sidechain bus "connected" with nothing but silence
+        // actually routed into it. Gate the reported active/UI state (and
+        // the auto-key contribution above, via harmonicContext's own
+        // presence gate) on real signal level, matching VXLeveler's
+        // isSidechainSteering()/scConfidence pattern, not bus connectivity
+        // alone - otherwise the badge (and anything a host derives PDC
+        // decisions from) claims "active" on tracks with nothing genuinely
+        // feeding the sidechain.
+        const float presenceCoeff = harmonicContext.presence() > sidechainPresenceSmoothed
+            ? 0.0f   // rise instantly on real signal
+            : 0.995f; // fall slowly so brief gaps don't flicker the badge
+        sidechainPresenceSmoothed = presenceCoeff * sidechainPresenceSmoothed
+            + (1.0f - presenceCoeff) * harmonicContext.presence();
+        sidechainActive = sidechainPresenceSmoothed > 0.12f;
     } else {
         sidechainActive = false;
+        sidechainPresenceSmoothed = 0.0f;
     }
 
     // Keep analysis and rendering marching together. Offline hosts may hand us

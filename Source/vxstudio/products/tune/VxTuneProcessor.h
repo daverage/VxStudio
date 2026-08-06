@@ -113,6 +113,7 @@ private:
     std::vector<float> monoScratch;
     std::vector<float> sidechainMonoScratch;
     bool sidechainActive = false;
+    float sidechainPresenceSmoothed = 0.0f;
     std::array<vxsuite::tune::PitchObservation, 64> observationScratch {};
 
     struct DebugTraceRow {

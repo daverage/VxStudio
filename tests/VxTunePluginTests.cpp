@@ -492,6 +492,27 @@ void testSidechainBusExistsAndNeverLeaksToOutput() {
     check(p.hasSidechainActive(), "reports sidechain active while fed a real signal");
 }
 
+// Regression for a real bug: a structurally-connected sidechain bus (the
+// host negotiated the channels) is not the same as a genuinely wired
+// sidechain send - some hosts reuse/copy a plugin's bus layout across
+// instances, which can leave an instance's bus "connected" with only
+// silence actually flowing into it. `hasSidechainActive()` must reflect
+// real signal, matching VXLeveler's isSidechainSteering()/scConfidence
+// pattern, not bus connectivity alone.
+void testSidechainBusConnectedButSilentDoesNotReportActive() {
+    std::printf("Sidechain: a connected-but-silent bus does not report active:\n");
+    VXTuneAudioProcessor p;
+    auto block = prepareWithSidechainBus(p);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 60; ++b) {
+        block.clear(); // main AND sidechain channels both silent
+        p.processBlock(block, midi);
+    }
+    check(!p.hasSidechainActive(),
+          "a structurally-connected bus carrying only silence does not "
+              "report sidechain active");
+}
+
 // Feeds silence on the main (vocal) input and a repeating C-major melody
 // on the sidechain input; traces auto-key state the same way
 // runMelodyAndTraceAutoKey() does for the vocal-only path.
@@ -569,6 +590,7 @@ int main() {
     testAppliedScaleMaskRecoversMidNoteWhenPitchClassNewlyAllowed();
     testPitchTraceFeed();
     testSidechainBusExistsAndNeverLeaksToOutput();
+    testSidechainBusConnectedButSilentDoesNotReportActive();
     testSidechainAloneEstablishesKeyWithNoVocal();
     if (failures == 0) {
         std::printf("All VX Tune plugin tests passed\n");
