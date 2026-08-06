@@ -536,7 +536,14 @@ void Dsp::processGeneralMode(juce::AudioBuffer<float>& buffer,
     const float mixDecisionTrust = clamp01(signalTrust
                                            * (1.0f - 0.22f * clamp01(params.monoScore))
                                            * (1.0f - 0.18f * compressionPenalty));
-    const float generalMomentaryCoeff = timeCoeff(sr, 0.40f);
+    // Spike detection compares momentary against short-term level (overshootDb
+    // below). At 0.40s this never fully settles between the ~0.4-0.5s repeats
+    // typical of rhythmic/pulsing program material, so overshootDb reads as
+    // continuously elevated instead of a brief transient - generalSpikeGain
+    // then stays pinned near its floor for the whole passage rather than
+    // ducking only genuine spikes. 0.06s decays between such repeats while
+    // still smoothing over a handful of samples.
+    const float generalMomentaryCoeff = timeCoeff(sr, 0.06f);
     const float generalShortCoeff = timeCoeff(sr, 3.0f);
     const float generalBaselineRiseCoeff = timeCoeff(sr, 4.2f);
     const float generalBaselineFallCoeff = timeCoeff(sr, 8.0f);

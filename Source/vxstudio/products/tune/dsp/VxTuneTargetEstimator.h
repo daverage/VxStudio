@@ -62,6 +62,7 @@ public:
 
     void reset() noexcept {
         count = 0;
+        lastMidi = -1000000;
     }
 
     struct Result {
@@ -72,12 +73,33 @@ public:
         float marginLog = 0.0f;       // best score - runner-up score
     };
 
+    // Bounds how much a single frame's switching-inertia bonus can help the
+    // previously-held target. Deliberately small relative to kInRangeBonus
+    // (3.0): this must nudge a close call, never let a stale target beat
+    // fresh, clearly-better evidence outright.
+    static constexpr float kSwitchInertiaMax = 0.8f;
+
     // One call per analysis frame, always (even low-confidence/unvoiced —
     // that is how the estimator knows to forget between phrases).
     // decompConfidence == 0 means "nothing to go on": the pool resets so the
     // next phrase starts fresh instead of gliding from a stale target.
+    //
+    // stabilityBias (0..1, typically the caller's previous-frame
+    // behaviourProb[sustain]+[vibrato] from VxTuneSegmenter) grounds a small
+    // per-frame preference for whichever note won last frame: real
+    // sustain/vibrato should not flip on a single frame's competing blip,
+    // while a genuine passing/onset/slide segment (bias near 0) switches as
+    // fast as it always has. The segmenter computes this independently of
+    // which note the estimator itself favours (see VxTuneSegmenter.h), so
+    // this is not the estimator validating its own past choice - the
+    // failure mode this project already caught once with the reverted
+    // octave-continuity fix. The bonus is applied only to THIS frame's
+    // decision, never folded into a candidate's stored score, so it cannot
+    // accumulate across frames the way stale evidence itself once did (see
+    // kScoreFloor/kInRangeBonus above).
     Result update(const float centreCents, const float decompConfidence,
-                  const std::uint16_t scaleMask, const float natural) noexcept {
+                  const std::uint16_t scaleMask, const float natural,
+                  const float stabilityBias = 0.0f) noexcept {
         if (decompConfidence <= 0.0f) {
             reset();
             return {};
@@ -124,16 +146,34 @@ public:
         if (count == 0)
             return {};
 
+        const float bias = stabilityBias <= 0.0f
+            ? 0.0f
+            : (stabilityBias >= 1.0f ? 1.0f : stabilityBias);
+        const float inertiaBonus = bias * kSwitchInertiaMax;
+        const auto effective = [this, inertiaBonus](const int i) noexcept {
+            return candidates[i].score
+                + (candidates[i].midi == lastMidi ? inertiaBonus : 0.0f);
+        };
+
         int bestIdx = 0;
-        for (int i = 1; i < count; ++i)
-            if (candidates[i].score > candidates[bestIdx].score)
+        float bestEffective = effective(0);
+        for (int i = 1; i < count; ++i) {
+            const float e = effective(i);
+            if (e > bestEffective) {
+                bestEffective = e;
                 bestIdx = i;
+            }
+        }
         int runnerIdx = -1;
+        float runnerEffective = 0.0f;
         for (int i = 0; i < count; ++i) {
             if (i == bestIdx)
                 continue;
-            if (runnerIdx < 0 || candidates[i].score > candidates[runnerIdx].score)
+            const float e = effective(i);
+            if (runnerIdx < 0 || e > runnerEffective) {
                 runnerIdx = i;
+                runnerEffective = e;
+            }
         }
 
         Result r;
@@ -142,9 +182,10 @@ public:
         r.errorCents = centreCents - 100.0f * static_cast<float>(candidates[bestIdx].midi - 69);
         r.runnerUpMidiNote = runnerIdx >= 0 ? candidates[runnerIdx].midi : -1;
         r.marginLog = runnerIdx >= 0
-            ? candidates[bestIdx].score - candidates[runnerIdx].score
-            : candidates[bestIdx].score;
+            ? bestEffective - runnerEffective
+            : bestEffective;
 
+        lastMidi = r.midiNote;
         return r;
     }
 
@@ -189,6 +230,7 @@ private:
     float frameDur = 1.0f / 187.5f;
     Candidate candidates[kMaxCandidates] {};
     int count = 0;
+    int lastMidi = -1000000;
 };
 
 } // namespace vxsuite::tune

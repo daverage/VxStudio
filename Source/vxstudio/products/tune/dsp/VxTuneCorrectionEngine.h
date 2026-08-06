@@ -151,8 +151,17 @@ public:
         // decompConfidence of exactly zero (true unvoiced) is how it knows
         // to forget between phrases; weak-but-nonzero confidence just
         // contributes weak evidence rather than forcing a reset.
+        // Previous frame's segment (segmenter.process() for THIS frame
+        // hasn't run yet) grounds a small switching-inertia bias: real
+        // sustain/vibrato should resist a single competing frame, a
+        // passing/onset/slide segment should not. See
+        // TargetEstimator::update()'s stabilityBias doc for why this is
+        // safe (segmenter is independent of the estimator's own choice).
+        const NoteSegment& previousSegment = segmenter.currentSegment();
+        const float stabilityBias = previousSegment.behaviourProb[static_cast<int>(Behaviour::sustain)]
+            + previousSegment.behaviourProb[static_cast<int>(Behaviour::vibrato)];
         const auto target = estimator.update(frame.centreCents, frame.decompConfidence,
-                                              scaleMask, natural);
+                                              scaleMask, natural, stabilityBias);
         lastTarget = {
             target.valid,
             target.midiNote,

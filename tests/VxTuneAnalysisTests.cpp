@@ -488,6 +488,58 @@ void testMusicalAuthorityProtectsUnstableFrames() {
               + std::to_string(settled) + "c)");
 }
 
+void testTargetSwitchingInertiaAtBoundary() {
+    std::printf("Target-switching inertia damps flicker at a semitone "
+                "boundary without blocking a genuine note change:\n");
+    // A single-frame competing blip amid a long-held note would never flip
+    // the estimator's argmax anyway - the incumbent's accumulated evidence
+    // dwarfs one fresh frame's contribution by design (that is the whole
+    // point of evidence accumulation). The regime this fix actually targets
+    // is a noisy real pitch estimate hovering almost exactly on a semitone
+    // boundary during a genuinely held/sustained note, where per-frame
+    // jitter can tip the instantaneous argmax back and forth many times a
+    // second - the F4-round-6 "on/off" flicker bug class, one level up
+    // (which NOTE is favoured, not just whether correction engages).
+    constexpr double frameRate = 48000.0 / 256.0;
+    CorrectionEngine engine;
+    engine.prepare(frameRate, CorrectionEngine::Config {});
+
+    std::mt19937 rng(12345);
+    std::uniform_real_distribution<float> jitter(-8.0f, 8.0f);
+
+    int switches = 0;
+    int lastMidi = -1000000;
+    // Hover exactly between A3 (0c) and A#3 (100c) with small per-frame
+    // jitter, both candidates symmetric at +/-50c.
+    for (int i = 0; i < 60; ++i) {
+        auto frame = syntheticFrame(220.0f, 50.0f + jitter(rng), 0.95f,
+                                     EstimateReason::nominal);
+        frame.timeSamples = static_cast<std::int64_t>(i * 256);
+        engine.process(frame, 1.0f, 0.5f);
+        const int midi = engine.currentTargetSnapshot().midiNote;
+        if (lastMidi != -1000000 && midi != lastMidi)
+            ++switches;
+        lastMidi = midi;
+    }
+    check(switches <= 6,
+          "target does not flicker every frame while hovering at the "
+              "boundary (got " + std::to_string(switches)
+              + " switches over 60 frames)");
+
+    // Contrast: a genuine, unambiguous note change (A3 -> C4, three
+    // semitones, unmistakably nearer the new note every frame) must still
+    // land promptly - inertia must not create a new stuck-target bug.
+    for (int i = 0; i < 30; ++i) {
+        auto frame = syntheticFrame(261.63f, 0.0f, 0.95f, EstimateReason::nominal);
+        frame.timeSamples = static_cast<std::int64_t>((60 + i) * 256);
+        engine.process(frame, 1.0f, 0.5f);
+    }
+    const int finalMidi = engine.currentTargetSnapshot().midiNote;
+    check(finalMidi == 60,
+          "genuine note change to C4 still converges despite switching "
+              "inertia (got midi " + std::to_string(finalMidi) + ")");
+}
+
 // Runs detector -> decomposition -> engine on `audio` and returns the
 // dominant behaviour + its probability at the LAST analysed frame -
 // i.e. after the whole clip has been seen, matching how a real-time
@@ -684,6 +736,7 @@ int main() {
     testDivergenceGuardStopsChasingAGlide();
     testDoesNotTouchInTune();
     testMusicalAuthorityProtectsUnstableFrames();
+    testTargetSwitchingInertiaAtBoundary();
     testBehaviourDistribution();
     testScaleAwareTargets();
     testVibratoSurvivesCorrection();
