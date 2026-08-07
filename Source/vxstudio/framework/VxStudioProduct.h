@@ -111,6 +111,11 @@ struct ProductIdentity {
     // Scrolling pitch trace (detected vs corrected pitch on a note grid);
     // requires the ProcessorBase pitch-trace virtuals.
     bool showPitchTrace = false;
+    // VX Width Phase 2 (docs/Task Based/VX_WIDTH_ENGINE_UPGRADE.md): a
+    // dedicated real-time input/target/actual spatial-width visualiser plus
+    // mono/stereo-adaptive Width knob presentation. Requires
+    // ProcessorBase::getSpatialWidthTelemetry() to return a value.
+    bool showSpatialWidthVisualizer = false;
     // Adds a stereo "Sidechain" input bus (disabled until the host routes to
     // it). Detection-only: the framework never writes SC channels to output.
     bool wantsSidechainInput = false;

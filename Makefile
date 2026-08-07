@@ -4991,6 +4991,30 @@ Source/vxstudio/framework/VxStudioSignalQuality.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxStudioFramework.dir/build.make CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.s
 .PHONY : Source/vxstudio/framework/VxStudioSignalQuality.cpp.s
 
+Source/vxstudio/framework/VxStudioSpatialWidthView.o: Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o
+.PHONY : Source/vxstudio/framework/VxStudioSpatialWidthView.o
+
+# target to build an object file
+Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxStudioFramework.dir/build.make CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o
+.PHONY : Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o
+
+Source/vxstudio/framework/VxStudioSpatialWidthView.i: Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i
+.PHONY : Source/vxstudio/framework/VxStudioSpatialWidthView.i
+
+# target to preprocess a source file
+Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxStudioFramework.dir/build.make CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i
+.PHONY : Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i
+
+Source/vxstudio/framework/VxStudioSpatialWidthView.s: Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s
+.PHONY : Source/vxstudio/framework/VxStudioSpatialWidthView.s
+
+# target to generate assembly for a file
+Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VxStudioFramework.dir/build.make CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s
+.PHONY : Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s
+
 Source/vxstudio/framework/VxStudioSpectrumTelemetry.o: Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o
 .PHONY : Source/vxstudio/framework/VxStudioSpectrumTelemetry.o
 
@@ -7816,6 +7840,9 @@ help:
 	@echo "... Source/vxstudio/framework/VxStudioSignalQuality.o"
 	@echo "... Source/vxstudio/framework/VxStudioSignalQuality.i"
 	@echo "... Source/vxstudio/framework/VxStudioSignalQuality.s"
+	@echo "... Source/vxstudio/framework/VxStudioSpatialWidthView.o"
+	@echo "... Source/vxstudio/framework/VxStudioSpatialWidthView.i"
+	@echo "... Source/vxstudio/framework/VxStudioSpatialWidthView.s"
 	@echo "... Source/vxstudio/framework/VxStudioSpectrumTelemetry.o"
 	@echo "... Source/vxstudio/framework/VxStudioSpectrumTelemetry.i"
 	@echo "... Source/vxstudio/framework/VxStudioSpectrumTelemetry.s"

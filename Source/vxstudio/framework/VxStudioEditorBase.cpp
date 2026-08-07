@@ -10,7 +10,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
       tooltipWindow(this, 700),
       levelTraceView(owner.getProductIdentity().theme),
       gainMeterView(owner.getProductIdentity().theme),
-      pitchTraceView(owner.getProductIdentity().theme) {
+      pitchTraceView(owner.getProductIdentity().theme),
+      spatialWidthView(owner.getProductIdentity().theme) {
     auto makeMouseTransparent = [](auto& component) {
         component.setInterceptsMouseClicks(false, false);
     };
@@ -240,6 +241,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
     }
     if (identity.showStereoGainMeter)
         addAndMakeVisible(gainMeterView);
+    if (identity.showSpatialWidthVisualizer)
+        addAndMakeVisible(spatialWidthView);
     const bool analyzeStyle = identity.learnButtonLabel == "Analyze";
     if (analyzeStyle) {
         learnButton.setTooltip("Play the track through once, then press Analyze again to stop and lock the offline levelling map.");
@@ -310,6 +313,35 @@ EditorBase::EditorBase(ProcessorBase& owner)
     } else {
         primaryAttachment = std::make_unique<SliderAttachment>(state, identity.primaryParamId.data(), primarySlider);
         secondaryAttachment = std::make_unique<SliderAttachment>(state, identity.secondaryParamId.data(), secondarySlider);
+        // Phase 2 (§2/§3/§13, refined per explicit product decision): the
+        // STORED PARAMETER stays bipolar and unconditional - v=0.5 is
+        // ALWAYS an exact no-op, for every content type, matching the
+        // foundational "exact null at Width=0" regression invariant that
+        // predates this feature. Mono/stereo classification changes only
+        // the KNOB'S OWN interactive range (applyWidthKnobRangeForCurrentMode,
+        // called below and on every mode flip in updateSpatialWidthUi):
+        // mono restricts the slider's own NormalisableRange to the
+        // parameter's existing upper half [0.5,1.0], spread across the
+        // knob's full physical rotation, so centre-CCW genuinely means
+        // "no widening" and full-CW genuinely means "max widening" - with
+        // no fake/compressed dead zone and no change to what the stored
+        // value means. If automation drives the parameter below 0.5 while
+        // mono presentation is active, JUCE's Slider clamps the DISPLAYED
+        // position to the range's minimum (verified against
+        // SliderParameterAttachment's ignoreCallbacks guard - this can
+        // never write the clamped display value back to the parameter);
+        // the instant stereo content returns, the knob reflects the true
+        // stored value again, unchanged throughout.
+        if (identity.showSpatialWidthVisualizer) {
+            primarySlider.textFromValueFunction = [this](const double value) {
+                const float centred = juce::jlimit(-100.0f, 100.0f, (static_cast<float>(value) - 0.5f) * 200.0f);
+                if (widthPresentationIsMonoLike)
+                    return juce::String(juce::roundToInt(juce::jmax(0.0f, centred)));
+                const juce::String prefix = centred > 0.05f ? "+" : "";
+                return prefix + juce::String(juce::roundToInt(centred));
+            };
+            applyWidthKnobRangeForCurrentMode();
+        }
         if (identity.supportsTertiaryControl())
             tertiaryAttachment = std::make_unique<SliderAttachment>(state, identity.tertiaryParamId.data(), tertiarySlider);
         if (identity.supportsQuaternaryControl())
@@ -627,6 +659,12 @@ void EditorBase::resized() {
         pitchZoomBounds.removeFromRight(scaled(6));
         traceZoomBox.setBounds(pitchZoomBounds.removeFromRight(scaled(96)).reduced(0, scaled(2)));
         pitchTraceView.setBounds(pitchBounds);
+        body.removeFromTop(scaled(6));
+    }
+    spatialWidthViewBounds = {};
+    if (processor.getProductIdentity().showSpatialWidthVisualizer) {
+        spatialWidthViewBounds = body.removeFromTop(stacked ? scaled(150) : scaled(136)).reduced(scaled(18), scaled(4));
+        spatialWidthView.setBounds(spatialWidthViewBounds);
         body.removeFromTop(scaled(6));
     }
 
@@ -1016,6 +1054,65 @@ void EditorBase::timerCallback() {
         if (!sidechainBadgeBounds.isEmpty())
             repaint(sidechainBadgeBounds);
     }
+
+    updateSpatialWidthUi();
+}
+
+void EditorBase::updateSpatialWidthUi() {
+    const auto& identity = processor.getProductIdentity();
+    if (!identity.showSpatialWidthVisualizer)
+        return;
+    const auto telemetry = processor.getSpatialWidthTelemetry();
+    if (!telemetry.has_value())
+        return;
+
+    // §5: smoothed analysis + hysteresis + minimum dwell, entirely UI-side -
+    // the DSP's own continuous weighting (Phase 1/1.1) is untouched by this.
+    constexpr float kUiSmoothing = 0.82f;
+    widthMonoConfidenceSmoothed += (telemetry->monoConfidence01 - widthMonoConfidenceSmoothed) * (1.0f - kUiSmoothing);
+
+    constexpr float kMonoEnterThreshold = 0.65f;   // stereo -> mono requires this
+    constexpr float kStereoEnterThreshold = 0.45f; // mono -> stereo requires this (lower band = hysteresis)
+    constexpr int kDwellTicksRequired = 6;          // ~500ms at the 12Hz UI tick
+
+    const bool wantsMono = widthPresentationIsMonoLike
+        ? widthMonoConfidenceSmoothed > kStereoEnterThreshold
+        : widthMonoConfidenceSmoothed > kMonoEnterThreshold;
+
+    if (wantsMono != widthPresentationIsMonoLike) {
+        if (++widthModeDwellTicksElapsed >= kDwellTicksRequired) {
+            widthPresentationIsMonoLike = wantsMono;
+            widthModeDwellTicksElapsed = 0;
+            applyWidthKnobRangeForCurrentMode();
+        }
+    } else {
+        widthModeDwellTicksElapsed = 0;
+    }
+
+    spatialWidthView.setTelemetry(*telemetry, widthPresentationIsMonoLike);
+}
+
+void EditorBase::applyWidthKnobRangeForCurrentMode() {
+    // Remaps the Width knob's OWN interactive range - never the stored
+    // parameter (see the long comment where primaryAttachment is built).
+    // Mono: knob's full physical rotation spans only the parameter's
+    // existing upper half [0.5,1.0] (0..100% widening, no dead zone).
+    // Stereo: full [0.0,1.0] range, as always.
+    primarySlider.setNormalisableRange(widthPresentationIsMonoLike
+        ? juce::NormalisableRange<double>(0.5, 1.0, 0.001)
+        : juce::NormalisableRange<double>(0.0, 1.0, 0.001));
+    // Re-read the TRUE stored value directly from the parameter (not from
+    // primarySlider.getValue(), which may already be stale/clamped from
+    // before this range change) and re-apply it with dontSendNotification.
+    // If that value falls outside the new range (e.g. automation has Width
+    // at -40 while mono presentation is active), JUCE's Slider clamps the
+    // DISPLAYED position to the range boundary - the parameter itself is
+    // never touched, so returning to stereo presentation later restores
+    // the true value exactly.
+    const auto& identity = processor.getProductIdentity();
+    if (auto* param = processor.getValueTreeState().getParameter(identity.primaryParamId.data()))
+        primarySlider.setValue(param->getValue(), juce::dontSendNotification);
+    primarySlider.updateText();
 }
 
 void EditorBase::updateActivityIndicators() {

@@ -51,6 +51,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o.d"
   "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o"
   "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o.d"
+  "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o"
+  "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o.d"
   "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o"
   "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o.d"
   "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o"

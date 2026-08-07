@@ -465,10 +465,10 @@ inline constexpr HelpContent width {
 <p>Stereo image and doubling processor with four controls: Width, Double, Tightness, and Focus. Narrow a signal toward mono, widen an existing stereo image, or add a synthetic double - all without needing to understand M/S processing, phase, delay, or detuning.</p>
 <h2>How to use it</h2>
 <ul>
-<li>Width sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens the image.</li>
+<li>Width sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens the image. Width is the only control that changes the stereo image itself.</li>
 <li>Double introduces a synthetic second performance alongside the original. At 0 there is no added voice.</li>
-<li>Tightness sets how closely the generated performance follows the original, from tight and precise to loose and separate.</li>
-<li>Focus sets where in the spectrum the width and doubling effect concentrates: Body, Full, or Air.</li>
+<li>Tightness sets how closely that generated performance follows the original: loose and separate toward 0%, tight and precise toward 100%. Only affects Double - it has no effect on Width, including when Double is off.</li>
+<li>Focus sets where in the spectrum the generated doubled performance concentrates: Body, Full, or Air. Only affects Double's spectral character - it has no effect on Width, including when Double is off.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>

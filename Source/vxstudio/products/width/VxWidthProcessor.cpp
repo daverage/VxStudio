@@ -16,10 +16,6 @@ constexpr std::string_view kWidthParam      = "width";
 constexpr std::string_view kDoubleParam     = "double";
 constexpr std::string_view kTightnessParam  = "tightness";
 constexpr std::string_view kFocusParam      = "focus";
-// EXPERIMENTAL (2026-08-07, off by default) - user-facing so it can
-// actually be A/B'd in a DAW, but deliberately not one of the four main
-// knobs: a plain header toggle via ProductIdentity::simpleToggleParamId.
-constexpr std::string_view kMicroPitchExperimentalParam = "microPitchExperimental";
 
 // Region A (narrow, Width -100..0): SideOut = SideIn * sideScale, 1 at 0, 0 at -100.
 // Perceptually smooth curve per spec §7.1 rather than a raw linear map.
@@ -29,13 +25,93 @@ float narrowSideScale(const float widthNegative01) noexcept {
     return juce::jlimit(0.0f, 1.0f, shaped);
 }
 
-// Region B (bounded expansion, Width 0..+35): direct Side gain, capped per §7.2
-// ("approximately +3 dB to +6 dB" max). Region C (decorrelated layer, +35..+100)
-// is a later build-order step (§7.3-7.4) and is not applied yet - Width is
-// clamped to the Region B ceiling until that lands, so higher settings do not
-// silently regress to no-op.
+// Region B (bounded expansion): direct Side gain, capped per §7.2
+// ("approximately +3 dB to +6 dB" max). Region C is the decorrelated layer
+// that fills whatever gap Region B's bound can't close.
+//
+// Both regions are now driven by GAP-TO-TARGET (VX_WIDTH_ENGINE_UPGRADE.md
+// §5/§7), not by the raw requested Width value: widthGapPercent below is
+// (1 - estimatedInputWidth01) * widthPositivePercent - "how much of the
+// remaining distance to max practical width is being requested." For mono
+// input estimatedInputWidth01≈0, so widthGapPercent≈widthPositivePercent and
+// behaviour is unchanged from before this rebuild (§3's full-range mono
+// mapping). For material that's already wide, the same requested Width
+// percent produces a much smaller gap - satisfying §16's "already-wide
+// material must remain safe, only a small change" requirement structurally,
+// not via a special-cased threshold.
 constexpr float kRegionBCeiling = 35.0f;
 constexpr float kRegionBMaxGainDb = 4.5f;
+
+// Phase 1.2 (VX_WIDTH_ENGINE_1.2.md §2-§4): the fixed 35%/4.5dB ceiling
+// above is the PROVEN MONO law and must stay exactly as-is for mono-like
+// input (§1's hard requirement). For content that already reads as
+// genuinely stereo, that same ceiling was the plateau bug - Region B
+// saturated by widthGapPercent=35 (often around Width+50 on real stereo
+// material) and only Region C's decorrelated layer continued growing,
+// which doesn't read as "the existing image getting wider" (§3).
+//
+// Fix: extend the existing-Side expansion law itself across (almost) the
+// full 0..100 gap domain for stereo-like content, continuously blended by
+// stereoEvidence (§4) so there's no hard branch and mono is untouched at
+// stereoEvidence=0. Ceiling stops short of 100 (kStereoSideCeiling=85) so
+// Region C still has a supplementary 15-point band to fill per §7 - it's
+// no longer asked to carry everything above 35.
+constexpr float kStereoSideCeiling = 85.0f;
+constexpr float kStereoSideMaxGainDb = 9.0f;
+
+// stereoEvidence: 0 for mono-like input, 1 once the input's own estimated
+// width clearly reads as stereo. Built from analysis.estimatedWidth01
+// (W0), which is already ~0 for true-mono material and rises with genuine
+// stereo content - reusing it here (rather than a second classifier) keeps
+// this consistent with the same W0 that already drives widthGapPercent.
+constexpr float kStereoEvidenceLowW0 = 0.05f;
+constexpr float kStereoEvidenceHighW0 = 0.35f;
+
+float stereoEvidenceFromWidth01(const float estimatedInputWidth01) noexcept {
+    return juce::jlimit(0.0f, 1.0f,
+        (estimatedInputWidth01 - kStereoEvidenceLowW0) / (kStereoEvidenceHighW0 - kStereoEvidenceLowW0));
+}
+
+// Target-seeking direct-Side solver (design brief, 2026-08-07 - see
+// tasks/todo.md). Maps target width01 -> target Side/Mid ratio. Linear
+// against the same practical-maximum-ratio constant InputAnalyser's
+// sideMidWidth01 already normalises against (its local kMaxPracticalSideMidRatio
+// = 1.0) so R0 and the target stay on one consistent scale rather than
+// inventing a second one. A non-linear curve was explicitly invited but not
+// evidenced yet (no listening session available this pass); linear is the
+// simplest choice that is monotonic and bounded, picked as the starting
+// point pending a real listening pass (see tasks/todo.md report).
+constexpr float kMaxPracticalSideMidRatio = 1.0f;
+float targetRatioForWidth(const float width01) noexcept {
+    return juce::jlimit(0.0f, 1.0f, width01) * kMaxPracticalSideMidRatio;
+}
+
+// Upper bound on the direct existing-Side gain the solver may request.
+// §18/§30.2 of the brief explicitly asks for a 9/12/15dB comparison rather
+// than a guess - see VXWidthShellCheck.cpp's [gain-limit sweep] diagnostic
+// for the measured numbers this default is based on. Measured on the
+// moderate-stereo fixture (sideGain=0.30): 9dB visibly plateaus by w75->w100
+// (0.1788->0.1939); 12dB clears that plateau (0.2010->0.2150); 15dB keeps
+// climbing further still (0.2211->0.2430) - so 15dB is NOT just a marginal
+// gain over 12dB on this measure, more authority keeps buying more width.
+// On the narrow and already-wide fixtures the three ceilings measure
+// near-identically (narrow: Region C's residual path dominates regardless
+// of ceiling; wide: required gain never reaches even the 9dB bound). 12dB
+// is picked as the conservative middle option BECAUSE the extra headroom
+// 15dB offers on moderate material is exactly where image-quality/phase
+// risk from over-driving direct Side would show up first, and there is no
+// listening session available in this environment to confirm 15dB is still
+// safe there. Revisit upward only after a real A/B pass - see tasks/todo.md.
+constexpr float kDirectSideGainCeilingDb = 12.0f;
+constexpr float kR0Epsilon = 1.0e-4f;
+
+// Asymmetric block-rate smoothing for the solver-driven direct-Side gain
+// (§12): a distinct time constant from InputAnalyser's ~450ms width-estimate
+// constant (deliberately not reused, per §12), slower on release than
+// attack so a momentarily-dropping required gain doesn't audibly duck the
+// image while genuinely growing stereo content isn't kept waiting too long.
+constexpr float kDirectGainAttackSeconds = 0.35f;
+constexpr float kDirectGainReleaseSeconds = 0.6f;
 
 // Lag-aware predictability correlation (§11.3): checked at these lags, not
 // same-sample only - a delayed copy of Mid (exactly what the ADT voice's
@@ -47,24 +123,29 @@ constexpr float kPredictabilityMaxLagMs = 16.0f;
 // monoRiskRestraint: 0 = fully restrained (no boost applied, e.g. broadband
 // correlation at -1/anti-phase), 1 = unrestrained (correlation at +1/safe).
 // §7.2: "restrained by mono-risk analysis" - a phase-risky signal should not
-// have its Side energy boosted further.
-float expandedSideGain(const float widthPositivePercent, const float monoRiskRestraint) noexcept {
-    const float clamped = juce::jlimit(0.0f, kRegionBCeiling, widthPositivePercent);
-    const float gainDb = (clamped / kRegionBCeiling) * kRegionBMaxGainDb * juce::jlimit(0.0f, 1.0f, monoRiskRestraint);
+// have its Side energy boosted further. Takes widthGapPercent (see comment
+// above kRegionBCeiling), not the raw requested Width.
+float expandedSideGain(const float widthGapPercent, const float monoRiskRestraint,
+                        const float ceiling, const float maxGainDb) noexcept {
+    const float clamped = juce::jlimit(0.0f, ceiling, widthGapPercent);
+    const float gainDb = (clamped / ceiling) * maxGainDb * juce::jlimit(0.0f, 1.0f, monoRiskRestraint);
     return juce::Decibels::decibelsToGain(gainDb);
 }
 
-// Region C (decorrelated widening, Width +35..+100, §7.3-7.4): blend ramps
-// 0..1 across the region so the Region B -> Region C handover is continuous
-// (§4.1 "the transition between regions must be continuous and inaudible").
+// Region C (decorrelated widening): blend ramps 0..1 across the region so the
+// Region B -> Region C handover is continuous (§4.1 "the transition between
+// regions must be continuous and inaudible"). kRegionCMaxLevel=1.0 so a mono
+// source at full gap (widthGapPercent=100, i.e. Width=+100) can reach a
+// decorrelated Side level on par with Mid - §3/§8's "generated pair reaches
+// the left/right extremes" endpoint - rather than being capped short of it.
 constexpr float kRegionCCeiling = 100.0f;
-constexpr float kRegionCMaxLevel = 0.85f;
+constexpr float kRegionCMaxLevel = 1.0f;
 constexpr float kDecorrelatorWindowMs = 1.2f;
 
-float regionCBlend(const float widthPositivePercent) noexcept {
-    if (widthPositivePercent <= kRegionBCeiling)
+float regionCBlend(const float widthGapPercent, const float ceiling) noexcept {
+    if (widthGapPercent <= ceiling)
         return 0.0f;
-    const float t = (widthPositivePercent - kRegionBCeiling) / (kRegionCCeiling - kRegionBCeiling);
+    const float t = (widthGapPercent - ceiling) / (kRegionCCeiling - ceiling);
     return juce::jlimit(0.0f, 1.0f, t);
 }
 
@@ -100,7 +181,7 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.quaternaryLabel   = "Focus";
     id.primaryHint    = "Stereo image size: left narrows toward mono, right widens the image.";
     id.secondaryHint  = "Introduces a synthetic doubled performance alongside the original.";
-    id.tertiaryHint   = "How closely the generated performance follows the original - tight and precise, or loose and separate.";
+    id.tertiaryHint   = "How closely the generated performance follows the original - loose and separate toward 0%, tight and precise toward 100%.";
     id.quaternaryHint = "Where in the spectrum the width and doubling effect concentrates - body, full range, or air.";
     id.dspVersion    = vxsuite::versions::plugins::width;
     id.helpTitle     = vxsuite::help::width.title;
@@ -110,8 +191,17 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.primaryDefaultValue   = 0.5f;
     // Double: 0..100, default 0.
     id.secondaryDefaultValue = 0.0f;
-    // Tightness: 0..100, default 40 (spec §4.3).
-    id.tertiaryDefaultValue  = 0.40f;
+    // Tightness: 0..100, default 60 (spec §4.3). User-facing knob convention
+    // inverted 2026-08-07 (user feedback: 0%=loosest/100%=tightest read
+    // backwards against the control's own name) - 100% now means "tight",
+    // 0% means "loose", matching kTightnessLabel. The underlying DSP call
+    // (AdtVoice::process, VxWidthAdtVoice.h) still expects its OWN
+    // internal 0=Tight/1=Loose convention unchanged - see the
+    // `1.0f - smoothed.tertiary` inversion at the call site in
+    // processProduct(). This default (0.60) is the OLD default (0.40)
+    // inverted, so the actual DSP behaviour at the factory default is
+    // unchanged - only the knob's own labelling/direction flipped.
+    id.tertiaryDefaultValue  = 0.60f;
     // Focus: 0..100, default 55 (spec §4.4).
     id.quaternaryDefaultValue = 0.55f;
     id.theme.accentRgb     = { 0.20f, 0.78f, 0.72f };
@@ -120,16 +210,15 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.theme.panelRgb      = { 0.08f, 0.12f, 0.12f };
     id.theme.textRgb       = { 0.90f, 0.98f, 0.96f };
     id.requiresSignalQuality = true; // side/mid mono score feeds InputAnalyser (§6.1).
+    id.showSpatialWidthVisualizer = true; // Phase 2 spatial-width UI (VX_WIDTH_ENGINE_UPGRADE.md).
 
-    // EXPERIMENTAL micro-pitch toggle (2026-08-07, off by default via
-    // simpleToggleDefaultValue) - a plain header button, not one of the
-    // four main knobs. See AdtVoice::setMicroPitchEnabled()'s comment for
-    // what this actually does; see tasks/todo.md for the investigation
-    // this came out of and why it's gated separately from the four-knob
-    // "production" surface rather than exposed as a real control yet.
-    id.simpleToggleParamId = kMicroPitchExperimentalParam;
-    id.simpleToggleLabel = "Micro-Pitch (Experimental)";
-    id.simpleToggleDefaultValue = false;
+    // Micro-pitch (2026-08-07): graduated from an experimental, user-facing
+    // toggle to a permanent, always-on part of the ADT engine - it's a nice
+    // effect and there's no longer a reason to gate it behind a control.
+    // No simpleToggleParamId set (== no UI checkbox, no APVTS parameter -
+    // see ProductIdentity::supportsSimpleToggle()); setAdtMicroPitchEnabled
+    // is instead called unconditionally in prepareSuite()/resetSuite(). See
+    // AdtVoice::setMicroPitchEnabled()'s comment for what this actually does.
 
     // §20: factory presets demonstrate use cases, not technical parameters -
     // only 4 knobs are ever touched. Spec §20 lists 14 example names; the
@@ -146,37 +235,54 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.presetChoiceLabels[4] = "Loose ADT";
     id.presetChoiceLabels[5] = "Extreme Width";
     // Width=-100 (mono), everything else at default.
+    // Tertiary (Tightness) values below are the pre-inversion values
+    // (0=Tight/1=Loose) flipped via (1.0-old) so the actual DSP sound each
+    // preset produces is UNCHANGED by the 2026-08-07 knob-direction fix -
+    // only the stored number's meaning changed, not the audible result.
     id.presetPrimaryValues[0]   = 0.0f;
     id.presetSecondaryValues[0] = 0.0f;
-    id.presetTertiaryValues[0]  = 0.40f;
+    id.presetTertiaryValues[0]  = 0.60f;
     id.presetQuaternaryValues[0] = 0.55f;
     // Width=+15 (Region B, conservative expansion).
     id.presetPrimaryValues[1]   = 0.5f + 15.0f / 200.0f;
     id.presetSecondaryValues[1] = 0.0f;
-    id.presetTertiaryValues[1]  = 0.40f;
+    id.presetTertiaryValues[1]  = 0.60f;
     id.presetQuaternaryValues[1] = 0.55f;
     // Width=+60 (into Region C decorrelated widening).
     id.presetPrimaryValues[2]   = 0.5f + 60.0f / 200.0f;
     id.presetSecondaryValues[2] = 0.0f;
-    id.presetTertiaryValues[2]  = 0.40f;
+    id.presetTertiaryValues[2]  = 0.60f;
     id.presetQuaternaryValues[2] = 0.55f;
     // Width=0, Double engaged, tighter/precise, Focus toward Air.
     id.presetPrimaryValues[3]   = 0.5f;
     id.presetSecondaryValues[3] = 0.55f;
-    id.presetTertiaryValues[3]  = 0.35f;
+    id.presetTertiaryValues[3]  = 0.65f;
     id.presetQuaternaryValues[3] = 0.65f;
     // Width mild, Double strong, Tightness loose (separate-take feel).
     id.presetPrimaryValues[4]   = 0.5f + 10.0f / 200.0f;
     id.presetSecondaryValues[4] = 0.70f;
-    id.presetTertiaryValues[4]  = 0.75f;
+    id.presetTertiaryValues[4]  = 0.25f;
     id.presetQuaternaryValues[4] = 0.55f;
     // Width=+100 (max), Double moderate.
     id.presetPrimaryValues[5]   = 1.0f;
     id.presetSecondaryValues[5] = 0.30f;
-    id.presetTertiaryValues[5]  = 0.40f;
+    id.presetTertiaryValues[5]  = 0.60f;
     id.presetQuaternaryValues[5] = 0.55f;
 
     return id;
+}
+
+std::optional<vxsuite::SpatialWidthTelemetry> VXWidthAudioProcessor::getSpatialWidthTelemetry() const noexcept {
+    vxsuite::SpatialWidthTelemetry t;
+    t.monoConfidence01 = monoConfidence01State;
+    t.estimatedInputWidth01 = estimatedInputWidth01State;
+    t.requestedOutputWidth01 = requestedOutputWidth01State;
+    t.actualOutputWidth01 = actualOutputWidth01State;
+    t.doubleAmount01 = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
+    t.tightness01 = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId, 0.60f);
+    t.focus01 = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.55f);
+    t.hasSignal = hasSignalState;
+    return t;
 }
 
 juce::String VXWidthAudioProcessor::getStatusText() const {
@@ -227,12 +333,14 @@ void VXWidthAudioProcessor::prepareSuite(const double sampleRate, const int /*sa
     adtVoiceA.prepare(currentSampleRateHz, 0x1234u, -4.0f, 4.0f);
     adtVoiceB.prepare(currentSampleRateHz, 0x2222u, 5.0f, 3.0f);
     focusTiltMid.prepare(currentSampleRateHz, 700.0f);
-    focusTiltSide.prepare(currentSampleRateHz, 700.0f);
-    subBassProtect.prepare(currentSampleRateHz, 80.0f);
+    subBassProtectWidth.prepare(currentSampleRateHz, 80.0f);
+    subBassProtectDouble.prepare(currentSampleRateHz, 80.0f);
     loudnessCompensator.prepare(currentSampleRateHz);
-    contentPredictabilityRestraint.prepare(currentSampleRateHz);
+    contentPredictabilityRestraintWidth.prepare(currentSampleRateHz);
+    contentPredictabilityRestraintDouble.prepare(currentSampleRateHz);
     monoDownmixGuardrail.prepare(currentSampleRateHz);
-    sideOrthogonalizer.prepare(currentSampleRateHz);
+    sideOrthogonalizerWidth.prepare(currentSampleRateHz);
+    sideOrthogonalizerDouble.prepare(currentSampleRateHz);
     midHistoryMaxLagSamples = static_cast<int>(std::ceil(kPredictabilityMaxLagMs * 0.001 * currentSampleRateHz)) + 1;
     midHistory.assign(static_cast<size_t>(midHistoryMaxLagSamples + 1), 0.0f);
     midHistoryWritePos = 0;
@@ -248,19 +356,39 @@ void VXWidthAudioProcessor::resetSuite() {
     decorrelatorB.reset();
     adtVoiceA.reset();
     adtVoiceB.reset();
+    // Permanent, always-on (2026-08-07 - see makeIdentity()'s comment);
+    // AdtVoice::reset() doesn't touch this flag itself, so re-assert it
+    // here rather than relying on construction-time defaults surviving
+    // every reset path.
+    setAdtMicroPitchEnabled(true);
     focusTiltMid.reset();
-    focusTiltSide.reset();
-    subBassProtect.reset();
+    subBassProtectWidth.reset();
+    subBassProtectDouble.reset();
     loudnessCompensator.reset();
-    contentPredictabilityRestraint.reset();
+    contentPredictabilityRestraintWidth.reset();
+    contentPredictabilityRestraintDouble.reset();
     monoDownmixGuardrail.reset();
-    sideOrthogonalizer.reset();
+    sideOrthogonalizerWidth.reset();
+    sideOrthogonalizerDouble.reset();
     adtMaxPitchShiftCentsObserved = 0.0f;
+    estimatedInputWidth01State = 0.0f;
+    requestedOutputWidth01State = 0.0f;
+    actualOutputWidth01State = 0.0f;
+    widthPathOutputRatioState = 0.0f;
+    safetyRestraintAmountState = 0.0f;
+    monoConfidence01State = 0.0f;
+    hasSignalState = false;
+    inputSideMidRatioState = 0.0f;
+    directSideGainSmoothedState = 1.0f;
+    directStereoWeightState = 0.0f;
+    remainingWidthGapState = 0.0f;
+    targetSideMidRatioState = 0.0f;
+    limitedSideGainDbState = 0.0f;
     std::fill(midHistory.begin(), midHistory.end(), 0.0f);
     midHistoryWritePos = 0;
     const float width     = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
     const float doubleAmt = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
-    const float tightness = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.40f);
+    const float tightness = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.60f);
     const float focus     = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.55f);
     controls.reset(width, doubleAmt, tightness, focus);
 }
@@ -275,14 +403,8 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
 
     const float widthTarget  = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
     const float doubleTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
-    const float tightTarget  = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.40f);
+    const float tightTarget  = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.60f);
     const float focusTarget  = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.55f);
-
-    // EXPERIMENTAL (off by default) - see AdtVoice::setMicroPitchEnabled()'s
-    // comment. Read once per block; toggling mid-stream just changes
-    // whether the (already-running) micro-pitch walkers/shifters are
-    // applied, no re-prepare needed.
-    setAdtMicroPitchEnabled(vxsuite::readBool(parameters, productIdentity.simpleToggleParamId, false));
 
     const auto smoothed = controls.process(
         widthTarget, doubleTarget, tightTarget, focusTarget,
@@ -340,19 +462,128 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     // intensity by how tonal/sustained the current block reads.
     const float harmonicProtect = 1.0f - 0.30f * voice.speechStability * (1.0f - voice.transientRisk);
 
+    // §5/§7: Width is a request RELATIVE TO the estimated current width
+    // (analysis.estimatedWidth01), not an absolute gain on the slider value.
+    // widthGapPercent = "how much of the remaining distance to max practical
+    // width (1 - W0) is this request asking for" - see the comment above
+    // kRegionBCeiling for why this collapses to the old widthPositivePercent
+    // behaviour for mono input (W0≈0) and shrinks toward 0 for already-wide
+    // stereo input (W0≈1), satisfying §16's mono-endpoint and
+    // already-wide-stays-safe requirements from one rule.
+    //
+    // IMPORTANT (product decision, see EditorBase.cpp's applyWidthKnobRangeForCurrentMode):
+    // the stored parameter's bipolar meaning (v=0.5 is ALWAYS an exact
+    // no-op, regardless of mono/stereo classification) is a foundational,
+    // regression-tested invariant that must never be conditioned on
+    // classification. Mono's "0..100, full physical sweep" presentation is
+    // achieved entirely in the UI by remapping the KNOB's interactive
+    // range to the parameter's existing upper half [0.5,1.0] - the DSP
+    // here stays exactly as Phase 1/1.1 left it, unconditional on
+    // monoConfidence. (An earlier attempt blended this per-block by
+    // monoConfidence and broke the neutral-null invariant for ALL content,
+    // since monoConfidence is a continuous, never-exactly-zero measurement
+    // - reverted.)
+    const float widthGapPercent = widthSigned > 0.0f
+        ? (1.0f - analysis.estimatedWidth01) * widthSigned
+        : 0.0f;
+
     const float sideScale = widthSigned < 0.0f
         ? narrowSideScale(-widthSigned / 100.0f)
         : 1.0f;
+
+    // §4/§9: continuous mono<->stereo blend, using this block's own
+    // estimated input width as stereoEvidence (== directStereoWeight, §9 -
+    // the same continuous evidence answers both "how mono-like is this" and
+    // "how eligible is the direct-Side solver"). At stereoEvidence=0 the
+    // blends below resolve to bit-for-bit the original mono law - required
+    // by §1 - because they now interpolate between the UNCHANGED mono-law
+    // GAIN/BLEND VALUES and the new solver's values, rather than blending
+    // the old law's ceiling/max-gain constants the way Phase 1.2 did.
+    const float stereoEvidence = stereoEvidenceFromWidth01(analysis.estimatedWidth01);
+
+    // T (§4): target width01 this request is asking for, relative to W0.
+    // Computed once here and reused for requestedOutputWidth01State below so
+    // the two definitions can't drift apart.
+    const float targetWidth01 = widthSigned >= 0.0f
+        ? juce::jlimit(0.0f, 1.0f, analysis.estimatedWidth01 + (1.0f - analysis.estimatedWidth01) * (widthSigned / 100.0f))
+        : juce::jlimit(0.0f, 1.0f, analysis.estimatedWidth01 * (1.0f - (-widthSigned) / 100.0f));
+
+    // Mono-law component: Region B's existing-Side gain law is unchanged
+    // (§1 hard invariant) - still evaluated at the fixed mono ceiling/max-gain.
+    //
+    // Region C's mono blend is DELIBERATELY no longer gated behind that same
+    // 35% ceiling (user report, 2026-08-07): for bit-exact dual-mono input,
+    // sideOriginal is exactly 0, so Region B's gain has literally nothing to
+    // amplify - Region B contributes ZERO regardless of its own ceiling. That
+    // left Region C (the only path able to generate width from nothing) as
+    // the sole source of any change on true mono, but it was gated to not
+    // start until widthGapPercent>35 - a measured, confirmed dead zone
+    // (VXWidthShellCheck.cpp's [near-mono visualizer sensitivity]
+    // diagnostic: diffVsWidth0Rms==0.0 exactly for widths 0/10/25/35 on
+    // bit-exact mono). Using ceiling=0 here makes Region C ramp linearly
+    // and continuously from Width=0 (still an exact null AT 0 - regionCBlend
+    // returns 0 only when widthGapPercent<=ceiling, so widthGapPercent=0
+    // still yields 0) instead of sitting inert for the first third of the
+    // knob's range.
+    const float monoLawSideGain = expandedSideGain(widthGapPercent, monoRiskRestraint, kRegionBCeiling, kRegionBMaxGainDb);
+    constexpr float kMonoRegionCCeiling = 0.0f;
+    const float monoLawDecorBlendFraction = regionCBlend(widthGapPercent, kMonoRegionCCeiling);
+
+    // Target-ratio solver (§6-§11): R0 is LAST block's measured input
+    // Side/Mid ratio (inputSideMidRatioState, updated at the end of this
+    // function) - feed-forward, block-rate, not sample-chasing (§13).
+    const float targetSideMidRatio = targetRatioForWidth(targetWidth01);
+    const float requiredGain = targetSideMidRatio / juce::jmax(inputSideMidRatioState, kR0Epsilon);
+    const float ceilingGain = juce::Decibels::decibelsToGain(directSideGainCeilingDbState);
+    const float boundedGain = juce::jlimit(1.0f, ceilingGain, requiredGain);
+    // §11: phase risk restrains the ALLOWED gain, not the target itself -
+    // same restrain-the-dB pattern expandedSideGain() already uses for the
+    // mono law, so both paths respond to phase risk identically.
+    const float restrainedGainDb = juce::Decibels::gainToDecibels(boundedGain) * juce::jlimit(0.0f, 1.0f, monoRiskRestraint);
+    const float solverGainThisBlock = juce::Decibels::decibelsToGain(restrainedGainDb);
+
+    // §12: asymmetric attack/release smoothing, always updated (even while
+    // stereoEvidence is currently low) so the smoothed value doesn't jump
+    // when evidence rises later - same "always-live" reasoning the
+    // decorrelator/ADT voices already use elsewhere in this function.
+    const bool solverGainRising = solverGainThisBlock > directSideGainSmoothedState;
+    const float directGainTauSeconds = solverGainRising ? kDirectGainAttackSeconds : kDirectGainReleaseSeconds;
+    const float directGainAlpha = std::exp(-static_cast<float>(numSamples) / (directGainTauSeconds * static_cast<float>(currentSampleRateHz)));
+    directSideGainSmoothedState = directGainAlpha * directSideGainSmoothedState + (1.0f - directGainAlpha) * solverGainThisBlock;
+
+    // §14: Region C now supplements whatever the direct-Side solver couldn't
+    // reach, instead of picking up everything above a fixed ceiling.
+    const float directAchievedWidth01 = juce::jlimit(0.0f, 1.0f,
+        (inputSideMidRatioState * directSideGainSmoothedState) / kMaxPracticalSideMidRatio);
+    const float remainingWidthGap = juce::jmax(0.0f, targetWidth01 - directAchievedWidth01);
+
     const float sideGain = widthSigned > 0.0f
-        ? expandedSideGain(widthSigned, monoRiskRestraint) * transientProtect
+        ? juce::jmap(stereoEvidence, monoLawSideGain, directSideGainSmoothedState) * transientProtect
         : 1.0f;
-    // Region C blend/level, restrained by mono-risk AND the mono-downmix
-    // guardrail (§11.3 priority: decorrelated width is restrained FIRST,
-    // ahead of DoubleSide - see doubleSideAmount below).
-    const float decorBlend = widthSigned > 0.0f
-        ? regionCBlend(widthSigned) * monoRiskRestraint * monoDownmixRestraint
-              * kRegionCMaxLevel * transientProtect * harmonicProtect
+    // Region C blend/level, restrained by mono-risk. The blend FRACTION
+    // interpolates between the untouched mono law (§1) and the residual-
+    // gap-driven fraction (§14), by the same stereoEvidence.
+    //
+    // NOT restrained by monoDownmixRestraint (removed 2026-08-07,
+    // VX_ENGINE_AUDIT.md §11/§12/§15 audit): outL+outR = 2*midOut*k*compGain
+    // algebraically - Side cancels exactly in that sum for ANY Side value,
+    // by construction of the Mid/Side encoding (L=Mid+Side, R=Mid-Side).
+    // MonoDownmixGuardrail measures exactly that (L+R) sum, so it can only
+    // ever be responding to changes in midOut (i.e. Double's doubleMid
+    // contribution) - it was mathematically incapable of ever detecting
+    // anything Region C's decorBlend (a pure Side-domain quantity) did, so
+    // gating decorBlend by it was measuring one thing and restraining
+    // another. Worse: this made Region C's OWN amount silently move
+    // whenever DOUBLE's midOut degraded the mono downmix (e.g. via
+    // Tightness/Focus changing the ADT voices) - exactly the indirect
+    // Double->Width coupling the audit's Test 3/4 checks for. Moved to
+    // doubleMidAmount below, the one quantity that can actually affect
+    // what this guardrail measures.
+    const float decorBlendFraction = widthSigned > 0.0f
+        ? juce::jmap(stereoEvidence, monoLawDecorBlendFraction, remainingWidthGap)
         : 0.0f;
+    const float decorBlend = decorBlendFraction * monoRiskRestraint
+        * kRegionCMaxLevel * transientProtect * harmonicProtect;
 
     // §10: Focus -100(Body)..+100(Air) as -6..+6dB tilt on the WET paths'
     // source only (decorrelation + ADT) - the dry Region A/B path is
@@ -378,23 +609,50 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     // panned", but can't isolate a centred vocal from simultaneous
     // hard-panned guitars within the same block - that needs the still-
     // deferred §8.8 harmonic/residual/transient decomposition.
-    constexpr float kDoubleCentreGateFloor = 0.25f;
+    // Phase 1.2 (§9-§11): the old 0.25 floor let broadband centreConfidence
+    // cut DoubleSide to ~25% (DoubleMid to ~8.75%) of the user's requested
+    // amount on real stereo material with low centre confidence - Double
+    // 100 read as roughly Double 25. Centre confidence may still nudge the
+    // amount (§10: "may influence... how conservative safety should be"),
+    // but it must not be the dominant multiplier. A high floor keeps that
+    // influence mild instead of amplitude-defining.
+    constexpr float kDoubleCentreGateFloor = 0.85f;
     const float doubleCentreGate = kDoubleCentreGateFloor
         + (1.0f - kDoubleCentreGateFloor) * juce::jlimit(0.0f, 1.0f, voice.centerConfidence);
-    const float doubleSideAmount = smoothed.secondary * doubleCentreGate * monoDownmixRestraint;
-    const float doubleMidAmount = smoothed.secondary * 0.35f * doubleCentreGate;
-    const float tightness01 = smoothed.tertiary;
+    // monoDownmixRestraint moved here from decorBlend/doubleSideAmount
+    // (2026-08-07, see decorBlend's comment above for the full reasoning):
+    // outL+outR is algebraically independent of Side entirely, so this
+    // guardrail can only ever be reacting to doubleMidAmount's own
+    // contribution - applying it here (not to the Side-domain amounts) is
+    // both the mathematically correct place AND removes an indirect
+    // Double->Width coupling path.
+    const float doubleSideAmount = smoothed.secondary * doubleCentreGate;
+    const float doubleMidAmount = smoothed.secondary * 0.35f * doubleCentreGate * monoDownmixRestraint;
+    // Tightness knob convention inverted 2026-08-07 (0%=loose, 100%=tight,
+    // matching the control's own name - was backwards before). AdtVoice::
+    // process() below still expects ITS OWN unchanged internal convention
+    // (0=Tight, 1=Loose - see VxWidthAdtVoice.h), so invert here at the one
+    // call site rather than touching that already-tested band mapping.
+    const float tightness01 = 1.0f - smoothed.tertiary;
     const float transientRisk = voice.transientRisk;
 
     double inEnergySum = 0.0;
     double outEnergySum = 0.0;
     double inMonoSumSquared = 0.0;
     double outMonoSumSquared = 0.0;
-    double sumMidLagTimesGenerated[6] = {};
-    double sumMidLagSquared[6] = {};
-    double sumGeneratedSquared = 0.0;
+    // Separate lag-correlation accumulators per source (VX_ENGINE_AUDIT.md
+    // §7/§11/§12) - see contentPredictabilityRestraintWidth/Double's comment.
+    double sumMidLagTimesGeneratedWidth[6] = {};
+    double sumMidLagSquaredWidth[6] = {};
+    double sumGeneratedSquaredWidth = 0.0;
+    double sumMidLagTimesGeneratedDouble[6] = {};
+    double sumMidLagSquaredDouble[6] = {};
+    double sumGeneratedSquaredDouble = 0.0;
+    double sumOutMidSq = 0.0, sumWidthOnlySideSq = 0.0; // §17 telemetry: actualOutputWidth01 (Width-only, excludes Double)
+    double sumInMidSq = 0.0, sumInSideSq = 0.0; // target-seeking engine instrumentation: R0 = sideRms/midRms of the raw input
     const float compGain = loudnessCompensator.currentGain();
-    const float predictabilityRestraint = contentPredictabilityRestraint.currentRestraint();
+    const float predictabilityRestraintWidth = contentPredictabilityRestraintWidth.currentRestraint();
+    const float predictabilityRestraintDouble = contentPredictabilityRestraintDouble.currentRestraint();
     const int midHistorySize = static_cast<int>(midHistory.size());
 
     static constexpr float kInvSqrt2 = 0.70710678f;
@@ -407,10 +665,26 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
 
         const float mid  = (l + r) * kInvSqrt2;
         const float sideOriginal = (l - r) * kInvSqrt2;
+        sumInMidSq += static_cast<double>(mid) * mid;
+        sumInSideSq += static_cast<double>(sideOriginal) * sideOriginal;
 
-        // §10: shape only the wet paths' source, not the dry Region A/B path.
+        // Focus/Tightness are Double-only controls (user correction,
+        // 2026-08-07: "nothing except the width control should be affecting
+        // width. Focus and Tightness are part of double and should have no
+        // effect on width itself"). Previously BOTH Region C's decorrelator
+        // (Width) and the ADT voices (Double) ran off this same
+        // Focus-tilted signal, so turning Focus changed Region C's output
+        // energy even at a fixed Width (confirmed: ~1.7x width swing across
+        // Focus 0->100 even after making the tilt itself energy-neutral -
+        // see OnePoleTilt's comment in VxWidthSpectralShaping.h. The
+        // decorrelator's sparse tap pattern is effectively a non-flat comb
+        // filter, so ANY spectral reshaping of its source - not just an
+        // unbalanced one - shows up as a change in its output level).
+        // Fix is architectural, not a compensation gain: only the ADT
+        // voices (Double) see the Focus-tilted signal now; Region C
+        // (Width) runs off the untilted Mid/Side, same as Region B always
+        // has, so Focus/Tightness genuinely cannot move Width's own output.
         const float focusedMid  = focusTiltMid.process(mid, focusTiltDb);
-        const float focusedSide = focusTiltSide.process(sideOriginal, focusTiltDb);
 
         // §5.1: the decorrelation path runs in parallel off the original
         // Mid/Side, not the already-widened Region A/B output - the two
@@ -419,10 +693,11 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         // decorrelator (even when its blend is 0) so its ring buffer stays
         // live and doesn't replay stale audio when Width crosses back above
         // the Region B ceiling later.
-        const float decorSource = 0.7f * focusedMid + 0.3f * focusedSide;
+        const float decorSource = 0.7f * mid + 0.3f * sideOriginal;
         const float decorSideRaw = decorrelatorA.process(decorSource) - decorrelatorB.process(decorSource);
 
-        // §8.2: Voice A/B always run (off the focused Mid), gated into the
+        // §8.2: Voice A/B always run (off the focused Mid - Double's own
+        // wet path, per the Focus-scoping note above), gated into the
         // output by doubleSideAmount/doubleMidAmount - same always-live-ring
         // reasoning as the decorrelator above, so re-engaging Double after
         // it's been at 0 doesn't replay stale delay-line content.
@@ -447,32 +722,63 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         //     (its own header comment explains why it restrains rather than
         //     tries to cancel - it's now a safety net, not the primary
         //     mechanism).
-        const float rawGenerated = decorSideRaw * decorBlend + doubleSide * doubleSideAmount;
-        const float orthogonalized = sideOrthogonalizer.process(focusedMid, rawGenerated,
+        const float widthRawContribution  = decorSideRaw * decorBlend;
+        const float doubleRawContribution = doubleSide * doubleSideAmount;
+        // Separate orthogonalizer instances (2026-08-07, "nothing but
+        // Width should affect Width" fix - see sideOrthogonalizerWidth's
+        // header comment). Width's predictor uses ONLY fixed lags (dynamic
+        // delay args fixed at 0,0 - it has no ADT voices to track and never
+        // did), so it is structurally independent of Tightness/Focus.
+        // Double's instance keeps the real ADT-tracking dynamic taps,
+        // unchanged from before the split. Predictor reference is the TRUE
+        // Mid signal (not focusedMid) for the Double instance too, so
+        // Focus can't leak in via the predictor's own level either.
+        const float widthOrthogonalized = sideOrthogonalizerWidth.process(mid, widthRawContribution,
+            0.0f, 0.0f, transientRisk);
+        const float doubleOrthogonalized = sideOrthogonalizerDouble.process(mid, doubleRawContribution,
             adtVoiceA.currentDelayMs(), adtVoiceB.currentDelayMs(), transientRisk);
-        const float generatedRaw = orthogonalized * predictabilityRestraint;
+        // Separate restraint per source (VX_ENGINE_AUDIT.md §7/§11/§12): a
+        // single shared restraint scaling the combined sum would let
+        // Double's own correlation-with-Mid (which Tightness/Focus can
+        // change) alter the gain applied to Width's contribution too, even
+        // with Width itself unchanged.
+        const float generatedRawWidth = widthOrthogonalized * predictabilityRestraintWidth;
+        const float generatedRawDouble = doubleOrthogonalized * predictabilityRestraintDouble;
+        const float generatedRaw = generatedRawWidth + generatedRawDouble;
 
-        // Lag-aware correlation accumulation: write this sample's Mid into
-        // the ring buffer, then read it back at each lag to compare against
-        // generatedRaw. Same-sample-only correlation misses a delayed copy
-        // of Mid (the ADT voice's own delay-line output) - see
-        // ContentPredictabilityRestraint's header comment.
+        // Lag-aware correlation accumulation, split per source (matches the
+        // restraint split above): write this sample's Mid into the ring
+        // buffer, then read it back at each lag to compare against EACH
+        // source's own generated content separately. Same-sample-only
+        // correlation misses a delayed copy of Mid (the ADT voice's own
+        // delay-line output) - see ContentPredictabilityRestraint's header
+        // comment. (Pearson correlation is scale-invariant, so measuring on
+        // the pre- or post-restraint signal gives the same rho; using the
+        // post-restraint value here just matches the original single-path
+        // code's convention.)
         midHistory[static_cast<size_t>(midHistoryWritePos)] = mid;
         for (size_t k = 0; k < predictabilityLagSamples.size(); ++k) {
             int idx = midHistoryWritePos - predictabilityLagSamples[k];
             if (idx < 0)
                 idx += midHistorySize;
             const float midLagged = midHistory[static_cast<size_t>(idx)];
-            sumMidLagTimesGenerated[k] += static_cast<double>(midLagged) * generatedRaw;
-            sumMidLagSquared[k] += static_cast<double>(midLagged) * midLagged;
+            sumMidLagTimesGeneratedWidth[k] += static_cast<double>(midLagged) * generatedRawWidth;
+            sumMidLagSquaredWidth[k] += static_cast<double>(midLagged) * midLagged;
+            sumMidLagTimesGeneratedDouble[k] += static_cast<double>(midLagged) * generatedRawDouble;
+            sumMidLagSquaredDouble[k] += static_cast<double>(midLagged) * midLagged;
         }
         midHistoryWritePos = (midHistoryWritePos + 1) % midHistorySize;
-        sumGeneratedSquared += static_cast<double>(generatedRaw) * generatedRaw;
+        sumGeneratedSquaredWidth += static_cast<double>(generatedRawWidth) * generatedRawWidth;
+        sumGeneratedSquaredDouble += static_cast<double>(generatedRawDouble) * generatedRawDouble;
 
         // §10.3: always-on sub-bass protection on GENERATED content only -
         // independent of Focus, applies to the decorrelated + doubled Side
-        // energy before it joins the dry Region A/B side.
-        const float generatedSide = subBassProtect.process(generatedRaw);
+        // energy before it joins the dry Region A/B side. Separate filter
+        // instances (VX_ENGINE_AUDIT.md §7) so Width's own post-filter
+        // output can never be coloured by Double's filter history.
+        const float generatedSideWidth = subBassProtectWidth.process(generatedRawWidth);
+        const float generatedSideDouble = subBassProtectDouble.process(generatedRawDouble);
+        const float generatedSide = generatedSideWidth + generatedSideDouble;
 
         float side = sideOriginal * sideScale * sideGain;
         side += generatedSide;
@@ -485,6 +791,13 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         outEnergySum += static_cast<double>(outL) * outL + static_cast<double>(outR) * outR;
         const double outMono = static_cast<double>(outL) + outR;
         outMonoSumSquared += outMono * outMono;
+        sumOutMidSq += outMono * outMono;
+        // §17 telemetry: Width-only Side energy (dry Region A/B + Width's
+        // own filtered generated content) - an EXACT split now (no fraction
+        // needed), since generatedSideWidth never contains any Double
+        // content at any stage.
+        const float widthOnlySide = sideOriginal * sideScale * sideGain + generatedSideWidth;
+        sumWidthOnlySideSq += static_cast<double>(widthOnlySide) * widthOnlySide;
     }
 
     // §12: bounded, slow makeup gain for the NEXT block - see
@@ -494,17 +807,99 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     const double outRms = std::sqrt(outEnergySum / (2.0 * numSamples));
     loudnessCompensator.updateForNextBlock(inRms, outRms, numSamples);
 
-    float maxAbsRho = 0.0f;
-    for (size_t k = 0; k < predictabilityLagSamples.size(); ++k) {
-        const double denom = sumMidLagSquared[k] * sumGeneratedSquared;
-        if (denom < 1.0e-12)
-            continue;
-        const float rho = juce::jlimit(-1.0f, 1.0f,
-            static_cast<float>(sumMidLagTimesGenerated[k] / std::sqrt(denom)));
-        maxAbsRho = juce::jmax(maxAbsRho, std::abs(rho));
-    }
-    contentPredictabilityRestraint.updateForNextBlock(maxAbsRho, numSamples);
+    auto maxAbsRhoFor = [&](const double (&sumMidLagTimesGenerated)[6], const double (&sumMidLagSquared)[6],
+                            const double sumGeneratedSquared) {
+        float maxAbsRho = 0.0f;
+        for (size_t k = 0; k < predictabilityLagSamples.size(); ++k) {
+            const double denom = sumMidLagSquared[k] * sumGeneratedSquared;
+            if (denom < 1.0e-12)
+                continue;
+            const float rho = juce::jlimit(-1.0f, 1.0f,
+                static_cast<float>(sumMidLagTimesGenerated[k] / std::sqrt(denom)));
+            maxAbsRho = juce::jmax(maxAbsRho, std::abs(rho));
+        }
+        return maxAbsRho;
+    };
+    contentPredictabilityRestraintWidth.updateForNextBlock(
+        maxAbsRhoFor(sumMidLagTimesGeneratedWidth, sumMidLagSquaredWidth, sumGeneratedSquaredWidth), numSamples);
+    contentPredictabilityRestraintDouble.updateForNextBlock(
+        maxAbsRhoFor(sumMidLagTimesGeneratedDouble, sumMidLagSquaredDouble, sumGeneratedSquaredDouble), numSamples);
     monoDownmixGuardrail.updateForNextBlock(inMonoSumSquared, outMonoSumSquared, numSamples);
+
+    // §17 debug telemetry: what the engine actually did this block, so
+    // tests/UI can verify the requested-width model without disagreeing
+    // definitions (§6's "the UI and DSP must never disagree").
+    estimatedInputWidth01State = analysis.estimatedWidth01;
+    requestedOutputWidth01State = targetWidth01;
+    directStereoWeightState = stereoEvidence;
+    remainingWidthGapState = remainingWidthGap;
+    targetSideMidRatioState = targetSideMidRatio;
+    limitedSideGainDbState = juce::Decibels::gainToDecibels(directSideGainSmoothedState);
+    // §17 UI display only (does not feed back into any DSP decision): the
+    // raw per-block ratio is measured over a single ~5ms block, which is
+    // inherently noisy sample-to-sample (few cycles of signal, phase-
+    // dependent). estimatedInputWidth01 already gets ~450ms smoothing
+    // inside InputAnalyser; this matches that so the visualiser's actual-
+    // width ray doesn't visibly jitter block-to-block the way an unsmoothed
+    // value does (reported directly by the user against the live plugin).
+    // Energy gate (same principle as SideOrthogonalizer's kEnergyFloor): a
+    // ratio-of-small-numbers is unstable at low signal level - near
+    // silence, both sumWidthOnlySideSq and sumOutMidSq are dominated by
+    // whatever tiny noise floor is present, so the RATIO can swing wildly
+    // even though nothing meaningful changed. Below the floor, hold the
+    // last known value rather than blending toward that noise (this is
+    // what the earlier ~350ms-only smoothing missed - it dampened the
+    // SIZE of each jump but still chased every noisy sample during quiet
+    // passages/transient gaps, which is what read as "fluctuates
+    // constantly" against real programme material).
+    const double meanMidSq = sumOutMidSq / juce::jmax(1, numSamples);
+    constexpr double kMidEnergyFloor = 1.0e-6; // ~ -120 dBish in this L+R-summed metric
+    if (meanMidSq > kMidEnergyFloor) {
+        const float rawActualWidth01 = juce::jlimit(0.0f, 1.0f,
+            static_cast<float>(std::sqrt(sumWidthOnlySideSq / sumOutMidSq)));
+        // ~250ms: this stacks with the UI's OWN ballistic smoothing
+        // (VxStudioSpatialWidthView.cpp's kWidthValueSmoothing) - an
+        // earlier 0.6s value here compounded with that second smoothing
+        // pass into a visibly sluggish trace (user: the width rays weren't
+        // tracking live while Double's independently-animated ghost dots
+        // clearly were, reading as "the lines don't move"). One smoothing
+        // stage should own most of the settling time, not both stacked.
+        const float actualWidthBlockAlpha = std::exp(-static_cast<float>(numSamples) / (0.25f * static_cast<float>(currentSampleRateHz)));
+        actualOutputWidth01State = actualWidthBlockAlpha * actualOutputWidth01State
+            + (1.0f - actualWidthBlockAlpha) * rawActualWidth01;
+    }
+    // Width-path-only telemetry (VX_ENGINE_AUDIT.md §14): actualOutputWidth01
+    // above divides by sumOutMidSq (the FINAL combined output's Mid, which
+    // legitimately includes Double's own doubleMidAmount contribution) - a
+    // control-ownership test comparing actualOutputWidth01 across Tightness/
+    // Focus with Double active would therefore see the ratio move even
+    // though the Side-domain numerator (widthOnlySide) is untouched, purely
+    // because Double's own Mid contribution shifts the denominator. This
+    // divides by sumInMidSq instead - the RAW INPUT Mid, entirely prior to
+    // any processing - so it is genuinely blind to anything Double does,
+    // not just to the numerator.
+    if (sumInMidSq / juce::jmax(1, numSamples) > kMidEnergyFloor) {
+        const float rawWidthPathRatio = static_cast<float>(std::sqrt(sumWidthOnlySideSq / juce::jmax(1.0e-12, sumInMidSq)));
+        const float widthPathBlockAlpha = std::exp(-static_cast<float>(numSamples) / (0.25f * static_cast<float>(currentSampleRateHz)));
+        widthPathOutputRatioState = widthPathBlockAlpha * widthPathOutputRatioState
+            + (1.0f - widthPathBlockAlpha) * rawWidthPathRatio;
+    }
+    safetyRestraintAmountState = 1.0f - juce::jmin(monoRiskRestraint, monoDownmixRestraint,
+        juce::jmin(predictabilityRestraintWidth, predictabilityRestraintDouble));
+    monoConfidence01State = analysis.monoConfidence;
+    hasSignalState = meanMidSq > kMidEnergyFloor;
+
+    // Target-seeking engine instrumentation: R0 = actual input Side/Mid RMS
+    // ratio, distinct from W0 (analysis.estimatedWidth01, which already
+    // applies channelBalance/phaseRiskFactor corrections - see §6 of the
+    // brief). Telemetry only for now; same energy-gate/hold-last-value and
+    // smoothing pattern as actualOutputWidth01State above, for the same
+    // reason (ratio-of-small-numbers is unstable near silence).
+    if (sumInMidSq / juce::jmax(1, numSamples) > kMidEnergyFloor) {
+        const float rawR0 = static_cast<float>(std::sqrt(sumInSideSq / juce::jmax(1.0e-12, sumInMidSq)));
+        const float r0BlockAlpha = std::exp(-static_cast<float>(numSamples) / (0.25f * static_cast<float>(currentSampleRateHz)));
+        inputSideMidRatioState = r0BlockAlpha * inputSideMidRatioState + (1.0f - r0BlockAlpha) * rawR0;
+    }
 
     outputTrimmer.process(buffer, currentSampleRateHz);
 }

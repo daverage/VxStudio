@@ -57,14 +57,14 @@ Framework and plugin DSP versions are tracked independently.
 | VXRepair | `0.1.1` |
 | VXStudioAnalyser | `0.2.1` |
 | VXTune | `0.1.1` |
-| VXWidth | `0.1.0` |
+| VXWidth | `0.2.0` |
 
 ---
 
 ## Current status
 
 - `16` focused plugins are implemented and shipping in the shared VX Studio shell.
-- VXWidth is a new stereo image and doubling plugin, still in active development (build order tracked in `docs/Task Based/VXWIDTH_BUILD.md`) - not yet a finished/shipping product. Landed so far: the full existing-stereo width engine (narrow, bounded expansion, decorrelated widening), the ADT doubling engine, Focus spectral placement, mono-in/stereo-out bus support, and CPU/allocation hardening (verified realtime-safe, no audio-thread allocations). Still outstanding: harmonic/residual/transient-aware decorrelation (a documented later differentiator, not started), the full mono/phase-risk guardrail beyond the correlation-based restraints already in place, and real DAW host validation (only automated/headless testing has been done so far).
+- VXWidth is a new stereo image and doubling plugin, still in active development (build order tracked in `docs/Task Based/VXWIDTH_BUILD.md`) - not yet a finished/shipping product. Landed so far: a target-seeking Width engine (measures the source's actual stereo width and solves for the existing-Side gain needed to reach the requested target, rather than applying a fixed widening curve), the ADT doubling engine (now with a permanent, always-on subtle micro-pitch stage), Focus spectral placement, a live spatial-width visualiser, mono-in/stereo-out bus support, and CPU/allocation hardening (verified realtime-safe, no audio-thread allocations). Focus and Tightness are now structurally Double-only controls - a dedicated audit (`docs/Task Based/VX_ENGINE_AUDIT.md`) traced every signal path and closed several found couplings (shared adaptive filters/restraints that let Double's own behaviour nudge Width's output) down to exact-bit-equality; neither control can move Width's output at all, even with Double active. Validated against real DAW playback (REAPER), not just automated/headless tests. Still outstanding: harmonic/residual/transient-aware decorrelation (a documented later differentiator, not started), and the full mono/phase-risk guardrail beyond the correlation-based restraints already in place.
 - VXTune is a new confidence-gated vocal pitch correction plugin: performance decomposition separates sung centre pitch from expression (vibrato, bends, slides), a Bayesian target estimator picks the intended note, and a Signalsmith Stretch-based shifter renders the correction with a live sung-vs-tuned pitch trace. Round-trip latency is ~30-45ms, low enough to monitor through while tracking.
 - VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
 - VXProximityClassic is a new two-control simplified proximity model.
@@ -565,10 +565,10 @@ Stereo image and doubling processor with four controls. Narrows a stereo signal 
 
 How to use it:
 
-- `Width` sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens - moderate settings boost the existing Side signal, high settings blend in a decorrelated layer synthesized from Mid so a fully mono source can be widened into real stereo.
-- `Double` introduces a synthetic second performance (ADT-style: independent fractional delay, pitch drift from delay modulation, gain and spectral tilt movement per voice) alongside the original. Weighted toward centred, correlated content rather than doubling a whole stereo mix uniformly.
-- `Tightness` sets how closely the generated double follows the original, from tight and precise to loose and separate.
-- `Focus` sets where in the spectrum the width and doubling effect concentrates: Body, Full, or Air - shapes only the generated content, not the dry signal.
+- `Width` sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens. Width measures the source's actual current stereo width and solves for how much existing-Side gain is needed to reach the requested target, rather than applying a fixed widening curve - a narrow source gets more expansion than a source that's already wide at the same knob setting. Width is the only control that changes the stereo image; Double, Tightness, and Focus cannot move it, including when Double is active.
+- `Double` introduces a synthetic second performance (ADT-style: independent fractional delay, pitch drift from delay modulation, gain and spectral tilt movement per voice, plus a subtle always-on micro-pitch stage) alongside the original. Weighted toward centred, correlated content rather than doubling a whole stereo mix uniformly.
+- `Tightness` sets how closely the generated double follows the original: loose and separate toward 0%, tight and precise toward 100%. Only affects Double.
+- `Focus` sets where in the spectrum the generated doubled performance concentrates: Body, Full, or Air - shapes only Double's generated content, not the dry signal and not Width. Only affects Double.
 
 Practical scenarios:
 
@@ -576,7 +576,7 @@ Practical scenarios:
 - Widening a mono or near-mono vocal, instrument, or backing track into real stereo
 - Adding a believable double-take to a mono or centred vocal without a second take
 
-Known gaps (tracked in `docs/Task Based/VXWIDTH_BUILD.md`'s build log): no harmonic/residual/transient-aware decorrelation yet (a documented later differentiator); the mono/phase-risk guardrail covers broadband correlation but not the full multi-stage restraint the spec describes; no UI visual feedback beyond the standard four-knob shell; not yet validated in a real DAW host, only automated/headless tests.
+Known gaps (tracked in `docs/Task Based/VXWIDTH_BUILD.md`'s build log): no harmonic/residual/transient-aware decorrelation yet (a documented later differentiator); the mono/phase-risk guardrail covers broadband correlation but not the full multi-stage restraint the spec describes.
 
 ---
 

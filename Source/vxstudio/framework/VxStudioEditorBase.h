@@ -6,6 +6,7 @@
 #include "VxStudioGainMeterView.h"
 #include "VxStudioPitchTraceView.h"
 #include "VxStudioProcessorBase.h"
+#include "VxStudioSpatialWidthView.h"
 
 #include <array>
 #include <memory>
@@ -21,6 +22,17 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void setScaleFactor(float newScale) override;
+
+    // Test-only visibility (Phase 2 spatial-width UI, VX_WIDTH_ENGINE_UPGRADE.md
+    // §16): the real update runs off a private juce::Timer, which headless
+    // tests can't pump without a running message loop - these let a test
+    // drive/observe the exact same logic deterministically. Not used by
+    // production code paths.
+    void pumpSpatialWidthUiForTesting() { updateSpatialWidthUi(); }
+    bool isWidthPresentationMonoLikeForTesting() const noexcept { return widthPresentationIsMonoLike; }
+    juce::String getPrimaryDisplayTextForTesting() { return primarySlider.getTextFromValue(primarySlider.getValue()); }
+    double getPrimarySliderValueForTesting() const { return primarySlider.getValue(); }
+    void applyUiPresetForTesting(const int presetIndex) { applyUiPreset(presetIndex); }
 
 protected:
     ProcessorBase& processor;
@@ -46,6 +58,16 @@ private:
     void updateExpertUi();
     bool lastExtrasAllowed = true;
     void applyTextFit();
+    // Phase 2 spatial-width UI (VX_WIDTH_ENGINE_UPGRADE.md §5, §13):
+    // hysteresis/dwell-gated mono<->stereo presentation state, purely
+    // display-side - never writes to processor.getValueTreeState() (§1).
+    void updateSpatialWidthUi();
+    // Remaps primarySlider's OWN interactive range per mono/stereo mode -
+    // never the stored parameter. See its definition for the full rationale.
+    void applyWidthKnobRangeForCurrentMode();
+    bool widthPresentationIsMonoLike = true;
+    float widthMonoConfidenceSmoothed = 1.0f;
+    int widthModeDwellTicksElapsed = 0;
 
     SuiteLookAndFeel lookAndFeel;
     float uiScale = 1.0f;
@@ -107,9 +129,11 @@ private:
     LevelTraceView levelTraceView;
     GainMeterView gainMeterView;
     PitchTraceView pitchTraceView;
+    SpatialWidthView spatialWidthView;
     juce::Rectangle<int> activityStripBounds;
     juce::Rectangle<int> gainMeterBounds;
     juce::Rectangle<int> traceViewBounds;
+    juce::Rectangle<int> spatialWidthViewBounds;
     juce::Rectangle<int> lowShelfIconBounds;
     juce::Rectangle<int> highShelfIconBounds;
     juce::Rectangle<int> sidechainBadgeBounds;

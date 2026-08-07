@@ -23,11 +23,28 @@ public:
     void reset() noexcept { lowpassState = 0.0f; }
 
     // tiltDb: negative emphasises low/body, positive emphasises high/air.
+    //
+    // Splits the tilt symmetrically across both bands (+tiltDb/2 on one,
+    // -tiltDb/2 on the other) rather than only ever touching the high band.
+    // The original one-sided-shelf version (`x + highPart*(gain(tiltDb)-1)`)
+    // left the low band's gain fixed at 1 always, so negative tilt (Body)
+    // was a pure CUT with no compensating boost while positive tilt (Air)
+    // was a pure BOOST - not an energy-neutral tilt at all. That directly
+    // fed Focus's downstream consumers (the decorrelator + ADT voices, both
+    // driven off this tilted signal): measured total generated Side energy
+    // swung ~9x from Focus=0 to Focus=100 at a FIXED Width, so turning Focus
+    // alone visibly changed how wide the image read even with Width
+    // untouched (user report, 2026-08-07 - "the width lines seem to be
+    // linked to focus"). Symmetric split keeps broadband RMS roughly
+    // constant across the full tilt range, so Focus repositions the effect
+    // instead of scaling it.
     float process(const float x, const float tiltDb) noexcept {
         lowpassState += (x - lowpassState) * (1.0f - alpha);
+        const float lowPart = lowpassState;
         const float highPart = x - lowpassState;
-        const float tiltGainDelta = juce::Decibels::decibelsToGain(tiltDb) - 1.0f;
-        return x + highPart * tiltGainDelta;
+        const float highGain = juce::Decibels::decibelsToGain(tiltDb * 0.5f);
+        const float lowGain  = juce::Decibels::decibelsToGain(-tiltDb * 0.5f);
+        return lowPart * lowGain + highPart * highGain;
     }
 
 private:

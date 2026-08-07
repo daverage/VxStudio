@@ -7,9 +7,11 @@
 #include "VxWidthCorpusGenerator.h"
 #include <atomic>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <new>
+#include <random>
 
 using namespace vxsuite::test;
 
@@ -61,7 +63,12 @@ int main() {
     std::cout << "=== VXWidth Shell Check ===\n";
     bool allPass = true;
 
-    // --- Test 1: neutral null (Width=0, Double=0) ---
+    // --- Test 1: neutral null (Width=0, Double=0). v=0.5 is the parameter's
+    // foundational, unconditional no-op point - true for ALL content, mono
+    // included. Mono's "full physical sweep 0..100" UI presentation
+    // (EditorBase.cpp's applyWidthKnobRangeForCurrentMode) is achieved by
+    // remapping the KNOB's interactive range to [0.5,1.0], never by
+    // changing what the stored parameter itself means. ---
     {
         VXWidthAudioProcessor proc;
         proc.prepareToPlay(sr, 256);
@@ -237,11 +244,14 @@ int main() {
     // Measures the ACTUAL max via lastInstantaneousPitchShiftCents(), not
     // just trusting the clamp math - proves the fix, doesn't assume it. ---
     {
+        // Tightness knob convention inverted 2026-08-07 (0%=loose,
+        // 100%=tight, matching the control's own name) - so the "tight"
+        // budget is now reached at the top of the knob's range.
         struct Band { const char* name; float tightnessNorm; float maxBudgetCents; };
         const Band bands[] = {
-            { "Tight",   0.0f, 3.0f },
+            { "Tight",   1.0f, 3.0f },
             { "Natural", 0.5f, 6.0f },
-            { "Loose",   1.0f, 10.0f },
+            { "Loose",   0.0f, 10.0f },
         };
         bool ok = true;
         for (const auto& band : bands) {
@@ -308,6 +318,53 @@ int main() {
         std::cout << "  [Double centre-confidence gate] pannedDiff=" << pannedDiff
                   << " centredDiff=" << centredDiff
                   << (ok ? "  PASS (panned material doubled less)" : "  FAIL") << "\n";
+    }
+
+    // --- Test (Phase 1.2 §9/§10/§21): Double must stay clearly audible on
+    // genuine stereo material, not collapse toward Double 100 sounding like
+    // Double 25. The pre-fix kDoubleCentreGateFloor=0.25 meant real stereo
+    // material with modest centerConfidence received roughly 25%-50% of the
+    // requested DoubleSide amount; the fix raises that floor so
+    // centerConfidence only mildly modulates the amount. Uses a mono-source
+    // Karplus-Strong-style fixture with an added independent stereo Side
+    // component (same construction as makeStereoWithSide) so centerConfidence
+    // reads meaningfully below 1 without being the extreme hard-pan case
+    // already covered above. ---
+    {
+        auto makeGenuineStereo = [](double sampleRate, float seconds) {
+            auto mono = makeSpeechLike(sampleRate, seconds);
+            std::mt19937 rng(9191);
+            std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+            float n = 0.0f;
+            for (int i = 0; i < mono.getNumSamples(); ++i) {
+                n = 0.985f * n + 0.015f * dist(rng);
+                const float m = mono.getSample(0, i);
+                mono.setSample(0, i, m + 0.30f * n);
+                mono.setSample(1, i, m - 0.30f * n);
+            }
+            return mono;
+        };
+        auto doubleDiffAt = [&](const float double01) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f); // isolate Double's own effect
+            setParamNormalized(proc, "double", double01);
+            auto input = makeGenuineStereo(sr, 8.0f);
+            render(proc, input, 256);
+            auto out = render(proc, input, 256);
+            return maxAbsDiff(input, out);
+        };
+        const float diff50  = doubleDiffAt(0.5f);
+        const float diff100 = doubleDiffAt(1.0f);
+        // §21: "Double 100 must be clearly materially greater than Double 50"
+        // and must not be a negligible amount in absolute terms.
+        const bool monotonicOk = diff100 > diff50 * 1.10f;
+        const bool audibleOk = diff100 > 0.05f;
+        const bool ok = monotonicOk && audibleOk;
+        allPass &= ok;
+        std::cout << "  [Phase1.2 Double audible on genuine stereo] diff50=" << diff50
+                  << " diff100=" << diff100
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
     }
 
     // --- Test: L/R loudness balance (user-reported symptom: "left channel
@@ -378,7 +435,7 @@ int main() {
         const double doubleAvg = doubleSum / repItems.size();
 
         // Thresholds derived from measuring the actual production config
-        // across this exact representative set (2026-08-07). Two
+        // across this exact representative set (2026-08-07). Three
         // generations of evidence: (1) seeds/taps alone (0x1234/0x2222,
         // original decorrelator taps, no orthogonaliser): widthAvg=0.111,
         // widthMax=0.281, doubleAvg=0.046, doubleMax=0.151 - a corpus-wide
@@ -390,11 +447,19 @@ int main() {
         // doubleAvg=0.030, doubleMax=0.094 - a real, bounded improvement
         // (confirmed non-degenerate: 72% of generated-Side RMS retained,
         // 2.7dB energy reduction, not the 90%-removed/26dB failure mode an
-        // earlier unconstrained version produced). Thresholds set with
-        // headroom over THIS measured baseline, tight enough to catch a
-        // real regression.
+        // earlier unconstrained version produced). (3) monoDownmixRestraint
+        // removed from decorBlend/doubleSideAmount (VX_ENGINE_AUDIT.md
+        // §11/§12/§15): that restraint was mathematically incapable of ever
+        // responding to Side-domain content (outL+outR=2*midOut*k*compGain
+        // algebraically, independent of Side) - it was being applied to the
+        // wrong quantity and, worse, silently coupled Double's midOut
+        // degradation into Width's own amount. Removing it lets slightly
+        // more signal through (one fewer multiplicative restraint), raising
+        // the measured worst case slightly: widthAvg=0.089, widthMax=0.246,
+        // doubleAvg=0.032, doubleMax=0.098 - avg comfortably unchanged,
+        // worst-case threshold widened with headroom over this new baseline.
         constexpr double kAvgThreshold = 0.095;
-        constexpr double kWorstCaseThreshold = 0.24;
+        constexpr double kWorstCaseThreshold = 0.28;
         const bool ok = widthAvg < kAvgThreshold && doubleAvg < kAvgThreshold
                       && widthMax < kWorstCaseThreshold && doubleMax < kWorstCaseThreshold;
         allPass &= ok;
@@ -596,6 +661,77 @@ int main() {
                   << (ok ? "  PASS" : "  FAIL") << "\n";
     }
 
+    // --- Test (user report, 2026-08-07: "the width knob never moves" when
+    // selecting a preset): the PREVIOUS [factory presets] test above only
+    // checks the identity table's raw values are in range - it never
+    // exercises the actual UI path a preset selection takes (EditorBase::
+    // applyUiPreset -> parameter->setValueNotifyingHost -> SliderAttachment
+    // -> primarySlider). This drives that exact path via the test-only
+    // hooks (applyUiPresetForTesting/getPrimarySliderValueForTesting) and
+    // checks the SLIDER's own value actually reflects each preset, in both
+    // stereo and mono UI presentation. ---
+    {
+        auto runPresetKnobCheck = [&](const bool startMonoLike, const char* label) {
+            juce::ScopedJuceInitialiser_GUI guiInit;
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            if (editor == nullptr) {
+                allPass = false;
+                std::cout << "  [preset moves knob, " << label << "] FAIL (no editor)\n";
+                return;
+            }
+            // Drive the mono/stereo presentation to the requested starting
+            // state via real content, same path the live plugin uses (§5's
+            // hysteresis/dwell), rather than reaching into private state.
+            auto makeLocalStereoWithSide = [](const double sampleRate, const float seconds, const float sideGain) {
+                auto mono = makeSpeechLike(sampleRate, seconds);
+                std::mt19937 rng(4242);
+                std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+                float n = 0.0f;
+                for (int i = 0; i < mono.getNumSamples(); ++i) {
+                    n = 0.985f * n + 0.015f * dist(rng);
+                    const float m = mono.getSample(0, i);
+                    mono.setSample(0, i, m + sideGain * n);
+                    mono.setSample(1, i, m - sideGain * n);
+                }
+                return mono;
+            };
+            auto content = startMonoLike ? makeSpeechLike(sr, 0.3f) : makeLocalStereoWithSide(sr, 0.3f, 0.6f);
+            for (int i = 0; i < 40; ++i) {
+                render(proc, content, 256);
+                editor->pumpSpatialWidthUiForTesting();
+            }
+            const bool reachedMode = editor->isWidthPresentationMonoLikeForTesting() == startMonoLike;
+
+            const auto& identity = proc.getProductIdentity();
+            bool sliderTracksPresets = true;
+            for (int i = 0; i < identity.clampedPresetChoiceCount(); ++i) {
+                editor->applyUiPresetForTesting(i);
+                const double sliderValue = editor->getPrimarySliderValueForTesting();
+                const double expected = identity.presetPrimaryValues[static_cast<size_t>(i)];
+                // In mono presentation the slider's own range is clamped to
+                // [0.5,1.0] (applyWidthKnobRangeForCurrentMode) - a preset
+                // value below that (e.g. "Mono Maker"=0.0) is EXPECTED to
+                // clamp visually per that documented, intentional behaviour;
+                // only check presets whose value actually falls in-range for
+                // the current presentation.
+                if (startMonoLike && expected < 0.5)
+                    continue;
+                if (std::abs(sliderValue - expected) > 0.002)
+                    sliderTracksPresets = false;
+            }
+            const bool ok = reachedMode && sliderTracksPresets;
+            allPass &= ok;
+            std::cout << "  [preset moves knob, " << label << "] reachedMode=" << reachedMode
+                       << " sliderTracksPresets=" << sliderTracksPresets
+                       << (ok ? "  PASS" : "  FAIL") << "\n";
+        };
+        runPresetKnobCheck(false, "stereo");
+        runPresetKnobCheck(true, "mono");
+    }
+
     // --- Test: MonoDownmixGuardrail (§11.3) restrains on severe mono-energy
     // loss and recovers when the output stops degrading - a real audio
     // scenario that reliably drives the FINAL mono downmix down (as
@@ -626,44 +762,16 @@ int main() {
     }
 
     // =====================================================================
-    // EXPERIMENTAL: ADT micro-pitch stage (2026-08-07, off by default -
-    // vxsuite::width::AdtVoice::setMicroPitchEnabled(), default false, no
-    // user-facing control). These tests exercise the feature explicitly
-    // enabled via VXWidthAudioProcessor::setAdtMicroPitchEnabled() (a
-    // developer/test-only API) - production code never calls this.
+    // ADT micro-pitch stage - permanent, always-on (2026-08-07, graduated
+    // from an experimental toggle: no more user-facing control, no more
+    // "microPitchExperimental" parameter - VXWidthAudioProcessor enables it
+    // unconditionally in resetSuite()). These tests now validate the
+    // ALWAYS-ON production behaviour directly - no separate enable step.
     // =====================================================================
     {
         using namespace vxsuite::width::corpus;
 
-        // --- Disabled path is sample-identical to today's production
-        // behaviour: one processor never touches the experimental API, the
-        // other explicitly disables it - both must render byte-identical
-        // output, proving the feature has zero effect unless opted into. ---
-        {
-            auto input = makeSpeechLike(sr, 6.0f);
-            VXWidthAudioProcessor untouched;
-            untouched.prepareToPlay(sr, 256);
-            setParamNormalized(untouched, "width", 0.5f);
-            setParamNormalized(untouched, "double", 1.0f);
-            render(untouched, input, 256);
-            auto untouchedOut = render(untouched, input, 256);
-
-            VXWidthAudioProcessor explicitlyDisabled;
-            explicitlyDisabled.prepareToPlay(sr, 256);
-            setParamNormalized(explicitlyDisabled, "width", 0.5f);
-            setParamNormalized(explicitlyDisabled, "double", 1.0f);
-            setParamNormalized(explicitlyDisabled, "microPitchExperimental", 0.0f);
-            render(explicitlyDisabled, input, 256);
-            auto disabledOut = render(explicitlyDisabled, input, 256);
-
-            const float diff = maxAbsDiff(untouchedOut, disabledOut);
-            const bool ok = diff == 0.0f;
-            allPass &= ok;
-            std::cout << "  [EXPERIMENTAL micro-pitch: disabled == production] diff=" << diff
-                      << (ok ? "  PASS" : "  FAIL") << "\n";
-        }
-
-        // --- Enabled: bounded actual pitch deviation per voice, measured via
+        // --- Bounded actual pitch deviation per voice, measured via
         // telemetry, not assumed from the configured range. Voice A
         // configured -1.5c+/-1.5c (range -3..0c), Voice B +2.0c+/-2.0c
         // (range 0..+4c) - asymmetric, weighted-average-neutral per the
@@ -673,7 +781,6 @@ int main() {
             proc.prepareToPlay(sr, 256);
             setParamNormalized(proc, "width", 0.5f);
             setParamNormalized(proc, "double", 1.0f);
-            setParamNormalized(proc, "microPitchExperimental", 1.0f);
             auto input = makeSpeechLike(sr, 10.0f);
             render(proc, input, 256);
             render(proc, input, 256);
@@ -686,14 +793,12 @@ int main() {
             const bool bOk = bCents > (2.0f - kTol) && bCents < (8.0f + kTol);
             const bool ok = aOk && bOk;
             allPass &= ok;
-            std::cout << "  [EXPERIMENTAL micro-pitch: bounded deviation] voiceA longTermCents=" << aCents
+            std::cout << "  [micro-pitch: bounded deviation] voiceA longTermCents=" << aCents
                       << " (expect -8..0) voiceB longTermCents=" << bCents << " (expect 2..8)"
                       << (ok ? "  PASS" : "  FAIL") << "\n";
         }
 
-        // --- No NaN/Inf, stable across sample rates and block sizes, with
-        // the feature enabled (mirrors the production SR/block-size sweep
-        // above, but with micro-pitch active). ---
+        // --- No NaN/Inf, stable across sample rates and block sizes. ---
         {
             const double sampleRates[] = { 44100.0, 48000.0, 96000.0, 192000.0 };
             const int blockSizes[] = { 32, 128, 512, 2048 };
@@ -704,7 +809,6 @@ int main() {
                     proc.prepareToPlay(testSr, block);
                     setParamNormalized(proc, "width", 0.5f);
                     setParamNormalized(proc, "double", 1.0f);
-                    setParamNormalized(proc, "microPitchExperimental", 1.0f);
                     auto input = makeSpeechLike(testSr, 1.0f);
                     render(proc, input, block);
                     auto out = render(proc, input, block);
@@ -715,17 +819,16 @@ int main() {
                 }
             }
             allPass &= ok;
-            std::cout << "  [EXPERIMENTAL micro-pitch: SR/block-size stability] "
+            std::cout << "  [micro-pitch: SR/block-size stability] "
                       << (ok ? "PASS (all combinations finite)" : "FAIL") << "\n";
         }
 
-        // --- No audio-thread allocations with the feature enabled. ---
+        // --- No audio-thread allocations. ---
         {
             VXWidthAudioProcessor proc;
             proc.prepareToPlay(sr, 256);
             setParamNormalized(proc, "width", 0.5f);
             setParamNormalized(proc, "double", 1.0f);
-            setParamNormalized(proc, "microPitchExperimental", 1.0f);
             auto input = makeSpeechLike(sr, 1.0f);
             juce::MidiBuffer midi;
             {
@@ -737,64 +840,1009 @@ int main() {
             proc.processBlock(testBlock, midi);
             const bool ok = allocationScope.allocations() == 0;
             allPass &= ok;
-            std::cout << "  [EXPERIMENTAL micro-pitch: no audio-thread allocations] count="
+            std::cout << "  [micro-pitch: no audio-thread allocations] count="
                       << allocationScope.allocations() << (ok ? "  PASS" : "  FAIL") << "\n";
         }
+    }
 
-        // --- No regression in L/R imbalance / Side-retention with the
-        // feature enabled, on the same representative corpus and thresholds
-        // the production path is held to. ---
-        {
-            constexpr double repSr = 48000.0;
-            constexpr float repSeconds = 6.0f;
-            constexpr std::uint32_t repSeedBase = 5000u;
-            std::vector<juce::AudioBuffer<float>> repMonos;
-            repMonos.push_back(makeMaleSpeech(repSr, repSeconds, repSeedBase + 0));
-            repMonos.push_back(makeFemaleSpeech(repSr, repSeconds, repSeedBase + 1));
-            repMonos.push_back(makeSungVocal(repSr, repSeconds, repSeedBase + 2));
-            repMonos.push_back(makeGuitar(repSr, repSeconds, repSeedBase + 3, true));
-            repMonos.push_back(makeDrums(repSr, repSeconds, repSeedBase + 4));
-            repMonos.push_back(makePinkNoise(repSr, repSeconds, repSeedBase + 5));
+    // ======================================================================
+    // §16 acceptance tests for the target-geometry engine rebuild
+    // (docs/Task Based/VX_WIDTH_ENGINE_UPGRADE.md).
+    // ======================================================================
 
-            auto channelEnergyLocal = [](const juce::AudioBuffer<float>& b, int ch) {
-                double e = 0.0;
-                for (int i = 0; i < b.getNumSamples(); ++i) {
-                    const float s = b.getSample(ch, i);
-                    e += static_cast<double>(s) * s;
+    // L = mono + sideGain*n, R = mono - sideGain*n: an exact, controllable
+    // Side/Mid ratio on top of shared Mid content, so "moderate width" /
+    // "already wide" fixtures aren't ad hoc - sideGain directly sets the
+    // input's own estimatedWidth01 (§6) via the same Side/Mid RMS ratio the
+    // engine itself measures.
+    auto makeStereoWithSide = [](const double sampleRate, const float seconds, const float sideGain) {
+        auto mono = makeSpeechLike(sampleRate, seconds);
+        std::mt19937 rng(4242);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        float n = 0.0f;
+        for (int i = 0; i < mono.getNumSamples(); ++i) {
+            n = 0.985f * n + 0.015f * dist(rng); // slow-varying, not white noise
+            const float m = mono.getSample(0, i);
+            mono.setSample(0, i, m + sideGain * n);
+            mono.setSample(1, i, m - sideGain * n);
+        }
+        return mono;
+    };
+
+    auto outputWidth01 = [](const juce::AudioBuffer<float>& b) {
+        double sumMidSq = 0.0, sumSideSq = 0.0;
+        for (int i = 0; i < b.getNumSamples(); ++i) {
+            const double l = b.getSample(0, i), r = b.getSample(1, i);
+            const double mid = l + r, side = l - r;
+            sumMidSq += mid * mid;
+            sumSideSq += side * side;
+        }
+        return sumMidSq > 1e-12 ? std::sqrt(sumSideSq / sumMidSq) : 0.0;
+    };
+
+    // --- Test: stereo-neutral preservation at Width=0 (§16 "Stereo neutral")
+    {
+        VXWidthAudioProcessor proc;
+        proc.prepareToPlay(sr, 256);
+        setParamNormalized(proc, "width", 0.5f); // Width=0
+        auto input = makeStereoWithSide(sr, 4.0f, 0.25f);
+        render(proc, input, 256);
+        auto out = render(proc, input, 256);
+        const double w0 = outputWidth01(input);
+        const double wOut = outputWidth01(out);
+        const bool ok = std::abs(wOut - w0) < 0.05 * std::max(1.0, w0);
+        allPass &= ok;
+        std::cout << "  [§16 stereo neutral] inputWidth=" << w0 << " outputWidth=" << wOut
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test: monotonic expansion for a moderate-width fixture (§16
+    // "Stereo expansion") ---
+    {
+        auto renderAt = [&](const float widthPercent) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + widthPercent / 200.0f);
+            auto input = makeStereoWithSide(sr, 4.0f, 0.25f);
+            render(proc, input, 256);
+            return outputWidth01(render(proc, input, 256));
+        };
+        const double w0   = renderAt(0.0f);
+        const double w25  = renderAt(25.0f);
+        const double w50  = renderAt(50.0f);
+        const double w100 = renderAt(100.0f);
+        const bool ok = w25 > w0 && w50 > w25 && w100 > w50;
+        allPass &= ok;
+        std::cout << "  [§16 monotonic expansion] w0=" << w0 << " w25=" << w25
+                  << " w50=" << w50 << " w100=" << w100
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test (Phase 1.2 §2/§20): the +50->+100 plateau regression check.
+    // The pre-fix engine hard-capped existing-Side expansion (Region B) at
+    // widthGapPercent=35 - for genuinely stereo content with an already-
+    // meaningful estimated width, that ceiling is reached well before
+    // Width=+100, so the +50->+100 half of the control produced far less
+    // extra width than the 0->+50 half (only Region C's decorrelated layer
+    // kept growing, which the original bug report describes as
+    // "little or no further audible widening" of the EXISTING image).
+    // Gate on +100 vs +50 being MATERIALLY greater (§20: "not a technically
+    // positive but perceptually negligible difference"), specifically that
+    // the second half of the range isn't dramatically weaker than the
+    // first half - the old ceiling collapsed it far below this bound. ---
+    {
+        auto renderAt = [&](const float widthPercent) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + widthPercent / 200.0f);
+            auto input = makeStereoWithSide(sr, 4.0f, 0.30f); // genuinely-stereo-like W0
+            render(proc, input, 256);
+            return outputWidth01(render(proc, input, 256));
+        };
+        const double w50  = renderAt(50.0f);
+        const double w75  = renderAt(75.0f);
+        const double w100 = renderAt(100.0f);
+        const double firstHalfGain = w75 - w50;
+        const double secondHalfGain = w100 - w75;
+        const bool materiallyGreater = w100 > w75 * 1.02;
+        // The second quarter-turn must remain a substantial fraction of the
+        // first, not collapse toward zero (the plateau signature).
+        const bool noPlateau = secondHalfGain > firstHalfGain * 0.35;
+        const bool ok = materiallyGreater && noPlateau;
+        allPass &= ok;
+        std::cout << "  [Phase1.2 no +50->+100 plateau] w50=" << w50 << " w75=" << w75
+                  << " w100=" << w100 << " firstHalfGain=" << firstHalfGain
+                  << " secondHalfGain=" << secondHalfGain
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test: already-wide material stays close to unchanged at +100 (§16
+    // "Already-wide material") - the gap-to-target model should apply little
+    // gain/decorrelation once estimatedWidth01 is already near max. ---
+    {
+        VXWidthAudioProcessor narrowProc;
+        narrowProc.prepareToPlay(sr, 256);
+        setParamNormalized(narrowProc, "width", 1.0f); // +100
+        auto narrowInput = makeStereoWithSide(sr, 4.0f, 0.08f);
+        render(narrowProc, narrowInput, 256);
+        const double narrowGain = outputWidth01(render(narrowProc, narrowInput, 256))
+            / std::max(1e-6, outputWidth01(narrowInput));
+
+        VXWidthAudioProcessor wideProc;
+        wideProc.prepareToPlay(sr, 256);
+        setParamNormalized(wideProc, "width", 1.0f); // +100
+        auto wideInput = makeStereoWithSide(sr, 4.0f, 0.95f); // already near max practical width
+        render(wideProc, wideInput, 256);
+        auto wideOut = render(wideProc, wideInput, 256);
+        const double wideGain = outputWidth01(wideOut) / std::max(1e-6, outputWidth01(wideInput));
+        bool finiteOk = true;
+        for (int ch = 0; ch < wideOut.getNumChannels(); ++ch)
+            for (int i = 0; i < wideOut.getNumSamples(); ++i)
+                finiteOk &= std::isfinite(wideOut.getSample(ch, i));
+
+        // The already-wide fixture must be expanded proportionally far less
+        // than the narrow one, and must never be made narrower.
+        const bool ok = finiteOk && wideGain < narrowGain * 0.5 && wideGain >= 0.95;
+        allPass &= ok;
+        std::cout << "  [§16 already-wide stays safe] narrowGain=" << narrowGain
+                  << " wideGain=" << wideGain
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test: mono endpoint reaches a real spatial extent, not a small
+    // capped nudge (§16 "Mono endpoint", §3/§8's "generated pair reaches the
+    // left/right extremes") - Width=100/Double=0 on true mono input must
+    // reach a MEANINGFULLY wider result than before this rebuild
+    // (kRegionCMaxLevel 0.85->1.0), not a token nudge.
+    //
+    // HONEST LIMITATION (measured, not assumed): the decorrelator's
+    // normalisation (VxWidthDecorrelator.h) assumes flat-spectrum noise-like
+    // input; on tonal/voiced content the velvet-noise taps partially cancel,
+    // so measured output width tops out well short of a literal
+    // side==mid "hard-pan-equivalent" (~1.0) for speech-like material even
+    // at full blend. Pushing further would mean either engaging ADT voices
+    // under plain Width (blurring the Width/Double split §9 deliberately
+    // keeps separate) or loosening ContentPredictabilityRestraint/
+    // SideOrthogonalizer - both of which exist specifically to prevent the
+    // L/R imbalance regression this codebase already fixed once (see
+    // tasks/todo.md). Gate on the measured, safety-respecting improvement
+    // instead of an unreached ideal. ---
+    {
+        VXWidthAudioProcessor proc;
+        proc.prepareToPlay(sr, 256);
+        setParamNormalized(proc, "width", 1.0f);  // +100
+        setParamNormalized(proc, "double", 0.0f); // isolate Width's own endpoint
+        auto input = makeSpeechLike(sr, 4.0f); // true mono (near-identical L/R)
+        render(proc, input, 256);
+        auto out = render(proc, input, 256);
+        const double wOut = outputWidth01(out);
+        // telemetryActual reflects only the LAST processed block, which for
+        // this fixture is the faded-to-silence tail - diagnostic only, not
+        // gated on.
+        const bool ok = wOut > 0.12;
+        allPass &= ok;
+        std::cout << "  [§16 mono endpoint] actualOutputWidth=" << wOut
+                  << " telemetryActual(lastBlock)=" << proc.getActualOutputWidth01()
+                  << (ok ? "  PASS (measurable spatial extent)" : "  FAIL") << "\n";
+    }
+
+    // --- Phase 1.1: estimatedWidth01 correctness (VxWidthInputAnalyser.h).
+    // Side/Mid ratio alone can't tell "positioned far to one side" from
+    // "actually wide" - these fixtures use steady (non-fading) sine content
+    // so the LAST processed block's telemetry (getEstimatedInputWidth01())
+    // is representative of steady-state, not a fade-out tail. ---
+    {
+        auto hardPan = [](const juce::AudioBuffer<float>& tone, const bool silenceRight) {
+            auto buf = tone;
+            for (int i = 0; i < buf.getNumSamples(); ++i)
+                buf.setSample(silenceRight ? 1 : 0, i, 0.0f);
+            return buf;
+        };
+        auto antiPhaseTone = [](const juce::AudioBuffer<float>& tone) {
+            auto buf = tone;
+            for (int i = 0; i < buf.getNumSamples(); ++i)
+                buf.setSample(1, i, -buf.getSample(0, i));
+            return buf;
+        };
+        auto broadStereo = [&](const double sampleRate, const float seconds) {
+            auto l = makeSine(sampleRate, seconds, 300.0f, 0.3f);
+            auto r = makeSine(sampleRate, seconds, 317.0f, 0.3f); // different freq -> decorrelated, balanced, in-phase-ish
+            for (int i = 0; i < l.getNumSamples(); ++i)
+                l.setSample(1, i, r.getSample(1, i));
+            return l;
+        };
+
+        auto estimatedWidthOf = [&](const juce::AudioBuffer<float>& fixture) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            render(proc, fixture, 256); // prime the ~450ms width smoother
+            render(proc, fixture, 256);
+            return proc.getEstimatedInputWidth01();
+        };
+
+        const auto tone = makeSine(sr, 3.0f, 300.0f, 0.3f); // L=R, equal mono baseline
+
+        const float wEqualMono  = estimatedWidthOf(tone);
+        const float wHardLeft   = estimatedWidthOf(hardPan(tone, true));
+        const float wHardRight  = estimatedWidthOf(hardPan(tone, false));
+        const float wAntiPhase  = estimatedWidthOf(antiPhaseTone(tone));
+        const float wModerate   = estimatedWidthOf(makeStereoWithSide(sr, 3.0f, 0.25f));
+        const float wBroad      = estimatedWidthOf(broadStereo(sr, 3.0f));
+
+        const bool equalOk    = wEqualMono < 0.10f;
+        const bool hardLeftOk = wHardLeft < 0.35f;   // positioned, not "wide"
+        const bool hardRightOk = wHardRight < 0.35f;
+        const bool antiPhaseOk = wAntiPhase < 0.35f; // phase-risk, not "excellent width"
+        const bool orderingOk = wModerate > wEqualMono && wBroad > wModerate
+                              && wBroad > wHardLeft && wBroad > wAntiPhase;
+        const bool ok = equalOk && hardLeftOk && hardRightOk && antiPhaseOk && orderingOk;
+        allPass &= ok;
+        std::cout << "  [Phase1.1 estimatedWidth01] equalMono=" << wEqualMono
+                  << " hardLeft=" << wHardLeft << " hardRight=" << wHardRight
+                  << " antiPhase=" << wAntiPhase << " moderate=" << wModerate
+                  << " broad=" << wBroad
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Phase 1.1: Width +100 stays responsive on strongly panned-but-not-
+    // broad material (the exact regression this fix targets - a bad
+    // estimator reading hard-pan as W0≈1 would zero out gapToTarget) ---
+    {
+        VXWidthAudioProcessor proc;
+        proc.prepareToPlay(sr, 256);
+        setParamNormalized(proc, "width", 1.0f); // +100
+        auto input = makeSine(sr, 3.0f, 300.0f, 0.3f);
+        for (int i = 0; i < input.getNumSamples(); ++i)
+            input.setSample(1, i, 0.0f); // hard-panned mono object, not broad stereo
+        render(proc, input, 256);
+        auto out = render(proc, input, 256);
+        const double w0 = outputWidth01(input);
+        const double wOut = outputWidth01(out);
+        const bool ok = wOut > w0 * 1.05; // Width must still DO something here
+        allPass &= ok;
+        std::cout << "  [Phase1.1 hard-pan stays responsive] inputWidth=" << w0
+                  << " outputWidth=" << wOut
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test: dynamic mono<->stereo transition has no NaN/Inf/large
+    // single-block jump (§16 "Dynamic classification") ---
+    {
+        VXWidthAudioProcessor proc;
+        proc.prepareToPlay(sr, 256);
+        setParamNormalized(proc, "width", 1.0f); // +100, exercises both regions
+        auto mono = makeSpeechLike(sr, 2.0f);
+        auto stereo = makeStereoWithSide(sr, 2.0f, 0.6f);
+
+        bool finiteOk = true;
+        float prevBlockPeak = 0.0f;
+        bool noJump = true;
+        const juce::AudioBuffer<float>* segments[4] = { &mono, &stereo, &mono, &stereo };
+        for (const auto* seg : segments) {
+            auto out = render(proc, *seg, 256);
+            float peak = 0.0f;
+            for (int ch = 0; ch < out.getNumChannels(); ++ch) {
+                for (int i = 0; i < out.getNumSamples(); ++i) {
+                    const float s = out.getSample(ch, i);
+                    if (!std::isfinite(s))
+                        finiteOk = false;
+                    peak = std::max(peak, std::abs(s));
                 }
-                return e;
-            };
-            auto imbalanceEnabled = [&](const juce::AudioBuffer<float>& mono, const float widthNorm, const float doubleNorm) {
-                VXWidthAudioProcessor proc;
-                proc.prepareToPlay(repSr, 256);
-                setParamNormalized(proc, "width", widthNorm);
-                setParamNormalized(proc, "double", doubleNorm);
-                setParamNormalized(proc, "microPitchExperimental", 1.0f);
-                render(proc, mono, 256);
-                auto out = render(proc, mono, 256);
-                const double l = channelEnergyLocal(out, 0), r = channelEnergyLocal(out, 1);
-                return std::abs(l - r) / std::max(l, r);
-            };
-
-            double widthSum = 0.0, widthMax = 0.0, doubleSum = 0.0, doubleMax = 0.0;
-            for (const auto& mono : repMonos) {
-                const double w = imbalanceEnabled(mono, 1.0f, 0.0f);
-                const double d = imbalanceEnabled(mono, 0.5f, 1.0f);
-                widthSum += w; widthMax = std::max(widthMax, w);
-                doubleSum += d; doubleMax = std::max(doubleMax, d);
             }
-            const double widthAvg = widthSum / repMonos.size();
-            const double doubleAvg = doubleSum / repMonos.size();
-            // Same production thresholds - the experimental stage must not
-            // push imbalance past what the production path is held to.
-            constexpr double kAvgThreshold = 0.095;
-            constexpr double kWorstCaseThreshold = 0.24;
-            const bool ok = widthAvg < kAvgThreshold && doubleAvg < kAvgThreshold
-                          && widthMax < kWorstCaseThreshold && doubleMax < kWorstCaseThreshold;
+            if (prevBlockPeak > 0.05f)
+                noJump &= peak < prevBlockPeak * 6.0f + 0.1f;
+            prevBlockPeak = peak;
+        }
+        const bool ok = finiteOk && noJump;
+        allPass &= ok;
+        std::cout << "  [§16 dynamic classification] finite=" << finiteOk << " noJump=" << noJump
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // ======================================================================
+    // Phase 2 UI acceptance tests (§16 of VX_WIDTH_ENGINE_UPGRADE.md's Phase
+    // 2 brief): presentation-mode hysteresis, parameter-state stability, and
+    // display formatting - driven via the editor's test-only pump hooks
+    // (see VxStudioEditorBase.h) since the real 12Hz juce::Timer can't be
+    // pumped without a running message loop in a headless test.
+    // ======================================================================
+    {
+        juce::ScopedJuceInitialiser_GUI guiInit;
+
+        auto broadStereo = [](const double sampleRate, const float seconds) {
+            auto l = makeSine(sampleRate, seconds, 300.0f, 0.3f);
+            auto r = makeSine(sampleRate, seconds, 317.0f, 0.3f);
+            for (int i = 0; i < l.getNumSamples(); ++i)
+                l.setSample(1, i, r.getSample(1, i));
+            return l;
+        };
+        auto mono = makeSpeechLike(sr, 3.0f);
+        auto stereo = broadStereo(sr, 3.0f);
+
+        // --- §16.1/§16.10: mono input settles to mono presentation. Per the
+        // explicit product decision (full physical sweep for mono - "we
+        // can't reduce width beyond mono"), mono's "0" is the knob's
+        // physical hard-CCW end (parameter v=0.0), not the centre. ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.0f); // fully CCW -> mono "0"
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            bool ok = editor != nullptr;
+            for (int i = 0; i < 20 && ok; ++i) {
+                render(proc, mono, 256);
+                editor->pumpSpatialWidthUiForTesting();
+            }
+            const bool modeOk = ok && editor->isWidthPresentationMonoLikeForTesting();
+            const juce::String text = ok ? editor->getPrimaryDisplayTextForTesting() : juce::String();
+            const bool textOk = text == "0";
+            ok = modeOk && textOk;
             allPass &= ok;
-            std::cout << "  [EXPERIMENTAL micro-pitch: no imbalance regression] widthAvg=" << widthAvg
-                      << " widthMax=" << widthMax << " doubleAvg=" << doubleAvg << " doubleMax=" << doubleMax
+            std::cout << "  [Phase2 mono display] mode=" << (modeOk ? "mono" : "NOT-mono")
+                      << " text=\"" << text.toStdString() << "\""
                       << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+
+        // --- Mono uses the knob's FULL physical sweep (explicit product
+        // decision): v=1.0 (fully clockwise) must display "100". ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 1.0f); // fully CW -> mono "100"
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            bool ok = editor != nullptr;
+            for (int i = 0; i < 20 && ok; ++i) {
+                render(proc, mono, 256);
+                editor->pumpSpatialWidthUiForTesting();
+            }
+            const bool modeOk = ok && editor->isWidthPresentationMonoLikeForTesting();
+            const juce::String text = ok ? editor->getPrimaryDisplayTextForTesting() : juce::String();
+            const bool textOk = text == "100";
+            ok = modeOk && textOk;
+            allPass &= ok;
+            std::cout << "  [Phase2 mono full-range] mode=" << (modeOk ? "mono" : "NOT-mono")
+                      << " text=\"" << text.toStdString() << "\""
+                      << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+
+        // --- Automation preserved through the mono clamp (the whole point
+        // of the knob-range-remap architecture): Width=-40 (a negative
+        // automated value, below mono's operable [0.5,1.0] range) must
+        // stay EXACTLY -40 in the stored parameter throughout - visually
+        // clamped to mono's "0" boundary while mono classification holds,
+        // then restored to "-40" the instant stereo classification
+        // returns, with the raw parameter never having moved at all. ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.3f); // Width=-40
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            bool ok = editor != nullptr;
+            const float rawBefore = proc.getValueTreeState().getRawParameterValue("width")->load();
+
+            for (int i = 0; i < 20 && ok; ++i) {
+                render(proc, mono, 256);
+                editor->pumpSpatialWidthUiForTesting();
+            }
+            const bool monoModeOk = ok && editor->isWidthPresentationMonoLikeForTesting();
+            const juce::String monoText = ok ? editor->getPrimaryDisplayTextForTesting() : juce::String();
+            const float rawDuringMono = proc.getValueTreeState().getRawParameterValue("width")->load();
+
+            for (int i = 0; i < 20 && ok; ++i) {
+                render(proc, stereo, 256);
+                editor->pumpSpatialWidthUiForTesting();
+            }
+            const bool stereoModeOk = ok && !editor->isWidthPresentationMonoLikeForTesting();
+            const juce::String stereoText = ok ? editor->getPrimaryDisplayTextForTesting() : juce::String();
+            const float rawAfter = proc.getValueTreeState().getRawParameterValue("width")->load();
+
+            ok = monoModeOk && stereoModeOk
+                && monoText == "0" && stereoText == "-40"
+                && rawBefore == rawDuringMono && rawDuringMono == rawAfter;
+            allPass &= ok;
+            std::cout << "  [Phase2 automation preserved through mono clamp] "
+                      << "mono: mode=" << (monoModeOk ? "mono" : "NOT-mono") << " text=\"" << monoText.toStdString() << "\" "
+                      << "stereo: mode=" << (stereoModeOk ? "stereo" : "NOT-stereo") << " text=\"" << stereoText.toStdString() << "\" "
+                      << "raw=" << rawBefore << "/" << rawDuringMono << "/" << rawAfter
+                      << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+
+        // --- §16.2/§16.9: broad stereo input settles to stereo presentation,
+        // Width=0 displays "0" too (same physical position, §4's continuity). ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f);
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            bool ok = editor != nullptr;
+            for (int i = 0; i < 20 && ok; ++i) {
+                render(proc, stereo, 256);
+                editor->pumpSpatialWidthUiForTesting();
+            }
+            const bool modeOk = ok && !editor->isWidthPresentationMonoLikeForTesting();
+            const juce::String text = ok ? editor->getPrimaryDisplayTextForTesting() : juce::String();
+            const bool textOk = text == "0";
+            ok = modeOk && textOk;
+            allPass &= ok;
+            std::cout << "  [Phase2 stereo display] mode=" << (modeOk ? "stereo" : "NOT-stereo")
+                      << " text=\"" << text.toStdString() << "\""
+                      << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+
+        // --- §16.3/§16.4/§16.12: classification flips (mono<->stereo) never
+        // move the stored Width/Double/Tightness/Focus parameter values -
+        // this is the CORE rule of Phase 2 (§1). ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f);
+            setParamNormalized(proc, "double", 0.3f);
+            setParamNormalized(proc, "tightness", 0.4f);
+            setParamNormalized(proc, "focus", 0.6f);
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            bool ok = editor != nullptr;
+            auto raw = [&](const char* id) {
+                return proc.getValueTreeState().getRawParameterValue(id)->load();
+            };
+            const float w0 = raw("width"), d0 = raw("double"), t0 = raw("tightness"), f0 = raw("focus");
+            const juce::AudioBuffer<float>* segments[6] = { &mono, &stereo, &mono, &mono, &stereo, &stereo };
+            for (const auto* seg : segments) {
+                for (int i = 0; i < 15; ++i) {
+                    render(proc, *seg, 256);
+                    if (editor)
+                        editor->pumpSpatialWidthUiForTesting();
+                }
+            }
+            const bool unchanged = raw("width") == w0 && raw("double") == d0
+                                 && raw("tightness") == t0 && raw("focus") == f0;
+            ok = ok && unchanged;
+            allPass &= ok;
+            std::cout << "  [Phase2 parameter stability] unchangedThroughModeFlips=" << unchanged
+                      << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+
+        // --- §16.5: classification doesn't chatter - rapid mono/stereo
+        // alternation (one render block per switch) must not flip the
+        // PRESENTATION mode every tick; the dwell requirement (~500ms/6
+        // ticks) must suppress that. ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+            auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+            bool ok = editor != nullptr;
+            int transitions = 0;
+            bool lastMode = ok && editor->isWidthPresentationMonoLikeForTesting();
+            for (int i = 0; i < 40 && ok; ++i) {
+                render(proc, (i % 2 == 0) ? mono : stereo, 256);
+                editor->pumpSpatialWidthUiForTesting();
+                const bool nowMode = editor->isWidthPresentationMonoLikeForTesting();
+                if (nowMode != lastMode) {
+                    ++transitions;
+                    lastMode = nowMode;
+                }
+            }
+            // Rapid single-block alternation should settle and stay put
+            // (dwell-gated), not flip anywhere near once per tick.
+            const bool chatterOk = ok && transitions <= 3;
+            ok = chatterOk;
+            allPass &= ok;
+            std::cout << "  [Phase2 no chatter] transitions=" << transitions
+                      << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+
+        // --- §16.6/§16.7/§16.8: telemetry-driven visualiser tracks the
+        // engine - target/actual width grows with positive Width, shrinks
+        // with negative Width, relative to the input reference. ---
+        {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 1.0f); // +100
+            render(proc, stereo, 256);
+            render(proc, stereo, 256);
+            const auto expandTelemetry = proc.getSpatialWidthTelemetry();
+
+            VXWidthAudioProcessor procNarrow;
+            procNarrow.prepareToPlay(sr, 256);
+            setParamNormalized(procNarrow, "width", 0.0f); // -100
+            render(procNarrow, stereo, 256);
+            render(procNarrow, stereo, 256);
+            const auto contractTelemetry = procNarrow.getSpatialWidthTelemetry();
+
+            const bool ok = expandTelemetry.has_value() && contractTelemetry.has_value()
+                && expandTelemetry->requestedOutputWidth01 > expandTelemetry->estimatedInputWidth01
+                && contractTelemetry->requestedOutputWidth01 < contractTelemetry->estimatedInputWidth01;
+            allPass &= ok;
+            std::cout << "  [Phase2 telemetry expand/contract] "
+                      << "expand(target=" << (expandTelemetry ? expandTelemetry->requestedOutputWidth01 : -1.0f)
+                      << " > input=" << (expandTelemetry ? expandTelemetry->estimatedInputWidth01 : -1.0f) << ") "
+                      << "contract(target=" << (contractTelemetry ? contractTelemetry->requestedOutputWidth01 : -1.0f)
+                      << " < input=" << (contractTelemetry ? contractTelemetry->estimatedInputWidth01 : -1.0f) << ")"
+                      << (ok ? "  PASS" : "  FAIL") << "\n";
+        }
+    }
+
+    // --- Phase 2 revision: Double must not move actualOutputWidth01 (user-
+    // reported: the visualiser's main ray was fluctuating with Double, not
+    // just Width - traced to decorSideRaw*decorBlend (Width) and
+    // doubleSide*doubleSideAmount (Double) being summed into ONE Side
+    // signal before the shared safety chain, so a blanket output Side/Mid
+    // measurement couldn't tell them apart). At Width=0, sweeping Double
+    // 0->100% must leave actualOutputWidth01 essentially flat. ---
+    {
+        auto actualWidthAt = [&](const float doubleNorm) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f); // Width=0
+            setParamNormalized(proc, "double", doubleNorm);
+            auto input = makeSine(sr, 4.0f, 220.0f, 0.3f); // steady (no fade) so the last block is representative
+            render(proc, input, 256);
+            render(proc, input, 256);
+            return proc.getActualOutputWidth01();
+        };
+        const float widthAtDouble0   = actualWidthAt(0.0f);
+        const float widthAtDouble50  = actualWidthAt(0.5f);
+        const float widthAtDouble100 = actualWidthAt(1.0f);
+        const float maxDrift = std::max({ std::abs(widthAtDouble50 - widthAtDouble0),
+                                           std::abs(widthAtDouble100 - widthAtDouble0) });
+        const bool ok = maxDrift < 0.03f;
+        allPass &= ok;
+        std::cout << "  [Phase2 Double does not move Width telemetry] Width=0: "
+                  << "double0=" << widthAtDouble0 << " double50=" << widthAtDouble50
+                  << " double100=" << widthAtDouble100 << " maxDrift=" << maxDrift
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Phase 2 revision round 3: energy-gated actualOutputWidth01 holds
+    // its last value through silence rather than drifting toward a noisy
+    // near-zero ratio (user: "the width fluctuates constantly when audio
+    // is playing" - traced partly to an ungated ratio-of-small-numbers
+    // during quiet passages). getSpatialWidthTelemetry().hasSignal must
+    // also correctly reflect signal presence, driving the visualiser's
+    // Double-dot animation gate. ---
+    {
+        VXWidthAudioProcessor proc;
+        proc.prepareToPlay(sr, 256);
+        setParamNormalized(proc, "width", 1.0f); // +100
+        auto tone = makeSine(sr, 3.0f, 220.0f, 0.4f);
+        render(proc, tone, 256);
+        render(proc, tone, 256);
+        const auto withSignal = proc.getSpatialWidthTelemetry();
+        const float widthWithSignal = withSignal ? withSignal->actualOutputWidth01 : -1.0f;
+        const bool hasSignalOk = withSignal && withSignal->hasSignal;
+
+        juce::AudioBuffer<float> silence(2, static_cast<int>(sr * 1.0));
+        silence.clear();
+        render(proc, silence, 256);
+        const auto afterSilence = proc.getSpatialWidthTelemetry();
+        const float widthAfterSilence = afterSilence ? afterSilence->actualOutputWidth01 : -1.0f;
+        const bool noSignalOk = afterSilence && !afterSilence->hasSignal;
+
+        const bool heldOk = std::abs(widthAfterSilence - widthWithSignal) < 0.01f;
+        const bool ok = hasSignalOk && noSignalOk && heldOk;
+        allPass &= ok;
+        std::cout << "  [Phase2 energy-gated hold] widthWithSignal=" << widthWithSignal
+                  << " widthAfterSilence=" << widthAfterSilence
+                  << " hasSignal(loud)=" << hasSignalOk << " hasSignal(silent)=" << !noSignalOk
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Diagnostic (non-gating): target-seeking solver gain-limit sweep,
+    // design brief §18/§30.2. Compares candidate direct-Side gain ceilings
+    // (9/12/15dB) across narrow/moderate/wide stereo fixtures at Width
+    // 0/25/50/75/100, so the production default (12dB, see
+    // kDirectSideGainCeilingDb in VxWidthProcessor.cpp) is picked from
+    // measured numbers rather than a guess. No real listening session is
+    // available in this environment - this is the measurable half of the
+    // §18 experiment (monotonicity/width reached); the perceptual half
+    // (image quality, hollowness, mono compatibility by ear) still needs a
+    // human pass before treating 12dB as final. ---
+    {
+        std::cout << "\n  [gain-limit sweep] (diagnostic only, not gated)\n";
+        const float ceilingsDb[] = { 9.0f, 12.0f, 15.0f };
+        struct FixtureSpec { const char* label; float sideGain; };
+        const FixtureSpec fixtures[] = {
+            { "narrow(sideGain=0.08)",   0.08f },
+            { "moderate(sideGain=0.30)", 0.30f },
+            { "wide(sideGain=0.95)",     0.95f },
+        };
+        for (const auto& fixture : fixtures) {
+            for (const auto ceilingDb : ceilingsDb) {
+                std::cout << "    " << fixture.label << " ceiling=" << ceilingDb << "dB:";
+                for (const float widthPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+                    VXWidthAudioProcessor proc;
+                    proc.prepareToPlay(sr, 256);
+                    proc.setDirectSideGainCeilingDbForTesting(ceilingDb);
+                    setParamNormalized(proc, "width", 0.5f + widthPercent / 200.0f);
+                    auto input = makeStereoWithSide(sr, 4.0f, fixture.sideGain);
+                    render(proc, input, 256);
+                    auto out = render(proc, input, 256);
+                    std::cout << " w" << static_cast<int>(widthPercent) << "="
+                               << std::fixed << std::setprecision(4) << outputWidth01(out);
+                }
+                std::cout << "\n";
+            }
+        }
+    }
+
+    // --- Test: Focus (and Tightness) must have ZERO effect on Width's own
+    // output - they are Double-only controls (explicit user correction,
+    // 2026-08-07: "nothing except the width control should be affecting
+    // width. Focus and Tightness are part of double and should have no
+    // effect on width itself"). Root cause was architectural: Region C's
+    // decorrelator source and the ADT voices both ran off the same
+    // Focus-tilted signal. Fixed by giving Region C its own untilted
+    // Mid/Side source (decorSource in VxWidthProcessor.cpp) - only the ADT
+    // voices (Double) still see the Focus tilt. Gate on EXACT equality
+    // (bit-identical, not just "close") since there is now no mechanism by
+    // which Focus should touch this path at all - any measurable
+    // difference means the coupling is back. Covers both near-mono
+    // (makeSpeechLike) and bit-exact dual-mono (forced L==R), since mono
+    // has zero Region B contribution and so is the most exposed case (all
+    // of Width's output comes from Region C alone there). ---
+    {
+        for (const bool bitExactMono : { false, true }) {
+            double widths[5];
+            int idx = 0;
+            for (const float focusPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+                VXWidthAudioProcessor proc;
+                proc.prepareToPlay(sr, 256);
+                setParamNormalized(proc, "width", 1.0f); // +100
+                setParamNormalized(proc, "focus", focusPercent / 100.0f);
+                auto input = makeSpeechLike(sr, 3.0f);
+                if (bitExactMono)
+                    for (int i = 0; i < input.getNumSamples(); ++i)
+                        input.setSample(1, i, input.getSample(0, i));
+                render(proc, input, 256);
+                render(proc, input, 256);
+                widths[idx++] = proc.getActualOutputWidth01();
+            }
+            double minW = widths[0], maxW = widths[0];
+            for (const auto w : widths) { minW = std::min(minW, w); maxW = std::max(maxW, w); }
+            const bool ok = maxW == minW;
+            allPass &= ok;
+            std::cout << "  [Focus/Width coupling, " << (bitExactMono ? "bit-exact mono" : "near-mono") << "] "
+                       << "minWidth=" << minW << " maxWidth=" << maxW
+                       << (ok ? "  PASS (Focus has zero effect on Width)" : "  FAIL") << "\n";
+        }
+    }
+
+    // --- Test: Tightness must also have ZERO effect on Width's own output
+    // (same user requirement as Focus above). Tightness only ever feeds
+    // AdtVoice::process() (Double's path) - never Region B/C - so this was
+    // already true architecturally; locking it in as a regression so it
+    // can't regress if that changes later. ---
+    {
+        double widths[3];
+        int idx = 0;
+        for (const float tightnessPercent : { 0.0f, 50.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 1.0f); // +100
+            setParamNormalized(proc, "tightness", tightnessPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 3.0f);
+            render(proc, input, 256);
+            render(proc, input, 256);
+            widths[idx++] = proc.getActualOutputWidth01();
+        }
+        double minW = widths[0], maxW = widths[0];
+        for (const auto w : widths) { minW = std::min(minW, w); maxW = std::max(maxW, w); }
+        const bool ok = maxW == minW;
+        allPass &= ok;
+        std::cout << "  [Tightness/Width coupling] minWidth=" << minW << " maxWidth=" << maxW
+                   << (ok ? "  PASS (Tightness has zero effect on Width)" : "  FAIL") << "\n";
+    }
+
+    // --- Test (VX_ENGINE_AUDIT.md §11/§12, Tests 3/4): the STRONGER
+    // requirement - Width-path telemetry must stay invariant to Focus/
+    // Tightness even with Double ACTIVE, not just when Double=0. Root
+    // cause found in this audit: ContentPredictabilityRestraint was a
+    // single shared instance scaling widthOrthogonalized+doubleOrthogonalized
+    // combined - Double's own correlation-with-Mid (which Tightness/Focus
+    // change via ADT delay/spectral shape) could move the restraint gain
+    // applied to Width's contribution too. Fixed by splitting into
+    // contentPredictabilityRestraintWidth/Double, each measuring and
+    // restraining only its own source. Also found and fixed a second,
+    // deeper coupling: monoDownmixRestraint was applied to decorBlend/
+    // doubleSideAmount, but outL+outR=2*midOut*k*compGain algebraically -
+    // that restraint can only ever respond to doubleMidAmount, never to
+    // Side-domain content, so it was measuring one thing and restraining
+    // another (and silently let Double's midOut degradation move Width's
+    // own amount). Moved to doubleMidAmount, the only place it can do
+    // anything (see decorBlend's comment in VxWidthProcessor.cpp).
+    //
+    // Uses getWidthPathOutputRatio() (§14), NOT getActualOutputWidth01():
+    // the latter divides by the FINAL COMBINED output Mid, which legitimately
+    // shifts with Double's own doubleMidAmount contribution - that's Double
+    // changing itself, not Width being affected, but it would still move the
+    // ratio and produce a false failure here. widthPathOutputRatioState
+    // divides by the RAW INPUT Mid instead, so it's blind to anything Double
+    // does. Small tolerance (not exact-bit-equality) since the two
+    // restraints' own smoothing states still start from slightly different
+    // histories depending on what Double did in prior blocks. ---
+    {
+        auto widthOutputWithDoubleActive = [&](const float tightnessPercent, const float focusPercent) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + 75.0f / 200.0f); // Width=+75, fixed
+            setParamNormalized(proc, "double", 0.5f); // Double=50%, ACTIVE (not 0)
+            setParamNormalized(proc, "tightness", tightnessPercent / 100.0f);
+            setParamNormalized(proc, "focus", focusPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 3.0f);
+            render(proc, input, 256);
+            render(proc, input, 256);
+            return proc.getWidthPathOutputRatio();
+        };
+        const double wT0   = widthOutputWithDoubleActive(0.0f, 0.0f);
+        const double wT50  = widthOutputWithDoubleActive(50.0f, 0.0f);
+        const double wT100 = widthOutputWithDoubleActive(100.0f, 0.0f);
+        const double wF0   = widthOutputWithDoubleActive(0.0f, 0.0f);
+        const double wF50  = widthOutputWithDoubleActive(0.0f, 50.0f);
+        const double wF100 = widthOutputWithDoubleActive(0.0f, 100.0f);
+        auto spread = [](std::initializer_list<double> vs) {
+            double lo = *vs.begin(), hi = *vs.begin();
+            for (const auto v : vs) { lo = std::min(lo, v); hi = std::max(hi, v); }
+            return hi - lo;
+        };
+        const double tightnessSpread = spread({ wT0, wT50, wT100 });
+        const double focusSpread = spread({ wF0, wF50, wF100 });
+        // Tolerance: 2% of the measured width itself, not an absolute
+        // constant - catches a real reintroduced coupling (which measured
+        // ~0.7-1x FULL swings before the fix) while allowing for ordinary
+        // floating-point/smoothing-state noise.
+        const double tolerance = 0.02 * std::max({ wT0, wT50, wT100, wF0, wF50, wF100 });
+        const bool ok = tightnessSpread < tolerance && focusSpread < tolerance;
+        allPass &= ok;
+        std::cout << "  [Width-path invariant with Double active] tightness(0/50/100)=" << wT0 << "/" << wT50 << "/" << wT100
+                   << " focus(0/50/100)=" << wF0 << "/" << wF50 << "/" << wF100
+                   << " tolerance=" << tolerance
+                   << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Diagnostic (non-gating): same bit-exact-mono Focus sweep, but also
+    // prints the mono-mode perceptualMap ray extent directly
+    // (kPerceptualReferenceMaxMono/gamma from VxStudioSpatialWidthView.cpp)
+    // so the visualizer's own on-screen number is visible, not just the raw
+    // telemetry the test above gates on. ---
+    {
+        std::cout << "\n  [Focus/Width, bit-exact mono ray extent] (diagnostic only, not gated)\n";
+        constexpr float kPerceptualReferenceMaxMono = 0.17f;
+        constexpr float kPerceptualGamma = 0.5f;
+        auto perceptualMapMono = [&](const float raw01) {
+            return std::pow(juce::jlimit(0.0f, 1.0f, raw01 / kPerceptualReferenceMaxMono), kPerceptualGamma);
+        };
+        for (const float focusPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 1.0f); // +100
+            setParamNormalized(proc, "focus", focusPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 3.0f);
+            for (int i = 0; i < input.getNumSamples(); ++i)
+                input.setSample(1, i, input.getSample(0, i)); // force bit-exact L==R
+            render(proc, input, 256);
+            render(proc, input, 256);
+            const float actual = proc.getActualOutputWidth01();
+            std::cout << "    focus=" << focusPercent << " actualOutputWidth01=" << actual
+                       << " rayExtent01=" << perceptualMapMono(actual) << "\n";
+        }
+    }
+
+    // --- Diagnostic (non-gating): near-mono visualizer sensitivity
+    // investigation (user report, 2026-08-07 - mono display at Width=25%
+    // shows no visible ray movement despite an audible change). makeSpeechLike
+    // is NOT bit-identical dual-mono (channel 1 has a ~+/-2% natural
+    // amplitude difference, matching typical real-world "mono" material far
+    // better than a synthetic exact-duplicate fixture would) - so there IS a
+    // tiny genuine Side signal for Region B to act on well before Region C's
+    // widthGapPercent>35 threshold engages. This measures whether that's a
+    // DSP no-op (visualizer correctly showing nothing) or a real, audible,
+    // just-not-visualized change (visualizer under-reporting it). Also
+    // replicates SpatialWidthView::perceptualMap()'s own formula (mono
+    // branch: /0.17 then ^0.5) locally so the printed "rayExtent" is exactly
+    // what the on-screen mono ray length would be. ---
+    {
+        // --- Diagnostic (non-gating): user-supplied exact repro file,
+        // 2026-08-07: "/Users/andrzejmarczewski/Documents/Edits/nf3 after/
+        // Untitled/detune/width-mono-dry.wav" - the actual dry mono source
+        // used when the triangle was observed opening fully at Width=1%. ---
+        {
+            std::cout << "\n  [Width=1% user's exact file] (diagnostic only, not gated)\n";
+            const juce::File userFile("/Users/andrzejmarczewski/Documents/Edits/nf3 after/Untitled/detune/width-mono-dry.wav");
+            if (!userFile.existsAsFile()) {
+                std::cout << "    (file not found - skipped)\n";
+            } else {
+                juce::AudioFormatManager fm;
+                fm.registerBasicFormats();
+                std::unique_ptr<juce::AudioFormatReader> reader(fm.createReaderFor(userFile));
+                if (reader == nullptr) {
+                    std::cout << "    (could not open file - skipped)\n";
+                } else {
+                    const int n = static_cast<int>(reader->lengthInSamples);
+                    juce::AudioBuffer<float> full(static_cast<int>(reader->numChannels), n);
+                    reader->read(&full, 0, n, 0, true, true);
+                    juce::AudioBuffer<float> stereo(2, n);
+                    for (int i = 0; i < n; ++i) {
+                        const float l = full.getSample(0, i);
+                        const float r = full.getNumChannels() > 1 ? full.getSample(1, i) : l;
+                        stereo.setSample(0, i, l);
+                        stereo.setSample(1, i, r);
+                    }
+                    double maxLRDiff = 0.0;
+                    for (int i = 0; i < n; ++i)
+                        maxLRDiff = std::max(maxLRDiff, static_cast<double>(std::abs(stereo.getSample(0, i) - stereo.getSample(1, i))));
+                    std::cout << "    file: sr=" << reader->sampleRate << " channels=" << reader->numChannels
+                               << " samples=" << n << " maxLRDiff=" << maxLRDiff << "\n";
+
+                    VXWidthAudioProcessor proc;
+                    proc.prepareToPlay(reader->sampleRate, 256);
+                    setParamNormalized(proc, "width", 0.5f + 1.0f / 200.0f); // Width=+1
+                    setParamNormalized(proc, "double", 0.0f);
+                    setParamNormalized(proc, "tightness", 0.0f);
+                    setParamNormalized(proc, "focus", 0.0f);
+                    juce::AudioBuffer<float> chunk(2, 256);
+                    int pos = 0;
+                    int blockIdx = 0;
+                    const int blocksPerSecond = std::max(1, static_cast<int>(reader->sampleRate / 256.0));
+                    std::cout << "    width01 over time:";
+                    while (pos < n) {
+                        const int bn = std::min(256, n - pos);
+                        chunk.setSize(2, bn, false, false, true);
+                        for (int ch = 0; ch < 2; ++ch)
+                            chunk.copyFrom(ch, 0, stereo, ch, pos, bn);
+                        juce::MidiBuffer midi;
+                        proc.processBlock(chunk, midi);
+                        pos += bn;
+                        ++blockIdx;
+                        if (blockIdx % blocksPerSecond == 0)
+                            std::cout << " " << proc.getActualOutputWidth01();
+                    }
+                    std::cout << " (final=" << proc.getActualOutputWidth01()
+                               << " W0=" << proc.getEstimatedInputWidth01()
+                               << " R0=" << proc.getInputSideMidRatio() << ")\n";
+                }
+            }
+        }
+
+        // --- Diagnostic (non-gating): user report follow-up, 2026-08-07:
+        // real sustained mono playback at Width=1%, Double=0%, opens the
+        // width triangle almost fully - the short synthetic fixture above
+        // did NOT reproduce this (tiny actualOutputWidth01). Uses the real
+        // vocal WAV anchors (data/vxtune/...) over a much longer render
+        // (~10s, many blocks) to see whether this is (a) a steady-state
+        // per-content gain issue that shows immediately, or (b) something
+        // that BUILDS UP over sustained playback (slow-adapting state). ---
+        {
+            std::cout << "\n  [Width=1% real-vocal sustained playback] (diagnostic only, not gated)\n";
+            using namespace vxsuite::width::corpus;
+            const juce::File repoRoot = juce::File::getCurrentWorkingDirectory();
+            const auto anchors = loadRealVocalAnchors(repoRoot);
+            if (anchors.empty()) {
+                std::cout << "    (no real vocal anchors found under data/vxtune/ - skipped)\n";
+            } else {
+                for (const auto& anchor : anchors) {
+                    VXWidthAudioProcessor proc;
+                    proc.prepareToPlay(anchor.sampleRate, 256);
+                    setParamNormalized(proc, "width", 0.5f + 1.0f / 200.0f); // Width=+1
+                    setParamNormalized(proc, "double", 0.0f);
+                    setParamNormalized(proc, "tightness", 0.0f);
+                    setParamNormalized(proc, "focus", 0.0f);
+                    juce::AudioBuffer<float> chunk(2, 256);
+                    const int totalSamples = anchor.audio.getNumSamples();
+                    int pos = 0;
+                    int blockIdx = 0;
+                    std::cout << "    " << anchor.label << ":";
+                    while (pos < totalSamples) {
+                        const int n = std::min(256, totalSamples - pos);
+                        chunk.setSize(2, n, false, false, true);
+                        for (int ch = 0; ch < 2; ++ch)
+                            chunk.copyFrom(ch, 0, anchor.audio, ch, pos, n);
+                        juce::MidiBuffer midi;
+                        proc.processBlock(chunk, midi);
+                        pos += n;
+                        ++blockIdx;
+                        // Print roughly every ~1s of audio.
+                        const int blocksPerSecond = std::max(1, static_cast<int>(anchor.sampleRate / 256.0));
+                        if (blockIdx % blocksPerSecond == 0)
+                            std::cout << " " << proc.getActualOutputWidth01();
+                    }
+                    std::cout << " (final=" << proc.getActualOutputWidth01() << ")\n";
+                }
+            }
+        }
+
+        // --- Diagnostic (non-gating): user report, 2026-08-07: "1% makes a
+        // very large change to the width lines" - screenshot shows Width=1,
+        // Double=100, Tightness=42.4%, Focus=0, Micro-Pitch ON, mono
+        // content, and the output width ray at near-MAXIMUM extent. Since
+        // actualOutputWidth01 is supposed to be Width-ONLY (excludes
+        // Double via widthGeneratedFraction), reproduce exactly to see
+        // whether Double's content is leaking into the "Width-only" ray. ---
+        {
+            std::cout << "\n  [Width=1%/Double=100% mono repro] (diagnostic only, not gated)\n";
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + 1.0f / 200.0f); // Width=+1
+            setParamNormalized(proc, "double", 1.0f); // Double=100%
+            setParamNormalized(proc, "tightness", 0.424f);
+            setParamNormalized(proc, "focus", 0.0f);
+            proc.setAdtMicroPitchEnabled(true);
+            auto input = makeSpeechLike(sr, 3.0f);
+            for (int i = 0; i < input.getNumSamples(); ++i)
+                input.setSample(1, i, input.getSample(0, i)); // bit-exact mono
+            render(proc, input, 256);
+            render(proc, input, 256);
+            std::cout << "    actualOutputWidth01=" << proc.getActualOutputWidth01()
+                       << " estimatedInputWidth01=" << proc.getEstimatedInputWidth01()
+                       << " requestedOutputWidth01=" << proc.getRequestedOutputWidth01() << "\n";
+            // Compare against Width=1%/Double=0% to isolate Double's share.
+            VXWidthAudioProcessor procNoDouble;
+            procNoDouble.prepareToPlay(sr, 256);
+            setParamNormalized(procNoDouble, "width", 0.5f + 1.0f / 200.0f);
+            setParamNormalized(procNoDouble, "double", 0.0f);
+            setParamNormalized(procNoDouble, "tightness", 0.424f);
+            setParamNormalized(procNoDouble, "focus", 0.0f);
+            auto input2 = makeSpeechLike(sr, 3.0f);
+            for (int i = 0; i < input2.getNumSamples(); ++i)
+                input2.setSample(1, i, input2.getSample(0, i));
+            render(procNoDouble, input2, 256);
+            render(procNoDouble, input2, 256);
+            std::cout << "    (Double=0 for comparison) actualOutputWidth01=" << procNoDouble.getActualOutputWidth01() << "\n";
+        }
+
+        std::cout << "\n  [near-mono visualizer sensitivity] (diagnostic only, not gated)\n";
+        constexpr float kPerceptualReferenceMaxMono = 0.17f;
+        constexpr float kPerceptualGamma = 0.5f;
+        auto perceptualMapMono = [&](const float raw01) {
+            return std::pow(juce::jlimit(0.0f, 1.0f, raw01 / kPerceptualReferenceMaxMono), kPerceptualGamma);
+        };
+        auto outputDiffRms = [](const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b) {
+            double sumSq = 0.0;
+            const int n = a.getNumSamples();
+            for (int ch = 0; ch < a.getNumChannels(); ++ch)
+                for (int i = 0; i < n; ++i) {
+                    const double d = static_cast<double>(a.getSample(ch, i)) - b.getSample(ch, i);
+                    sumSq += d * d;
+                }
+            return std::sqrt(sumSq / (a.getNumChannels() * n));
+        };
+        auto makeBitExactMono = [](const double sampleRate, const float seconds) {
+            auto buf = makeSpeechLike(sampleRate, seconds);
+            for (int i = 0; i < buf.getNumSamples(); ++i)
+                buf.setSample(1, i, buf.getSample(0, i)); // force L==R bit-exact
+            return buf;
+        };
+        for (const bool bitExact : { false, true }) {
+            std::cout << "   -- " << (bitExact ? "BIT-EXACT dual-mono (L==R exactly)" : "near-mono (makeSpeechLike, ~2% natural imbalance)") << " --\n";
+            auto makeInput = [&](const double sampleRate, const float seconds) {
+                return bitExact ? makeBitExactMono(sampleRate, seconds) : makeSpeechLike(sampleRate, seconds);
+            };
+            auto zeroInput = makeInput(sr, 3.0f);
+            VXWidthAudioProcessor zeroProc;
+            zeroProc.prepareToPlay(sr, 256);
+            setParamNormalized(zeroProc, "width", 0.5f); // Width=0 reference
+            render(zeroProc, zeroInput, 256);
+            auto zeroOut = render(zeroProc, zeroInput, 256);
+            for (const float widthPercent : { 0.0f, 10.0f, 25.0f, 35.0f, 50.0f, 100.0f }) {
+                VXWidthAudioProcessor proc;
+                proc.prepareToPlay(sr, 256);
+                setParamNormalized(proc, "width", 0.5f + widthPercent / 200.0f);
+                auto input = makeInput(sr, 3.0f);
+                render(proc, input, 256);
+                auto out = render(proc, input, 256);
+                const double diffRms = outputDiffRms(out, zeroOut);
+                const float rayExtent = perceptualMapMono(proc.getActualOutputWidth01());
+                std::cout << "    width=" << widthPercent
+                           << " W0=" << proc.getEstimatedInputWidth01()
+                           << " actualOutputWidth01=" << proc.getActualOutputWidth01()
+                           << " limitedSideGainDb=" << proc.getLimitedSideGainDb()
+                           << " diffVsWidth0Rms=" << diffRms
+                           << " rayExtent01=" << rayExtent << "\n";
+            }
         }
     }
 

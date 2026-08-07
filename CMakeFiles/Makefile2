@@ -654,7 +654,7 @@ CMakeFiles/VXDeverb_VST3.dir/all: CMakeFiles/VXDeverb.dir/all
 CMakeFiles/VXDeverb_VST3.dir/all: CMakeFiles/VXDeverb_vst3_helper.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverb_VST3.dir/build.make CMakeFiles/VXDeverb_VST3.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverb_VST3.dir/build.make CMakeFiles/VXDeverb_VST3.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=15,16 "Built target VXDeverb_VST3"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=15 "Built target VXDeverb_VST3"
 .PHONY : CMakeFiles/VXDeverb_VST3.dir/all
 
 # Build rule for subdir invocation for target.
@@ -671,7 +671,7 @@ VXDeverb_VST3: CMakeFiles/VXDeverb_VST3.dir/rule
 # codegen rule for target.
 CMakeFiles/VXDeverb_VST3.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverb_VST3.dir/build.make CMakeFiles/VXDeverb_VST3.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=15,16 "Finished codegen for target VXDeverb_VST3"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=15 "Finished codegen for target VXDeverb_VST3"
 .PHONY : CMakeFiles/VXDeverb_VST3.dir/codegen
 
 # clean rule for target.
@@ -686,12 +686,12 @@ CMakeFiles/VXDeverb_VST3.dir/clean:
 CMakeFiles/VXDeverb_vst3_helper.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverb_vst3_helper.dir/build.make CMakeFiles/VXDeverb_vst3_helper.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverb_vst3_helper.dir/build.make CMakeFiles/VXDeverb_vst3_helper.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num= "Built target VXDeverb_vst3_helper"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=16 "Built target VXDeverb_vst3_helper"
 .PHONY : CMakeFiles/VXDeverb_vst3_helper.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXDeverb_vst3_helper.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 1
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXDeverb_vst3_helper.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXDeverb_vst3_helper.dir/rule
@@ -703,7 +703,7 @@ VXDeverb_vst3_helper: CMakeFiles/VXDeverb_vst3_helper.dir/rule
 # codegen rule for target.
 CMakeFiles/VXDeverb_vst3_helper.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXDeverb_vst3_helper.dir/build.make CMakeFiles/VXDeverb_vst3_helper.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num= "Finished codegen for target VXDeverb_vst3_helper"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=16 "Finished codegen for target VXDeverb_vst3_helper"
 .PHONY : CMakeFiles/VXDeverb_vst3_helper.dir/codegen
 
 # clean rule for target.
@@ -1624,7 +1624,7 @@ CMakeFiles/VXOptoComp_VST3.dir/all: CMakeFiles/VXOptoComp.dir/all
 CMakeFiles/VXOptoComp_VST3.dir/all: CMakeFiles/VXOptoComp_vst3_helper.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXOptoComp_VST3.dir/build.make CMakeFiles/VXOptoComp_VST3.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXOptoComp_VST3.dir/build.make CMakeFiles/VXOptoComp_VST3.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=28,29 "Built target VXOptoComp_VST3"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=28 "Built target VXOptoComp_VST3"
 .PHONY : CMakeFiles/VXOptoComp_VST3.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1641,7 +1641,7 @@ VXOptoComp_VST3: CMakeFiles/VXOptoComp_VST3.dir/rule
 # codegen rule for target.
 CMakeFiles/VXOptoComp_VST3.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXOptoComp_VST3.dir/build.make CMakeFiles/VXOptoComp_VST3.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=28,29 "Finished codegen for target VXOptoComp_VST3"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=28 "Finished codegen for target VXOptoComp_VST3"
 .PHONY : CMakeFiles/VXOptoComp_VST3.dir/codegen
 
 # clean rule for target.
@@ -1656,12 +1656,12 @@ CMakeFiles/VXOptoComp_VST3.dir/clean:
 CMakeFiles/VXOptoComp_vst3_helper.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXOptoComp_vst3_helper.dir/build.make CMakeFiles/VXOptoComp_vst3_helper.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXOptoComp_vst3_helper.dir/build.make CMakeFiles/VXOptoComp_vst3_helper.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num= "Built target VXOptoComp_vst3_helper"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=29 "Built target VXOptoComp_vst3_helper"
 .PHONY : CMakeFiles/VXOptoComp_vst3_helper.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXOptoComp_vst3_helper.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 1
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXOptoComp_vst3_helper.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXOptoComp_vst3_helper.dir/rule
@@ -1673,7 +1673,7 @@ VXOptoComp_vst3_helper: CMakeFiles/VXOptoComp_vst3_helper.dir/rule
 # codegen rule for target.
 CMakeFiles/VXOptoComp_vst3_helper.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXOptoComp_vst3_helper.dir/build.make CMakeFiles/VXOptoComp_vst3_helper.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num= "Finished codegen for target VXOptoComp_vst3_helper"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=29 "Finished codegen for target VXOptoComp_vst3_helper"
 .PHONY : CMakeFiles/VXOptoComp_vst3_helper.dir/codegen
 
 # clean rule for target.
@@ -2409,7 +2409,7 @@ CMakeFiles/VXTone_All.dir/all: CMakeFiles/VXTone_VST3.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXTone_All.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXTone_All.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXTone_All.dir/rule
@@ -2438,12 +2438,12 @@ CMakeFiles/VXTone_VST3.dir/all: CMakeFiles/VXTone.dir/all
 CMakeFiles/VXTone_VST3.dir/all: CMakeFiles/VXTone_vst3_helper.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTone_VST3.dir/build.make CMakeFiles/VXTone_VST3.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTone_VST3.dir/build.make CMakeFiles/VXTone_VST3.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=75 "Built target VXTone_VST3"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=74,75 "Built target VXTone_VST3"
 .PHONY : CMakeFiles/VXTone_VST3.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXTone_VST3.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXTone_VST3.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXTone_VST3.dir/rule
@@ -2455,7 +2455,7 @@ VXTone_VST3: CMakeFiles/VXTone_VST3.dir/rule
 # codegen rule for target.
 CMakeFiles/VXTone_VST3.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXTone_VST3.dir/build.make CMakeFiles/VXTone_VST3.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=75 "Finished codegen for target VXTone_VST3"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=74,75 "Finished codegen for target VXTone_VST3"
 .PHONY : CMakeFiles/VXTone_VST3.dir/codegen
 
 # clean rule for target.
@@ -2507,7 +2507,7 @@ CMakeFiles/VXTonePlugin.dir/all: CMakeFiles/VXTone_VST3.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXTonePlugin.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXTonePlugin.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXTonePlugin.dir/rule
@@ -2534,7 +2534,7 @@ CMakeFiles/VXTonePlugin.dir/clean:
 CMakeFiles/VXToneStage.dir/all: CMakeFiles/VXTone_VST3.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXToneStage.dir/build.make CMakeFiles/VXToneStage.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXToneStage.dir/build.make CMakeFiles/VXToneStage.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=74 "Built target VXToneStage"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num= "Built target VXToneStage"
 .PHONY : CMakeFiles/VXToneStage.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2551,7 +2551,7 @@ VXToneStage: CMakeFiles/VXToneStage.dir/rule
 # codegen rule for target.
 CMakeFiles/VXToneStage.dir/codegen: CMakeFiles/VXTone_VST3.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXToneStage.dir/build.make CMakeFiles/VXToneStage.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=74 "Finished codegen for target VXToneStage"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num= "Finished codegen for target VXToneStage"
 .PHONY : CMakeFiles/VXToneStage.dir/codegen
 
 # clean rule for target.
@@ -3733,12 +3733,12 @@ CMakeFiles/VXRepair.dir/all: CMakeFiles/VxStudioFramework.dir/all
 CMakeFiles/VXRepair.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=44,45,46 "Built target VXRepair"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=44,45 "Built target VXRepair"
 .PHONY : CMakeFiles/VXRepair.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXRepair.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 8
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 7
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXRepair.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXRepair.dir/rule
@@ -3750,7 +3750,7 @@ VXRepair: CMakeFiles/VXRepair.dir/rule
 # codegen rule for target.
 CMakeFiles/VXRepair.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepair.dir/build.make CMakeFiles/VXRepair.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=44,45,46 "Finished codegen for target VXRepair"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=44,45 "Finished codegen for target VXRepair"
 .PHONY : CMakeFiles/VXRepair.dir/codegen
 
 # clean rule for target.
@@ -3770,7 +3770,7 @@ CMakeFiles/VXRepair_All.dir/all: CMakeFiles/VXRepair_VST3.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXRepair_All.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 9
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXRepair_All.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXRepair_All.dir/rule
@@ -3807,7 +3807,7 @@ CMakeFiles/VXRepair_VST3.dir/all: CMakeFiles/VXRepair_vst3_helper.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXRepair_VST3.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 9
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXRepair_VST3.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXRepair_VST3.dir/rule
@@ -3871,7 +3871,7 @@ CMakeFiles/VXRepairPlugin.dir/all: CMakeFiles/VXRepair_VST3.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXRepairPlugin.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 9
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXRepairPlugin.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXRepairPlugin.dir/rule
@@ -3903,7 +3903,7 @@ CMakeFiles/VXRepairStage.dir/all: CMakeFiles/VXRepair_VST3.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXRepairStage.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 9
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXRepairStage.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXRepairStage.dir/rule
@@ -3963,7 +3963,7 @@ CMakeFiles/VXSuite_VST3.dir/all: CMakeFiles/VXRepairStage.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXSuite_VST3.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 57
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 56
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXSuite_VST3.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXSuite_VST3.dir/rule
@@ -4472,12 +4472,12 @@ CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/VxStudioFramework.dir/al
 CMakeFiles/VXRepairPassthroughCheck.dir/all: CMakeFiles/VxStudioRNNoiseRuntime.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepairPassthroughCheck.dir/build.make CMakeFiles/VXRepairPassthroughCheck.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepairPassthroughCheck.dir/build.make CMakeFiles/VXRepairPassthroughCheck.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=47,48 "Built target VXRepairPassthroughCheck"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=46,47,48 "Built target VXRepairPassthroughCheck"
 .PHONY : CMakeFiles/VXRepairPassthroughCheck.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VXRepairPassthroughCheck.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VXRepairPassthroughCheck.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles 0
 .PHONY : CMakeFiles/VXRepairPassthroughCheck.dir/rule
@@ -4489,7 +4489,7 @@ VXRepairPassthroughCheck: CMakeFiles/VXRepairPassthroughCheck.dir/rule
 # codegen rule for target.
 CMakeFiles/VXRepairPassthroughCheck.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VXRepairPassthroughCheck.dir/build.make CMakeFiles/VXRepairPassthroughCheck.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=47,48 "Finished codegen for target VXRepairPassthroughCheck"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=46,47,48 "Finished codegen for target VXRepairPassthroughCheck"
 .PHONY : CMakeFiles/VXRepairPassthroughCheck.dir/codegen
 
 # clean rule for target.

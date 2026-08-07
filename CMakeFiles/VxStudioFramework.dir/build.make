@@ -142,10 +142,24 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioPitchTraceVie
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioPitchTraceView.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioPitchTraceView.cpp -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioPitchTraceView.cpp.s
 
+CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
+CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o: Source/vxstudio/framework/VxStudioSpatialWidthView.cpp
+CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp
+
+CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp > CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.i
+
+CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.s
+
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o: Source/vxstudio/framework/VxStudioModelAssets.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioModelAssets.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.i: cmake_force
@@ -159,7 +173,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.c
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o: Source/vxstudio/framework/VxStudioProcessorBase.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioProcessorBase.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.i: cmake_force
@@ -173,7 +187,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o: Source/vxstudio/framework/VxStudioCorrectiveStage.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.i: cmake_force
@@ -187,7 +201,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveSta
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o: Source/vxstudio/framework/VxStudioSignalQuality.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioSignalQuality.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality.cpp.i: cmake_force
@@ -201,7 +215,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSignalQuality
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o: Source/vxstudio/framework/VxStudioEditorBase.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioEditorBase.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cpp.i: cmake_force
@@ -215,7 +229,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioEditorBase.cp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o: Source/vxstudio/framework/VxStudioFinishDsp.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioFinishDsp.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp.i: cmake_force
@@ -229,7 +243,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioFinishDsp.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o: Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompressorLA2A.cpp.i: cmake_force
@@ -243,7 +257,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioOptoCompresso
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o: Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelemetry.cpp.i: cmake_force
@@ -257,7 +271,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpectrumTelem
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o: Source/vxstudio/framework/VxStudioUiHelpers.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioUiHelpers.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp.i: cmake_force
@@ -271,7 +285,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioUiHelpers.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o: Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis.cpp.i: cmake_force
@@ -285,7 +299,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceAnalysis
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o: Source/vxstudio/framework/VxStudioVoiceContext.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/VxStudioVoiceContext.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.cpp.i: cmake_force
@@ -299,7 +313,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioVoiceContext.
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o: Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQueryService.cpp.i: cmake_force
@@ -313,7 +327,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTelemetryQ
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o: Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScopeFilter.cpp.i: cmake_force
@@ -327,7 +341,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxTrackScope
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o: Source/vxstudio/framework/analysis/VxDryWetResolver.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetResolver.cpp.i: cmake_force
@@ -341,7 +355,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxDryWetReso
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o: Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o -MF CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp
 
 CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSmoothingPipeline.cpp.i: cmake_force
@@ -355,7 +369,7 @@ CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/analysis/VxSpectrumSm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: JUCE/modules/juce_audio_processors/juce_audio_processors.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors/juce_audio_processors.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.i: cmake_force
@@ -369,7 +383,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors/juce_audio_p
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.i: cmake_force
@@ -383,7 +397,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.s
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.i: cmake_force
@@ -397,7 +411,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_25) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.i: cmake_force
@@ -411,7 +425,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbu
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_25) "Building C object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_26) "Building C object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.i: cmake_force
@@ -425,7 +439,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenb
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: JUCE/modules/juce_graphics/juce_graphics.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_26) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_27) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_graphics/juce_graphics.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.i: cmake_force
@@ -439,7 +453,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_graphics/juce_graphics.mm.s: 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o: JUCE/modules/juce_events/juce_events.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_27) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_28) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_events/juce_events.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.i: cmake_force
@@ -453,7 +467,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_events/juce_events.mm.s: cmak
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: JUCE/modules/juce_core/juce_core_CompilationTime.cpp
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_28) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_29) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core_CompilationTime.cpp
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.i: cmake_force
@@ -467,7 +481,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core_CompilationTim
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o: JUCE/modules/juce_core/juce_core.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_29) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_30) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_core/juce_core.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.i: cmake_force
@@ -481,7 +495,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_core/juce_core.mm.s: cmake_fo
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: JUCE/modules/juce_data_structures/juce_data_structures.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_30) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_31) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_data_structures/juce_data_structures.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.i: cmake_force
@@ -495,7 +509,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_data_structures/juce_data_str
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_31) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_32) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.i: cmake_force
@@ -509,7 +523,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juc
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_32) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_33) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.i: cmake_force
@@ -523,7 +537,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juc
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_33) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_34) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.i: cmake_force
@@ -537,7 +551,7 @@ CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_processors_headless/juc
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: CMakeFiles/VxStudioFramework.dir/flags.make
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: JUCE/modules/juce_audio_basics/juce_audio_basics.mm
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o: CMakeFiles/VxStudioFramework.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_34) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_35) "Building CXX object CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o -MF CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o.d -o CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o -c /Users/andrzejmarczewski/Documents/GitHub/VxStudio/JUCE/modules/juce_audio_basics/juce_audio_basics.mm
 
 CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.i: cmake_force
@@ -555,6 +569,7 @@ VxStudioFramework_OBJECTS = \
 "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioLevelTraceView.cpp.o" \
 "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioGainMeterView.cpp.o" \
 "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioPitchTraceView.cpp.o" \
+"CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o" \
 "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o" \
 "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o" \
 "CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o" \
@@ -593,6 +608,7 @@ libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framewo
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioLevelTraceView.cpp.o
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioGainMeterView.cpp.o
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioPitchTraceView.cpp.o
+libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioSpatialWidthView.cpp.o
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioModelAssets.cpp.o
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioProcessorBase.cpp.o
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/Source/vxstudio/framework/VxStudioCorrectiveStage.cpp.o
@@ -624,7 +640,7 @@ libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/build.make
 libVxStudioFramework.a: CMakeFiles/VxStudioFramework.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_35) "Linking CXX static library libVxStudioFramework.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/andrzejmarczewski/Documents/GitHub/VxStudio/CMakeFiles --progress-num=$(CMAKE_PROGRESS_36) "Linking CXX static library libVxStudioFramework.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/VxStudioFramework.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/VxStudioFramework.dir/link.txt --verbose=$(VERBOSE)
 
