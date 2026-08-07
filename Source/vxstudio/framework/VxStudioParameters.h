@@ -41,6 +41,12 @@ inline juce::AudioParameterBoolAttributes makeExpertAttributes(std::string_view 
     return attrs;
 }
 
+inline juce::AudioParameterBoolAttributes makeSimpleToggleAttributes(std::string_view label) {
+    juce::AudioParameterBoolAttributes attrs;
+    attrs = attrs.withLabel(label.data());
+    return attrs;
+}
+
 inline juce::AudioParameterFloatAttributes makePercentFloatAttributes() {
     juce::AudioParameterFloatAttributes attrs;
     attrs = attrs.withLabel("%")
@@ -200,6 +206,13 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             toJuceString(identity.learnButtonLabel.empty() ? "Learn" : identity.learnButtonLabel),
             false,
             makeLearnAttributes(identity.learnButtonLabel.empty() ? "Learn" : identity.learnButtonLabel)));
+    }
+    if (identity.supportsSimpleToggle()) {
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { identity.simpleToggleParamId.data(), 1 },
+            toJuceString(identity.simpleToggleLabel.empty() ? "Toggle" : identity.simpleToggleLabel),
+            identity.simpleToggleDefaultValue,
+            makeSimpleToggleAttributes(identity.simpleToggleLabel.empty() ? "Toggle" : identity.simpleToggleLabel)));
     }
     if (!identity.lowShelfParamId.empty()) {
         layout.add(std::make_unique<juce::AudioParameterBool>(

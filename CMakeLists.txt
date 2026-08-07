@@ -31,6 +31,7 @@ set(VXSTUDIO_PLUGIN_VERSION_VXREBALANCE "0.2.2")
 set(VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER "0.2.1")
 set(VXSTUDIO_PLUGIN_VERSION_VXREPAIR "0.1.1")
 set(VXSTUDIO_PLUGIN_VERSION_VXTUNE "0.1.1")
+set(VXSTUDIO_PLUGIN_VERSION_VXWIDTH "0.1.0")
 option(VXSTUDIO_ENABLE_REBALANCE_AI "Build the experimental, non-product VxRebalanceAI tool" OFF)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
@@ -653,6 +654,34 @@ target_include_directories(VXTune PRIVATE
 target_link_libraries(VXTune PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXTunePlugin ALL DEPENDS VXTune_VST3)
 vxstudio_stage_vst3_bundle(VXTune_VST3 "VXTune")
+
+juce_add_plugin(VXWidth
+  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXWIDTH}
+  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXWIDTH}
+  FORMATS VST3
+  COMPANY_NAME "VX Suite"
+  BUNDLE_ID "com.vxstudio.vxwidth"
+  IS_SYNTH FALSE
+  NEEDS_MIDI_INPUT FALSE
+  NEEDS_MIDI_OUTPUT FALSE
+  IS_MIDI_EFFECT FALSE
+  PLUGIN_MANUFACTURER_CODE "VXS1"
+  PLUGIN_CODE "VXWD"
+)
+target_compile_definitions(VXWidth PRIVATE
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+  JUCE_WEB_BROWSER=0
+)
+juce_generate_juce_header(VXWidth)
+target_sources(VXWidth PRIVATE
+  Source/vxstudio/products/width/VxWidthProcessor.cpp
+)
+target_include_directories(VXWidth PRIVATE Source)
+target_link_libraries(VXWidth PRIVATE VxStudioFramework juce::juce_dsp)
+add_custom_target(VXWidthPlugin ALL DEPENDS VXWidth_VST3)
+vxstudio_stage_vst3_bundle(VXWidth_VST3 "VXWidth")
 
 juce_add_plugin(VXRefine
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXREFINE}
@@ -1298,6 +1327,7 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
   Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
+  Source/vxstudio/products/width/VxWidthProcessor.cpp
 )
 target_include_directories(VXStudioPluginRegressionTests PRIVATE
   Source
@@ -1362,6 +1392,34 @@ target_link_libraries(VXRepairPassthroughCheck PRIVATE
 )
 target_compile_definitions(VXRepairPassthroughCheck PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 vxstudio_add_executable_test(VXRepairPassthroughCheck)
+
+add_executable(VXWidthShellCheck
+  tests/VXWidthShellCheck.cpp
+  Source/vxstudio/products/width/VxWidthProcessor.cpp
+)
+target_include_directories(VXWidthShellCheck PRIVATE Source tests)
+target_link_libraries(VXWidthShellCheck PRIVATE
+  VxStudioFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+)
+target_compile_definitions(VXWidthShellCheck PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
+vxstudio_add_executable_test(VXWidthShellCheck)
+
+# Manual offline research tool (2026-08-07 imbalance investigation) - NOT
+# registered via vxstudio_add_executable_test, deliberately not part of the
+# regression suite/CI. Run on demand: ./VXWidthAdtSeedOptimizer
+add_executable(VXWidthAdtSeedOptimizer
+  tests/VXWidthAdtSeedOptimizer.cpp
+)
+target_include_directories(VXWidthAdtSeedOptimizer PRIVATE Source tests)
+target_link_libraries(VXWidthAdtSeedOptimizer PRIVATE
+  VxStudioFramework
+  juce::juce_dsp
+  juce::juce_audio_processors
+  juce::juce_audio_formats
+)
+target_compile_definitions(VXWidthAdtSeedOptimizer PRIVATE VXSTUDIO_DISABLE_PLUGIN_ENTRYPOINT=1)
 
 add_executable(VXStudioBatchAudioCheck
   tests/VXStudioBatchAudioCheck.cpp
@@ -1448,6 +1506,7 @@ add_executable(VXSuiteProfile
   Source/vxstudio/products/tune/dsp/VxTuneDecomposition.cpp
   Source/vxstudio/products/tune/dsp/VxTunePitchRenderer.cpp
   Source/vxstudio/products/tune/dsp/VxTuneHarmonicContext.cpp
+  Source/vxstudio/products/width/VxWidthProcessor.cpp
 )
 target_include_directories(VXSuiteProfile PRIVATE
   Source
@@ -1478,6 +1537,7 @@ vxstudio_add_pluginval_test(VXStudioAnalyser)
 vxstudio_add_pluginval_test(VXSubtract)
 vxstudio_add_pluginval_test(VXTone)
 vxstudio_add_pluginval_test(VXLeveler)
+vxstudio_add_pluginval_test(VXWidth)
 
 # Test Host for CPU/Memory Profiling
 add_subdirectory(Source/vxstudio/tools/test_host)

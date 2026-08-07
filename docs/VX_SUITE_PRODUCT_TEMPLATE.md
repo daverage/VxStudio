@@ -16,6 +16,7 @@ Use this for every new plugin.
 - Knob 1:
 - Knob 2:
 - Knob 3 (only if truly justified):
+- Knob 4 (only if truly justified, and distinct in intent from knobs 1-3):
 - Shared `Listen` toggle needed?:
 - Hidden advanced controls to avoid in v1:
 - Mode status text:

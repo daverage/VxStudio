@@ -1,0 +1,2 @@
+# Empty dependencies file for VXStudioAnalyser_VST3.
+# This may be replaced when dependencies are built.

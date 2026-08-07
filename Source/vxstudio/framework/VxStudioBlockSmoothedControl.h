@@ -152,4 +152,63 @@ private:
     bool primed = false;
 };
 
+/**
+ * @brief Four-parameter smoothing for products with four main controls (rare;
+ * the framework's headline-knob ceiling — see VX_SUITE_FRAMEWORK.md).
+ */
+class BlockSmoothedControlQuad {
+public:
+    struct Values {
+        float primary = 0.5f;
+        float secondary = 0.5f;
+        float tertiary = 0.5f;
+        float quaternary = 0.5f;
+    };
+
+    void reset(float primaryDefault = 0.5f, float secondaryDefault = 0.5f,
+               float tertiaryDefault = 0.5f, float quaternaryDefault = 0.5f) noexcept {
+        primary = primaryDefault;
+        secondary = secondaryDefault;
+        tertiary = tertiaryDefault;
+        quaternary = quaternaryDefault;
+        primed = false;
+    }
+
+    Values process(float primaryTarget, float secondaryTarget, float tertiaryTarget,
+                   float quaternaryTarget,
+                   double sampleRate, int numSamples,
+                   float primaryTimeSeconds, float secondaryTimeSeconds,
+                   float tertiaryTimeSeconds, float quaternaryTimeSeconds) noexcept {
+        if (!primed) {
+            primary = primaryTarget;
+            secondary = secondaryTarget;
+            tertiary = tertiaryTarget;
+            quaternary = quaternaryTarget;
+            primed = true;
+        } else {
+            primary = smoothBlockValue(primary, primaryTarget,
+                                      sampleRate, numSamples, primaryTimeSeconds);
+            secondary = smoothBlockValue(secondary, secondaryTarget,
+                                        sampleRate, numSamples, secondaryTimeSeconds);
+            tertiary = smoothBlockValue(tertiary, tertiaryTarget,
+                                       sampleRate, numSamples, tertiaryTimeSeconds);
+            quaternary = smoothBlockValue(quaternary, quaternaryTarget,
+                                         sampleRate, numSamples, quaternaryTimeSeconds);
+        }
+        return { primary, secondary, tertiary, quaternary };
+    }
+
+    float getPrimary() const noexcept { return primary; }
+    float getSecondary() const noexcept { return secondary; }
+    float getTertiary() const noexcept { return tertiary; }
+    float getQuaternary() const noexcept { return quaternary; }
+
+private:
+    float primary = 0.5f;
+    float secondary = 0.5f;
+    float tertiary = 0.5f;
+    float quaternary = 0.5f;
+    bool primed = false;
+};
+
 } // namespace vxsuite

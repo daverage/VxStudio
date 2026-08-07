@@ -114,6 +114,20 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int scChannels = hasSidechainBus ? getChannelCountOfBus(true, 1) : 0;
     auto* const* channelPointers = buffer.getArrayOfWritePointers();
 
+    // Mono-input-bus products (e.g. a mono-to-stereo widener) get a buffer
+    // sized to the OUTPUT channel count, but the host is not required to
+    // have duplicated the mono source into the extra channel(s) - whatever
+    // was there before (stale data, silence, or unrelated content) would
+    // otherwise reach voiceAnalysis/signalQuality below and every
+    // downstream consumer as if it were real stereo content. Normalise
+    // once, centrally, before any analysis runs - a product overriding
+    // processProduct() runs too late for this (analysis has already read
+    // the buffer by then).
+    if (!hasSidechainBus && getMainBusNumInputChannels() == 1 && mainChannels >= 2) {
+        for (int ch = 1; ch < mainChannels; ++ch)
+            buffer.copyFrom(ch, 0, buffer, 0, 0, buffer.getNumSamples());
+    }
+
     const int preparedBlockSize = listenInputScratch.getNumSamples();
     const int chunkSize = (preparedBlockSize <= 0 || buffer.getNumSamples() <= preparedBlockSize)
         ? std::max(1, buffer.getNumSamples())

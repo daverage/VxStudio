@@ -13,6 +13,7 @@
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "../Source/vxstudio/products/tone_refine/VxToneRefineProcessor.h"
 #include "../Source/vxstudio/products/tune/VxTuneProcessor.h"
+#include "../Source/vxstudio/products/width/VxWidthProcessor.h"
 #include "../Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.h"
 #include "../Source/vxstudio/products/repair/VxRepairProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
@@ -3725,6 +3726,13 @@ bool testNoSteadyStateAllocationsOnAudioThread() {
     setParamNormalized(tune, "amount", 0.60f);
     setParamNormalized(tune, "natural", 0.50f);
     if (!expectNoSteadyStateAllocations("tune", tune, speech))
+        return false;
+
+    VXWidthAudioProcessor width;
+    width.prepareToPlay(sr, 256);
+    setParamNormalized(width, "width", 0.90f);
+    setParamNormalized(width, "double", 0.60f);
+    if (!expectNoSteadyStateAllocations("width", width, speech))
         return false;
 
     return true;

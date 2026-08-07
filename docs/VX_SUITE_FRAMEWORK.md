@@ -18,7 +18,7 @@ See also: [VX Suite Research](/Users/andrzejmarczewski/Documents/GitHub/VxCleane
 Each VX Suite product should:
 
 - solve one main problem
-- expose one or two headline knobs by default
+- expose up to four headline knobs, using only as many as the product genuinely needs (default to fewer; a 3rd or 4th must earn its place)
 - support `Vocal` and `General` modes only when the DSP genuinely needs them
 - expose `Listen` only when removed-content audition is meaningful for that product
 - keep all non-essential diagnostics and visualization out of the shipping UI
@@ -82,7 +82,7 @@ The framework should also own shared analysis and protection evidence when multi
 The visual template should stay recognizable across the suite:
 
 - strong product title
-- two-knob hero layout
+- hero-knob layout, sized to the product (2 knobs by default, up to 4 when each is independently justified)
 - simple mode switch
 - optional small `Listen` toggle when delta audition is part of the product contract
 - one short sentence under each knob
@@ -110,7 +110,7 @@ Framework readability/responsiveness expectations:
 Before starting a new plugin:
 
 1. Write a one-line job statement.
-2. Prove the main value can be expressed with one or two knobs.
+2. Prove the main value can be expressed with as few knobs as possible (2 by default; a 3rd or 4th only if each maps to a distinct, non-overlapping user decision).
 3. Define whether `Vocal` and `General` truly need different DSP maps.
 4. Decide whether removed-content `Listen` is genuinely useful and trustworthy for this product.
 5. If the product uses modes, map them through the shared `ModePolicy` helpers instead of ad hoc parameter reads.

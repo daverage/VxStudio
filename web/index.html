@@ -205,9 +205,10 @@
                         </div>
                         <h3>Speech Clarity</h3>
                         <p>
-                            Targeted de-esser, plosive control, and breath
-                            removal. Three independent bands for precise
-                            speech-artifact cleanup.
+                            Targeted de-esser, plosive control, breath
+                            removal, and click/mouth-noise repair. Four
+                            independent bands for precise speech-artifact
+                            cleanup.
                         </p>
                         <div class="card-actions">
                             <a
@@ -664,7 +665,10 @@
                             Confidence-gated vocal pitch correction. Fixes
                             pitch errors while leaving vibrato, bends, and
                             phrasing untouched, with a live sung-vs-tuned
-                            trace.
+                            trace. Detects the song's key on its own, and can
+                            learn it directly from the instrumental via an
+                            optional sidechain input - no manual key entry,
+                            no companion plugin.
                         </p>
                         <div class="card-actions">
                             <a
@@ -703,9 +707,10 @@
                     <article id="product-speech-clarity" class="detail-card">
                         <h3>Speech Clarity</h3>
                         <p>
-                            Three independent bands  -  de-esser, plosive control,
-                            and breath reduction  -  for targeted speech-artifact
-                            cleanup without touching the rest of the signal.
+                            Four independent bands  -  de-esser, plosive control,
+                            breath reduction, and click/mouth-noise repair  -  for
+                            targeted speech-artifact cleanup without touching
+                            the rest of the signal.
                         </p>
                     </article>
                     <article id="product-denoiser" class="detail-card">
@@ -725,7 +730,7 @@
                         <p>
                             Room-tail reduction tuned to act on late ambience
                             more intentionally instead of flattening the whole
-                            source. GR meter active.
+                            source.
                         </p>
                     </article>
                     <article id="product-finish" class="detail-card">
@@ -794,6 +799,11 @@
                             toward the dry signal when the network starts
                             producing artifacts, trading some noise removal
                             for a more natural result on hard material.
+                            Choose from DeepFilterNet 3, DeepFilterNet 2, or
+                            the lighter RNNoise model; inference runs on a
+                            dedicated per-channel thread, never the audio
+                            thread, so the model can't glitch the signal
+                            path.
                         </p>
                     </article>
                     <article id="product-rebalance" class="detail-card">
@@ -830,14 +840,15 @@
                     <article id="product-analyser" class="detail-card">
                         <h3>Studio Analyser</h3>
                         <p>
-                            Chain-wide spectrum and gain-reduction view that
-                            follows only the active upstream path feeding the
-                            instance you are inspecting, so it stays correct
-                            even when other tracks route through the same
-                            plugin chain. Drop it anywhere in the signal
-                            path to compare input against output at that
-                            exact point, not just at the very end of the
-                            chain.
+                            Chain-wide dry-vs-wet spectrum view. Insert it
+                            last in the VX chain, then use the Full Chain
+                            button to compare chain input against final
+                            output, or click any stage in the left rail to
+                            inspect only that processor's own dry-vs-wet
+                            spectrum. It follows only the active upstream
+                            path feeding the instance you are inspecting, so
+                            it stays correct even when other tracks route
+                            through the same plugin chain.
                         </p>
                     </article>
                     <article id="product-tune" class="detail-card">
@@ -850,7 +861,17 @@
                             acting, so expressive performance detail survives
                             correction. The live sung-vs-tuned trace lets you
                             see exactly what it changed, note by note, rather
-                            than trusting the setting by ear.
+                            than trusting the setting by ear. Key and Scale
+                            can be set manually, detected automatically from
+                            the vocal, or - uniquely - learned from an
+                            instrumental routed into the sidechain input:
+                            route the backing track in the way you'd route a
+                            sidechain to a compressor, and VXTune reads the
+                            actual chord content instead of guessing the key
+                            from one voice at a time. Most tuners either need
+                            a separate key-detector plugin and a cross-plugin
+                            key broadcast, or ask you to enter the key by
+                            hand - VXTune just needs a send.
                         </p>
                     </article>
                 </div>

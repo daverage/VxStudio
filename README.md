@@ -30,6 +30,7 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXRepair | All-in-one guided voice repair | `Noise`, `Speech Clarity`, `Clicks`, `Reverb` | Automatic problem detection and one-step correction |
 | VXStudioAnalyser | Chain-aware dry-vs-wet analyser | `Avg Time`, `Smoothing` | Inspecting stage impact and whole-chain tone |
 | VXTune | Confidence-gated vocal pitch correction | `Amount`, `Natural`, `Speed`, `Focus`, `Key`, `Scale` | Pitch correction with a live sung-vs-tuned trace |
+| VXWidth *(in development)* | Stereo image and ADT doubling | `Width`, `Double`, `Tightness`, `Focus` | Narrowing, mono-to-stereo widening, vocal/instrument doubling |
 
 ---
 
@@ -56,12 +57,14 @@ Framework and plugin DSP versions are tracked independently.
 | VXRepair | `0.1.1` |
 | VXStudioAnalyser | `0.2.1` |
 | VXTune | `0.1.1` |
+| VXWidth | `0.1.0` |
 
 ---
 
 ## Current status
 
 - `16` focused plugins are implemented and shipping in the shared VX Studio shell.
+- VXWidth is a new stereo image and doubling plugin, still in active development (build order tracked in `docs/Task Based/VXWIDTH_BUILD.md`) - not yet a finished/shipping product. Landed so far: the full existing-stereo width engine (narrow, bounded expansion, decorrelated widening), the ADT doubling engine, Focus spectral placement, mono-in/stereo-out bus support, and CPU/allocation hardening (verified realtime-safe, no audio-thread allocations). Still outstanding: harmonic/residual/transient-aware decorrelation (a documented later differentiator, not started), the full mono/phase-risk guardrail beyond the correlation-based restraints already in place, and real DAW host validation (only automated/headless testing has been done so far).
 - VXTune is a new confidence-gated vocal pitch correction plugin: performance decomposition separates sung centre pitch from expression (vibrato, bends, slides), a Bayesian target estimator picks the intended note, and a Signalsmith Stretch-based shifter renders the correction with a live sung-vs-tuned pitch trace. Round-trip latency is ~30-45ms, low enough to monitor through while tracking.
 - VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
 - VXProximityClassic is a new two-control simplified proximity model.
@@ -146,7 +149,7 @@ Most VX Studio products use the shared `Vocal / General` selector when the DSP t
 
 Important exceptions:
 
-- `VXDeepFilterNet` uses the main selector as a model selector: `DeepFilterNet 3` or `DeepFilterNet 2`.
+- `VXDeepFilterNet` uses the main selector as a model selector: `DeepFilterNet 3`, `DeepFilterNet 2`, or `RNNoise`.
 - `VXLeveler` uses `Vocal Rider` and `Mix Leveler`, plus an `Analysis` selector with `Realtime`, `Smart Realtime`, and `Offline` (available in both modes). It also accepts an optional stereo sidechain input in `Vocal Rider` mode.
 - `VXRebalance` does not use the shared Vocal/General selector. It uses `Recording Type` with `Studio`, `Live`, and `Phone / Rough`.
 - `VXStudioAnalyser` is a custom analyser UI rather than a standard processing shell.
@@ -175,13 +178,13 @@ The framework runs block-rate analysis and exposes:
 
 ### VXDeepFilterNet
 
-ML-powered voice isolation for heavy or complex background noise. It is the strongest noise-removal tool in the suite when classic denoisers cannot separate the voice cleanly enough.
+ML-powered voice isolation for heavy or complex background noise. It is the strongest noise-removal tool in the suite when classic denoisers cannot separate the voice cleanly enough. Inference runs on a dedicated per-channel thread rather than the audio thread, so the model can never glitch or drop out the signal path.
 
 How to use it:
 
 - Start with `Clean` around `55%` to `70%`.
 - Use `Guard` to recover natural speech detail if the result starts to sound over-processed.
-- Choose the model that behaves best on the material. `DeepFilterNet 3` is usually the first choice.
+- Choose the model that behaves best on the material from the model selector: `DeepFilterNet 3` (usually the first choice), `DeepFilterNet 2`, or `RNNoise` (lighter-weight).
 
 Example settings:
 
@@ -226,6 +229,8 @@ How to use it:
 - Enable `Learn` and play the noise by itself for about one to two seconds.
 - Turn `Learn` off to lock the profile.
 - Raise `Subtract` for more removal and raise `Protect` if the source becomes hollow or over-scooped.
+- `Mode` switches the learn-prompt wording and thresholds between `Vocal` and `General` material.
+- Use `Listen` to hear only what is being removed.
 - If the status bar shows a stale-profile warning, re-learn to re-capture the current noise floor.
 
 Example settings:
@@ -343,6 +348,7 @@ How to use it:
 - Use `Bass` for weight and warmth, `Treble` for brightness and openness.
 - Use `Mid` to shape the presence region: in Vocal mode at 2 kHz for speech intelligibility; in General mode at 1 kHz for warmth.
 - Prefer subtle shaping after cleanup and proximity, not before.
+- Use `Listen` to hear only what this stage is changing.
 
 Example settings:
 
@@ -365,6 +371,9 @@ How to use it:
 - Raise `Mud` to reduce boxy low-mid buildup.
 - Raise `Harshness` to soften brittle presence-region peaks.
 - Raise `Smooth` to apply transparent broad tonal calming after the main problems are under control.
+- Toggle the HPF icon to cut sub-rumble below the voice (80 Hz vocal / 40 Hz general).
+- Toggle the Hi-shelf icon to gently tame extreme top-end harshness.
+- Use `Listen` to hear only what this stage is changing.
 
 Example settings:
 
@@ -380,7 +389,7 @@ Practical scenarios:
 
 ### VXFinish
 
-Final polish and level control after cleanup and tone work. It combines finish compression, bounded body recovery, makeup, and limiting for a more produced result.
+Final polish and level control after cleanup and tone work. It combines finish compression, bounded body recovery, makeup, and a true-peak-aware limiter (2x minimum-phase oversampled) for a more produced result without inter-sample overshoot.
 
 How to use it:
 
@@ -531,7 +540,8 @@ How to use it:
 - `Natural` sets how readily movement counts as error rather than expression: left preserves everything human, right is tighter.
 - `Speed` sets how quickly the correction glides toward the target once it engages.
 - `Focus` sets how assertively the engine commits to a correction versus holding back when uncertain.
-- Set `Key` and `Scale` to match the song, or leave them on `Chromatic` if the key is unknown or modulates.
+- Set `Key` and `Scale` to match the song, leave them on `Auto` to have VXTune detect the key itself from the sung notes (section-based evidence accumulation, not a first-note guess), or leave them on `Chromatic` if the key is unknown/modulates and you don't want any note filtering.
+- Optionally route an instrumental into the sidechain input. VXTune extracts a chroma (pitch-class energy) profile from it every block and feeds that into the same Auto Key/Scale detector the vocal itself uses - full chord content resolves the key faster and more reliably than the vocal alone, and can even establish the key during an instrumental intro before the vocal enters. Detection-only: the sidechain audio is never mixed into the output. No new control - it activates automatically whenever a sidechain bus is connected with real signal.
 - Start from the `Natural`, `Balanced`, `Tight`, or `Hard Tune` presets and adjust from there.
 
 Example settings:
@@ -545,6 +555,28 @@ Practical scenarios:
 - Transparent intonation cleanup on lead or backing vocals
 - Checking vocal intonation while tracking or comping
 - Creative hard-tune effect for stylized vocals
+- Correcting against a known key/chord progression by feeding the instrumental bus into the sidechain, instead of manually picking (or guessing) Key/Scale
+
+---
+
+### VXWidth *(in development)*
+
+Stereo image and doubling processor with four controls. Narrows a stereo signal toward mono, widens an existing stereo image, or adds a synthetic ADT-style double - without needing to understand M/S processing, phase, delay, or detuning. Accepts both mono and stereo input buses; a mono source is duplicated internally before any processing, so mono-to-stereo widening and doubling work the same as on a stereo source.
+
+How to use it:
+
+- `Width` sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens - moderate settings boost the existing Side signal, high settings blend in a decorrelated layer synthesized from Mid so a fully mono source can be widened into real stereo.
+- `Double` introduces a synthetic second performance (ADT-style: independent fractional delay, pitch drift from delay modulation, gain and spectral tilt movement per voice) alongside the original. Weighted toward centred, correlated content rather than doubling a whole stereo mix uniformly.
+- `Tightness` sets how closely the generated double follows the original, from tight and precise to loose and separate.
+- `Focus` sets where in the spectrum the width and doubling effect concentrates: Body, Full, or Air - shapes only the generated content, not the dry signal.
+
+Practical scenarios:
+
+- Narrowing an overly wide stereo recording for mono compatibility
+- Widening a mono or near-mono vocal, instrument, or backing track into real stereo
+- Adding a believable double-take to a mono or centred vocal without a second take
+
+Known gaps (tracked in `docs/Task Based/VXWIDTH_BUILD.md`'s build log): no harmonic/residual/transient-aware decorrelation yet (a documented later differentiator); the mono/phase-risk guardrail covers broadband correlation but not the full multi-stage restraint the spec describes; no UI visual feedback beyond the standard four-knob shell; not yet validated in a real DAW host, only automated/headless tests.
 
 ---
 

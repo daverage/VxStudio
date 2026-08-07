@@ -186,6 +186,12 @@ EditorBase::EditorBase(ProcessorBase& owner)
     if (identity.supportsLearnButton())
         addAndMakeVisible(learnButton);
 
+    simpleToggleButton.setButtonText(identity.simpleToggleLabel.empty() ? "Toggle" : toJuceString(identity.simpleToggleLabel));
+    simpleToggleButton.setClickingTogglesState(true);
+    simpleToggleButton.setWantsKeyboardFocus(true);
+    if (identity.supportsSimpleToggle())
+        addAndMakeVisible(simpleToggleButton);
+
     traceZoomBox.addItem("1.5 s", 1);
     traceZoomBox.addItem("3 s", 2);
     traceZoomBox.addItem("6 s", 3);
@@ -292,6 +298,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
         listenAttachment = std::make_unique<ButtonAttachment>(state, identity.listenParamId.data(), listenButton);
     if (identity.supportsLearnButton())
         learnAttachment = std::make_unique<ButtonAttachment>(state, identity.learnParamId.data(), learnButton);
+    if (identity.supportsSimpleToggle())
+        simpleToggleAttachment = std::make_unique<ButtonAttachment>(state, identity.simpleToggleParamId.data(), simpleToggleButton);
     if (hasControlBank) {
         for (int i = 0; i < identity.clampedControlBankCount(); ++i) {
             bankAttachments[static_cast<size_t>(i)] =
@@ -501,6 +509,7 @@ void EditorBase::resized() {
     if (processor.getProductIdentity().supportsExpertMode())      fixedLeftWidth += scaled(92 + 12);
     if (processor.getProductIdentity().supportsListenMode())      fixedLeftWidth += scaled(116 + 12);
     if (processor.getProductIdentity().supportsLearnButton())     fixedLeftWidth += scaled(110 + 12);
+    if (processor.getProductIdentity().supportsSimpleToggle())    fixedLeftWidth += scaled(140 + 12);
     if (processor.supportsModelDownloadUi())                      fixedLeftWidth += scaled(156 + 12);
     const bool hasPresetForRow = processor.getProductIdentity().supportsPresetSelector();
     const int comboCount = (hasModeForRow ? 1 : 0) + (hasAuxForRow ? 1 : 0) + (hasAux2ForRow ? 1 : 0) + (hasPresetForRow ? 1 : 0);
@@ -542,6 +551,10 @@ void EditorBase::resized() {
     }
     if (processor.getProductIdentity().supportsLearnButton()) {
         learnButton.setBounds(modeRow.removeFromLeft(scaled(110)).reduced(0, scaled(2)));
+        modeRow.removeFromLeft(scaled(12));
+    }
+    if (processor.getProductIdentity().supportsSimpleToggle()) {
+        simpleToggleButton.setBounds(modeRow.removeFromLeft(scaled(140)).reduced(0, scaled(2)));
         modeRow.removeFromLeft(scaled(12));
     }
     if (processor.supportsModelDownloadUi()) {

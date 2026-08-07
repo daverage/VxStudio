@@ -14,12 +14,12 @@ inline constexpr HelpContent deepFilterNet {
     "VXDeepFilterNet Help",
     R"(
 <h1>VXDeepFilterNet</h1>
-<p>ML-powered voice isolation for heavy or complex background noise. It is the strongest noise-removal tool in the suite when classic denoisers cannot separate the voice cleanly enough.</p>
+<p>ML-powered voice isolation for heavy or complex background noise. It is the strongest noise-removal tool in the suite when classic denoisers cannot separate the voice cleanly enough. Inference runs on a dedicated per-channel thread, not the audio thread, so the neural model never risks a glitch or dropout.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Start with Clean around 55 to 70% and raise it until the noise falls back clearly.</li>
 <li>Use Guard to restore natural speech detail if the result starts to sound over-processed.</li>
-<li>Choose the model that behaves best on the material. DeepFilterNet 3 is usually the first choice.</li>
+<li>Choose the model that behaves best on the material from the model selector: DeepFilterNet 3 (usually the first choice), DeepFilterNet 2, or RNNoise (lighter-weight).</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
@@ -72,6 +72,8 @@ inline constexpr HelpContent subtract {
 <li>Enable Learn and play the noise by itself for about one to two seconds.</li>
 <li>Turn Learn off to lock the profile.</li>
 <li>Raise Subtract for more removal and raise Protect if the source becomes hollow or over-scooped.</li>
+<li>Mode switches the learn-prompt wording and thresholds between Vocal and General material.</li>
+<li>Use Listen to hear only what is being removed - lower Subtract or disable Listen to return to normal.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
@@ -172,18 +174,19 @@ inline constexpr HelpContent speech_clarity {
     "VXSpeechClarity Help",
     R"(
 <h1>VXSpeechClarity</h1>
-<p>Targeted speech-artifact cleanup for sibilance, plosives, and breath noise. It is the focused corrective stage for speech mechanics rather than broad tonal shaping.</p>
+<p>Targeted speech-artifact cleanup for sibilance, plosives, breath noise, and clicks/mouth noise. It is the focused corrective stage for speech mechanics rather than broad tonal shaping.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Raise Sibilance to soften harsh /s/ and /z/ bursts without dulling the whole take.</li>
 <li>Raise Plosive to reduce low-frequency consonant thumps from close mics.</li>
 <li>Raise Breath to pull back obvious inhalations and wind-like noise between phrases.</li>
+<li>Raise Click to repair clicks, lip ticks, and other mouth noise.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
-<li>Light de-essing only: Sibilance 35%, Plosive 0%, Breath 0%.</li>
-<li>Close-mic spoken voice cleanup: Sibilance 30%, Plosive 40%, Breath 25%.</li>
-<li>Podcast artifact control: Sibilance 45%, Plosive 35%, Breath 30%.</li>
+<li>Light de-essing only: Sibilance 35%, Plosive 0%, Breath 0%, Click 0%.</li>
+<li>Close-mic spoken voice cleanup: Sibilance 30%, Plosive 40%, Breath 25%, Click 20%.</li>
+<li>Podcast artifact control: Sibilance 45%, Plosive 35%, Breath 30%, Click 25%.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>
@@ -205,6 +208,7 @@ inline constexpr HelpContent tone {
 <li>Use Bass for weight and warmth, Treble for brightness and openness.</li>
 <li>Use Mid to shape the presence region: in Vocal mode at 2 kHz for speech intelligibility; in General mode at 1 kHz for warmth.</li>
 <li>Prefer subtle shaping after cleanup and proximity, not before.</li>
+<li>Use Listen to hear only what this stage is changing.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
@@ -231,6 +235,9 @@ inline constexpr HelpContent tone_refine {
 <li>Raise Mud to reduce boxy low-mid buildup.</li>
 <li>Raise Harshness to soften brittle presence-region peaks.</li>
 <li>Raise Smooth to apply transparent broad tonal calming after the main problems are under control.</li>
+<li>Toggle the HPF icon to cut sub-rumble below the voice (80 Hz vocal / 40 Hz general).</li>
+<li>Toggle the Hi-shelf icon to gently tame extreme top-end harshness.</li>
+<li>Use Listen to hear only what this stage is changing.</li>
 </ul>
 <h2>Example settings</h2>
 <ul>
@@ -251,7 +258,7 @@ inline constexpr HelpContent finish {
     "VXFinish Help",
     R"(
 <h1>VXFinish</h1>
-<p>Final polish and level control after cleanup and tone work. It combines finish compression, bounded body recovery, makeup, and limiting for a more produced result.</p>
+<p>Final polish and level control after cleanup and tone work. It combines finish compression, bounded body recovery, makeup, and a true-peak-aware limiter (2x minimum-phase oversampled) for a more produced result without inter-sample overshoot.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Raise Finish to increase compression, polish, and level control.</li>
@@ -365,11 +372,11 @@ inline constexpr HelpContent repair {
     "VX Repair Help",
     R"(
 <h1>VX Repair</h1>
-<p>All-in-one voice repair assistant. Analyses your audio and automatically suggests which tools to enable and at what strength. It combines noise reduction, speech clarity cleanup, and dereverberation in a single guided workflow.</p>
+<p>All-in-one voice repair assistant. Analyses your audio and automatically suggests which tools to enable and at what strength. It combines noise reduction, click/mouth-noise repair, speech clarity cleanup, and dereverberation in a single guided workflow.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Click Analyse and play a representative section  -  at least five seconds with real programme material, not silence.</li>
-<li>Repair detects the problems and sets the tools. Accept the suggestions, adjust to taste, or turn individual tools off.</li>
+<li>Repair detects the problems (noise, clicks/mouth noise, sibilance/plosives/breath, and reverb) and sets the tools. Accept the suggestions, adjust to taste, or turn individual tools off.</li>
 <li>Drag any strength knob to enable that tool automatically if it is currently off.</li>
 <li>Use Listen on any tool row to hear only what that processor is removing.</li>
 <li>Click Reset Analysis to start again from scratch.</li>
@@ -383,11 +390,11 @@ inline constexpr HelpContent repair {
 <li><strong>DeepFilter</strong>  -  ML-powered voice isolation. Stronger on complex or non-stationary backgrounds such as crowd noise, traffic, or cafes. Requires the DeepFilter model to be installed via VX Deep Filter Net. Falls back silently to the DSP denoiser if the model is not available. When DeepFilter is selected it is also used as the reference denoiser during Phase 2 analysis.</li>
 </ul>
 <h2>Tool order</h2>
-<p>The repair chain runs Noise first, then Speech Clarity, then Reverb. This order matters: cleaning noise before de-essing avoids false sibilance triggers, and de-essing before deverb stops the reverb tail from masking breath sounds.</p>
+<p>The repair chain runs Noise, then Click, then Speech Clarity, then Reverb. This order matters: cleaning noise before click repair avoids false triggers on noise transients, cleaning noise and clicks before de-essing avoids false sibilance triggers, and de-essing before deverb stops the reverb tail from masking breath sounds.</p>
 <h2>Practical scenarios</h2>
 <ul>
-<li>Podcast or narration with background hiss and slight room reverb: let Repair analyse and apply all three tools.</li>
-<li>Phone or camera speech with strong interference: enable DeepFilter mode for heavier noise removal, then let Repair adjust reverb and clarity around it.</li>
+<li>Podcast or narration with background hiss, mouth noise, and slight room reverb: let Repair analyse and apply all four tools.</li>
+<li>Phone or camera speech with strong interference: enable DeepFilter mode for heavier noise removal, then let Repair adjust click, clarity, and reverb around it.</li>
 <li>Voice already mostly clean: Repair will leave inactive tools off  -  use only what is needed.</li>
 </ul>)",
     "VXRepair"
@@ -430,12 +437,17 @@ inline constexpr HelpContent tune {
 <li>Insert on a monophonic vocal. The status line shows the detected note, its offset in cents, confidence, and whether the engine is intervening.</li>
 <li>Amount sets how much detected pitch error is removed.</li>
 <li>Natural sets how readily movement counts as error rather than expression: left preserves everything human, right is tighter.</li>
+<li>Speed sets how quickly the correction glides toward the target once it engages.</li>
+<li>Focus sets how assertively the engine commits to a correction versus holding back when uncertain.</li>
+<li>Key and Scale can be set to match the song, left on Auto to detect the key from the sung notes over time, or left on Chromatic for no note filtering.</li>
+<li>The Natural, Balanced, Tight, and Hard Tune presets are starting points, not fixed settings - adjust Amount/Natural/Speed/Focus from there.</li>
 <li>When unsure, the engine does nothing - a missed correction sounds like the singer; a wrong correction sounds like a malfunction.</li>
 </ul>
 <h2>Practical scenarios</h2>
 <ul>
 <li>Transparent intonation cleanup on lead or backing vocals.</li>
 <li>Checking vocal intonation while tracking or comping.</li>
+<li>Creative hard-tune effect for stylized vocals.</li>
 </ul>
 <h2>Sidechain (optional)</h2>
 <p>Route an instrumental into the sidechain input to help Key/Scale detection - VXTune learns the song's key faster and more reliably from full chord content than from the vocal alone. This is detection-only: the sidechain audio is never mixed into VXTune's output.</p>
@@ -444,6 +456,27 @@ inline constexpr HelpContent tune {
 <li>VXTune adds real processing latency for the pitch-shift itself (shown as the plugin's reported latency). If your host does not fully delay-compensate a sidechain feed the way it does a plain signal chain, a track feeding the sidechain can drift out of time-alignment with the corrected vocal once both are audible together. If you hear phasing/timing artifacts only when both the vocal and the sidechain source are playing (and not when either is soloed), check your host's delay compensation for that specific routing, or the receive/send point (post-fader is usually safer than pre-fader/pre-FX).</li>
 </ul>)",
     "VXTune"
+};
+
+inline constexpr HelpContent width {
+    "VXWidth Help",
+    R"(
+<h1>VXWidth</h1>
+<p>Stereo image and doubling processor with four controls: Width, Double, Tightness, and Focus. Narrow a signal toward mono, widen an existing stereo image, or add a synthetic double - all without needing to understand M/S processing, phase, delay, or detuning.</p>
+<h2>How to use it</h2>
+<ul>
+<li>Width sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens the image.</li>
+<li>Double introduces a synthetic second performance alongside the original. At 0 there is no added voice.</li>
+<li>Tightness sets how closely the generated performance follows the original, from tight and precise to loose and separate.</li>
+<li>Focus sets where in the spectrum the width and doubling effect concentrates: Body, Full, or Air.</li>
+</ul>
+<h2>Practical scenarios</h2>
+<ul>
+<li>Narrowing an overly wide stereo recording for mono compatibility.</li>
+<li>Widening backing vocals, guitars, or synths.</li>
+<li>Adding a believable double-take to a mono or near-mono vocal.</li>
+</ul>)",
+    "VXWidth"
 };
 
 } // namespace vxsuite::help

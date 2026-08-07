@@ -1,0 +1,10 @@
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cargo/libdf/release/deps/time_core-bc5dc575ba715cef.d: /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/lib.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/hint.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/unit.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/util.rs
+
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cargo/libdf/release/deps/libtime_core-bc5dc575ba715cef.rlib: /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/lib.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/hint.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/unit.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/util.rs
+
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cargo/libdf/release/deps/libtime_core-bc5dc575ba715cef.rmeta: /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/lib.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/hint.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/unit.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/util.rs
+
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/lib.rs:
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/hint.rs:
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/unit.rs:
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.9/src/util.rs:

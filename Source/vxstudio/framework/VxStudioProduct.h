@@ -97,6 +97,15 @@ struct ProductIdentity {
     bool expertDefaultValue = false;
     std::string_view learnParamId;
     std::string_view learnButtonLabel;
+    // Generic plain on/off toggle - deliberately NOT "Listen" (audition-delta
+    // semantics) or "Learn"/"Analyze" (drags in progress/confidence meter
+    // UI, see updateLearnUi()) or "Expert" (gates other controls' visibility
+    // elsewhere). For a product that just needs one simple persistent
+    // switch with no side effects on the rest of the UI - e.g. VX Width's
+    // experimental micro-pitch toggle.
+    std::string_view simpleToggleParamId;
+    std::string_view simpleToggleLabel = "Toggle";
+    bool simpleToggleDefaultValue = false;
     bool showLevelTrace = false;
     bool showStereoGainMeter = false;
     // Scrolling pitch trace (detected vs corrected pitch on a note grid);
@@ -183,6 +192,10 @@ struct ProductIdentity {
 
     bool supportsLearnButton() const noexcept {
         return !learnParamId.empty();
+    }
+
+    bool supportsSimpleToggle() const noexcept {
+        return !simpleToggleParamId.empty();
     }
 
     bool hasHelpContent() const noexcept {

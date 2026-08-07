@@ -1,0 +1,8 @@
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cargo/libdf_dfn2/release/deps/enum_ordinalize-55d84c62e5edac00.d: /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/lib.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/big_int_wrapper.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/panic.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/variant_type.rs
+
+/Users/andrzejmarczewski/Documents/GitHub/VxStudio/cargo/libdf_dfn2/release/deps/libenum_ordinalize-55d84c62e5edac00.dylib: /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/lib.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/big_int_wrapper.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/panic.rs /Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/variant_type.rs
+
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/lib.rs:
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/big_int_wrapper.rs:
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/panic.rs:
+/Users/andrzejmarczewski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enum-ordinalize-3.1.15/src/variant_type.rs:

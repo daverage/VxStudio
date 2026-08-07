@@ -13,6 +13,7 @@
 #include "../Source/vxstudio/products/tone/VxToneProcessor.h"
 #include "../Source/vxstudio/products/tone_refine/VxToneRefineProcessor.h"
 #include "../Source/vxstudio/products/tune/VxTuneProcessor.h"
+#include "../Source/vxstudio/products/width/VxWidthProcessor.h"
 #include "../Source/vxstudio/products/analyser/VXStudioAnalyserProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
@@ -168,6 +169,11 @@ int main() {
             runProfile<VXTuneAudioProcessor>("Tune", speech, sr, blockSize, passes, [](auto& p) {
                 setParamNormalized(p, "amount", 0.60f);
                 setParamNormalized(p, "natural", 0.50f);
+            });
+
+            runProfile<VXWidthAudioProcessor>("Width", speech, sr, blockSize, passes, [](auto& p) {
+                setParamNormalized(p, "width", 0.90f);
+                setParamNormalized(p, "double", 0.60f);
             });
 
             runProfile<VXDenoiserAudioProcessor>("Denoiser", noisy, sr, blockSize, passes, [](auto& p) {

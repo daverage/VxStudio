@@ -7,7 +7,7 @@ modules, Bayesian target estimation, perceptual-cost decision engine,
 intervention budget, performance decomposition elevated to core).
 Implementation not started.
 
----
+---begin
 
 ## 1. Vision
 

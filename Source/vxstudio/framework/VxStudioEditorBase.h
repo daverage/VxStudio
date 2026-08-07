@@ -75,6 +75,7 @@ private:
     juce::TextButton modelButton;
     juce::ToggleButton listenButton;
     juce::TextButton learnButton;
+    juce::ToggleButton simpleToggleButton;
     juce::Slider primarySlider;
     juce::Slider secondarySlider;
     juce::Slider tertiarySlider;
@@ -101,6 +102,7 @@ private:
     std::unique_ptr<ButtonAttachment> expertAttachment;
     std::unique_ptr<ButtonAttachment> listenAttachment;
     std::unique_ptr<ButtonAttachment> learnAttachment;
+    std::unique_ptr<ButtonAttachment> simpleToggleAttachment;
     juce::TooltipWindow tooltipWindow;
     LevelTraceView levelTraceView;
     GainMeterView gainMeterView;

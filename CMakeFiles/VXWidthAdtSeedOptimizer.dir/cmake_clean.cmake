@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_core/juce_core.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_core/juce_core.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_events/juce_events.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_events/juce_events.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o.d"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/tests/VXWidthAdtSeedOptimizer.cpp.o"
+  "CMakeFiles/VXWidthAdtSeedOptimizer.dir/tests/VXWidthAdtSeedOptimizer.cpp.o.d"
+  "VXWidthAdtSeedOptimizer"
+  "VXWidthAdtSeedOptimizer.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C CXX)
+  include(CMakeFiles/VXWidthAdtSeedOptimizer.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

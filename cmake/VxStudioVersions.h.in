@@ -23,6 +23,7 @@ inline constexpr std::string_view rebalance = "@VXSTUDIO_PLUGIN_VERSION_VXREBALA
 inline constexpr std::string_view analyser = "@VXSTUDIO_PLUGIN_VERSION_VXSTUDIOANALYSER@";
 inline constexpr std::string_view repair   = "@VXSTUDIO_PLUGIN_VERSION_VXREPAIR@";
 inline constexpr std::string_view tune     = "@VXSTUDIO_PLUGIN_VERSION_VXTUNE@";
+inline constexpr std::string_view width    = "@VXSTUDIO_PLUGIN_VERSION_VXWIDTH@";
 } // namespace plugins
 
 } // namespace vxsuite::versions
