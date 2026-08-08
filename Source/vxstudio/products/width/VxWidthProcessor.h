@@ -7,7 +7,9 @@
 #include "dsp/VxWidthAdtVoice.h"
 #include "dsp/VxWidthDecorrelator.h"
 #include "dsp/VxWidthInputAnalyser.h"
+#include "dsp/VxWidthHarmonicResidualAnalyser.h"
 #include "dsp/VxWidthLoudnessCompensator.h"
+#include "dsp/VxWidthPhaseRiskGuardrail.h"
 #include "dsp/VxWidthSideOrthogonalizer.h"
 #include "dsp/VxWidthSpectralShaping.h"
 
@@ -66,6 +68,21 @@ public:
     float getWidthPathOutputRatio() const noexcept { return widthPathOutputRatioState; }
     float getSafetyRestraintAmount() const noexcept { return safetyRestraintAmountState; }
     float getMonoConfidence01() const noexcept { return monoConfidence01State; }
+    // §11 full guardrail (VXWIDTH_BUILD.md) development visibility - the
+    // combined restraint currently applied to Width's own decorBlend/
+    // sideGain, and Double's own doubleSideAmount, plus which specific
+    // measurement (of the four) is currently driving each.
+    float getPhaseRiskGuardrailWidthRestraint() const noexcept { return phaseRiskGuardrailWidth.currentRestraint(); }
+    float getPhaseRiskGuardrailDoubleRestraint() const noexcept { return phaseRiskGuardrailDouble.currentRestraint(); }
+    // §8.8 development visibility.
+    float getHarmonicConfidence01() const noexcept { return harmonicResidualAnalyser.harmonicConfidence01(); }
+    float getTransientWeight01() const noexcept { return harmonicResidualAnalyser.transientWeightValue(); }
+    // §22 development visibility (VX_ENGINE_AUDIT.md, final control-
+    // ownership pass): RMS of Double's own Mid/Side contribution to the
+    // output (post doubleMidAmount/doubleSideAmount, i.e. what's actually
+    // added to the mix), block-rate, last-processed-block only.
+    float getDoubleMidRms() const noexcept { return doubleMidRmsState; }
+    float getDoubleSideRms() const noexcept { return doubleSideRmsState; }
 
     // Target-seeking engine instrumentation (docs brief, 2026-08-07): the
     // ACTUAL input Side/Mid RMS ratio (R0), distinct from estimatedWidth01
@@ -158,6 +175,23 @@ private:
     // ADT voices/Tightness entirely, not just close.
     vxsuite::width::SideOrthogonalizer sideOrthogonalizerWidth;
     vxsuite::width::SideOrthogonalizer sideOrthogonalizerDouble;
+    // Full mono/phase-risk guardrail (VXWIDTH_BUILD.md §11, 2026-08-08):
+    // per-band coherence, downmix spectral deviation, centre-image
+    // displacement, sustained negative-correlation duration - supplements
+    // the existing broadband monoRiskRestraint/MonoDownmixGuardrail. Split
+    // per-source (same reasoning as every other split above): each instance
+    // compares the ORIGINAL input against only its own source's hypothetical
+    // contribution (dry + Width's own generated Side; dry + Double's own
+    // Mid+Side), so Tightness/Focus changing Double's output can never move
+    // Width's own restraint via this mechanism either.
+    vxsuite::width::PhaseRiskGuardrail phaseRiskGuardrailWidth;
+    vxsuite::width::PhaseRiskGuardrail phaseRiskGuardrailDouble;
+    // §8.8 harmonic/residual/transient decomposition (VXWIDTH_BUILD.md,
+    // 2026-08-08) - see its own header comment for the lightweight (non-
+    // STFT) approach and why. Single instance: this analyses the ORIGINAL
+    // input Mid, not anything Width/Double generate, so it needs no
+    // per-source split (unlike everything else added this session).
+    vxsuite::width::HarmonicResidualAnalyser harmonicResidualAnalyser;
     float adtMaxPitchShiftCentsObserved = 0.0f;
 
     // §17 debug telemetry state, updated once per block in processProduct().
@@ -165,6 +199,8 @@ private:
     float requestedOutputWidth01State = 0.0f;
     float actualOutputWidth01State = 0.0f;
     float widthPathOutputRatioState = 0.0f;
+    float doubleMidRmsState = 0.0f;
+    float doubleSideRmsState = 0.0f;
     float safetyRestraintAmountState = 0.0f;
     float monoConfidence01State = 0.0f;
     bool hasSignalState = false;
@@ -176,10 +212,10 @@ private:
     float remainingWidthGapState = 0.0f;
     float targetSideMidRatioState = 0.0f;
     float limitedSideGainDbState = 0.0f;
-    // Production default 12dB - see kDirectSideGainCeilingDb's comment in
+    // Production default 18dB - see kDirectSideGainCeilingDb's comment in
     // VxWidthProcessor.cpp for why. Overridable only via the test-only
     // setter above.
-    float directSideGainCeilingDbState = 12.0f;
+    float directSideGainCeilingDbState = 18.0f;
 
     // Lag-aware predictability correlation (§11.3, see ContentPredictabilityRestraint's
     // header comment): rolling history of Mid samples so the generated

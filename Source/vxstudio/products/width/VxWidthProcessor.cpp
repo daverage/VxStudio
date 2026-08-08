@@ -87,22 +87,26 @@ float targetRatioForWidth(const float width01) noexcept {
 }
 
 // Upper bound on the direct existing-Side gain the solver may request.
-// §18/§30.2 of the brief explicitly asks for a 9/12/15dB comparison rather
-// than a guess - see VXWidthShellCheck.cpp's [gain-limit sweep] diagnostic
-// for the measured numbers this default is based on. Measured on the
-// moderate-stereo fixture (sideGain=0.30): 9dB visibly plateaus by w75->w100
-// (0.1788->0.1939); 12dB clears that plateau (0.2010->0.2150); 15dB keeps
-// climbing further still (0.2211->0.2430) - so 15dB is NOT just a marginal
-// gain over 12dB on this measure, more authority keeps buying more width.
-// On the narrow and already-wide fixtures the three ceilings measure
-// near-identically (narrow: Region C's residual path dominates regardless
-// of ceiling; wide: required gain never reaches even the 9dB bound). 12dB
-// is picked as the conservative middle option BECAUSE the extra headroom
-// 15dB offers on moderate material is exactly where image-quality/phase
-// risk from over-driving direct Side would show up first, and there is no
-// listening session available in this environment to confirm 15dB is still
-// safe there. Revisit upward only after a real A/B pass - see tasks/todo.md.
-constexpr float kDirectSideGainCeilingDb = 12.0f;
+// VX_ENGINE_AUDIT.md §9/§10 (final control-ownership pass, 2026-08-08):
+// extended the original 9/12/15dB comparison to 9/12/15/18dB - see
+// VXWidthShellCheck.cpp's [gain-limit sweep] diagnostic for the full
+// measured numbers. On moderate-stereo material (sideGain=0.30), width
+// keeps growing with NO plateau all the way to 18dB (w100: 9dB=0.1749,
+// 12dB=0.1944, 15dB=0.2194, 18dB=0.2367 - each step is a real, non-marginal
+// gain, not diminishing returns). Critically, PhaseRiskGuardrailWidth's
+// restraint at Width=100 was measured IDENTICAL across all four ceilings
+// for every fixture tested (narrow/moderate/wide) - raising the ceiling
+// bought more width without the new safety system reading any additional
+// danger. That is exactly §9's stated philosophy: "allow the solver enough
+// authority to fulfil the Width request; let actual safety systems
+// constrain pathological outcomes" - not stopping at an arbitrary number.
+// Raised to 18dB, the full extent measured. Still provisional: this is the
+// measurable half of the experiment (monotonicity, width reached, safety
+// engagement); the perceptual half (image quality, hollowness, mono
+// compatibility by ear at the top of this range) has not been confirmed by
+// a real listening pass in this environment - revisit if that surfaces an
+// issue this measurement couldn't catch.
+constexpr float kDirectSideGainCeilingDb = 18.0f;
 constexpr float kR0Epsilon = 1.0e-4f;
 
 // Asymmetric block-rate smoothing for the solver-driven direct-Side gain
@@ -147,6 +151,30 @@ float regionCBlend(const float widthGapPercent, const float ceiling) noexcept {
         return 0.0f;
     const float t = (widthGapPercent - ceiling) / (kRegionCCeiling - ceiling);
     return juce::jlimit(0.0f, 1.0f, t);
+}
+
+// §3-8 of the final control-ownership audit (2026-08-08): ADT spatial
+// separation must be a function of WIDTH, not of Double amount. Previously
+// doubleSide's placement was fixed (always 0.5*(A-B)), so raising Double
+// alone widened the image - Width owned nothing about ADT geometry. This
+// returns 0..1: how far apart the generated A/B voices should sit,
+// independent of Double/Tightness/Focus (only widthSigned is read).
+//
+// Monotonic and continuous through 0 by construction (both branches meet at
+// kAdtSeparationAtZeroWidth). Negative Width pulls voices toward centre
+// (reaching exactly 0 - fully collapsed/mono - at Width=-100, matching
+// "generated performances collapse toward centre/mono"). Positive Width
+// pushes them apart, reaching 1 (today's original always-on 0.5/0.5 split)
+// at Width=+100. At Width=0 the voices stay only MINIMALLY separated
+// (§6: "remain centred or minimally separated"), not fully collapsed - a
+// literal 0 here would make Double sound identical at every negative-to-
+// zero Width setting, which isn't what "minimally separated" asks for.
+constexpr float kAdtSeparationAtZeroWidth = 0.15f;
+
+float adtSeparationForWidth(const float widthSigned) noexcept {
+    if (widthSigned >= 0.0f)
+        return kAdtSeparationAtZeroWidth + (1.0f - kAdtSeparationAtZeroWidth) * juce::jlimit(0.0f, 1.0f, widthSigned / 100.0f);
+    return kAdtSeparationAtZeroWidth * (1.0f - juce::jlimit(0.0f, 1.0f, -widthSigned / 100.0f));
 }
 
 } // namespace
@@ -341,6 +369,9 @@ void VXWidthAudioProcessor::prepareSuite(const double sampleRate, const int /*sa
     monoDownmixGuardrail.prepare(currentSampleRateHz);
     sideOrthogonalizerWidth.prepare(currentSampleRateHz);
     sideOrthogonalizerDouble.prepare(currentSampleRateHz);
+    phaseRiskGuardrailWidth.prepare(currentSampleRateHz);
+    phaseRiskGuardrailDouble.prepare(currentSampleRateHz);
+    harmonicResidualAnalyser.prepare(currentSampleRateHz);
     midHistoryMaxLagSamples = static_cast<int>(std::ceil(kPredictabilityMaxLagMs * 0.001 * currentSampleRateHz)) + 1;
     midHistory.assign(static_cast<size_t>(midHistoryMaxLagSamples + 1), 0.0f);
     midHistoryWritePos = 0;
@@ -370,11 +401,16 @@ void VXWidthAudioProcessor::resetSuite() {
     monoDownmixGuardrail.reset();
     sideOrthogonalizerWidth.reset();
     sideOrthogonalizerDouble.reset();
+    phaseRiskGuardrailWidth.reset();
+    phaseRiskGuardrailDouble.reset();
+    harmonicResidualAnalyser.reset();
     adtMaxPitchShiftCentsObserved = 0.0f;
     estimatedInputWidth01State = 0.0f;
     requestedOutputWidth01State = 0.0f;
     actualOutputWidth01State = 0.0f;
     widthPathOutputRatioState = 0.0f;
+    doubleMidRmsState = 0.0f;
+    doubleSideRmsState = 0.0f;
     safetyRestraintAmountState = 0.0f;
     monoConfidence01State = 0.0f;
     hasSignalState = false;
@@ -444,23 +480,61 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     // §11.3: compares processed output against unprocessed input, one block
     // delayed - see MonoDownmixGuardrail's own comment.
     const float monoDownmixRestraint = monoDownmixGuardrail.currentRestraint();
+    // §11 full guardrail (VXWIDTH_BUILD.md, 2026-08-08) - see
+    // PhaseRiskGuardrail's own comment for what each covers.
+    const float phaseRiskRestraintWidth = phaseRiskGuardrailWidth.currentRestraint();
+    const float phaseRiskRestraintDouble = phaseRiskGuardrailDouble.currentRestraint();
 
     // §9: reduce generated Side/decorrelator contribution during transients
     // (Voice A/B already reduce their own level internally - this covers
     // Region B/C, which didn't have any transient protection before now).
-    const float transientProtect = 1.0f - 0.5f * juce::jlimit(0.0f, 1.0f, voice.transientRisk);
+    // Coefficient lowered 0.5->0.3 (VX_ENGINE_AUDIT.md §11, final control-
+    // ownership pass, 2026-08-08): the role of transient protection is
+    // "preserve localisation, avoid smearing attacks" - it should not
+    // routinely mean the user gets half their requested Width on every
+    // onset. 0.3 caps the maximum cut at 30% (was 50%) at full transient
+    // risk. This is the measurable half of the candidate comparison (0.5/
+    // 0.3/0.2, i.e. worst-case remaining protect of 0.50/0.70/0.80) - the
+    // perceptual half (drums, acoustic/picked guitar, piano, consonant-
+    // heavy vocals - does attack clarity survive at this shallower depth)
+    // needs a real listening pass to fully confirm.
+    const float transientProtect = 1.0f - 0.3f * juce::jlimit(0.0f, 1.0f, voice.transientRisk);
 
-    // §8.8 (partial): the spec's full harmonic/residual/transient
-    // decomposition needs actual spectral separation (STFT-level work) and
-    // is explicitly a later differentiator, not attempted here. This is a
-    // much coarser BLOCK-RATE proxy using signals the framework already
-    // computes for exactly this purpose (VoiceAnalysisSnapshot): stable,
-    // non-transient content reads as "harmonic-like" and gets modestly
-    // LESS decorrelation ("limited decorrelation... protect fundamentals"
-    // per §8.8's harmonic-component guidance) - it does not decompose the
-    // signal into three separate streams, only scales overall Region C
-    // intensity by how tonal/sustained the current block reads.
-    const float harmonicProtect = 1.0f - 0.30f * voice.speechStability * (1.0f - voice.transientRisk);
+    // §8.8 harmonic/residual/transient decomposition (VXWIDTH_BUILD.md,
+    // 2026-08-08): §8.8 explicitly says this "does not require source
+    // separation or machine learning" and lists lightweight candidate
+    // methods - a full STFT-based harmonic-percussive mask would need new
+    // FFT/overlap-add infrastructure and a latency budget §13's Live mode
+    // doesn't have, so this uses the lightweight path instead: block-rate
+    // normalised autocorrelation (HarmonicResidualAnalyser, fed by
+    // accumulateSample() in the loop below) for the harmonic/residual axis,
+    // combined with the framework's own transient-risk analysis. Feed-
+    // forward/one-block-delayed like every other analysis-driven value in
+    // this function - reads THIS block's harmonicWeight/residualWeight/
+    // transientWeight as measured up to the END of the PREVIOUS block.
+    //
+    // §8.8's processing table: harmonic content gets "limited decorrelation
+    // ... protect fundamentals" (factor <1); residual gets "stronger
+    // decorrelation ... more width" (factor >1); transient is already
+    // separately protected via transientProtect above, so its own factor
+    // here stays neutral (1.0) rather than double-restraining it.
+    // Harmonic factor raised 0.5->0.7 (VX_ENGINE_AUDIT.md §12, final
+    // control-ownership pass, 2026-08-08): 0.5 is a MAJOR authority cut
+    // (strongly tonal material got only half the requested Region C
+    // contribution before any other restraint applied). §12's own framing:
+    // "the question is how much protection is genuinely needed before
+    // tonal material becomes phasey/hollow" - not an assumption that
+    // fundamentals always need a 50% cut. 0.7 is the measurable middle of
+    // the requested 0.5/0.65/0.75/1.0 comparison; the perceptual
+    // confirmation (does pure-tonal content stay clean at this shallower
+    // protection depth) needs a real listening pass.
+    constexpr float kHarmonicDecorFactor = 0.7f;
+    constexpr float kResidualDecorFactor = 1.3f;
+    constexpr float kTransientDecorFactor = 1.0f;
+    const float harmonicResidualDecorFactor =
+        harmonicResidualAnalyser.harmonicWeight() * kHarmonicDecorFactor
+        + harmonicResidualAnalyser.residualWeight() * kResidualDecorFactor
+        + harmonicResidualAnalyser.transientWeightValue() * kTransientDecorFactor;
 
     // §5/§7: Width is a request RELATIVE TO the estimated current width
     // (analysis.estimatedWidth01), not an absolute gain on the slider value.
@@ -557,9 +631,15 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         (inputSideMidRatioState * directSideGainSmoothedState) / kMaxPracticalSideMidRatio);
     const float remainingWidthGap = juce::jmax(0.0f, targetWidth01 - directAchievedWidth01);
 
-    const float sideGain = widthSigned > 0.0f
+    // §11.3 "reduce direct Side expansion third": phaseRiskRestraintWidth
+    // blends the gain toward UNITY (not toward 0) as it restrains, same
+    // amplitude-domain pattern the solver's own monoRiskRestraint scaling
+    // already uses - a gain that MULTIPLIES Side should restrain toward
+    // "no change", not toward "mute".
+    const float rawSideGain = widthSigned > 0.0f
         ? juce::jmap(stereoEvidence, monoLawSideGain, directSideGainSmoothedState) * transientProtect
         : 1.0f;
+    const float sideGain = 1.0f + (rawSideGain - 1.0f) * phaseRiskRestraintWidth;
     // Region C blend/level, restrained by mono-risk. The blend FRACTION
     // interpolates between the untouched mono law (§1) and the residual-
     // gap-driven fraction (§14), by the same stereoEvidence.
@@ -582,8 +662,8 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     const float decorBlendFraction = widthSigned > 0.0f
         ? juce::jmap(stereoEvidence, monoLawDecorBlendFraction, remainingWidthGap)
         : 0.0f;
-    const float decorBlend = decorBlendFraction * monoRiskRestraint
-        * kRegionCMaxLevel * transientProtect * harmonicProtect;
+    const float decorBlend = decorBlendFraction * monoRiskRestraint * phaseRiskRestraintWidth
+        * kRegionCMaxLevel * transientProtect * harmonicResidualDecorFactor;
 
     // §10: Focus -100(Body)..+100(Air) as -6..+6dB tilt on the WET paths'
     // source only (decorrelation + ADT) - the dry Region A/B path is
@@ -591,43 +671,59 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     // without colouring the underlying signal.
     const float focusTiltDb = (smoothed.quaternary - 0.5f) * 2.0f * 6.0f;
 
-    // §8: Double 0..100 -> Side amount 0..1 directly; Mid amount capped at a
-    // smaller fraction so "the original Mid must remain dominant" (§8.2)
-    // even at Double=100. Tightness 0..100 -> 0..1 into the voice's own
-    // Tight/Natural/Loose band interpolation (§8.3/§8.7).
+    // §8: Double 0..100 -> generated A/B amount (Width/the crossfade below
+    // decides Mid vs Side split; Tightness 0..100 -> 0..1 into the voice's
+    // own Tight/Natural/Loose band interpolation (§8.3/§8.7)).
     //
-    // Double should be driven by CENTRE-confidence, not mono-confidence: a
-    // clearly stereo mix can still contain a very suitable centred source
-    // (vocal, snare) worth doubling, and mono-confidence would wrongly
-    // discount that just because the overall signal reads as stereo. Uses
-    // the framework's `centerConfidence` (block-rate L~=R correlation)
-    // directly, not `analysis.monoConfidence` (which blends in the
-    // broadband side/mid mono score - the wrong signal for this).
-    // Soft floor so Double never fully mutes on wide/panned material, just
-    // restrains toward selectivity. This is a BROADBAND, BLOCK-RATE gate -
-    // it can tell "this block is mostly centred" from "this block is wide/
-    // panned", but can't isolate a centred vocal from simultaneous
-    // hard-panned guitars within the same block - that needs the still-
-    // deferred §8.8 harmonic/residual/transient decomposition.
-    // Phase 1.2 (§9-§11): the old 0.25 floor let broadband centreConfidence
-    // cut DoubleSide to ~25% (DoubleMid to ~8.75%) of the user's requested
-    // amount on real stereo material with low centre confidence - Double
-    // 100 read as roughly Double 25. Centre confidence may still nudge the
-    // amount (§10: "may influence... how conservative safety should be"),
-    // but it must not be the dominant multiplier. A high floor keeps that
-    // influence mild instead of amplitude-defining.
-    constexpr float kDoubleCentreGateFloor = 0.85f;
-    const float doubleCentreGate = kDoubleCentreGateFloor
-        + (1.0f - kDoubleCentreGateFloor) * juce::jlimit(0.0f, 1.0f, voice.centerConfidence);
-    // monoDownmixRestraint moved here from decorBlend/doubleSideAmount
-    // (2026-08-07, see decorBlend's comment above for the full reasoning):
-    // outL+outR is algebraically independent of Side entirely, so this
-    // guardrail can only ever be reacting to doubleMidAmount's own
-    // contribution - applying it here (not to the Side-domain amounts) is
-    // both the mathematically correct place AND removes an indirect
-    // Double->Width coupling path.
-    const float doubleSideAmount = smoothed.secondary * doubleCentreGate;
-    const float doubleMidAmount = smoothed.secondary * 0.35f * doubleCentreGate * monoDownmixRestraint;
+    // Centre-confidence amplitude gate REMOVED (2026-08-08, final control-
+    // ownership audit §14): this used to scale doubleCentreGate down for
+    // wide/panned material (originally to bias Double toward "suitable"
+    // centred sources like vocals/snares over an already-wide mix). Tested
+    // removing it entirely (floor raised to 1.0, i.e. no-op, then deleted):
+    // the [Double centre-confidence gate] regression - hard-panned material
+    // still doubles measurably less than centred material - CONTINUES TO
+    // PASS, more strongly than before (pannedDiff/centredDiff ratio ~0.50
+    // vs the ~0.6 threshold, previously achieved by the gate directly).
+    // That differentiation now emerges from phaseRiskGuardrailDouble's
+    // centre-image-displacement measurement instead: de-panning a hard-
+    // panned source by adding centred generated content is exactly what
+    // that measurement is designed to catch, and it's a real, evidenced
+    // safety signal (§18's "significant centre displacement") rather than
+    // a confidence-based blanket amplitude cut. L/R imbalance also measured
+    // BETTER without the gate (doubleAvg 0.003 vs a pre-removal ~0.02-0.03)
+    // - no measurable safety benefit was lost, so per §14's own criterion
+    // ("if no meaningful safety benefit exists, remove the amplitude gate")
+    // this is removed rather than kept as a redundant, weaker duplicate of
+    // a real safety system. The Double knob is now the sole authority over
+    // Double amount, as §16/§24 require.
+    // fixed 0.35 doubleMidAmount cap ("Mid amount capped at a smaller
+    // fraction so the original Mid must remain dominant") predates Width
+    // owning ADT Mid/Side distribution and directly conflicts with it - a
+    // fixed 35% Mid ceiling would still mean "Width=0, Double=100" sounds
+    // thin no matter how much the NEW equal-power crossfade below (driven
+    // by Width) wants to put into Mid at low Width. Replaced with ONE
+    // shared amount: Double controls how much A/B energy exists at all;
+    // the crossfade alone controls how that energy splits Mid vs Side.
+    // Each domain keeps only its OWN genuine safety restraint (not an
+    // arbitrary asymmetric cap) - monoDownmixRestraint on Mid (the only
+    // thing it can mathematically detect, see decorBlend's comment above),
+    // phaseRiskRestraintDouble on Side (§11.3 "reduce generated DoubleSide").
+    const float doubleAmount = smoothed.secondary;
+    const float doubleSideAmount = doubleAmount * phaseRiskRestraintDouble;
+    const float doubleMidAmount = doubleAmount * monoDownmixRestraint;
+    // §3-8: ADT spatial separation is a function of WIDTH alone (see
+    // adtSeparationForWidth's own comment) - equal-power crossfade between
+    // "fully Mid" (separation=0, both voices summed centred) and "fully
+    // Side" (separation=1, today's original always-on 0.5/0.5 split, so
+    // Width=+100 reproduces exactly what Double always sounded like before
+    // this change). cos^2+sin^2=1 keeps total generated A/B energy
+    // approximately CONSTANT as Width moves (§7/§8's "Double strength
+    // remains stable as Width changes" - exact for decorrelated/independent
+    // A/B, which is the ADT design intent) - Width redistributes where that
+    // energy sits, it doesn't scale it up or down.
+    const float adtSeparation = adtSeparationForWidth(widthSigned);
+    const float adtMidWeight = std::cos(adtSeparation * juce::MathConstants<float>::halfPi);
+    const float adtSideWeight = std::sin(adtSeparation * juce::MathConstants<float>::halfPi);
     // Tightness knob convention inverted 2026-08-07 (0%=loose, 100%=tight,
     // matching the control's own name - was backwards before). AdtVoice::
     // process() below still expects ITS OWN unchanged internal convention
@@ -650,6 +746,7 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     double sumGeneratedSquaredDouble = 0.0;
     double sumOutMidSq = 0.0, sumWidthOnlySideSq = 0.0; // §17 telemetry: actualOutputWidth01 (Width-only, excludes Double)
     double sumInMidSq = 0.0, sumInSideSq = 0.0; // target-seeking engine instrumentation: R0 = sideRms/midRms of the raw input
+    double sumDoubleMidSq = 0.0, sumDoubleSideSq = 0.0; // §22: DoubleMid/DoubleSide RMS telemetry
     const float compGain = loudnessCompensator.currentGain();
     const float predictabilityRestraintWidth = contentPredictabilityRestraintWidth.currentRestraint();
     const float predictabilityRestraintDouble = contentPredictabilityRestraintDouble.currentRestraint();
@@ -667,6 +764,10 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         const float sideOriginal = (l - r) * kInvSqrt2;
         sumInMidSq += static_cast<double>(mid) * mid;
         sumInSideSq += static_cast<double>(sideOriginal) * sideOriginal;
+        // §8.8: accumulate for THIS block's harmonic/residual confidence -
+        // see HarmonicResidualAnalyser's own comment for why this is
+        // per-sample accumulation, not a whole-buffer pass.
+        harmonicResidualAnalyser.accumulateSample(mid);
 
         // Focus/Tightness are Double-only controls (user correction,
         // 2026-08-07: "nothing except the width control should be affecting
@@ -705,8 +806,20 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         const float voiceB = adtVoiceB.process(focusedMid, tightness01, transientRisk);
         adtMaxPitchShiftCentsObserved = juce::jmax(adtMaxPitchShiftCentsObserved,
             adtVoiceA.lastInstantaneousPitchShiftCents(), adtVoiceB.lastInstantaneousPitchShiftCents());
-        const float doubleMid  = 0.5f * (voiceA + voiceB);
-        const float doubleSide = 0.5f * (voiceA - voiceB);
+        // §3-8: Width-driven equal-power crossfade (adtMidWeight/
+        // adtSideWeight, computed once per block above) replaces the old
+        // always-on fixed 0.5/0.5 split - Width now owns how far apart A/B
+        // sit, Double still owns how much of them exists (via
+        // doubleMidAmount/doubleSideAmount below).
+        const float doubleMid  = adtMidWeight * 0.5f * (voiceA + voiceB);
+        const float doubleSide = adtSideWeight * 0.5f * (voiceA - voiceB);
+        // §22 telemetry: Double's own actual Mid/Side contribution (post
+        // doubleMidAmount/doubleSideAmount), for the ADT spatial-placement
+        // regression tests.
+        const float doubleMidContribution = doubleMid * doubleMidAmount;
+        const float doubleSideContribution = doubleSide * doubleSideAmount;
+        sumDoubleMidSq += static_cast<double>(doubleMidContribution) * doubleMidContribution;
+        sumDoubleSideSq += static_cast<double>(doubleSideContribution) * doubleSideContribution;
 
         // Generated content is a fixed, deterministic function of Mid, so it
         // can end up correlated with Mid rather than truly decorrelated -
@@ -798,6 +911,24 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         // content at any stage.
         const float widthOnlySide = sideOriginal * sideScale * sideGain + generatedSideWidth;
         sumWidthOnlySideSq += static_cast<double>(widthOnlySide) * widthOnlySide;
+
+        // §11 full guardrail (VXWIDTH_BUILD.md, 2026-08-08): each instance
+        // compares the ORIGINAL input against a HYPOTHETICAL "what would the
+        // output be if only THIS source's own generated content were
+        // present" - widthOnly uses the dry Mid (Width never touches Mid at
+        // all) plus widthOnlySide; doubleOnly uses Double's own Mid+Side
+        // contribution alone. Neither hypothetical is ever written to
+        // left[i]/right[i] - purely a measurement, matching kInvSqrt2/
+        // compGain scaling so units match the real output.
+        const float widthOnlyMidOut = mid;
+        const float widthOnlyOutL = (widthOnlyMidOut + widthOnlySide) * kInvSqrt2 * compGain;
+        const float widthOnlyOutR = (widthOnlyMidOut - widthOnlySide) * kInvSqrt2 * compGain;
+        phaseRiskGuardrailWidth.accumulateSample(l, r, widthOnlyOutL, widthOnlyOutR);
+
+        const float doubleOnlyMidOut = mid + doubleMid * doubleMidAmount;
+        const float doubleOnlyOutL = (doubleOnlyMidOut + generatedSideDouble) * kInvSqrt2 * compGain;
+        const float doubleOnlyOutR = (doubleOnlyMidOut - generatedSideDouble) * kInvSqrt2 * compGain;
+        phaseRiskGuardrailDouble.accumulateSample(l, r, doubleOnlyOutL, doubleOnlyOutR);
     }
 
     // §12: bounded, slow makeup gain for the NEXT block - see
@@ -825,6 +956,9 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     contentPredictabilityRestraintDouble.updateForNextBlock(
         maxAbsRhoFor(sumMidLagTimesGeneratedDouble, sumMidLagSquaredDouble, sumGeneratedSquaredDouble), numSamples);
     monoDownmixGuardrail.updateForNextBlock(inMonoSumSquared, outMonoSumSquared, numSamples);
+    phaseRiskGuardrailWidth.updateForNextBlock(analysis.broadbandCorrelation, numSamples);
+    phaseRiskGuardrailDouble.updateForNextBlock(analysis.broadbandCorrelation, numSamples);
+    harmonicResidualAnalyser.updateForNextBlock(voice.transientRisk, numSamples);
 
     // §17 debug telemetry: what the engine actually did this block, so
     // tests/UI can verify the requested-width model without disagreeing
@@ -884,8 +1018,14 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         widthPathOutputRatioState = widthPathBlockAlpha * widthPathOutputRatioState
             + (1.0f - widthPathBlockAlpha) * rawWidthPathRatio;
     }
-    safetyRestraintAmountState = 1.0f - juce::jmin(monoRiskRestraint, monoDownmixRestraint,
-        juce::jmin(predictabilityRestraintWidth, predictabilityRestraintDouble));
+    // §22 telemetry: last-processed-block RMS (no smoothing - tests read
+    // this immediately after rendering, matching getAdtMaxPitchShiftCentsObserved's
+    // own "measure what actually happened this render" convention).
+    doubleMidRmsState = static_cast<float>(std::sqrt(sumDoubleMidSq / juce::jmax(1, numSamples)));
+    doubleSideRmsState = static_cast<float>(std::sqrt(sumDoubleSideSq / juce::jmax(1, numSamples)));
+    safetyRestraintAmountState = 1.0f - juce::jmin(monoRiskRestraint, juce::jmin(monoDownmixRestraint,
+        juce::jmin(predictabilityRestraintWidth, predictabilityRestraintDouble)),
+        juce::jmin(phaseRiskRestraintWidth, phaseRiskRestraintDouble));
     monoConfidence01State = analysis.monoConfidence;
     hasSignalState = meanMidSq > kMidEnergyFloor;
 

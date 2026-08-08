@@ -167,6 +167,218 @@ int main() {
                   << (ok ? "  PASS (restrained)" : "  FAIL") << "\n";
     }
 
+    // --- Test (VXWIDTH_BUILD.md §11 full guardrail, 2026-08-08): the new
+    // PhaseRiskGuardrail measurements (band coherence, downmix spectral
+    // deviation, centre-image displacement, sustained negative-correlation
+    // duration) actually engage on genuinely risky material and stay clear
+    // on benign material - not just present in code but measurably doing
+    // something. Anti-phase content should drive BOTH the pre-existing
+    // broadband monoRiskRestraint AND the new guardrail's restraint down;
+    // ordinary moderate-stereo content should leave the new guardrail
+    // essentially unrestrained (>0.9) so it isn't overly trigger-happy on
+    // normal programme material. ---
+    {
+        auto runFor = [&](const juce::AudioBuffer<float>& input) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + 60.0f / 200.0f); // Width=+60
+            setParamNormalized(proc, "double", 0.5f); // Double active too
+            for (int i = 0; i < 8; ++i) // let the ~400ms-smoothed restraint settle
+                render(proc, input, 256);
+            return std::make_pair(proc.getPhaseRiskGuardrailWidthRestraint(), proc.getPhaseRiskGuardrailDoubleRestraint());
+        };
+        const auto risky = runFor(makeAntiPhase(sr, 4.0f));
+        const auto benign = runFor(makeSpeechLike(sr, 4.0f));
+        const bool riskyEngaged = risky.first < 0.7f && risky.second < 0.7f;
+        const bool benignClear = benign.first > 0.9f && benign.second > 0.9f;
+        const bool ok = riskyEngaged && benignClear;
+        allPass &= ok;
+        std::cout << "  [§11 full guardrail] anti-phase restraint(width/double)=" << risky.first << "/" << risky.second
+                   << " benign restraint(width/double)=" << benign.first << "/" << benign.second
+                   << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test (VXWIDTH_BUILD.md §8.8, 2026-08-08): HarmonicResidualAnalyser
+    // actually differentiates tonal from noise-like content, and that
+    // differentiation actually reaches Region C's decorrelation strength
+    // (not just present in telemetry but structurally disconnected). A pure
+    // sine tone must read as strongly harmonic (autocorrelation finds a
+    // clean periodicity peak); pink noise must read as strongly residual
+    // (no such peak exists). Measures generated-Side energy at a fixed
+    // Width/Double so the ONLY thing differing between the two runs is the
+    // §8.8 weighting itself. ---
+    {
+        VXWidthAudioProcessor toneProc;
+        toneProc.prepareToPlay(sr, 256);
+        setParamNormalized(toneProc, "width", 0.5f + 60.0f / 200.0f); // Width=+60
+        setParamNormalized(toneProc, "double", 0.0f);
+        auto tone = makeSine(sr, 3.0f, 220.0f, 0.3f);
+        for (int i = 0; i < tone.getNumSamples(); ++i)
+            tone.setSample(1, i, tone.getSample(0, i)); // bit-exact mono
+        for (int i = 0; i < 6; ++i)
+            render(toneProc, tone, 256);
+        const float toneHarmonicConfidence = toneProc.getHarmonicConfidence01();
+
+        VXWidthAudioProcessor noiseProc;
+        noiseProc.prepareToPlay(sr, 256);
+        setParamNormalized(noiseProc, "width", 0.5f + 60.0f / 200.0f);
+        setParamNormalized(noiseProc, "double", 0.0f);
+        auto noise = makeNoise(sr, 3.0f, 0.3f);
+        for (int i = 0; i < noise.getNumSamples(); ++i)
+            noise.setSample(1, i, noise.getSample(0, i));
+        for (int i = 0; i < 6; ++i)
+            render(noiseProc, noise, 256);
+        const float noiseHarmonicConfidence = noiseProc.getHarmonicConfidence01();
+
+        auto sideRms = [](const juce::AudioBuffer<float>& b) {
+            double sumSq = 0.0;
+            for (int i = 0; i < b.getNumSamples(); ++i) {
+                const float s = b.getSample(0, i) - b.getSample(1, i);
+                sumSq += static_cast<double>(s) * s;
+            }
+            return std::sqrt(sumSq / std::max(1, b.getNumSamples()));
+        };
+        auto toneOut = render(toneProc, tone, 256);
+        auto noiseOut = render(noiseProc, noise, 256);
+        const double toneSideRms = sideRms(toneOut);
+        const double noiseSideRms = sideRms(noiseOut);
+
+        const bool confidenceOk = toneHarmonicConfidence > 0.6f && noiseHarmonicConfidence < 0.4f;
+        // Same input RMS/Width/Double, so any generated-Side energy
+        // difference is attributable ONLY to the harmonic/residual weight -
+        // residual (noise) must decorrelate MORE than harmonic (tone).
+        const bool decorrelationOk = noiseSideRms > toneSideRms * 1.05;
+        const bool ok = confidenceOk && decorrelationOk;
+        allPass &= ok;
+        std::cout << "  [§8.8 harmonic/residual] toneConfidence=" << toneHarmonicConfidence
+                   << " noiseConfidence=" << noiseHarmonicConfidence
+                   << " toneSideRms=" << toneSideRms << " noiseSideRms=" << noiseSideRms
+                   << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test (VX_ENGINE_AUDIT.md §3-8/§22, final control-ownership pass,
+    // 2026-08-08): ADT spatial placement follows WIDTH, not Double. At a
+    // FIXED Double=100, sweep Width -100..+100 and verify: DoubleSide RMS
+    // is monotonic with Width (increasing separation); DoubleMid RMS is
+    // complementary (highest at Width=-100/0, lowest at Width=+100); total
+    // generated Double energy (Mid+Side combined, RMS-summed) stays
+    // reasonably stable across the sweep (§7/§8 - Width redistributes
+    // energy, it doesn't scale total Double strength up/down); and
+    // Width=-100 collapses DoubleSide toward (not necessarily exactly to,
+    // once safety restraints are included) zero. ---
+    {
+        std::cout << "\n  [§22 ADT spatial placement] (Double=100, sweeping Width)\n";
+        double prevSideRms = -1.0;
+        double minTotalEnergy = 1e18, maxTotalEnergy = 0.0;
+        bool sideMonotonic = true;
+        for (const float widthPercent : { -100.0f, -50.0f, 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + widthPercent / 200.0f);
+            setParamNormalized(proc, "double", 1.0f); // Double=100%
+            // Steady (non-fading) tone, not makeSpeechLike - render()
+            // processes the WHOLE fixture and these getters read the LAST
+            // processed block's state; makeSpeechLike fades to silence in
+            // its final ~28%, which would read as near-zero regardless of
+            // Width/Double (same gotcha the pre-existing [mono endpoint]
+            // test documents).
+            auto input = makeSine(sr, 2.0f, 220.0f, 0.3f);
+            render(proc, input, 256);
+            render(proc, input, 256);
+            const double midRms = proc.getDoubleMidRms();
+            const double sideRms = proc.getDoubleSideRms();
+            const double totalEnergy = midRms * midRms + sideRms * sideRms;
+            minTotalEnergy = std::min(minTotalEnergy, totalEnergy);
+            maxTotalEnergy = std::max(maxTotalEnergy, totalEnergy);
+            if (prevSideRms >= 0.0 && sideRms < prevSideRms - 1.0e-6)
+                sideMonotonic = false;
+            prevSideRms = sideRms;
+            std::cout << "    width=" << widthPercent << " doubleMidRms=" << midRms
+                       << " doubleSideRms=" << sideRms << "\n";
+        }
+        // Energy stability: worst-case total energy shouldn't swing more
+        // than ~2x across the whole Width sweep (equal-power crossfade
+        // targets ~constant; some drift is expected since voiceA/voiceB
+        // aren't perfectly decorrelated for every fixture, and safety
+        // restraints/centre-gate can still legitimately move it a little).
+        const bool energyStable = maxTotalEnergy < minTotalEnergy * 2.0;
+        const bool ok = sideMonotonic && energyStable;
+        allPass &= ok;
+        std::cout << "  [§22 ADT spatial placement] sideMonotonic=" << sideMonotonic
+                   << " energyStable=" << energyStable
+                   << " (minEnergy=" << minTotalEnergy << " maxEnergy=" << maxTotalEnergy << ")"
+                   << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test: Width=0/Double=100 must remain a genuinely strong centred
+    // double (§7: "not... Double has mostly disappeared") - DoubleMid RMS
+    // at Width=0 must be comparable to DoubleSide RMS at Width=+100 (both
+    // representing "the same generated A/B energy, just placed
+    // differently"), not a small fraction of it. ---
+    {
+        auto measureAt = [&](const float widthPercent) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + widthPercent / 200.0f);
+            setParamNormalized(proc, "double", 1.0f);
+            auto input = makeSine(sr, 2.0f, 220.0f, 0.3f); // steady, see note above
+            render(proc, input, 256);
+            render(proc, input, 256);
+            return std::make_pair(proc.getDoubleMidRms(), proc.getDoubleSideRms());
+        };
+        const auto atZero = measureAt(0.0f);
+        const auto atMax = measureAt(100.0f);
+        // DoubleMid at Width=0 should be at least 60% of DoubleSide at
+        // Width=+100 - "genuinely strong", not necessarily bit-identical
+        // (centre-gate/safety restraints differ slightly by placement).
+        const bool ok = atZero.first > atMax.second * 0.6;
+        allPass &= ok;
+        std::cout << "  [§7 Double strong at Width=0] doubleMidRms(Width=0)=" << atZero.first
+                   << " doubleSideRms(Width=+100)=" << atMax.second
+                   << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // --- Test (VX_ENGINE_AUDIT.md §16, final control-ownership pass,
+    // 2026-08-08): Double 0/25/50/75/100 must be clearly monotonic in
+    // generated-performance presence, and the upper half (75->100) must not
+    // collapse relative to the lower half - the exact "no arbitrary
+    // conservative layer silently dominates the user's request" criterion,
+    // applied to Double the same way the existing Phase1.2 test already
+    // applies it to Width. Measures total generated Double energy
+    // (Mid+Side RMS-summed) at a FIXED moderate Width so ADT placement
+    // itself doesn't confound the amount measurement. ---
+    {
+        auto totalDoubleEnergyAt = [&](const float doublePercent) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f + 50.0f / 200.0f); // Width=+50, fixed
+            setParamNormalized(proc, "double", doublePercent / 100.0f);
+            auto input = makeSine(sr, 2.0f, 220.0f, 0.3f);
+            render(proc, input, 256);
+            render(proc, input, 256);
+            const double m = proc.getDoubleMidRms(), s = proc.getDoubleSideRms();
+            return m * m + s * s;
+        };
+        const double e0 = totalDoubleEnergyAt(0.0f);
+        const double e25 = totalDoubleEnergyAt(25.0f);
+        const double e50 = totalDoubleEnergyAt(50.0f);
+        const double e75 = totalDoubleEnergyAt(75.0f);
+        const double e100 = totalDoubleEnergyAt(100.0f);
+        const bool monotonic = e25 > e0 && e50 > e25 && e75 > e50 && e100 > e75;
+        const double firstHalfGain = e75 - e0;
+        const double secondHalfGain = e100 - e75;
+        // Same "no plateau" shape as the existing Width test: the top
+        // quarter-turn must remain a substantial fraction of the rest of
+        // the range, not collapse toward zero.
+        const bool noPlateau = secondHalfGain > firstHalfGain * 0.15;
+        const bool ok = monotonic && noPlateau;
+        allPass &= ok;
+        std::cout << "  [§16 Double monotonic] e0=" << e0 << " e25=" << e25 << " e50=" << e50
+                   << " e75=" << e75 << " e100=" << e100
+                   << " monotonic=" << monotonic << " noPlateau=" << noPlateau
+                   << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
     // --- Test 5: Region C widens beyond the Region B ceiling (§7.3) ---
     {
         auto sideEnergy = [](const juce::AudioBuffer<float>& b) {
@@ -458,7 +670,15 @@ int main() {
         // the measured worst case slightly: widthAvg=0.089, widthMax=0.246,
         // doubleAvg=0.032, doubleMax=0.098 - avg comfortably unchanged,
         // worst-case threshold widened with headroom over this new baseline.
-        constexpr double kAvgThreshold = 0.095;
+        // (4) Final control-ownership pass (VX_ENGINE_AUDIT.md, 2026-08-08):
+        // direct-Side ceiling 12->18dB, transientProtect coefficient 0.5->
+        // 0.3, harmonic decorrelation factor 0.5->0.7, centre-confidence
+        // amplitude gate removed - all deliberate authority increases per
+        // that audit's evidence. widthAvg=0.096, widthMax=0.268,
+        // doubleAvg/doubleMax essentially unchanged (Double's own imbalance
+        // path wasn't touched by any of these). Avg threshold raised with
+        // headroom to match; worst case still comfortably under 0.28.
+        constexpr double kAvgThreshold = 0.10;
         constexpr double kWorstCaseThreshold = 0.28;
         const bool ok = widthAvg < kAvgThreshold && doubleAvg < kAvgThreshold
                       && widthMax < kWorstCaseThreshold && doubleMax < kWorstCaseThreshold;
@@ -1006,7 +1226,16 @@ int main() {
     // SideOrthogonalizer - both of which exist specifically to prevent the
     // L/R imbalance regression this codebase already fixed once (see
     // tasks/todo.md). Gate on the measured, safety-respecting improvement
-    // instead of an unreached ideal. ---
+    // instead of an unreached ideal.
+    //
+    // Threshold lowered 0.12->0.10 (2026-08-08, §8.8 harmonic/residual/
+    // transient decomposition): makeSpeechLike is a mostly-tonal/voiced
+    // fixture, so it now correctly reads as harmonic-weighted and gets
+    // §8.8's "limited decorrelation... protect fundamentals" treatment
+    // (kHarmonicDecorFactor=0.5, a real cut, replacing the old coarse
+    // proxy's 0.7 floor) - measured wOut dropped from ~0.14 to ~0.11 as a
+    // DIRECT, INTENDED consequence of harmonic content decorrelating less,
+    // not a regression. New threshold keeps headroom over the new baseline. ---
     {
         VXWidthAudioProcessor proc;
         proc.prepareToPlay(sr, 256);
@@ -1019,7 +1248,7 @@ int main() {
         // telemetryActual reflects only the LAST processed block, which for
         // this fixture is the faded-to-silence tail - diagnostic only, not
         // gated on.
-        const bool ok = wOut > 0.12;
+        const bool ok = wOut > 0.10;
         allPass &= ok;
         std::cout << "  [§16 mono endpoint] actualOutputWidth=" << wOut
                   << " telemetryActual(lastBlock)=" << proc.getActualOutputWidth01()
@@ -1433,18 +1662,20 @@ int main() {
     }
 
     // --- Diagnostic (non-gating): target-seeking solver gain-limit sweep,
-    // design brief §18/§30.2. Compares candidate direct-Side gain ceilings
-    // (9/12/15dB) across narrow/moderate/wide stereo fixtures at Width
-    // 0/25/50/75/100, so the production default (12dB, see
-    // kDirectSideGainCeilingDb in VxWidthProcessor.cpp) is picked from
-    // measured numbers rather than a guess. No real listening session is
-    // available in this environment - this is the measurable half of the
-    // §18 experiment (monotonicity/width reached); the perceptual half
-    // (image quality, hollowness, mono compatibility by ear) still needs a
-    // human pass before treating 12dB as final. ---
+    // design brief §18/§30.2, extended to 18dB per VX_ENGINE_AUDIT.md §9
+    // (final control-ownership pass, 2026-08-08). Compares candidate direct-
+    // Side gain ceilings across narrow/moderate/wide stereo fixtures at
+    // Width 0/25/50/75/100, AND prints phaseRiskGuardrailWidth's restraint
+    // at Width=100 for each ceiling - §9 explicitly asks "when does the new
+    // PhaseRiskGuardrail begin intervening" as part of picking the ceiling.
+    // No real listening session is available in this environment - this is
+    // the measurable half of the experiment (monotonicity/width reached/
+    // safety engagement); the perceptual half (image quality, hollowness,
+    // mono compatibility by ear) still needs a human pass before treating
+    // any of these as final. ---
     {
         std::cout << "\n  [gain-limit sweep] (diagnostic only, not gated)\n";
-        const float ceilingsDb[] = { 9.0f, 12.0f, 15.0f };
+        const float ceilingsDb[] = { 9.0f, 12.0f, 15.0f, 18.0f };
         struct FixtureSpec { const char* label; float sideGain; };
         const FixtureSpec fixtures[] = {
             { "narrow(sideGain=0.08)",   0.08f },
@@ -1454,6 +1685,7 @@ int main() {
         for (const auto& fixture : fixtures) {
             for (const auto ceilingDb : ceilingsDb) {
                 std::cout << "    " << fixture.label << " ceiling=" << ceilingDb << "dB:";
+                float restraintAt100 = 1.0f;
                 for (const float widthPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
                     VXWidthAudioProcessor proc;
                     proc.prepareToPlay(sr, 256);
@@ -1464,8 +1696,10 @@ int main() {
                     auto out = render(proc, input, 256);
                     std::cout << " w" << static_cast<int>(widthPercent) << "="
                                << std::fixed << std::setprecision(4) << outputWidth01(out);
+                    if (widthPercent == 100.0f)
+                        restraintAt100 = proc.getPhaseRiskGuardrailWidthRestraint();
                 }
-                std::cout << "\n";
+                std::cout << " phaseRiskRestraintAtW100=" << restraintAt100 << "\n";
             }
         }
     }
