@@ -5,13 +5,15 @@
 #include <cmath>
 #include <vector>
 
-// EXPERIMENTAL (2026-08-07, ADT micro-pitch investigation, off by default -
-// see VxWidthAdtVoice.h's `microPitchEnabled` runtime flag, default false,
-// no user control exposed). Time-domain micro-transposition suitable ONLY
-// for a few cents of shift, not chorus-range detune - deliberately not a
-// phase vocoder (no large-window FFT latency) and deliberately not reusing
-// the ADT delay line's own Doppler modulation (timing and pitch stay
-// conceptually separate per the design brief this was built against).
+// Graduated (2026-08-07) from an experimental, user-facing toggle to a
+// permanent, always-on part of the ADT engine - see VxWidthAdtVoice.h's
+// `microPitchEnabled` runtime flag (set unconditionally in
+// VxWidthProcessor.cpp's prepareSuite()/resetSuite(), no UI control).
+// Time-domain micro-transposition suitable ONLY for a few cents of shift,
+// not chorus-range detune - deliberately not a phase vocoder (no
+// large-window FFT latency) and deliberately not reusing the ADT delay
+// line's own Doppler modulation (timing and pitch stay conceptually
+// separate per the design brief this was built against).
 //
 // Classic two-tap variable-speed-delay pitch shifter (Zolzer, "DAFX":
 // pitch shifting via a modulated delay line read at a slightly different
@@ -19,8 +21,12 @@
 // window apart, each amplitude-weighted by a TRIANGULAR window that is
 // zero at the tap's wrap point and peaks at the window's midpoint; because
 // the two taps are a half-window apart, their triangular weights sum to
-// exactly 1.0 at every instant (w(d) + w(d + W/2 mod W) == 1), so the
-// crossfade is constant-power by construction, not tuned by ear.
+// exactly 1.0 at every instant (w(d) + w(d + W/2 mod W) == 1). That makes
+// the crossfade constant-SUM (constant-amplitude for identical, coherent
+// taps) by construction, not tuned by ear - NOT constant-power (e.g.
+// 0.5^2+0.5^2=0.5, not 1); a genuinely constant-power crossfade would need
+// weights whose SQUARES sum to 1, not the weights themselves
+// (VXWIDTH_AUDIT.md #6).
 //
 // For a shift of only a few cents, the per-sample delay drift rate
 // (ratio-1) is tiny (~0.0006-0.006 samples/sample), so a tap only wraps

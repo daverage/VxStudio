@@ -30,9 +30,10 @@
 // in the signal path), already meeting §13's Live-mode target without a
 // separate Quality mode - there is currently no lookahead-dependent
 // analysis (e.g. spectral) to justify one. §8.8's harmonic/residual/
-// transient decomposition and §11's full mono/phase-risk guardrail (beyond
-// the correlation-based restraints already in place) remain later
-// refinements, not built here.
+// transient decomposition (HarmonicResidualAnalyser) and §11's full
+// mono/phase-risk guardrail (PhaseRiskGuardrail, beyond the correlation-
+// based restraints already in place) both landed 2026-08-08 - see
+// dsp/VxWidthHarmonicResidualAnalyser.h and dsp/VxWidthPhaseRiskGuardrail.h.
 class VXWidthAudioProcessor final : public vxsuite::ProcessorBase {
 public:
     VXWidthAudioProcessor();

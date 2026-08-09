@@ -256,6 +256,64 @@ int main() {
                    << (ok ? "  PASS" : "  FAIL") << "\n";
     }
 
+    // --- Test (VXWIDTH_AUDIT.md #1 fix, 2026-08-08): the production ADT
+    // M/S geometry (adtMidWeight/adtSideWeight in VxWidthProcessor.cpp) is
+    // mathematically equivalent to actual equal-power panning of A and B
+    // apart (A moving centre->left, B moving centre->right as separation
+    // 0->1), NOT the old Mid<->Side crossfade that collapsed to a pure
+    // anti-phase Side signal at separation=1. Mirrors the exact production
+    // formula (not called via a hook - this is intentionally an independent
+    // re-derivation) and compares its Mid/Side reconstructed back to L/R
+    // against an INDEPENDENT reference implementation that pans A and B
+    // directly in L/R via two symmetric equal-power pans and never touches
+    // M/S at all. The production formula bakes in one extra 1/sqrt(2) of
+    // normalisation (to keep separation=1's amplitude matching the historic
+    // always-on 0.5/0.5 split - see that formula's own comment), so exact
+    // equality isn't expected; instead this proves reconstructed-L/R is
+    // proportional to the reference pan's L/R by a FIXED constant
+    // (1/sqrt(2)) across separation and content - i.e. genuinely the same
+    // spatial shape, just uniformly scaled, at every separation and for
+    // arbitrary A/B samples, not just by construction at the endpoints. ---
+    {
+        constexpr float kInvSqrt2 = 0.70710678f;
+        auto productionMidSide = [](const float separation, const float A, const float B) {
+            const float theta = separation * juce::MathConstants<float>::pi * 0.25f;
+            const float midWeight = std::cos(theta) * kInvSqrt2;
+            const float sideWeight = std::sin(theta) * kInvSqrt2;
+            return std::make_pair(midWeight * (A + B), sideWeight * (A - B));
+        };
+        auto referencePanLR = [](const float separation, const float A, const float B) {
+            const float thetaA = juce::MathConstants<float>::pi * 0.25f * (1.0f - separation); // A: centre -> left
+            const float thetaB = juce::MathConstants<float>::pi * 0.25f * (1.0f + separation); // B: centre -> right
+            const float L = A * std::cos(thetaA) + B * std::cos(thetaB);
+            const float R = A * std::sin(thetaA) + B * std::sin(thetaB);
+            return std::make_pair(L, R);
+        };
+        std::mt19937 rng(777);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        float maxRatioErr = 0.0f;
+        for (const float separation : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f }) {
+            for (int trial = 0; trial < 25; ++trial) {
+                const float A = dist(rng), B = dist(rng);
+                const auto [mid, side] = productionMidSide(separation, A, B);
+                const auto [refL, refR] = referencePanLR(separation, A, B);
+                const float reconL = (mid + side) * kInvSqrt2;
+                const float reconR = (mid - side) * kInvSqrt2;
+                // Expected fixed ratio is kInvSqrt2 (see comment above); skip
+                // near-zero reference values (e.g. A=B at separation=1's R)
+                // where the ratio is numerically ill-conditioned.
+                if (std::abs(refL) > 1.0e-3f)
+                    maxRatioErr = std::max(maxRatioErr, std::abs(reconL / refL - kInvSqrt2));
+                if (std::abs(refR) > 1.0e-3f)
+                    maxRatioErr = std::max(maxRatioErr, std::abs(reconR / refR - kInvSqrt2));
+            }
+        }
+        const bool ok = maxRatioErr < 1.0e-4f;
+        allPass &= ok;
+        std::cout << "  [ADT M/S vs L/R pan reference] maxRatioErr=" << maxRatioErr
+                  << (ok ? "  PASS (genuine equal-power A/B pan, uniformly scaled)" : "  FAIL") << "\n";
+    }
+
     // --- Test (VX_ENGINE_AUDIT.md §3-8/§22, final control-ownership pass,
     // 2026-08-08): ADT spatial placement follows WIDTH, not Double. At a
     // FIXED Double=100, sweep Width -100..+100 and verify: DoubleSide RMS

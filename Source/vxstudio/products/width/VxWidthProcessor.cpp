@@ -210,7 +210,7 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.primaryHint    = "Stereo image size: left narrows toward mono, right widens the image.";
     id.secondaryHint  = "Introduces a synthetic doubled performance alongside the original.";
     id.tertiaryHint   = "How closely the generated performance follows the original - loose and separate toward 0%, tight and precise toward 100%.";
-    id.quaternaryHint = "Where in the spectrum the width and doubling effect concentrates - body, full range, or air.";
+    id.quaternaryHint = "Where in the spectrum the doubling effect concentrates - body, full range, or air.";
     id.dspVersion    = vxsuite::versions::plugins::width;
     id.helpTitle     = vxsuite::help::width.title;
     id.helpHtml      = vxsuite::help::width.html;
@@ -665,10 +665,13 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     const float decorBlend = decorBlendFraction * monoRiskRestraint * phaseRiskRestraintWidth
         * kRegionCMaxLevel * transientProtect * harmonicResidualDecorFactor;
 
-    // §10: Focus -100(Body)..+100(Air) as -6..+6dB tilt on the WET paths'
-    // source only (decorrelation + ADT) - the dry Region A/B path is
-    // untouched, so Focus steers where the SPATIAL EFFECT concentrates
-    // without colouring the underlying signal.
+    // §10: Focus -100(Body)..+100(Air) as -6..+6dB tilt on the ADT (Double)
+    // voices' source only - see the "Focus/Tightness are Double-only
+    // controls" comment below for why this no longer includes Width's own
+    // decorrelator (Region C runs off the untilted Mid/Side; only Double's
+    // ADT voices see the Focus-tilted signal). Focus steers where the
+    // DOUBLING effect concentrates without colouring the underlying signal
+    // or moving Width's own output.
     const float focusTiltDb = (smoothed.quaternary - 0.5f) * 2.0f * 6.0f;
 
     // §8: Double 0..100 -> generated A/B amount (Width/the crossfade below
@@ -711,19 +714,29 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     const float doubleAmount = smoothed.secondary;
     const float doubleSideAmount = doubleAmount * phaseRiskRestraintDouble;
     const float doubleMidAmount = doubleAmount * monoDownmixRestraint;
+    static constexpr float kInvSqrt2 = 0.70710678f;
     // §3-8: ADT spatial separation is a function of WIDTH alone (see
-    // adtSeparationForWidth's own comment) - equal-power crossfade between
-    // "fully Mid" (separation=0, both voices summed centred) and "fully
-    // Side" (separation=1, today's original always-on 0.5/0.5 split, so
-    // Width=+100 reproduces exactly what Double always sounded like before
-    // this change). cos^2+sin^2=1 keeps total generated A/B energy
-    // approximately CONSTANT as Width moves (§7/§8's "Double strength
-    // remains stable as Width changes" - exact for decorrelated/independent
-    // A/B, which is the ADT design intent) - Width redistributes where that
-    // energy sits, it doesn't scale it up or down.
+    // adtSeparationForWidth's own comment). VXWIDTH_AUDIT.md #1 fix
+    // (2026-08-08): this used to crossfade between "fully Mid" and "fully
+    // Side" (cos/sin of separation*pi/2), which at separation=1 produced a
+    // PURE Side/anti-phase signal (M=0), not actual A-left/B-right placement
+    // - hard-panned A/B reconstructed through L=Mid+Side, R=Mid-Side
+    // requires BOTH Mid and Side energy, not Side alone. Correct model:
+    // A and B are each an independent equal-power pan (A moving centre->left,
+    // B moving centre->right as separation 0->1); summing the two pans'
+    // contributions into Mid/Side gives M=(A+B)*cos(separation*pi/4)/sqrt2,
+    // S=(A-B)*sin(separation*pi/4)/sqrt2 (derivation: VXWIDTH_AUDIT.md #1).
+    // At separation=0, M is at its LARGEST (equal-power centre pan sums
+    // in-phase), S=0 - both voices genuinely centred, not just crossfaded
+    // away. At separation=1, M/S carry equal energy (0.5/0.5 of A+B/A-B),
+    // matching the original always-on split so Width=+100 still reproduces
+    // what Double always sounded like. Verified against an explicit L/R-pan
+    // reference implementation in VXWidthShellCheck.cpp's [ADT M/S vs L/R
+    // pan reference] test.
     const float adtSeparation = adtSeparationForWidth(widthSigned);
-    const float adtMidWeight = std::cos(adtSeparation * juce::MathConstants<float>::halfPi);
-    const float adtSideWeight = std::sin(adtSeparation * juce::MathConstants<float>::halfPi);
+    const float adtPanTheta = adtSeparation * juce::MathConstants<float>::pi * 0.25f;
+    const float adtMidWeight = std::cos(adtPanTheta) * kInvSqrt2;
+    const float adtSideWeight = std::sin(adtPanTheta) * kInvSqrt2;
     // Tightness knob convention inverted 2026-08-07 (0%=loose, 100%=tight,
     // matching the control's own name - was backwards before). AdtVoice::
     // process() below still expects ITS OWN unchanged internal convention
@@ -752,7 +765,6 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     const float predictabilityRestraintDouble = contentPredictabilityRestraintDouble.currentRestraint();
     const int midHistorySize = static_cast<int>(midHistory.size());
 
-    static constexpr float kInvSqrt2 = 0.70710678f;
     for (int i = 0; i < numSamples; ++i) {
         const float l = left[i];
         const float r = right[i];
@@ -806,13 +818,14 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         const float voiceB = adtVoiceB.process(focusedMid, tightness01, transientRisk);
         adtMaxPitchShiftCentsObserved = juce::jmax(adtMaxPitchShiftCentsObserved,
             adtVoiceA.lastInstantaneousPitchShiftCents(), adtVoiceB.lastInstantaneousPitchShiftCents());
-        // §3-8: Width-driven equal-power crossfade (adtMidWeight/
-        // adtSideWeight, computed once per block above) replaces the old
-        // always-on fixed 0.5/0.5 split - Width now owns how far apart A/B
-        // sit, Double still owns how much of them exists (via
-        // doubleMidAmount/doubleSideAmount below).
-        const float doubleMid  = adtMidWeight * 0.5f * (voiceA + voiceB);
-        const float doubleSide = adtSideWeight * 0.5f * (voiceA - voiceB);
+        // §3-8: Width-driven equal-power A/B pan (adtMidWeight/adtSideWeight,
+        // computed once per block above, already include the 1/sqrt2
+        // normalisation - see that comment) replaces the old Mid<->Side
+        // crossfade - Width now owns how far apart A/B sit, Double still
+        // owns how much of them exists (via doubleMidAmount/doubleSideAmount
+        // below).
+        const float doubleMid  = adtMidWeight * (voiceA + voiceB);
+        const float doubleSide = adtSideWeight * (voiceA - voiceB);
         // §22 telemetry: Double's own actual Mid/Side contribution (post
         // doubleMidAmount/doubleSideAmount), for the ADT spatial-placement
         // regression tests.
@@ -918,16 +931,27 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         // present" - widthOnly uses the dry Mid (Width never touches Mid at
         // all) plus widthOnlySide; doubleOnly uses Double's own Mid+Side
         // contribution alone. Neither hypothetical is ever written to
-        // left[i]/right[i] - purely a measurement, matching kInvSqrt2/
-        // compGain scaling so units match the real output.
+        // left[i]/right[i] - purely a measurement, matching kInvSqrt2
+        // scaling so units match the real output. Deliberately EXCLUDES
+        // compGain (VXWIDTH_AUDIT.md #4 fix, 2026-08-08): compGain is
+        // derived from the COMBINED Width+Double output energy, so including
+        // it here let more Width Side raise overall RMS -> lower compGain ->
+        // this guardrail read a spurious reduction that was really loudness
+        // correction, not a phase/mono problem - a hidden cross-coupling
+        // where Double's safety restraint could silently move in response to
+        // Width's own level (or vice versa) via a channel neither guardrail
+        // is supposed to see. Safety analysis is now pre-loudness-
+        // compensation throughout: DSP geometry -> safety check -> loudness
+        // compensation -> output (compGain is applied only once, to the
+        // actual left[i]/right[i] write above).
         const float widthOnlyMidOut = mid;
-        const float widthOnlyOutL = (widthOnlyMidOut + widthOnlySide) * kInvSqrt2 * compGain;
-        const float widthOnlyOutR = (widthOnlyMidOut - widthOnlySide) * kInvSqrt2 * compGain;
+        const float widthOnlyOutL = (widthOnlyMidOut + widthOnlySide) * kInvSqrt2;
+        const float widthOnlyOutR = (widthOnlyMidOut - widthOnlySide) * kInvSqrt2;
         phaseRiskGuardrailWidth.accumulateSample(l, r, widthOnlyOutL, widthOnlyOutR);
 
         const float doubleOnlyMidOut = mid + doubleMid * doubleMidAmount;
-        const float doubleOnlyOutL = (doubleOnlyMidOut + generatedSideDouble) * kInvSqrt2 * compGain;
-        const float doubleOnlyOutR = (doubleOnlyMidOut - generatedSideDouble) * kInvSqrt2 * compGain;
+        const float doubleOnlyOutL = (doubleOnlyMidOut + generatedSideDouble) * kInvSqrt2;
+        const float doubleOnlyOutR = (doubleOnlyMidOut - generatedSideDouble) * kInvSqrt2;
         phaseRiskGuardrailDouble.accumulateSample(l, r, doubleOnlyOutL, doubleOnlyOutR);
     }
 
@@ -935,8 +959,20 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     // VxWidthLoudnessCompensator.h for why this is delayed feedback, not a
     // same-block correction.
     const double inRms = std::sqrt(inEnergySum / (2.0 * numSamples));
+    // VXWIDTH_AUDIT.md #3 fix (2026-08-08): outEnergySum is accumulated from
+    // outL/outR, which already have THIS block's compGain baked in (see the
+    // outL/outR assignment above) - feeding that straight into
+    // updateForNextBlock() as "outputRms" violates its own documented
+    // contract (pre-compensation output RMS) and turns the loop into
+    // targetGain=inputRms/(effectRms*compGain), whose fixed point is
+    // compGain=1/sqrt(effectRms) instead of the intended 1/effectRms - only
+    // ~half the level difference (in dB) ever gets corrected in steady
+    // state. compGain is constant across this whole block (read once, above
+    // the sample loop), so dividing back out here is exact, not an
+    // approximation - cheaper than a second energy accumulator.
     const double outRms = std::sqrt(outEnergySum / (2.0 * numSamples));
-    loudnessCompensator.updateForNextBlock(inRms, outRms, numSamples);
+    const double outRmsPreComp = compGain > 1.0e-6f ? outRms / compGain : outRms;
+    loudnessCompensator.updateForNextBlock(inRms, outRmsPreComp, numSamples);
 
     auto maxAbsRhoFor = [&](const double (&sumMidLagTimesGenerated)[6], const double (&sumMidLagSquared)[6],
                             const double sumGeneratedSquared) {
@@ -955,7 +991,15 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         maxAbsRhoFor(sumMidLagTimesGeneratedWidth, sumMidLagSquaredWidth, sumGeneratedSquaredWidth), numSamples);
     contentPredictabilityRestraintDouble.updateForNextBlock(
         maxAbsRhoFor(sumMidLagTimesGeneratedDouble, sumMidLagSquaredDouble, sumGeneratedSquaredDouble), numSamples);
-    monoDownmixGuardrail.updateForNextBlock(inMonoSumSquared, outMonoSumSquared, numSamples);
+    // VXWIDTH_AUDIT.md #4 fix: outMonoSumSquared is accumulated from
+    // outL+outR, which include this block's compGain - divide it back out
+    // (compGain is constant across the block, so this is exact) so the mono-
+    // downmix safety check sees DSP geometry only, not loudness correction -
+    // see the widthOnly/doubleOnly hypothetical-output comment above for why
+    // this cross-coupling matters.
+    const double outMonoSumSquaredPreComp = compGain > 1.0e-6f
+        ? outMonoSumSquared / (static_cast<double>(compGain) * compGain) : outMonoSumSquared;
+    monoDownmixGuardrail.updateForNextBlock(inMonoSumSquared, outMonoSumSquaredPreComp, numSamples);
     phaseRiskGuardrailWidth.updateForNextBlock(analysis.broadbandCorrelation, numSamples);
     phaseRiskGuardrailDouble.updateForNextBlock(analysis.broadbandCorrelation, numSamples);
     harmonicResidualAnalyser.updateForNextBlock(voice.transientRisk, numSamples);

@@ -20,6 +20,18 @@
 // RESTRAINS (multiplies existing-Side/decorrelated/DoubleSide amounts
 // toward zero), same role as the existing restraints it supplements.
 //
+// VXWIDTH_AUDIT.md #2 fix (2026-08-08): the per-band coherence check below
+// originally analysed the INPUT only. That made the 12/15/18dB direct-Side
+// ceiling "experiment" pass trivially - raising the ceiling doesn't change
+// the input's own coherence, so an INPUT-only check can never detect the
+// new correlation problems that Side expansion itself introduces (e.g.
+// L=M+kS, R=M-kS can go strongly anti-phase for large k while L+R and L/R
+// energy balance - the two output-aware checks that already existed here -
+// stay essentially unchanged). Added a second, OUTPUT-band-coherence
+// restraint alongside the existing input one (both feed currentRestraint()'s
+// min()), so a processed signal that goes anti-phase in a band is caught
+// even when the input in that band was fine.
+//
 // Accumulation shape matches the rest of VxWidthProcessor.cpp's per-block
 // measurements (e.g. the lag-correlation sums feeding ContentPredictability
 // Restraint): accumulateSample() is called once per sample from INSIDE the
@@ -67,6 +79,8 @@ public:
         sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
         splitterL.prepare(sr);
         splitterR.prepare(sr);
+        splitterOutL.prepare(sr);
+        splitterOutR.prepare(sr);
         splitterInMono.prepare(sr);
         splitterOutMono.prepare(sr);
         // ~400ms - distinct from the other restraints' own time constants
@@ -79,9 +93,12 @@ public:
     void reset() noexcept {
         splitterL.reset();
         splitterR.reset();
+        splitterOutL.reset();
+        splitterOutR.reset();
         splitterInMono.reset();
         splitterOutMono.reset();
         bandCoherenceRestraint = 1.0f;
+        outputBandCoherenceRestraint = 1.0f;
         downmixSpectralRestraint = 1.0f;
         centreDisplacementRestraint = 1.0f;
         sustainedRiskRestraint = 1.0f;
@@ -90,12 +107,12 @@ public:
     }
 
     // Combined restraint (0=fully restrained, 1=unrestrained) - the MOST
-    // restrictive of the four measurements below, matching how a safety
+    // restrictive of the five measurements below, matching how a safety
     // system should behave (any one serious issue restrains, they don't
     // average out against each other).
     [[nodiscard]] float currentRestraint() const noexcept {
-        return juce::jmin(bandCoherenceRestraint, downmixSpectralRestraint,
-            juce::jmin(centreDisplacementRestraint, sustainedRiskRestraint));
+        return juce::jmin(bandCoherenceRestraint, outputBandCoherenceRestraint,
+            juce::jmin(downmixSpectralRestraint, juce::jmin(centreDisplacementRestraint, sustainedRiskRestraint)));
     }
 
     // Call once per sample, from inside the main processing loop, with the
@@ -107,6 +124,16 @@ public:
         sumLL[0] += static_cast<double>(bl.low) * bl.low;   sumRR[0] += static_cast<double>(br.low) * br.low;   sumLR[0] += static_cast<double>(bl.low) * br.low;
         sumLL[1] += static_cast<double>(bl.mid) * bl.mid;   sumRR[1] += static_cast<double>(br.mid) * br.mid;   sumLR[1] += static_cast<double>(bl.mid) * br.mid;
         sumLL[2] += static_cast<double>(bl.high) * bl.high; sumRR[2] += static_cast<double>(br.high) * br.high; sumLR[2] += static_cast<double>(bl.high) * br.high;
+
+        // §11.2/VXWIDTH_AUDIT.md #2: the same per-band L/R coherence, on the
+        // PROCESSED OUTPUT this time - see this file's header comment for
+        // why the input-only version above can't catch danger this
+        // processing itself introduces.
+        const auto bol = splitterOutL.process(outL);
+        const auto bor = splitterOutR.process(outR);
+        sumLLOut[0] += static_cast<double>(bol.low) * bol.low;   sumRROut[0] += static_cast<double>(bor.low) * bor.low;   sumLROut[0] += static_cast<double>(bol.low) * bor.low;
+        sumLLOut[1] += static_cast<double>(bol.mid) * bol.mid;   sumRROut[1] += static_cast<double>(bor.mid) * bor.mid;   sumLROut[1] += static_cast<double>(bol.mid) * bor.mid;
+        sumLLOut[2] += static_cast<double>(bol.high) * bol.high; sumRROut[2] += static_cast<double>(bor.high) * bor.high; sumLROut[2] += static_cast<double>(bol.high) * bor.high;
 
         // §11.2 "downmix spectral deviation": band-split the MONO DOWNMIX of
         // input vs output, compare per-band energy - catches processing that
@@ -136,14 +163,24 @@ public:
         if (numSamples <= 0)
             return;
 
+        auto bandCorrelationFrom = [](const double sumLLb, const double sumRRb, const double sumLRb) {
+            const double denom = sumLLb * sumRRb;
+            if (denom < 1.0e-12)
+                return 1.0f; // silent/one-sided band: nothing to be unsafe about
+            return juce::jlimit(-1.0f, 1.0f, static_cast<float>(sumLRb / std::sqrt(denom)));
+        };
+        auto hasRealStereoContent = [](const double sumLLb, const double sumRRb) {
+            return sumLLb * sumRRb > 1.0e-12;
+        };
+
         // §11.2 "coherence by perceptual band", on the INPUT (proactive -
-        // matches monoRiskRestraint's own input-only convention).
+        // matches monoRiskRestraint's own input-only convention). Linear
+        // (corr+1)/2 - already restrains moderately-uncorrelated INPUT
+        // material, which is fine here since this only throttles how much
+        // widening gets ADDED to already-risky source material.
         float minBandCorrelation = 1.0f;
         for (int b = 0; b < 3; ++b) {
-            const double denom = sumLL[b] * sumRR[b];
-            if (denom < 1.0e-12)
-                continue;
-            const float corr = juce::jlimit(-1.0f, 1.0f, static_cast<float>(sumLR[b] / std::sqrt(denom)));
+            const float corr = bandCorrelationFrom(sumLL[b], sumRR[b], sumLR[b]);
             const float bandRestraint = juce::jlimit(0.0f, 1.0f, (corr + 1.0f) * 0.5f);
             // Low band weighted: squaring its restraint reads the SAME
             // correlation as more restrictive in the low band specifically
@@ -151,6 +188,38 @@ public:
             // separate mechanism.
             const float weighted = b == 0 ? bandRestraint * bandRestraint : bandRestraint;
             minBandCorrelation = std::min(minBandCorrelation, weighted);
+        }
+
+        // VXWIDTH_AUDIT.md #2: same per-band correlation, on the PROCESSED
+        // OUTPUT - but only for bands where the INPUT already had genuine
+        // two-channel content (both L and R energy present in that band).
+        // Two reasons this gate matters, not just a tuning knob:
+        // (1) Deliberately NOT the same linear (corr+1)/2 mapping as the
+        //     input check above - Width/Double are SUPPOSED to reduce output
+        //     band correlation (that's the effect working as designed), so
+        //     restraining on any output correlation below +1 would fight the
+        //     control itself. Only engages once a band's OUTPUT correlation
+        //     goes clearly anti-phase (knee/full, matching this file's other
+        //     output-aware checks' style e.g. centre-displacement below).
+        // (2) The input-real-content gate specifically distinguishes the
+        //     audit's actual concern - large direct Side gain pushing an
+        //     ALREADY-CORRELATED stereo pair (L=M+kS/R=M-kS) toward -1 - from
+        //     Region C's normal mechanism for a genuinely mono/hard-panned
+        //     source (single-channel input, no real per-band L/R relationship
+        //     to begin with): synthesising width via decorrelation legitimately
+        //     produces narrow anti-phase bands there (comb-filter-like, by
+        //     construction - see VXWidthShellCheck.cpp's [Phase1.1 hard-pan
+        //     stays responsive] test, which exists specifically to protect
+        //     that behaviour), which is not the danger this check targets.
+        constexpr float kOutCorrKnee = -0.2f, kOutCorrFull = -0.7f;
+        float minBandCorrelationOut = 1.0f;
+        for (int b = 0; b < 3; ++b) {
+            if (!hasRealStereoContent(sumLL[b], sumRR[b]))
+                continue;
+            const float corrOut = bandCorrelationFrom(sumLLOut[b], sumRROut[b], sumLROut[b]);
+            const float bandRestraintOut = 1.0f - juce::jlimit(0.0f, 1.0f,
+                (kOutCorrKnee - corrOut) / (kOutCorrKnee - kOutCorrFull));
+            minBandCorrelationOut = std::min(minBandCorrelationOut, bandRestraintOut);
         }
 
         // Spectral deviation: log-ratio of processed vs input band energy,
@@ -198,6 +267,7 @@ public:
 
         const float blockAlpha = std::pow(blockAlphaPerSample, static_cast<float>(std::max(1, numSamples)));
         bandCoherenceRestraint = blockAlpha * bandCoherenceRestraint + (1.0f - blockAlpha) * minBandCorrelation;
+        outputBandCoherenceRestraint = blockAlpha * outputBandCoherenceRestraint + (1.0f - blockAlpha) * minBandCorrelationOut;
         downmixSpectralRestraint = blockAlpha * downmixSpectralRestraint + (1.0f - blockAlpha) * targetSpectralRestraint;
         centreDisplacementRestraint = blockAlpha * centreDisplacementRestraint + (1.0f - blockAlpha) * targetDisplacementRestraint;
         sustainedRiskRestraint = blockAlpha * sustainedRiskRestraint + (1.0f - blockAlpha) * targetSustainedRestraint;
@@ -208,28 +278,34 @@ public:
     // Development visibility - which specific measurement is currently
     // driving the combined restraint, not just the final scalar.
     [[nodiscard]] float bandCoherence() const noexcept { return bandCoherenceRestraint; }
+    [[nodiscard]] float outputBandCoherence() const noexcept { return outputBandCoherenceRestraint; }
     [[nodiscard]] float downmixSpectral() const noexcept { return downmixSpectralRestraint; }
     [[nodiscard]] float centreDisplacement() const noexcept { return centreDisplacementRestraint; }
     [[nodiscard]] float sustainedRisk() const noexcept { return sustainedRiskRestraint; }
 
 private:
     void clearAccumulators() noexcept {
-        for (int b = 0; b < 3; ++b) { sumLL[b] = sumRR[b] = sumLR[b] = 0.0; }
+        for (int b = 0; b < 3; ++b) {
+            sumLL[b] = sumRR[b] = sumLR[b] = 0.0;
+            sumLLOut[b] = sumRROut[b] = sumLROut[b] = 0.0;
+        }
         inMonoLow = inMonoMid = inMonoHigh = 0.0;
         outMonoLow = outMonoMid = outMonoHigh = 0.0;
         inLRms = inRRms = outLRms = outRRms = 0.0;
     }
 
     double sr = 48000.0;
-    ThreeBandSplitter splitterL, splitterR, splitterInMono, splitterOutMono;
+    ThreeBandSplitter splitterL, splitterR, splitterOutL, splitterOutR, splitterInMono, splitterOutMono;
     float blockAlphaPerSample = 0.999999f;
     float bandCoherenceRestraint = 1.0f;
+    float outputBandCoherenceRestraint = 1.0f;
     float downmixSpectralRestraint = 1.0f;
     float centreDisplacementRestraint = 1.0f;
     float sustainedRiskRestraint = 1.0f;
     int negativeCorrelationStreakBlocks = 0;
 
     double sumLL[3] {}, sumRR[3] {}, sumLR[3] {};
+    double sumLLOut[3] {}, sumRROut[3] {}, sumLROut[3] {};
     double inMonoLow = 0.0, inMonoMid = 0.0, inMonoHigh = 0.0;
     double outMonoLow = 0.0, outMonoMid = 0.0, outMonoHigh = 0.0;
     double inLRms = 0.0, inRRms = 0.0, outLRms = 0.0, outRRms = 0.0;

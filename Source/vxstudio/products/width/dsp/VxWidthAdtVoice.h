@@ -227,8 +227,8 @@ public:
 
         const float delayed = delayLine.process(midInput, delaySamples);
 
-        // EXPERIMENTAL micro-pitch stage (off by default - see
-        // setMicroPitchEnabled()). Operates on the ALREADY-delayed signal,
+        // Micro-pitch stage (permanent, always-on - see setMicroPitchEnabled()'s
+        // own comment). Operates on the ALREADY-delayed signal,
         // via an entirely separate mechanism (MicroPitchShifter) from the
         // delay line's own Doppler modulation above - timing and pitch stay
         // conceptually independent, not one masquerading as the other.
@@ -248,25 +248,31 @@ public:
         // derived alpha (not a bare 0.995f constant) so the low/high split
         // sits at the same ~700Hz-ish crossover regardless of sample rate,
         // matching how OnePoleTilt/OnePoleHighpass compute alpha elsewhere
-        // in this product (VxWidthSpectralShaping.h).
+        // in this product (VxWidthSpectralShaping.h). Range scaled by
+        // Tightness (VXWIDTH_AUDIT.md #5 fix, 2026-08-08) - same
+        // juce::jmap(tightness01, ...) shape as gainRangeDb above, so
+        // spectral independence actually grows with looseness like the
+        // header comment always claimed, instead of being a fixed +/-1dB
+        // regardless of Tightness.
+        const float tiltRangeDb = juce::jmap(tightness01, 0.2f, 1.0f);
         const float tiltAlpha = std::exp(-2.0f * juce::MathConstants<float>::pi * kTiltCutoffHz / static_cast<float>(sr));
         tiltLowpassState += (pitchStageOutput - tiltLowpassState) * (1.0f - tiltAlpha);
         const float highPart = pitchStageOutput - tiltLowpassState;
-        const float tiltDb = tiltWalker.process(); // -1..1 -> treated as +/-1dB max
+        const float tiltDb = tiltWalker.process() * tiltRangeDb; // -1..1 -> +/-tiltRangeDb max
         const float tiltGainDelta = (juce::Decibels::decibelsToGain(tiltDb) - 1.0f) * 0.5f;
         const float tilted = pitchStageOutput + highPart * tiltGainDelta;
 
         return tilted * gain;
     }
 
-    // EXPERIMENTAL, developer/test-only - default false, no user-facing
-    // control exposed. Runtime switch (not a compile-time macro): simpler
-    // to build/test across all existing CMake targets without introducing
-    // separate compiled variants, while still fully satisfying "off by
-    // default" and "no production behaviour change" - production code never
-    // calls this, so the production signal path is bit-identical to before
-    // this feature existed (verified by VXWidthShellCheck's disabled-path
-    // regression test, not just assumed).
+    // Permanent, always-on (2026-08-07, graduated from an experimental,
+    // user-facing toggle - see VxWidthProcessor.cpp's setAdtMicroPitchEnabled()
+    // call site, no UI control, no APVTS parameter). Still a runtime switch
+    // rather than a compile-time macro (default false at construction, only
+    // ever flipped true by production's own unconditional call in
+    // prepareSuite()/resetSuite()) - keeps this class's own tests able to
+    // exercise both the enabled and disabled path without separate compiled
+    // variants.
     void setMicroPitchEnabled(const bool b) noexcept { microPitchEnabled = b; }
     [[nodiscard]] bool isMicroPitchEnabled() const noexcept { return microPitchEnabled; }
 
