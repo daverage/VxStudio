@@ -422,50 +422,60 @@ void VXTuneAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce
     const int keyChoice = vxsuite::readChoiceIndex(parameters, kKeyRootParam, 0);
     const int scaleChoice = vxsuite::readChoiceIndex(parameters, kScaleParam, 0);
 
-    if (const auto* sc = getSidechainBuffer();
-        sc != nullptr && sc->getNumChannels() > 0 && sc->getNumSamples() > 0) {
-        const int scSamples = sc->getNumSamples();
-        if (static_cast<int>(sidechainMonoScratch.size()) < scSamples)
-            sidechainMonoScratch.assign(static_cast<size_t>(scSamples), 0.0f);
-        const float* scLeft = sc->getReadPointer(0);
-        if (sc->getNumChannels() > 1) {
-            const float* scRight = sc->getReadPointer(1);
-            for (int i = 0; i < scSamples; ++i)
-                sidechainMonoScratch[static_cast<size_t>(i)] = 0.5f * (scLeft[i] + scRight[i]);
-        } else {
-            std::copy(scLeft, scLeft + scSamples, sidechainMonoScratch.begin());
-        }
-        harmonicContext.process(sidechainMonoScratch.data(), scSamples);
-        updateAutoKeyFromSidechain();
-        // A structurally-connected bus (host negotiated the channels) is not
-        // the same thing as a genuinely wired sidechain send - some hosts
-        // reuse/copy a plugin's bus layout across instances, which can leave
-        // an instance's sidechain bus "connected" with nothing but silence
-        // actually routed into it. Gate the reported active/UI state (and
-        // the auto-key contribution above, via harmonicContext's own
-        // presence gate) on real signal level, matching VXLeveler's
-        // isSidechainSteering()/scConfidence pattern, not bus connectivity
-        // alone - otherwise the badge (and anything a host derives PDC
-        // decisions from) claims "active" on tracks with nothing genuinely
-        // feeding the sidechain.
-        const float presenceCoeff = harmonicContext.presence() > sidechainPresenceSmoothed
-            ? 0.0f   // rise instantly on real signal
-            : 0.995f; // fall slowly so brief gaps don't flicker the badge
-        sidechainPresenceSmoothed = presenceCoeff * sidechainPresenceSmoothed
-            + (1.0f - presenceCoeff) * harmonicContext.presence();
-        sidechainActive = sidechainPresenceSmoothed > 0.12f;
-    } else {
+    const auto* sc = getSidechainBuffer();
+    const bool sidechainConnected = sc != nullptr && sc->getNumChannels() > 0 && sc->getNumSamples() > 0;
+    if (!sidechainConnected) {
         sidechainActive = false;
         sidechainPresenceSmoothed = 0.0f;
     }
 
     // Keep analysis and rendering marching together. Offline hosts may hand us
     // very large blocks; analysing the whole block before rendering would make
-    // the shifter use the final correction value for earlier audio.
+    // the shifter use the final correction value for earlier audio. The
+    // sidechain (key/scale evidence, below) is walked through the same
+    // offset/renderQuantum chunks for the same reason - analysing it as one
+    // big pre-pass would let harmonic content from later in an oversized
+    // offline block inform auto-key decisions for audio earlier in that
+    // same block.
     const int capacity = static_cast<int>(monoScratch.size());
     const int renderQuantum = std::max(1, std::min(capacity, detector.hopSamples()));
     for (int offset = 0; offset < totalSamples; offset += renderQuantum) {
         const int n = std::min(renderQuantum, totalSamples - offset);
+
+        if (sidechainConnected) {
+            // sidechainMonoScratch is sized to `capacity` in prepareSuite() -
+            // n is bounded by capacity by construction, so this never grows
+            // the scratch buffer on the audio thread.
+            jassert(n <= static_cast<int>(sidechainMonoScratch.size()));
+            const int scSamples = std::min(n, static_cast<int>(sidechainMonoScratch.size()));
+            const float* scLeft = sc->getReadPointer(0) + offset;
+            if (sc->getNumChannels() > 1) {
+                const float* scRight = sc->getReadPointer(1) + offset;
+                for (int i = 0; i < scSamples; ++i)
+                    sidechainMonoScratch[static_cast<size_t>(i)] = 0.5f * (scLeft[i] + scRight[i]);
+            } else {
+                std::copy(scLeft, scLeft + scSamples, sidechainMonoScratch.begin());
+            }
+            harmonicContext.process(sidechainMonoScratch.data(), scSamples);
+            updateAutoKeyFromSidechain();
+            // A structurally-connected bus (host negotiated the channels) is
+            // not the same thing as a genuinely wired sidechain send - some
+            // hosts reuse/copy a plugin's bus layout across instances, which
+            // can leave an instance's sidechain bus "connected" with nothing
+            // but silence actually routed into it. Gate the reported
+            // active/UI state (and the auto-key contribution above, via
+            // harmonicContext's own presence gate) on real signal level,
+            // matching VXLeveler's isSidechainSteering()/scConfidence
+            // pattern, not bus connectivity alone - otherwise the badge (and
+            // anything a host derives PDC decisions from) claims "active" on
+            // tracks with nothing genuinely feeding the sidechain.
+            const float presenceCoeff = harmonicContext.presence() > sidechainPresenceSmoothed
+                ? 0.0f   // rise instantly on real signal
+                : 0.995f; // fall slowly so brief gaps don't flicker the badge
+            sidechainPresenceSmoothed = presenceCoeff * sidechainPresenceSmoothed
+                + (1.0f - presenceCoeff) * harmonicContext.presence();
+            sidechainActive = sidechainPresenceSmoothed > 0.12f;
+        }
 
         // Analyse the mono mix of the (pre-shift) input.
         const float* left = buffer.getReadPointer(0) + offset;

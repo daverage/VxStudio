@@ -462,11 +462,12 @@ inline constexpr HelpContent width {
     "VXWidth Help",
     R"(
 <h1>VXWidth</h1>
-<p>Stereo image and doubling processor with four controls: Width, Double, Tightness, and Focus. Narrow a signal toward mono, widen an existing stereo image, or add a synthetic double - all without needing to understand M/S processing, phase, delay, or detuning.</p>
+<p>Stereo image and doubling processor with five controls: Width, Double, Blend, Tightness, and Focus. Narrow a signal toward mono, widen an existing stereo image, or add a synthetic double - all without needing to understand M/S processing, phase, delay, or detuning.</p>
 <h2>How to use it</h2>
 <ul>
 <li>Width sets the size of the stereo image: left of centre narrows toward true mono at -100, right of centre widens the image. Width is the only control that changes the stereo image itself.</li>
 <li>Double introduces a synthetic second performance alongside the original. At 0 there is no added voice.</li>
+<li>Blend controls the balance between the original performance and VXWidth's processed spatial/doubled result. 50% is the normal VXWidth sound; move left for more original signal, or right for a more effect-forward result. Blend only changes how much of that result you hear - it does not change the Width/Double/Tightness/Focus decisions themselves.</li>
 <li>Tightness sets how closely that generated performance follows the original: loose and separate toward 0%, tight and precise toward 100%. Only affects Double - it has no effect on Width, including when Double is off.</li>
 <li>Focus sets where in the spectrum the generated doubled performance concentrates: Body, Full, or Air. Only affects Double's spectral character - it has no effect on Width, including when Double is off.</li>
 </ul>

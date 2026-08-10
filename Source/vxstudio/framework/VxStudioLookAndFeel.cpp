@@ -42,7 +42,21 @@ void SuiteLookAndFeel::drawRotarySlider(juce::Graphics& g,
                                         juce::Slider& slider) {
     auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                          static_cast<float>(width), static_cast<float>(height));
-    const float diameter = std::max(1.0f, std::min(bounds.getWidth(), bounds.getHeight()) - 28.0f);
+    // Layout-responsiveness fix (2026-08): was a FIXED 28px inset
+    // (`min(w,h) - 28.0f`), independent of whatever bounds the slider
+    // component was actually given. That's fine only as long as every
+    // knob stays comfortably above ~28+px, which held under the old
+    // scaled() (host-DPI-only, floor 0.75x) but broke catastrophically
+    // once window-resize scaling (resizeFitScale) was added on top: any
+    // knob whose combined scale pushed its bounds below ~28px collapsed to
+    // `std::max(1.0f, negative-or-tiny)` - a near-invisible dot, not a
+    // small ring - across EVERY product's knobs, not just the one this was
+    // caught on. A proportional inset scales smoothly with whatever bounds
+    // it's given, at any size, and as a side effect makes differently-sized
+    // knobs (e.g. a product's secondary/refinement row) keep a consistent
+    // ring-to-diameter ratio instead of smaller knobs losing proportionally
+    // more of their diameter to a fixed subtraction.
+    const float diameter = std::max(1.0f, std::min(bounds.getWidth(), bounds.getHeight()) * 0.80f);
     bounds = juce::Rectangle<float>(diameter, diameter).withCentre(bounds.getCentre());
     const auto radius = std::min(bounds.getWidth(), bounds.getHeight()) * 0.5f;
     const auto centre = bounds.getCentre();

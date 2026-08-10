@@ -99,10 +99,27 @@ public:
     float getTargetSideMidRatio() const noexcept { return targetSideMidRatioState; }
     float getLimitedSideGainDb() const noexcept { return limitedSideGainDbState; }
     // Test-only: overrides the solver's direct-Side gain ceiling (production
-    // default 12dB, see VxWidthProcessor.cpp) so VXWidthShellCheck's
-    // [gain-limit sweep] can compare 9/12/15dB per the design brief's §18/
-    // §30.2 requirement, without a second production constant to keep in sync.
+    // default 18dB, see kDirectSideGainCeilingDb in VxWidthProcessor.cpp) so
+    // VXWidthShellCheck's [gain-limit sweep] can compare 9/12/15/18dB per
+    // the design brief's §18/§30.2 requirement, without a second production
+    // constant to keep in sync.
     void setDirectSideGainCeilingDbForTesting(const float db) noexcept { directSideGainCeilingDbState = db; }
+    // Test-only: overrides the REQUESTED generated-content Blend
+    // extrapolation ceiling (production default 3.0, see
+    // generatedBlendMaxGainState's comment) so VXWidthShellCheck's [Blend
+    // split-gain measurements] can compare candidate values, without a
+    // second production constant to keep in sync. The actually-applied
+    // gain is this value further limited by available output headroom each
+    // block - see processProduct(). The existing-content ceiling is NOT
+    // exposed for testing - it stays fixed at the conservative, clip-free-
+    // proven value (see existingBlendGain's comment in processProduct()).
+    void setGeneratedBlendMaxGainForTesting(const float gain) noexcept { generatedBlendMaxGainState = gain; }
+    // Test-only: the generated-content Blend gain ACTUALLY applied on the
+    // last processed block, after the headroom solve/smoothing (review
+    // follow-up). Used to confirm the design rule that the headroom
+    // limiter stays inert (applied == requested) at Blend<=50 across normal
+    // material - see [Review fix: headroom limiter inert at Blend<=50].
+    float getGeneratedBlendGainAppliedForTesting() const noexcept { return lastActualGeneratedGainState; }
 
     // Phase 2 UI contract (VX_WIDTH_ENGINE_UPGRADE.md §6-§9) - read-only,
     // never writes back to parameters/DSP state.
@@ -134,6 +151,11 @@ private:
 
     double currentSampleRateHz = 48000.0;
     vxsuite::BlockSmoothedControlQuad controls;
+    // Blend (VXWIDTH_BLEND.md §19): separate from `controls` rather than
+    // extending BlockSmoothedControlQuad to five, since Quad is shared
+    // framework infrastructure used by other products' unrelated four-knob
+    // layouts - Blend is a VX-Width-only fifth control (§1).
+    vxsuite::BlockSmoothedControl blendControl;
     vxsuite::OutputTrimmer outputTrimmer;
     vxsuite::width::InputAnalyser inputAnalyser;
     vxsuite::width::VelvetDecorrelator decorrelatorA;
@@ -217,6 +239,34 @@ private:
     // VxWidthProcessor.cpp for why. Overridable only via the test-only
     // setter above.
     float directSideGainCeilingDbState = 18.0f;
+    // Production default 3.0 - the REQUESTED generated-content Blend
+    // ceiling (VXWIDTH_BLEND.md's review follow-up). The gain actually
+    // applied is this value clamped by smoothedSafeGeneratedGain below, so
+    // 3.0 is only reached when headroom allows it - see processProduct()'s
+    // "headroom-limited generated gain" section for the full mechanism.
+    // Overridable only via the test-only setter above.
+    float generatedBlendMaxGainState = 3.0f;
+    // Block-smoothed cap on the generated-content Blend gain, solved each
+    // block from the actual base+generated decomposition against the
+    // output ceiling (see processProduct()). Starts at a large value so an
+    // unconstrained first block isn't artificially capped; the smoothing
+    // itself (fast attack/slow release) is what prevents zipper artifacts,
+    // not this initial value.
+    float smoothedSafeGeneratedGain = 1000.0f;
+    // Per-block scratch for the headroom solve - resized once in
+    // prepareSuite() to the largest block size seen, never reallocated on
+    // the audio thread after that (§32). Mid/Side domain, pre-kInvSqrt2:
+    // final output = (blendBaseMid ± blendBaseSide) plus g*(blendGenMidUnit
+    // ± blendGenSideUnit), all times kInvSqrt2, where g is the actually-
+    // applied generated gain solved after the main per-sample loop.
+    std::vector<float> blendBaseMidScratch;
+    std::vector<float> blendBaseSideScratch;
+    std::vector<float> blendGenMidUnitScratch;
+    std::vector<float> blendGenSideUnitScratch;
+    // Test-only visibility (review follow-up): the ACTUALLY-APPLIED
+    // generated-content Blend gain from the last processed block, after
+    // the headroom solve/smoothing - see getGeneratedBlendGainAppliedForTesting().
+    float lastActualGeneratedGainState = 1.0f;
 
     // Lag-aware predictability correlation (§11.3, see ContentPredictabilityRestraint's
     // header comment): rolling history of Mid samples so the generated

@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
             name="description"
-            content="VX Studio - 16 focused realtime audio plugins for voice, mix cleanup, tonal shaping, pitch correction, levelling, and chain-aware analysis."
+            content="VX Studio - 17 focused realtime audio plugins for voice, mix cleanup, tonal shaping, pitch correction, levelling, stereo width, and chain-aware analysis."
         />
         <meta
             name="keywords"
@@ -23,11 +23,11 @@
 
         <meta property="og:type" content="website" />
         <meta property="og:title" content="VX Studio — Professional Audio Processing Plugins" />
-        <meta property="og:description" content="16 focused realtime-safe plugins for voice cleanup, tonal shaping, pitch correction, levelling, and chain-aware analysis. VST3 for macOS and Windows." />
+        <meta property="og:description" content="17 focused realtime-safe plugins for voice cleanup, tonal shaping, pitch correction, levelling, stereo width, and chain-aware analysis. VST3 for macOS and Windows." />
         <meta property="og:image" content="assets/images/favicon-512.png" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="VX Studio" />
-        <meta name="twitter:description" content="16 focused realtime-safe audio plugins for voice, mix cleanup, and finishing." />
+        <meta name="twitter:description" content="17 focused realtime-safe audio plugins for voice, mix cleanup, and finishing." />
 
         <link rel="stylesheet" href="assets/css/style.css?v=0.2.4" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -82,7 +82,7 @@
                     Realtime-safe audio tools for decisive cleanup and finish
                     work
                 </p>
-                <h1>16 Focused Plugins. One Shared Studio Workflow.</h1>
+                <h1>17 Focused Plugins. One Shared Studio Workflow.</h1>
                 <p>
                     VX Studio brings cleanup, control, finishing, and analysis
                     into one deliberately compact suite for spoken-word and mix
@@ -104,7 +104,7 @@
                 </div>
                 <div class="hero-stats">
                     <div class="hero-stat">
-                        <strong>16</strong>
+                        <strong>17</strong>
                         <span>focused plugins</span>
                     </div>
                     <div class="hero-stat">
@@ -151,7 +151,7 @@
                     <p class="section-label">The Platform</p>
                     <h2>The Suite</h2>
                     <p>
-                        16 specialized tools for modern voice and mix processing
+                        17 specialized tools for modern voice and mix processing
                     </p>
                 </div>
 
@@ -682,6 +682,40 @@
                             >
                         </div>
                     </div>
+
+                    <!-- Width -->
+                    <div class="product-card" data-color="teal">
+                        <div
+                            class="product-icon"
+                            style="
+                                background: linear-gradient(
+                                    135deg,
+                                    #33c7b8 0%,
+                                    #14524a 100%
+                                );
+                            "
+                        >
+                            ↔
+                        </div>
+                        <h3>Width</h3>
+                        <p>
+                            Stereo image and ADT doubling: narrow a signal
+                            toward mono, widen an existing stereo image, or
+                            add a synthetic double, with a Blend control to
+                            dial the whole effect back toward the original.
+                        </p>
+                        <div class="card-actions">
+                            <a
+                                href="downloads/"
+                                download
+                                class="btn btn-sm btn-primary"
+                                >Download</a
+                            >
+                            <a href="#product-width" class="learn-more"
+                                >Learn More →</a
+                            >
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -872,6 +906,36 @@
                             a separate key-detector plugin and a cross-plugin
                             key broadcast, or ask you to enter the key by
                             hand - VXTune just needs a send.
+                        </p>
+                    </article>
+
+                    <article id="product-width" class="detail-card">
+                        <h3>Width</h3>
+                        <p>
+                            A target-seeking stereo image engine: instead of
+                            applying a fixed widening curve, VXWidth measures
+                            the source's actual current stereo width and
+                            solves for the existing-Side gain needed to reach
+                            the requested target, so a narrow source gets
+                            more expansion than one that's already wide at
+                            the same knob setting. Double adds a synthetic
+                            doubled performance (with an always-on subtle
+                            micro-pitch stage), Tightness controls how
+                            closely that generated performance follows the
+                            original, and Focus places its spectral content
+                            (Body, Full, or Air) - none of those three can
+                            move Width's own output, even when Double is
+                            active. Blend then balances the whole result
+                            against the original signal: 50% is the normal
+                            VXWidth sound, left leans toward the untouched
+                            input, right pushes further in the same
+                            direction the effect already moved it. A
+                            harmonic/transient-aware decorrelation stage and
+                            a full mono/phase-risk guardrail (per-band
+                            coherence, downmix spectral deviation, centre-image
+                            displacement) run underneath throughout, so
+                            widening and doubling stay mono-safe on real
+                            material.
                         </p>
                     </article>
                 </div>
@@ -1169,7 +1233,7 @@
                         Download VX Studio
                     </a>
                     <p class="download-note">
-                        16 plugins • Latest regression pass complete • Open
+                        17 plugins • Latest regression pass complete • Open
                         source
                     </p>
                 </div>
@@ -1300,7 +1364,7 @@
                             Professional audio processing plugins for realtime
                             production.
                         </p>
-                        <p class="footer-version">v1.0.5 • 16 Plugins</p>
+                        <p class="footer-version">v1.1.0 • 17 Plugins</p>
                     </div>
                     <div class="footer-section">
                         <h4>Resources</h4>

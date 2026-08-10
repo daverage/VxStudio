@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 
 namespace {
@@ -16,6 +17,7 @@ constexpr std::string_view kWidthParam      = "width";
 constexpr std::string_view kDoubleParam     = "double";
 constexpr std::string_view kTightnessParam  = "tightness";
 constexpr std::string_view kFocusParam      = "focus";
+constexpr std::string_view kBlendParam      = "blend";
 
 // Region A (narrow, Width -100..0): SideOut = SideIn * sideScale, 1 at 0, 0 at -100.
 // Perceptually smooth curve per spec §7.1 rather than a raw linear map.
@@ -108,6 +110,13 @@ float targetRatioForWidth(const float width01) noexcept {
 // issue this measurement couldn't catch.
 constexpr float kDirectSideGainCeilingDb = 18.0f;
 constexpr float kR0Epsilon = 1.0e-4f;
+// Shared with outputTrimmer.setCeiling() in prepareSuite() - the
+// headroom-limited generated-Blend-gain solve (VXWIDTH_BLEND.md review
+// follow-up, see processProduct()) targets the SAME technical ceiling the
+// final safety net uses, so the trimmer only ever has to catch genuine
+// surprises (transients, other controls' interactions), not Blend's own
+// predictable extrapolation.
+constexpr float kOutputHeadroomCeiling = 0.98f;
 
 // Asymmetric block-rate smoothing for the solver-driven direct-Side gain
 // (§12): a distinct time constant from InputAnalyser's ~450ms width-estimate
@@ -203,14 +212,22 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.secondaryParamId = kDoubleParam;
     id.tertiaryParamId  = kTightnessParam;
     id.quaternaryParamId = kFocusParam;
+    // Fifth headline knob (docs/Task Based/VXWIDTH_BLEND.md) - an explicit,
+    // documented exception to the framework's normal four-control ceiling
+    // (see ProductIdentity::quinaryParamId's comment). Deliberately no
+    // "requires expert"/vocal-mode gating: Blend is a primary sound
+    // decision (spec §1), always visible alongside Width/Double.
+    id.quinaryParamId   = kBlendParam;
     id.primaryLabel      = "Width";
     id.secondaryLabel    = "Double";
     id.tertiaryLabel     = "Tightness";
     id.quaternaryLabel   = "Focus";
+    id.quinaryLabel      = "Blend";
     id.primaryHint    = "Stereo image size: left narrows toward mono, right widens the image.";
     id.secondaryHint  = "Introduces a synthetic doubled performance alongside the original.";
     id.tertiaryHint   = "How closely the generated performance follows the original - loose and separate toward 0%, tight and precise toward 100%.";
     id.quaternaryHint = "Where in the spectrum the doubling effect concentrates - body, full range, or air.";
+    id.quinaryHint    = "Balance between the original performance and VX's processed spatial/doubled result. 50% is the normal VX sound; left is more original, right is more effect-forward.";
     id.dspVersion    = vxsuite::versions::plugins::width;
     id.helpTitle     = vxsuite::help::width.title;
     id.helpHtml      = vxsuite::help::width.html;
@@ -232,6 +249,11 @@ vxsuite::ProductIdentity VXWidthAudioProcessor::makeIdentity() {
     id.tertiaryDefaultValue  = 0.60f;
     // Focus: 0..100, default 55 (spec §4.4).
     id.quaternaryDefaultValue = 0.55f;
+    // Blend: 0..100, default 50 (VXWIDTH_BLEND.md §3) - centre detent at 50
+    // is the normal/current VX sound; old presets without this parameter
+    // load at 0.5f automatically (JUCE APVTS default-value behaviour, no
+    // migration code needed - see §27).
+    id.quinaryDefaultValue = 0.5f;
     id.theme.accentRgb     = { 0.20f, 0.78f, 0.72f };
     id.theme.accent2Rgb    = { 0.05f, 0.13f, 0.12f };
     id.theme.backgroundRgb = { 0.04f, 0.07f, 0.07f };
@@ -314,12 +336,22 @@ std::optional<vxsuite::SpatialWidthTelemetry> VXWidthAudioProcessor::getSpatialW
 }
 
 juce::String VXWidthAudioProcessor::getStatusText() const {
-    return "Stereo image and doubling - narrow, widen, or double a signal with four musical controls";
+    return "Stereo image and doubling - narrow, widen, double, and blend a signal";
 }
 
-void VXWidthAudioProcessor::prepareSuite(const double sampleRate, const int /*samplesPerBlock*/) {
+void VXWidthAudioProcessor::prepareSuite(const double sampleRate, const int samplesPerBlock) {
     currentSampleRateHz = sampleRate > 1000.0 ? sampleRate : 48000.0;
-    outputTrimmer.setCeiling(0.98f);
+    // Headroom-limited generated-Blend-gain scratch (VXWIDTH_BLEND.md review
+    // follow-up) - sized here, ONLY here, to the host's declared
+    // samplesPerBlock, so processProduct() never allocates on the audio
+    // thread (§32, no exceptions - see the jassert there instead of a
+    // runtime resize).
+    const size_t scratchSize = static_cast<size_t>(std::max(samplesPerBlock, 256));
+    blendBaseMidScratch.assign(scratchSize, 0.0f);
+    blendBaseSideScratch.assign(scratchSize, 0.0f);
+    blendGenMidUnitScratch.assign(scratchSize, 0.0f);
+    blendGenSideUnitScratch.assign(scratchSize, 0.0f);
+    outputTrimmer.setCeiling(kOutputHeadroomCeiling);
     outputTrimmer.setReleaseSeconds(0.12f);
     inputAnalyser.prepare(currentSampleRateHz);
     decorrelatorA.prepare(currentSampleRateHz, kDecorrelatorWindowMs, vxsuite::width::kDecorrelatorTapsA);
@@ -381,6 +413,7 @@ void VXWidthAudioProcessor::prepareSuite(const double sampleRate, const int /*sa
 }
 
 void VXWidthAudioProcessor::resetSuite() {
+    smoothedSafeGeneratedGain = 1000.0f;
     outputTrimmer.reset();
     inputAnalyser.reset();
     decorrelatorA.reset();
@@ -426,7 +459,9 @@ void VXWidthAudioProcessor::resetSuite() {
     const float doubleAmt = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     const float tightness = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.60f);
     const float focus     = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.55f);
+    const float blend     = vxsuite::readNormalized(parameters, productIdentity.quinaryParamId,    0.5f);
     controls.reset(width, doubleAmt, tightness, focus);
+    blendControl.reset(blend);
 }
 
 void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -436,16 +471,33 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     const int numChannels = buffer.getNumChannels();
     if (numSamples <= 0)
         return;
+    // §32: no audio-thread allocations, full stop - not even a defensive/
+    // exceptional-path one. prepareSuite() sizes the Blend scratch buffers
+    // to the host's declared samplesPerBlock, and the VST3/AU/AAX contract
+    // (enforced by JUCE's wrapper layer, not just convention) is that a
+    // host must call prepareToPlay() again before it may send a larger
+    // block than it originally declared - so numSamples here is bounded by
+    // construction, not by a runtime check. A prior version of this code
+    // had a `.assign()` fallback for this "should never happen" case, which
+    // was itself a possible audio-thread allocation - removed per review;
+    // trust the same contract every other per-block scratch buffer in this
+    // file (e.g. midHistory) already relies on without re-checking.
+    jassert(static_cast<size_t>(numSamples) <= blendBaseMidScratch.size());
 
     const float widthTarget  = vxsuite::readNormalized(parameters, productIdentity.primaryParamId,   0.5f);
     const float doubleTarget = vxsuite::readNormalized(parameters, productIdentity.secondaryParamId, 0.0f);
     const float tightTarget  = vxsuite::readNormalized(parameters, productIdentity.tertiaryParamId,  0.60f);
     const float focusTarget  = vxsuite::readNormalized(parameters, productIdentity.quaternaryParamId, 0.55f);
+    const float blendTarget  = vxsuite::readNormalized(parameters, productIdentity.quinaryParamId,    0.5f);
 
     const auto smoothed = controls.process(
         widthTarget, doubleTarget, tightTarget, focusTarget,
         currentSampleRateHz, numSamples,
         0.040f, 0.060f, 0.060f, 0.060f);
+    // §19: same smoothing time as Double/Tightness/Focus - no special-case
+    // discontinuity at the centre detent, block-smoothed like every other
+    // control here.
+    const float blend01 = blendControl.process(blendTarget, currentSampleRateHz, numSamples, 0.060f);
 
     // §15: defensive only - `isBusesLayoutSupported` always requires a
     // stereo output bus, so the host-provided buffer should never have
@@ -761,6 +813,70 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
     double sumInMidSq = 0.0, sumInSideSq = 0.0; // target-seeking engine instrumentation: R0 = sideRms/midRms of the raw input
     double sumDoubleMidSq = 0.0, sumDoubleSideSq = 0.0; // §22: DoubleMid/DoubleSide RMS telemetry
     const float compGain = loudnessCompensator.currentGain();
+    // VXWIDTH_BLEND.md §7-§12: output = dry + gain*(processed-dry), per M/S
+    // component. Chosen over literal Candidate A (§10, "Blend 100 =
+    // effectDelta") after that formula was found to violate the hard §20
+    // invariant: whenever processed==dry (no VX effect exists, e.g.
+    // Width=0/Double=0), delta=0, so "output=delta" collapses to SILENCE at
+    // Blend>50, not to the required "reproduce the original input" - see
+    // the failing [§20] shell-check test this replaced. Extrapolating
+    // instead of substituting fixes this structurally: when delta=0,
+    // output=dry+gain*0=dry at every Blend position, not just at Blend=0.
+    // gain(0)=0 (§8: Blend0=dry), gain(0.5)=1 exactly (§2/§22: Blend50=
+    // NORMAL_VX, now algebraically exact, not just close), gain(1)=one of
+    // the two ceilings below (§9-§12: Blend100 is MORE effect-forward than
+    // Blend50 by extrapolating the same direction of change rather than
+    // inventing a separate "effect-only" signal). This is this document's
+    // own "if neither candidate is ideal, derive a third simple endpoint
+    // based on the evidence" (§11).
+    //
+    // A SINGLE such gain scalar (review follow-up) was tried first and
+    // found to force an impossible tradeoff: large enough to be
+    // audible at moderate Width/Double settings, or safe at the extreme
+    // corner (Width AND Double both near max) - because it was doing two
+    // unrelated jobs at once: amplifying newly GENERATED effect content
+    // (headroom-cheap - starts at 0, no dry component to invert) and
+    // extrapolating the EXISTING-signal modification (headroom-expensive -
+    // it's scaling the already-present original image/level). Split into
+    // two independently tunable ceilings so generated content can run
+    // hotter without the existing-content term (the one that caused the
+    // extreme-corner peak overshoot AND the polarity-inversion bug below)
+    // needing to match it.
+    constexpr float kExistingContentMaxGain = 2.0f; // conservative: proven clip-free at Width=Double=100, Blend=100 (measured peak 0.86-0.99 across fixtures)
+    // Production default 2.5 (generatedBlendMaxGainState's own default) -
+    // candidate under test; see [Blend split-gain measurements] diagnostic,
+    // which compares 2.0/2.5/3.0 via setGeneratedBlendMaxGainForTesting().
+    auto blendGainFor = [blend01](const float maxGain) noexcept {
+        return blend01 <= 0.5f
+            ? blend01 * 2.0f
+            : 1.0f + (blend01 - 0.5f) * 2.0f * (maxGain - 1.0f);
+    };
+    const float existingBlendGain = blendGainFor(kExistingContentMaxGain);
+    // REQUESTED, not yet headroom-limited - see the two-pass headroom solve
+    // after the sample loop below for why this can't be applied directly.
+    const float requestedGeneratedBlendGain = blendGainFor(generatedBlendMaxGainState);
+    // Fix for a real bug found in review (VXWIDTH_BLEND.md §10's
+    // implementation note): a single uniform gain applied to the whole L/R
+    // delta extrapolates the EXISTING-Side term (sideOriginal*sideScale*
+    // sideGain - Width's direct narrowing/widening of the original image)
+    // right along with everything else. That term can legitimately reach 0
+    // at NORMAL_VX (Width=-100 collapses sideScale to 0 - full mono), and
+    // extrapolating an already-zero destination FURTHER in the same
+    // direction (coefficient 1 -> 0 -> negative as gain sweeps 0->1->2)
+    // inverts the original Side's polarity - audibly, L/R swap toward
+    // Blend 100 on narrowed material, not "more effect". Generated content
+    // (decorrelated Width + ADT Double) has no such risk: it starts at
+    // dry=0 and only grows in magnitude as its gain rises, never crossing
+    // through an existing signal's zero point - so it uses the (higher,
+    // uncapped-at-zero) requestedGeneratedBlendGain instead. Fix: clamp ONLY the
+    // existing-Side coefficient at 0 (never past it); existing-Mid's own
+    // coefficient (driven by compGain, a gain factor that's always >= 0, so
+    // it has the same latent risk in principle) is clamped identically for
+    // consistency, negligible extra cost.
+    const float existingSideMultiplier = sideScale * sideGain;
+    const float existingSideBlendGain = juce::jmax(
+        1.0f + existingBlendGain * (existingSideMultiplier * compGain - 1.0f), 0.0f);
+    const float midOwnBlendGain = juce::jmax(1.0f + existingBlendGain * (compGain - 1.0f), 0.0f);
     const float predictabilityRestraintWidth = contentPredictabilityRestraintWidth.currentRestraint();
     const float predictabilityRestraintDouble = contentPredictabilityRestraintDouble.currentRestraint();
     const int midHistorySize = static_cast<int>(midHistory.size());
@@ -910,12 +1026,44 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         side += generatedSide;
         const float midOut = mid + doubleMid * doubleMidAmount;
 
-        const float outL = (midOut + side) * kInvSqrt2 * compGain;
-        const float outR = (midOut - side) * kInvSqrt2 * compGain;
-        left[i]  = outL;
-        right[i] = outR;
-        outEnergySum += static_cast<double>(outL) * outL + static_cast<double>(outR) * outR;
-        const double outMono = static_cast<double>(outL) + outR;
+        // VXWIDTH_BLEND.md §6/§26: NORMAL_VX is exactly the pre-Blend
+        // output this whole file always produced (midOut/side unchanged by
+        // Blend, compGain unchanged by Blend - see the loudness-compensator
+        // comment above kDirectSideGainCeilingDb/compGain for why compGain
+        // itself must stay a function of this signal alone). Every
+        // guardrail/telemetry/loudness-feedback accumulator below keeps
+        // reading FROM THIS, not from the final Blended left[i]/right[i] -
+        // Blend is a presentation layer bolted on after all DSP decisions
+        // and safety measurement, never an input to them (§5/§25).
+        const float normalOutL = (midOut + side) * kInvSqrt2 * compGain;
+        const float normalOutR = (midOut - side) * kInvSqrt2 * compGain;
+        // §7-12: dry + gain*(processed-dry), computed per M/S component
+        // rather than as one uniform L/R delta, using the two ceilings
+        // split above: existing original content stays on the conservative
+        // existingBlendGain/existingSideBlendGain (clamped at 0 - never
+        // inverts polarity, never grows past what proved clip-free);
+        // GENERATED content (Double's own Mid contribution here, and
+        // Width's decorrelated + Double's ADT content in generatedSide
+        // below) uses the higher generatedBlendGain - it has no dry
+        // component to invert or existing level to overshoot from, so it
+        // can run hotter for a more audible Blend 50->100 without the
+        // extreme-corner peak risk a single shared ceiling created.
+        //
+        // The actual generated gain isn't known yet at this point in the
+        // loop (VXWIDTH_BLEND.md review follow-up: it depends on a
+        // headroom solve over the WHOLE block, done after this loop ends -
+        // see the two-pass split below). So store the base (existing-only)
+        // and per-unit generated contributions here; the final output is
+        // assembled in the second pass once the safe gain is known. This
+        // never re-runs any stateful DSP (decorrelators/ADT voices/filters/
+        // orthogonalizers all already ran, above, exactly once) - it's pure
+        // arithmetic on already-computed values.
+        blendBaseMidScratch[static_cast<size_t>(i)] = mid * midOwnBlendGain;
+        blendBaseSideScratch[static_cast<size_t>(i)] = sideOriginal * existingSideBlendGain;
+        blendGenMidUnitScratch[static_cast<size_t>(i)] = doubleMid * doubleMidAmount * compGain;
+        blendGenSideUnitScratch[static_cast<size_t>(i)] = generatedSide * compGain;
+        outEnergySum += static_cast<double>(normalOutL) * normalOutL + static_cast<double>(normalOutR) * normalOutR;
+        const double outMono = static_cast<double>(normalOutL) + normalOutR;
         outMonoSumSquared += outMono * outMono;
         sumOutMidSq += outMono * outMono;
         // §17 telemetry: Width-only Side energy (dry Region A/B + Width's
@@ -953,6 +1101,87 @@ void VXWidthAudioProcessor::processProduct(juce::AudioBuffer<float>& buffer, juc
         const float doubleOnlyOutL = (doubleOnlyMidOut + generatedSideDouble) * kInvSqrt2;
         const float doubleOnlyOutR = (doubleOnlyMidOut - generatedSideDouble) * kInvSqrt2;
         phaseRiskGuardrailDouble.accumulateSample(l, r, doubleOnlyOutL, doubleOnlyOutR);
+    }
+
+    // VXWIDTH_BLEND.md review follow-up: solve the largest generated-Blend
+    // gain (up to requestedGeneratedBlendGain) that keeps every sample this
+    // block within kOutputHeadroomCeiling, given the actual base+generated
+    // decomposition just computed - not merely 1/normalVxPeak, since the
+    // final output is base (existing content) PLUS gain*generated, and the
+    // two can partially cancel or reinforce depending on their relative
+    // sign per sample. This is a hard technical headroom constraint only -
+    // it never looks at loudness/correlation/"does this sound tasteful",
+    // just "does this specific arithmetic combination stay under the
+    // ceiling" - so it's not a musical guardrail, and it never touches
+    // Width/Double/Tightness/Focus/ADT geometry (only how far Blend's own
+    // presentation layer is allowed to extrapolate).
+    //
+    // PRECISE GUARANTEE (review follow-up - do not overstate this): this
+    // solve ensures GENERATED-CONTENT EXTRAPOLATION is never the cause of
+    // exceeding the ceiling, PROVIDED base is itself already within it. It
+    // cannot rescue a sample where |base| alone already exceeds ceiling
+    // (sampleLimit's own math only clamps g toward 0 in that case, not
+    // negative - see below) - that remains a pre-existing overload
+    // independent of Blend, and OutputTrimmer's responsibility, same as it
+    // always was. This is NOT a claim that "Blend guarantees output never
+    // exceeds the ceiling" in general.
+    float rawSafeGeneratedGain = requestedGeneratedBlendGain;
+    for (int i = 0; i < numSamples; ++i) {
+        const size_t idx = static_cast<size_t>(i);
+        const float baseMid = blendBaseMidScratch[idx];
+        const float baseSide = blendBaseSideScratch[idx];
+        const float genMidUnit = blendGenMidUnitScratch[idx];
+        const float genSideUnit = blendGenSideUnitScratch[idx];
+        const float baseL = (baseMid + baseSide) * kInvSqrt2;
+        const float baseR = (baseMid - baseSide) * kInvSqrt2;
+        const float genL = (genMidUnit + genSideUnit) * kInvSqrt2;
+        const float genR = (genMidUnit - genSideUnit) * kInvSqrt2;
+        // Largest g >= 0 with |base + g*gen| <= ceiling. When |base| is
+        // already within ceiling (the normal case - see the PRECISE
+        // GUARANTEE comment above), g=0 is always valid and this reduces
+        // to checking g_limit on gen's own sign. When |base| ALREADY
+        // exceeds ceiling on its own (a pre-existing overload independent
+        // of Blend, e.g. from another control's own headroom use), the
+        // formula below can compute a negative g_limit - the final
+        // juce::jmax(0.0f, rawSafeGeneratedGain) after this loop clamps
+        // that to 0 (zero out generated content entirely, don't make the
+        // pre-existing overload worse) rather than letting it drive
+        // rawSafeGeneratedGain further negative. It does NOT fix the
+        // pre-existing overload itself - that stays OutputTrimmer's job.
+        auto sampleLimit = [](const float base, const float gen) noexcept {
+            if (gen > 1.0e-9f)
+                return (kOutputHeadroomCeiling - base) / gen;
+            if (gen < -1.0e-9f)
+                return (-kOutputHeadroomCeiling - base) / gen;
+            return std::numeric_limits<float>::infinity();
+        };
+        rawSafeGeneratedGain = std::min(rawSafeGeneratedGain, sampleLimit(baseL, genL));
+        rawSafeGeneratedGain = std::min(rawSafeGeneratedGain, sampleLimit(baseR, genR));
+    }
+    rawSafeGeneratedGain = juce::jmax(0.0f, rawSafeGeneratedGain);
+    // Instant snap when headroom shrinks (rawSafeGeneratedGain is the EXACT
+    // solve for THIS block's own base+generated decomposition - applying
+    // anything less than a full, immediate snap here would mean using a
+    // gain looser than what this block's own data proves is safe, which is
+    // exactly the "reactive/lagged" overshoot bug OutputTrimmer's own
+    // within-block gain ramp has - see its comment. Zero lag is required
+    // for the hard-ceiling guarantee to actually hold every block, not just
+    // in the steady state. Slow, smoothed recovery when headroom returns,
+    // to avoid audibly pumping Blend's emphasis up and down block-to-block
+    // on transient material - this direction has no correctness requirement,
+    // only a taste one.
+    smoothedSafeGeneratedGain = rawSafeGeneratedGain < smoothedSafeGeneratedGain
+        ? rawSafeGeneratedGain
+        : vxsuite::smoothBlockValue(smoothedSafeGeneratedGain, rawSafeGeneratedGain,
+              currentSampleRateHz, numSamples, 0.30f);
+    const float actualGeneratedGain = juce::jmin(requestedGeneratedBlendGain, smoothedSafeGeneratedGain);
+    lastActualGeneratedGainState = actualGeneratedGain;
+    for (int i = 0; i < numSamples; ++i) {
+        const size_t idx = static_cast<size_t>(i);
+        const float blendedMid = blendBaseMidScratch[idx] + actualGeneratedGain * blendGenMidUnitScratch[idx];
+        const float blendedSide = blendBaseSideScratch[idx] + actualGeneratedGain * blendGenSideUnitScratch[idx];
+        left[i]  = (blendedMid + blendedSide) * kInvSqrt2;
+        right[i] = (blendedMid - blendedSide) * kInvSqrt2;
     }
 
     // §12: bounded, slow makeup gain for the NEXT block - see

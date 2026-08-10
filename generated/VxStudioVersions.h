@@ -23,7 +23,7 @@ inline constexpr std::string_view rebalance = "0.2.2";
 inline constexpr std::string_view analyser = "0.2.1";
 inline constexpr std::string_view repair   = "0.1.1";
 inline constexpr std::string_view tune     = "0.1.1";
-inline constexpr std::string_view width    = "0.1.0";
+inline constexpr std::string_view width    = "1.0.0";
 } // namespace plugins
 
 } // namespace vxsuite::versions

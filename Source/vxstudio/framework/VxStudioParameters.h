@@ -264,6 +264,14 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createSimpleParameter
             identity.quaternaryDefaultValue,
             quaternaryAttrs));
     }
+    if (identity.supportsQuinaryControl()) {
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { identity.quinaryParamId.data(), 1 },
+            toJuceString(identity.quinaryLabel),
+            juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
+            identity.quinaryDefaultValue,
+            makePercentFloatAttributes()));
+    }
     return layout;
 }
 

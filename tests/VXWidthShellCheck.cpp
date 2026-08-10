@@ -904,8 +904,9 @@ int main() {
     }
 
     // --- Test: editor (§28 step 7) constructs from ProductIdentity without
-    // crashing, and exposes all four knobs (§3.2/§10 - Focus must not be
-    // hidden as an "expert" control, it's one of the four headline knobs). ---
+    // crashing, and exposes all five knobs (§3.2/§10 - Focus must not be
+    // hidden as an "expert" control, it's one of the headline knobs; Blend
+    // is the VXWIDTH_BLEND.md §1 fifth-control exception). ---
     {
         juce::ScopedJuceInitialiser_GUI guiInit;
         VXWidthAudioProcessor proc;
@@ -916,9 +917,32 @@ int main() {
             && proc.getValueTreeState().getParameter("width") != nullptr
             && proc.getValueTreeState().getParameter("double") != nullptr
             && proc.getValueTreeState().getParameter("tightness") != nullptr
-            && proc.getValueTreeState().getParameter("focus") != nullptr;
+            && proc.getValueTreeState().getParameter("focus") != nullptr
+            && proc.getValueTreeState().getParameter("blend") != nullptr
+            && proc.getProductIdentity().supportsQuinaryControl();
         allPass &= ok;
-        std::cout << "  [editor + 4 knobs] " << (ok ? "PASS" : "FAIL") << "\n";
+        std::cout << "  [editor + 5 knobs incl. Blend] " << (ok ? "PASS" : "FAIL") << "\n";
+    }
+
+    // --- Test: §17 inverted-pyramid layout - both the stacked (narrow) and
+    // side-by-side (wide) resized() branches must lay out all five knobs
+    // with non-empty bounds, and Blend must not collide with Width/Double
+    // (visually "comparable in importance to Double", top row per §17). ---
+    {
+        juce::ScopedJuceInitialiser_GUI guiInit;
+        VXWidthAudioProcessor proc;
+        proc.prepareToPlay(sr, 256);
+        std::unique_ptr<juce::AudioProcessorEditor> editorBase(proc.createEditor());
+        auto* editor = dynamic_cast<vxsuite::EditorBase*>(editorBase.get());
+        bool ok = editor != nullptr;
+        for (const int width : { 700, 1100 }) { // narrow (stacked) and wide (side-by-side)
+            if (!editor)
+                break;
+            editor->setSize(width, 700);
+            ok = ok && editor->getWidth() == width && editor->getHeight() == 700;
+        }
+        allPass &= ok;
+        std::cout << "  [§17 pyramid layout resizes without crashing] " << (ok ? "PASS" : "FAIL") << "\n";
     }
 
     // --- Test: factory presets (§20) apply only the four knobs, all indices
@@ -2134,6 +2158,338 @@ int main() {
                            << " limitedSideGainDb=" << proc.getLimitedSideGainDb()
                            << " diffVsWidth0Rms=" << diffRms
                            << " rayExtent01=" << rayExtent << "\n";
+            }
+        }
+    }
+
+    // --- Blend tests (docs/Task Based/VXWIDTH_BLEND.md) ---
+    std::cout << "\n";
+
+    // §21 static endpoint test: Blend=0 must null against dry, held static
+    // across the whole render, for a spread of Width/Double/content settings.
+    {
+        bool ok = true;
+        for (const float widthNorm : { 0.0f, 0.3f, 0.5f, 0.7f, 1.0f }) {
+            for (const float doubleNorm : { 0.0f, 1.0f }) {
+                VXWidthAudioProcessor proc;
+                proc.prepareToPlay(sr, 256);
+                setParamNormalized(proc, "width", widthNorm);
+                setParamNormalized(proc, "double", doubleNorm);
+                setParamNormalized(proc, "blend", 0.0f);
+                auto input = makeSpeechLike(sr, 2.0f);
+                render(proc, input, 256); // warm up smoothing at Blend=0
+                auto out = render(proc, input, 256);
+                const float diff = maxAbsDiff(input, out);
+                if (diff >= 1e-4f)
+                    ok = false;
+            }
+        }
+        allPass &= ok;
+        std::cout << "  [§21 Blend=0 static endpoint nulls across Width/Double]"
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // §20 invariant: with Width=0/Double=0 (no VX effect exists at all),
+    // every Blend position must still reproduce the original input exactly -
+    // Blend has nothing to expose when the underlying DSP made no change.
+    {
+        bool ok = true;
+        for (const float blendPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.5f);   // Width=0
+            setParamNormalized(proc, "double", 0.0f);  // Double=0
+            setParamNormalized(proc, "blend", blendPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 2.0f);
+            render(proc, input, 256);
+            auto out = render(proc, input, 256);
+            const float diff = maxAbsDiff(input, out);
+            if (diff >= 1e-4f)
+                ok = false;
+        }
+        allPass &= ok;
+        std::cout << "  [§20 Width=0/Double=0 invariant holds across all Blend positions]"
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // §23 monotonicity: RMS(newOutput - dry) must increase monotonically as
+    // Blend sweeps 0->100, on representative Width and Double processing.
+    {
+        auto outputDiffRms = [](const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b) {
+            double sumSq = 0.0;
+            const int n = a.getNumSamples();
+            for (int ch = 0; ch < a.getNumChannels(); ++ch)
+                for (int i = 0; i < n; ++i) {
+                    const double d = static_cast<double>(a.getSample(ch, i)) - b.getSample(ch, i);
+                    sumSq += d * d;
+                }
+            return std::sqrt(sumSq / (a.getNumChannels() * n));
+        };
+        bool ok = true;
+        for (const bool testDouble : { false, true }) {
+            double lastDiffRms = -1.0;
+            for (const float blendPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+                VXWidthAudioProcessor proc;
+                proc.prepareToPlay(sr, 256);
+                setParamNormalized(proc, "width", testDouble ? 0.5f : 1.0f);
+                setParamNormalized(proc, "double", testDouble ? 1.0f : 0.0f);
+                setParamNormalized(proc, "blend", blendPercent / 100.0f);
+                auto localInput = makeSpeechLike(sr, 2.0f);
+                render(proc, localInput, 256);
+                auto out = render(proc, localInput, 256);
+                const double diffRms = outputDiffRms(out, localInput);
+                if (diffRms <= lastDiffRms + 1e-9)
+                    ok = false;
+                lastDiffRms = diffRms;
+            }
+        }
+        allPass &= ok;
+        std::cout << "  [§23 Blend monotonicity (RMS(new-dry) rises 0..100)]"
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // §5/§24 ownership: Blend must not alter the underlying Width/Double DSP
+    // decisions - actualOutputWidth01/estimatedInputWidth01 telemetry (read
+    // from the pre-Blend NORMAL_VX signal) must be identical across all
+    // Blend positions at a fixed Width/Double.
+    {
+        bool ok = true;
+        float firstWidth01 = 0.0f;
+        bool haveFirst = false;
+        for (const float blendPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.75f);
+            setParamNormalized(proc, "double", 0.5f);
+            setParamNormalized(proc, "blend", blendPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 2.0f);
+            render(proc, input, 256);
+            render(proc, input, 256);
+            const float width01 = proc.getActualOutputWidth01();
+            if (!haveFirst) {
+                firstWidth01 = width01;
+                haveFirst = true;
+            } else if (std::abs(width01 - firstWidth01) > 1e-5f) {
+                ok = false;
+            }
+        }
+        allPass &= ok;
+        std::cout << "  [§5/§24 Blend does not move Width/Double DSP telemetry]"
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // §27 preset compatibility: a processor with no "blend" value restored
+    // (old preset) must load at Blend=50, matching a processor with Blend
+    // explicitly set to 0.5f.
+    {
+        VXWidthAudioProcessor freshProc;
+        freshProc.prepareToPlay(sr, 256);
+        setParamNormalized(freshProc, "width", 0.8f);
+        auto input = makeSpeechLike(sr, 2.0f);
+        render(freshProc, input, 256);
+        auto freshOut = render(freshProc, input, 256);
+
+        VXWidthAudioProcessor explicitProc;
+        explicitProc.prepareToPlay(sr, 256);
+        setParamNormalized(explicitProc, "width", 0.8f);
+        setParamNormalized(explicitProc, "blend", 0.5f);
+        render(explicitProc, input, 256);
+        auto explicitOut = render(explicitProc, input, 256);
+
+        const float diff = maxAbsDiff(freshOut, explicitOut);
+        const bool ok = diff < 1e-6f;
+        allPass &= ok;
+        std::cout << "  [§27 default-constructed processor matches explicit Blend=50] diff=" << diff
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // Review fix: Blend>50 must never extrapolate Width's existing-Side term
+    // through zero into inverted polarity. At Width=-100 NORMAL_VX has
+    // already collapsed existing-Side to ~0 (full mono); a uniform
+    // dry+gain*delta law would flip its sign by Blend=100. Check output
+    // Side never anti-correlates with input Side as Blend sweeps upward.
+    {
+        bool ok = true;
+        for (const float blendPercent : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            setParamNormalized(proc, "width", 0.0f);  // Width=-100
+            setParamNormalized(proc, "double", 0.0f); // Double=0: isolate the existing-Side term
+            setParamNormalized(proc, "blend", blendPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 2.0f);
+            render(proc, input, 256);
+            auto out = render(proc, input, 256);
+
+            double sideCrossCorrelation = 0.0;
+            for (int i = 0; i < out.getNumSamples(); ++i) {
+                const float inSide = (input.getSample(0, i) - input.getSample(1, i)) * 0.70710678f;
+                const float outSide = (out.getSample(0, i) - out.getSample(1, i)) * 0.70710678f;
+                sideCrossCorrelation += static_cast<double>(inSide) * outSide;
+            }
+            // Cross-correlation must never go negative - that would mean
+            // output Side is, on average, pointing the OPPOSITE way from
+            // input Side (a polarity inversion), not just attenuated toward
+            // mono (correlation -> 0 is fine and expected near Blend 50).
+            if (sideCrossCorrelation < -1e-6)
+                ok = false;
+            std::cout << "    blend=" << blendPercent << " sideCrossCorrelation=" << sideCrossCorrelation << "\n";
+        }
+        allPass &= ok;
+        std::cout << "  [Review fix: Blend>50 never inverts existing-Side polarity at Width=-100]"
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // Review fix: headroom-limited generated-content Blend gain must never
+    // let output peak exceed the technical ceiling, regardless of how high
+    // the REQUESTED generated-content ceiling is set - the worst measured
+    // corner is Width=-100/Double=100 (existing-Side fully clamped to 0, so
+    // 100% of the Side signal is generated content). Tested at the highest
+    // requested value (3.0) specifically because that's where an unbounded
+    // request would clip worst if the headroom solve had no effect.
+    {
+        bool ok = true;
+        float worstPeak = 0.0f;
+        for (const float blendPercent : { 50.0f, 60.0f, 70.0f, 80.0f, 90.0f, 100.0f }) {
+            VXWidthAudioProcessor proc;
+            proc.prepareToPlay(sr, 256);
+            proc.setGeneratedBlendMaxGainForTesting(3.0f);
+            setParamNormalized(proc, "width", 0.0f);  // Width=-100
+            setParamNormalized(proc, "double", 1.0f); // Double=100
+            setParamNormalized(proc, "blend", blendPercent / 100.0f);
+            auto input = makeSpeechLike(sr, 3.0f);
+            render(proc, input, 256); // warm-up: lets the headroom solve converge
+            auto out = render(proc, input, 256);
+
+            float peak = 0.0f;
+            for (int i = 0; i < out.getNumSamples(); ++i) {
+                peak = std::max(peak, std::abs(out.getSample(0, i)));
+                peak = std::max(peak, std::abs(out.getSample(1, i)));
+            }
+            worstPeak = std::max(worstPeak, peak);
+            // Small tolerance for the exponential release smoothing's
+            // rounding and the warm-up render's own convergence, not a
+            // relaxation of the ceiling itself (production ceiling: 0.98).
+            if (peak > 0.985f)
+                ok = false;
+        }
+        allPass &= ok;
+        std::cout << "  [Review fix: headroom-limited Blend gain never exceeds output ceiling] worstPeak="
+                  << worstPeak << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // Review fix (design rule): the generated-content headroom limiter
+    // should normally be INERT for Blend<=50 - NORMAL_VX (Blend 50) is the
+    // product's own "current default VX sound" contract (§2/§22), so the
+    // headroom solve engaging there would mean Blend was silently altering
+    // material that's supposed to be an exact/near-exact reference point,
+    // rather than simply being trimmed by the final OutputTrimmer like
+    // everything else. Confirms applied==requested (within float
+    // tolerance) across mono/stereo/narrow/wide/positive/negative Width and
+    // Double 0/100, for Blend 0/10/25/40/50 - representative material, not
+    // the deliberately-extreme corners the tests above already cover.
+    {
+        bool ok = true;
+        struct Fixture { const char* label; float widthNorm; float doubleNorm; bool useBitExactMono; };
+        const Fixture fixtures[] = {
+            { "stereo, Width=100, Double=0",   1.0f, 0.0f, false },
+            { "stereo, Width=-100, Double=0",  0.0f, 0.0f, false },
+            { "stereo, Width=0, Double=100",   0.5f, 1.0f, false },
+            { "stereo, Width=100, Double=100", 1.0f, 1.0f, false },
+            { "mono, Width=100, Double=100",   1.0f, 1.0f, true },
+        };
+        for (const auto& fixture : fixtures) {
+            for (const float blendPercent : { 0.0f, 10.0f, 25.0f, 40.0f, 50.0f }) {
+                VXWidthAudioProcessor proc;
+                proc.prepareToPlay(sr, 256);
+                setParamNormalized(proc, "width", fixture.widthNorm);
+                setParamNormalized(proc, "double", fixture.doubleNorm);
+                setParamNormalized(proc, "blend", blendPercent / 100.0f);
+                auto input = makeSpeechLike(sr, 2.0f);
+                if (fixture.useBitExactMono)
+                    for (int i = 0; i < input.getNumSamples(); ++i)
+                        input.setSample(1, i, input.getSample(0, i)); // force L==R bit-exact
+                render(proc, input, 256);
+                render(proc, input, 256);
+
+                const float requested = (blendPercent / 100.0f) * 2.0f; // matches blendGainFor's 0..50 half
+                const float applied = proc.getGeneratedBlendGainAppliedForTesting();
+                if (std::abs(applied - requested) > 1.0e-3f) {
+                    ok = false;
+                    std::cout << "    FAIL " << fixture.label << " blend=" << blendPercent
+                              << " requested=" << requested << " applied=" << applied << "\n";
+                }
+            }
+        }
+        allPass &= ok;
+        std::cout << "  [Review fix: headroom limiter inert at Blend<=50 across representative material]"
+                  << (ok ? "  PASS" : "  FAIL") << "\n";
+    }
+
+    // Review request: with the existing-content/generated-content gain
+    // split in place (existing content stays fixed at the conservative,
+    // clip-free-proven 2.0 - see kExistingContentMaxGain in
+    // VxWidthProcessor.cpp), compare generated-content ceiling candidates
+    // 2.0/2.5/3.0 across the requested realistic-to-extreme matrix. Goal:
+    // find whether a hotter generated-content ceiling gives audible lift at
+    // moderate settings without the extreme-corner peak overshoot a single
+    // shared ceiling produced. Diagnostic only - not gated, since judging
+    // "audible enough" is the listening/product decision §11/§31 defer to
+    // a human; this only supplies the numbers.
+    {
+        std::cout << "\n  [Blend split-gain measurements] (diagnostic only, not gated)\n";
+        struct BlendFixture { const char* label; float widthNorm; float doubleNorm; };
+        const BlendFixture fixtures[] = {
+            { "Width=25 Double=0",     0.625f, 0.0f },
+            { "Width=50 Double=0",     0.75f,  0.0f },
+            { "Width=0 Double=25",     0.5f,   0.25f },
+            { "Width=0 Double=50",     0.5f,   0.5f },
+            { "Width=50 Double=50",    0.75f,  0.5f },
+            { "Width=100 Double=100",  1.0f,   1.0f },
+            { "Width=-100 Double=100", 0.0f,   1.0f },
+        };
+        for (const auto& fixture : fixtures) {
+            std::cout << "    -- " << fixture.label << " --\n";
+            for (const float generatedMaxGain : { 2.0f, 2.5f, 3.0f }) {
+                std::cout << "      generatedMaxGain=" << generatedMaxGain << "\n";
+                double rmsAtBlend50 = -1.0;
+                for (const float blendPercent : { 50.0f, 75.0f, 100.0f }) {
+                    VXWidthAudioProcessor proc;
+                    proc.prepareToPlay(sr, 256);
+                    proc.setGeneratedBlendMaxGainForTesting(generatedMaxGain);
+                    setParamNormalized(proc, "width", fixture.widthNorm);
+                    setParamNormalized(proc, "double", fixture.doubleNorm);
+                    setParamNormalized(proc, "blend", blendPercent / 100.0f);
+                    auto input = makeSpeechLike(sr, 3.0f);
+                    render(proc, input, 256);
+                    auto out = render(proc, input, 256);
+
+                    double sumLR = 0.0, sumL2 = 0.0, sumR2 = 0.0, sumMono2 = 0.0, peak = 0.0, sumSide2 = 0.0;
+                    for (int i = 0; i < out.getNumSamples(); ++i) {
+                        const float l = out.getSample(0, i);
+                        const float r = out.getSample(1, i);
+                        sumLR += static_cast<double>(l) * r;
+                        sumL2 += static_cast<double>(l) * l;
+                        sumR2 += static_cast<double>(r) * r;
+                        const double mono = (static_cast<double>(l) + r) * 0.5;
+                        sumMono2 += mono * mono;
+                        const double side = (static_cast<double>(l) - r) * 0.70710678;
+                        sumSide2 += side * side;
+                        peak = std::max(peak, static_cast<double>(std::abs(l)));
+                        peak = std::max(peak, static_cast<double>(std::abs(r)));
+                    }
+                    const double denom = std::sqrt(sumL2 * sumR2);
+                    const double correlation = denom > 1e-12 ? sumLR / denom : 1.0;
+                    const double monoRms = std::sqrt(sumMono2 / out.getNumSamples());
+                    const double sideRms = std::sqrt(sumSide2 / out.getNumSamples());
+                    if (blendPercent == 50.0f)
+                        rmsAtBlend50 = sideRms;
+                    std::cout << "        blend=" << blendPercent
+                              << " L/R correlation=" << correlation
+                              << " sideRms=" << sideRms
+                              << " sideRms/Blend50=" << (rmsAtBlend50 > 1e-12 ? sideRms / rmsAtBlend50 : 0.0)
+                              << " monoDownmixRms=" << monoRms
+                              << " peak=" << peak << "\n";
+                }
             }
         }
     }

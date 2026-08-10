@@ -41,6 +41,13 @@ struct ProductIdentity {
     std::string_view secondaryParamId;
     std::string_view tertiaryParamId;
     std::string_view quaternaryParamId;
+    // Fifth headline knob - deliberately not a general-purpose slot. Only
+    // VX Width's Blend control uses this (docs/Task Based/VXWIDTH_BLEND.md
+    // §1: an explicit, documented exception to the framework's normal
+    // four-control ceiling). Empty for every other product, so
+    // supportsQuinaryControl() is false everywhere else and this has no
+    // effect on existing plugins.
+    std::string_view quinaryParamId;
     std::string_view modeParamId;
     std::string_view auxSelectorParamId;
     std::string_view auxSelector2ParamId;
@@ -50,10 +57,12 @@ struct ProductIdentity {
     std::string_view secondaryLabel;
     std::string_view tertiaryLabel;
     std::string_view quaternaryLabel;
+    std::string_view quinaryLabel;
     std::string_view primaryHint;
     std::string_view secondaryHint;
     std::string_view tertiaryHint;
     std::string_view quaternaryHint;
+    std::string_view quinaryHint;
     // Keep these aligned with the public README whenever UI, behavior, or usage guidance changes.
     std::string_view helpTitle;
     std::string_view helpHtml;
@@ -62,6 +71,7 @@ struct ProductIdentity {
     float secondaryDefaultValue = 0.5f;
     float tertiaryDefaultValue = 0.5f;
     float quaternaryDefaultValue = 0.5f;
+    float quinaryDefaultValue = 0.5f;
     std::string_view selectorLabel = "Mode";
     std::array<std::string_view, 3> selectorChoiceLabels {};
     std::string_view auxSelectorLabel;
@@ -193,6 +203,10 @@ struct ProductIdentity {
 
     bool supportsQuaternaryControl() const noexcept {
         return !quaternaryParamId.empty();
+    }
+
+    bool supportsQuinaryControl() const noexcept {
+        return !quinaryParamId.empty();
     }
 
     bool supportsLearnButton() const noexcept {

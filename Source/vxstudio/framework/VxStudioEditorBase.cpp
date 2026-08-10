@@ -23,15 +23,22 @@ EditorBase::EditorBase(ProcessorBase& owner)
     const bool compactControlBank = hasControlBank && identity.compactControlBankLayout;
     const bool hasTertiary = identity.supportsTertiaryControl();
     const bool hasQuaternary = identity.supportsQuaternaryControl();
+    const bool hasQuinary = identity.supportsQuinaryControl();
     // Reserve extra width for the stereo gain meter sidebar so the knob layout
     // sees enough room to stay side-by-side (not stacked).
     const int meterExtra = identity.showStereoGainMeter ? 98 : 0;
-    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : (hasQuaternary ? 720 : (hasTertiary ? 560 : 440)) + meterExtra,
-                    hasControlBank ? (compactControlBank ? 640 : 720) : (hasQuaternary ? 560 : 520),
+    setResizeLimits(hasControlBank ? (compactControlBank ? 920 : 1040) : ((hasQuinary || hasQuaternary) ? 720 : (hasTertiary ? 560 : 440)) + meterExtra,
+                    hasControlBank ? (compactControlBank ? 640 : 720) : ((hasQuinary || hasQuaternary) ? 560 : 520),
                     1280 + meterExtra,
                     940);
-    setSize(hasControlBank ? (compactControlBank ? 1020 : 1160) : (hasQuaternary ? 1100 : (hasTertiary ? 950 : 760)) + meterExtra,
-            hasControlBank ? (compactControlBank ? 680 : 760) : (hasQuaternary ? 740 : 660));
+    setSize(hasControlBank ? (compactControlBank ? 1020 : 1160) : ((hasQuinary || hasQuaternary) ? 1100 : (hasTertiary ? 950 : 760)) + meterExtra,
+            hasControlBank ? (compactControlBank ? 680 : 760) : ((hasQuinary || hasQuaternary) ? 740 : 660));
+    // Reference size for resizeFitScale (see its own comment) - the exact
+    // size every fixed-pixel constant in this file was designed against.
+    // Must be captured AFTER setSize() above, and before anything below
+    // calls scaled() (nothing does, until resized() first runs).
+    referenceWidth = static_cast<float>(getWidth());
+    referenceHeight = static_cast<float>(getHeight());
 
     suiteLabel.setText(toJuceString(identity.suiteName), juce::dontSendNotification);
     suiteLabel.setFont(juce::FontOptions().withHeight(17.0f).withKerningFactor(0.16f));
@@ -264,12 +271,16 @@ EditorBase::EditorBase(ProcessorBase& owner)
             configureKnob(tertiarySlider, tertiaryLabel, identity.tertiaryLabel, identity.tertiaryHint);
         if (identity.supportsQuaternaryControl())
             configureKnob(quaternarySlider, quaternaryLabel, identity.quaternaryLabel, identity.quaternaryHint);
+        if (identity.supportsQuinaryControl())
+            configureKnob(quinarySlider, quinaryLabel, identity.quinaryLabel, identity.quinaryHint);
         addAndMakeVisible(primaryHint);
         addAndMakeVisible(secondaryHint);
         if (identity.supportsTertiaryControl())
             addAndMakeVisible(tertiaryHint);
         if (identity.supportsQuaternaryControl())
             addAndMakeVisible(quaternaryHint);
+        if (identity.supportsQuinaryControl())
+            addAndMakeVisible(quinaryHint);
     }
 
     auto& state = processor.getValueTreeState();
@@ -346,6 +357,8 @@ EditorBase::EditorBase(ProcessorBase& owner)
             tertiaryAttachment = std::make_unique<SliderAttachment>(state, identity.tertiaryParamId.data(), tertiarySlider);
         if (identity.supportsQuaternaryControl())
             quaternaryAttachment = std::make_unique<SliderAttachment>(state, identity.quaternaryParamId.data(), quaternarySlider);
+        if (identity.supportsQuinaryControl())
+            quinaryAttachment = std::make_unique<SliderAttachment>(state, identity.quinaryParamId.data(), quinarySlider);
     }
 
     timerCallback();
@@ -494,6 +507,24 @@ void EditorBase::paint(juce::Graphics& g) {
 }
 
 void EditorBase::resized() {
+    // Continuous window-resize scaling (layout responsiveness fix) - must
+    // run before any scaled() call below, including the very first one on
+    // the next line. min(width ratio, height ratio) rather than either
+    // alone, so knobs/text scale uniformly instead of stretching when the
+    // window's aspect ratio changes. Guarded on referenceWidth/Height being
+    // set: they're 0 during the constructor's own setSize() call (which
+    // synchronously triggers this before the reference is captured, right
+    // after that same setSize() - see the constructor), so that first call
+    // correctly falls back to resizeFitScale's default of 1.0 (reference
+    // size == itself). Clamp range covers every product's actual
+    // resizeLimits-to-setSize ratio (checked against every hasControlBank/
+    // hasQuinary/hasQuaternary/hasTertiary/default combination above) with
+    // margin, not an arbitrary guess.
+    if (referenceWidth > 0.0f && referenceHeight > 0.0f) {
+        const float fitX = static_cast<float>(getWidth()) / referenceWidth;
+        const float fitY = static_cast<float>(getHeight()) / referenceHeight;
+        resizeFitScale = juce::jlimit(0.55f, 1.5f, juce::jmin(fitX, fitY));
+    }
     auto bounds = getLocalBounds().reduced(scaled(20), scaled(16));
     const bool compactControlBank = processor.getProductIdentity().supportsControlBank()
         && processor.getProductIdentity().compactControlBankLayout;
@@ -605,6 +636,9 @@ void EditorBase::resized() {
     const bool hasQuaternary = identity.supportsQuaternaryControl()
         && (!identity.quaternaryRequiresExpert || expertEnabled)
         && extrasAllowed;
+    // Fifth headline knob (VX Width Blend only) - always shown when present,
+    // no expert-gating precedent exists for it (see ProductIdentity::quinaryParamId).
+    const bool hasQuinary = identity.supportsQuinaryControl();
     const bool hasControlBank = processor.getProductIdentity().supportsControlBank();
     const bool wrapStatusRow = modeRow.getWidth() < scaled(220);
     if (wrapStatusRow) {
@@ -637,7 +671,7 @@ void EditorBase::resized() {
         body.removeFromRight(scaled(4));
     }
 
-    const bool stacked = body.getWidth() < scaled(hasQuaternary ? 940 : (hasTertiary ? 860 : 680));
+    const bool stacked = body.getWidth() < scaled((hasQuinary || hasQuaternary) ? 940 : (hasTertiary ? 860 : 680));
     activityLightCount = processor.getActivityLightCount();
     activityStripBounds = {};
     traceViewBounds = {};
@@ -751,7 +785,25 @@ void EditorBase::resized() {
                 hint.setBounds({});
         };
 
-        if (hasQuaternary) {
+        if (hasQuinary) {
+            // Inverted pyramid (VXWIDTH_BLEND.md §17): 3-across top row
+            // (Width/Double/Blend - the primary sound decisions), 2-across
+            // bottom row (Tightness/Focus - refinement of the generated
+            // Double), bottom row full-width since this is the stacked
+            // (narrow) branch. Equal height split (review fix, matches the
+            // non-stacked branch below) - a 3/5-vs-2/5 split compounded
+            // with layoutKnob's own height-driven dialSize formula to make
+            // the bottom row's knobs shrink far more than intended.
+            const int topH = body.getHeight() / 2;
+            auto topRow = body.removeFromTop(topH);
+            const int topW = topRow.getWidth() / 3;
+            layoutKnob(topRow.removeFromLeft(topW), primarySlider,   primaryLabel,   primaryHint);
+            layoutKnob(topRow.removeFromLeft(topW), secondarySlider, secondaryLabel, secondaryHint);
+            layoutKnob(topRow,                      quinarySlider,   quinaryLabel,   quinaryHint);
+            const int botW = body.getWidth() / 2;
+            layoutKnob(body.removeFromLeft(botW),   tertiarySlider,  tertiaryLabel,  tertiaryHint);
+            layoutKnob(body,                        quaternarySlider, quaternaryLabel, quaternaryHint);
+        } else if (hasQuaternary) {
             // 2×2 grid: far better dial sizes than 4 vertical rows at narrow widths.
             const int halfH = body.getHeight() / 2;
             auto topHalf = body.removeFromTop(halfH);
@@ -797,6 +849,45 @@ void EditorBase::resized() {
         else
             hint.setBounds({});
     };
+
+    if (hasQuinary) {
+        // Inverted pyramid (VXWIDTH_BLEND.md §17): 3-across top row
+        // (Width/Double/Blend), 2-across bottom row (Tightness/Focus)
+        // inset so it's visually centred beneath the top row rather than
+        // spanning the full width - the "inverted pyramid" the spec calls
+        // for, not five knobs in one row.
+        //
+        // Review fix (2026-08): this used to split body height 3/5 top vs
+        // 2/5 bottom, WITH a smaller maxDial cap on top of that for the
+        // bottom row too (112 vs 136) and asymmetric insets (16 vs 20px) -
+        // three separate size-reducing factors compounding on top of each
+        // other. The intent was "top row primary, bottom row secondary,"
+        // but the actual rendered ratio came out far more extreme than
+        // that (bottom knobs ended up roughly half the top row's diameter,
+        // not a subtle hierarchy). Equal height split + matching insets
+        // now means the ONLY intentional size difference between the rows
+        // is the maxDial cap itself (132 vs 116, ~88%) - still visually
+        // "top row is primary," but proportionate rather than compounded.
+        auto topRow = body.removeFromTop(body.getHeight() / 2);
+        body.removeFromTop(scaled(4));
+        auto t1 = topRow.removeFromLeft(topRow.getWidth() / 3).reduced(scaled(14), scaled(16));
+        auto t2 = topRow.removeFromLeft(topRow.getWidth() / 2).reduced(scaled(14), scaled(16));
+        auto t3 = topRow.reduced(scaled(14), scaled(16));
+        const int maxDialTop = scaled(132);
+        layoutKnobSideBySide(t1, primarySlider,   primaryLabel,   primaryHint,   maxDialTop, scaled(60));
+        layoutKnobSideBySide(t2, secondarySlider, secondaryLabel, secondaryHint, maxDialTop, scaled(60));
+        layoutKnobSideBySide(t3, quinarySlider,   quinaryLabel,   quinaryHint,   maxDialTop, scaled(60));
+
+        auto bottomRow = body.reduced(body.getWidth() / 6, 0);
+        auto b1 = bottomRow.removeFromLeft(bottomRow.getWidth() / 2).reduced(scaled(14), scaled(16));
+        auto b2 = bottomRow.reduced(scaled(14), scaled(16));
+        const int maxDialBottom = scaled(116);
+        layoutKnobSideBySide(b1, tertiarySlider,  tertiaryLabel,  tertiaryHint,  maxDialBottom, scaled(60));
+        layoutKnobSideBySide(b2, quaternarySlider, quaternaryLabel, quaternaryHint, maxDialBottom, scaled(60));
+        placeInlineShelfIcons(secondaryLabel.getBounds());
+        applyTextFit();
+        return;
+    }
 
     if (hasQuaternary) {
         auto c1 = body.removeFromLeft(body.getWidth() / 4).reduced(scaled(14), scaled(24));
@@ -869,6 +960,8 @@ void EditorBase::configureKnob(juce::Slider& slider,
         hintLabel = &tertiaryHint;
     else if (&label == &quaternaryLabel)
         hintLabel = &quaternaryHint;
+    else if (&label == &quinaryLabel)
+        hintLabel = &quinaryHint;
     hintLabel->setText(toJuceString(hint), juce::dontSendNotification);
     hintLabel->setJustificationType(juce::Justification::centredLeft);
     hintLabel->setFont(juce::FontOptions().withHeight(static_cast<float>(scaled(13))));
@@ -917,7 +1010,7 @@ juce::String EditorBase::footerText() const {
 }
 
 int EditorBase::scaled(const int value) const {
-    return juce::roundToInt(static_cast<float>(value) * uiScale);
+    return juce::roundToInt(static_cast<float>(value) * uiScale * resizeFitScale);
 }
 
 void EditorBase::showTransientStatus(const juce::String& text) {

@@ -71,6 +71,22 @@ private:
 
     SuiteLookAndFeel lookAndFeel;
     float uiScale = 1.0f;
+    // Continuous window-resize scaling (layout responsiveness fix, review
+    // 2026-08): every fixed-pixel constant in this file goes through
+    // scaled(), which used to reflect ONLY host DPI (uiScale, set via
+    // setScaleFactor()) - dragging the plugin window bigger/smaller left
+    // knob caps, fonts, custom-view heights and gaps pixel-identical,
+    // producing dead space on large windows and cramped/vanishing content
+    // on small ones. referenceWidth/Height capture the constructor's own
+    // setSize() call (the size every fixed constant in this file was
+    // designed against); resizeFitScale, recomputed at the top of every
+    // resized(), is current-size/reference-size (the more constraining of
+    // width/height, to keep knobs circular rather than stretched). scaled()
+    // multiplies by both factors, so DPI and window-resize scaling compose
+    // rather than compete.
+    float referenceWidth = 0.0f;
+    float referenceHeight = 0.0f;
+    float resizeFitScale = 1.0f;
     double learnMeterUi = 0.0;
     int activityLightCount = 0;
     std::array<float, 8> activityLights {};
@@ -102,21 +118,29 @@ private:
     juce::Slider secondarySlider;
     juce::Slider tertiarySlider;
     juce::Slider quaternarySlider;
+    // Fifth headline knob - only VX Width's Blend uses this (see
+    // ProductIdentity::quinaryParamId's comment). Laid out in a dedicated
+    // pyramid branch in resized() when present, not part of the generic
+    // primary..quaternary row/grid logic.
+    juce::Slider quinarySlider;
     std::array<juce::Slider, ProductIdentity::maxControlBankControls> bankSliders;
     juce::Label primaryLabel;
     juce::Label secondaryLabel;
     juce::Label tertiaryLabel;
     juce::Label quaternaryLabel;
+    juce::Label quinaryLabel;
     std::array<juce::Label, ProductIdentity::maxControlBankControls> bankLabels;
     juce::Label primaryHint;
     juce::Label secondaryHint;
     juce::Label tertiaryHint;
     juce::Label quaternaryHint;
+    juce::Label quinaryHint;
     std::array<juce::Label, ProductIdentity::maxControlBankControls> bankHints;
     std::unique_ptr<SliderAttachment> primaryAttachment;
     std::unique_ptr<SliderAttachment> secondaryAttachment;
     std::unique_ptr<SliderAttachment> tertiaryAttachment;
     std::unique_ptr<SliderAttachment> quaternaryAttachment;
+    std::unique_ptr<SliderAttachment> quinaryAttachment;
     std::array<std::unique_ptr<SliderAttachment>, ProductIdentity::maxControlBankControls> bankAttachments;
     std::unique_ptr<ComboAttachment> modeAttachment;
     std::unique_ptr<ComboAttachment> auxSelectorAttachment;

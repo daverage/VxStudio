@@ -81,21 +81,18 @@ Therefore the existing sound is not equivalent to:
 
 It is its own designed balance.
 
-Blend must therefore preserve that existing behaviour at its centre position.
-
-Requirements:
+**Requirement (VX Width 1.0 shipped — see §22).** The implemented Blend
+gain law is algebraically exact at the centre: `blendGain(0.5) = 1`, so
 
 ```text
 Blend = 50
 ```
 
-must reproduce the pre-Blend version of VX Width exactly or within normal floating-point tolerance.
+reproduces the pre-Blend VX Width output exactly (not just in close sonic
+continuity), satisfying the original bit-exact requirement now that a
+public release and real sessions/presets exist to protect. This preserves:
 
-This preserves:
-
-* old presets;
-* old sessions;
-* automation compatibility;
+* old presets and sessions (Blend defaults to 50 - see §27);
 * the currently approved sound;
 * the existing Width/Double balance.
 
@@ -206,27 +203,35 @@ drySide
 
 before VX processing modifies the signal.
 
-Preferred conceptual flow:
+**Revised preferred flow.** The existing loudness compensator must not sit
+downstream of Blend — see §25/§26 for why. Loudness compensation stays
+where it already is, inside the normal VX path, and Blend is constructed
+from the compensated result:
 
 ```text
 Original input
       │
-      ├─────────────── Dry reference
+      ├──────────────────────────── Dry reference
       │
       ▼
-Width + Double DSP
+Width / Double DSP
       │
       ▼
-VX processed signal
+Spatial / phase safety
       │
       ▼
-Blend stage
+Existing VX loudness compensation
+      │
+      ├──────────────────────────── Normal VX reference (Blend 50)
       │
       ▼
-Loudness management
+Construct effect-forward endpoint
       │
       ▼
-Output trim
+Blend
+      │
+      ▼
+Output trim / hard output safety only
 ```
 
 The Blend stage must not force a redesign of the existing M/S architecture.
@@ -268,6 +273,37 @@ processed - dry
 This decomposition is exact.
 
 Then the left half of Blend can cleanly control the amount of VX delta around the original.
+
+**Naming.** To keep this unambiguous through the rest of the spec, the three
+internal references Blend interpolates between are:
+
+```text
+DRY
+= untouched original input
+= never receives VX compGain
+
+NORMAL_VX
+= corrected pre-Blend processor output (§34's PRE-BLEND BASELINE)
+= includes the existing Width/Double processing and its baseline loudness
+  compensation
+= exactly what Blend 50 reproduces
+= this document's "dry"/"processed" pair above maps to DRY/NORMAL_VX
+
+EFFECT_ENDPOINT
+= chosen musically useful effect-forward interpretation (§10-12)
+= derived from the same underlying processing
+= may reuse NORMAL_VX's baseline compGain
+= must NOT compute its own Blend-dependent loudness normalisation
+```
+
+Blend is interpolating between three intentional sonic states, not feeding
+a wet/dry crossfade into an adaptive normaliser:
+
+```text
+0 ─────────────── 50 ─────────────── 100
+
+DRY              NORMAL_VX          EFFECT_ENDPOINT
+```
 
 ---
 
@@ -446,6 +482,186 @@ If neither candidate is ideal, derive a third simple endpoint based on the evide
 
 Do not introduce unnecessary new DSP merely to solve Blend 100.
 
+**Implementation note (built without listening access - confirm by ear before ship).**
+Neither Candidate A nor Candidate B as literally specified survives the
+hard §20 invariant: both are built entirely from "what changed" (pure
+delta, or an explicit effect-only bus with the original component
+excluded), so both collapse to silence at Blend 100 whenever
+Width=0/Double=0 (delta=0) - directly violating "Blend 0/25/50/75/100
+should all produce the original input" when there is no VX effect to
+expose. A `[§20]` regression test (tests/VXWidthShellCheck.cpp) caught
+this against a literal Candidate-A implementation during the first
+build pass.
+
+The endpoint actually implemented is a third, simple option per this
+section's own escape hatch: **extrapolated delta**, not substituted delta.
+
+```text
+output = dry + blendGain * (processed - dry)
+
+blendGain(0)   = 0     (Blend 0 = dry, §8)
+blendGain(0.5) = 1     (Blend 50 = NORMAL_VX, exact - §2/§22)
+blendGain(1.0) = 2.0   (Blend 100 = twice as far past dry as Blend 50 -
+                        as far again in the same direction the effect
+                        already moved the signal, not a separately-
+                        constructed "effect-only" signal)
+```
+
+This keeps §7's delta decomposition and §9's "more effect-forward than
+Blend 50" intent, but fixes the §20 collapse structurally: when
+`processed == dry` (delta = 0), `output = dry` at *every* Blend position,
+not only at Blend 0. It also makes Blend 50 algebraically exact (not just
+close - stronger than §22 currently requires) and keeps §23 monotonicity
+automatic (RMS(output-dry) scales linearly with blendGain).
+
+The `2.0` ceiling is a reasoned default, not a listening-confirmed one -
+this section's requirement stands: **run the listening pass in this
+section against the actual corpus, and tune or replace kBlendMaxGain
+(VxWidthProcessor.cpp) based on the result**, same as either named
+candidate would have needed. Candidate A/B's originally-specified
+"effect-only" character can still be recovered by extrapolating a
+constructed effect-bus signal instead of the delta above, if listening
+shows the plain extrapolation isn't distinct enough from Width/Double's
+own knobs - that would be a small, local change to what "processed" and
+"delta" are built from, not to the Blend architecture itself.
+
+**Tuning history: a single global gain could not satisfy both "audible" and
+"safe."** `1.5` was tried first and found too subtle (extrapolation only
+adds `(K-1)*delta` beyond NORMAL_VX, so at `1.5` the 50->100 half added only
+*half* as much change as 0->50 already did - 4-12% Side-energy increase on
+moderate Width-only settings, genuinely inaudible). `2.0` fixed that
+(symmetric halves, clean 2.0x Side-RMS lift) but `2.5`/`3.0` measurably
+clipped (peak up to 1.05-1.11) on the Width=100/Double=100 and
+Width=-100/Double=100 corners specifically.
+
+**Root cause and fix: one gain was doing two unrelated jobs.** Splitting the
+per-sample blend into three components (Mid/existing-Side/generated-Side -
+already required for the polarity fix below) exposed that a single ceiling
+was simultaneously (a) amplifying newly GENERATED effect content, which is
+headroom-cheap (starts at dry=0, only grows), and (b) extrapolating the
+EXISTING-signal modification, which is headroom-expensive (scaling an
+already-present level). The production architecture is now:
+
+```text
+existingBlendGain  (kExistingContentMaxGain = 2.0, fixed)
+    -> Width's existing-Side term (sideOriginal*sideScale*sideGain) and
+       existing-Mid's own compGain-driven coefficient
+    -> conservative: this is also what the polarity-inversion fix (below)
+       clamps at 0, so it must stay proven clip-free on its own
+
+generatedBlendGain (requested up to generatedBlendMaxGainState = 3.0)
+    -> Double's generated Mid contribution, Width's decorrelated Side,
+       Double's ADT Side - all content with no dry component to invert
+    -> REQUESTED ceiling only - the gain actually applied is this value
+       further limited by a per-block headroom solve, not used directly
+```
+
+**Headroom-limited generated gain (VxWidthProcessor.cpp, processProduct()).**
+Rather than picking one fixed generatedBlendMaxGainState value that's
+"safe everywhere" (which the data showed throws away real audible range on
+the ~95% of settings that have ample headroom), the actual applied gain is
+solved exactly, per block, from the real decomposition already computed:
+
+```text
+output = base + g * generated   (per Mid/Side component, per §7's dry+gain*delta)
+
+solve for the largest g in [0, requestedGain] such that
+  |base + g*generated| <= kOutputHeadroomCeiling (0.98, matching
+                                                   OutputTrimmer's own ceiling)
+  holds for every sample in the block, both channels
+```
+
+This is a closed-form per-sample linear solve (`g <= (ceiling - base) /
+generated`, sign-aware), not a peak estimate or a fraction of NORMAL_VX's
+own peak - the two doubly-summed components can reinforce or partially
+cancel per sample depending on relative sign, and the exact solve accounts
+for that. The block-wide minimum g becomes `rawSafeGeneratedGain`; it's
+applied with an **instant snap when it drops** (this block's own solve is
+already exact, so anything less than a full, immediate snap would mean
+knowingly using a gain looser than what this block's own data proves is
+safe - the same reactive-lag flaw the OutputTrimmer's within-block ramp
+already has, and worth avoiding here specifically since it's a
+*predictable, reproducible* overshoot rather than a rare transient) and a
+**slow, smoothed recovery when headroom returns** (0.30s, purely a taste
+choice to avoid audible pumping on transient material - has no correctness
+requirement). The final `actualGeneratedGain = min(requestedGain,
+smoothedSafeGeneratedGain)`.
+
+Result: moderate/realistic settings (Width or Double alone at 25/50%, or
+both at 50%) get the FULL requested 3.0x gain with peak comfortably under
+0.90 - genuinely audible, ~2-3x Side-RMS lift from Blend 50->100. The two
+extreme corners (Width=100/Double=100, and Width=-100/Double=100 where
+100% of the Side signal is generated content) are automatically capped to
+whatever headroom allows - measured peak pins exactly at 0.9800 (the
+ceiling) regardless of the requested 2.0/2.5/3.0, with **zero measured
+overshoot**, confirmed by both the `[Blend split-gain measurements]`
+diagnostic and the gated `[Review fix: headroom-limited Blend gain never
+exceeds output ceiling]` regression in tests/VXWidthShellCheck.cpp.
+
+**Precise scope of the guarantee (review follow-up - do not overstate
+this).** The solve ensures generated-content Blend extrapolation is never
+*itself* the cause of exceeding the ceiling, given the non-generated/base
+contribution is already within it. It is not a claim that "Blend
+guarantees output never exceeds 0.98" in general - a sample where
+`|base| > ceiling` on its own (a pre-existing overload independent of
+Blend, e.g. from another control's own headroom use) cannot be rescued by
+any value of the generated gain; that case degrades gracefully to
+`g -> 0` (never makes the pre-existing overload worse) but does not fix
+it, and remains OutputTrimmer's responsibility exactly as before Blend
+existed. A design rule follows directly from this: **the headroom limiter
+should normally be INERT for Blend<=50** (NORMAL_VX, the "current default
+VX sound" contract in §2/§22, should virtually never need the generated
+gain reduced below its own requested <=1.0 value to stay under 0.98 - if
+it did, Blend would be silently altering the Blend-50 reference point
+itself rather than leaving it to the final OutputTrimmer like everything
+else). Confirmed by the gated `[Review fix: headroom limiter inert at
+Blend<=50 across representative material]` regression (mono/stereo,
+positive/negative Width, Double 0/100, Blend 0/10/25/40/50): applied
+generated gain equals requested in every case tested.
+
+This is deliberately a **hard technical headroom constraint only** - it
+never evaluates correlation, mono-safety, or "does this sound tasteful"
+(those stay exactly where §25/§26 put them, evaluated on NORMAL_VX before
+Blend exists), and it never touches Width/Double/Tightness/Focus/ADT
+geometry - only how far Blend's own presentation-layer extrapolation is
+allowed to go. It does not violate §25's "don't feed Blend back into DSP
+decisions," because nothing here is a DSP decision; it's Blend limiting
+itself against a fixed technical number it shares with the OutputTrimmer.
+
+**Review fix (found before listening, not by ear): existing-Side polarity
+inversion.** A single uniform gain applied to the whole L/R delta has a real
+bug, not just a tuning question: Width's *existing*-Side term
+(`sideOriginal * sideScale * sideGain` - the direct narrowing/widening of
+the original image, as distinct from newly generated content) can reach
+exactly 0 at NORMAL_VX (Width=-100 fully collapses it to mono). Extrapolating
+that already-zero destination further in the same direction inverts its
+sign by Blend 100 - L/R polarity swap on narrowed material, not "more
+effect". Fixed by decomposing the per-sample blend into Mid/existing-Side/
+generated-Side components and clamping only the existing-Side coefficient
+at 0 (`juce::jmax(1.0f + existingBlendGain*(sideScale*sideGain*compGain -
+1.0f), 0.0f)`), leaving generated Width/Double content free to extrapolate
+(it has no dry component to invert - starts at 0, only grows). A
+`[Review fix]` regression test (Width=-100, Double=0, Blend 0..100,
+checking input/output Side cross-correlation never goes negative) covers
+this in tests/VXWidthShellCheck.cpp. Confirmed algebraically: the
+unclamped coefficient at Width=-100 is `1.0, 0.5, 0.0, -0.25, -0.5` for
+Blend `0/25/50/75/100` - exactly the inversion predicted, now clamped to
+`1.0, 0.5, 0.0, 0.0, 0.0`.
+
+**Still outstanding before shipping generatedBlendMaxGainState=3.0:** the
+correlation/mono-downmix/peak measurements run so far are still synthetic-
+corpus, non-gated diagnostics (`tests/VXWidthShellCheck.cpp`'s `[Blend
+split-gain measurements]`), not the full §31 corpus (12 material types) or
+a human listening pass. The headroom solve guarantees no clipping, but
+does NOT evaluate whether the resulting sound is musically good at the
+corners where it engages heavily (e.g. Width=-100/Double=100 at Blend 100
+runs at a much-reduced actual gain purely to avoid clipping - whether that
+reduced-emphasis result still sounds intentional, or instead sounds like
+the knob "gave up," is exactly the kind of judgment §11 defers to a human).
+Run the full corpus and listen before shipping; re-check with the
+diagnostic if `kExistingContentMaxGain` or `generatedBlendMaxGainState` are
+tuned again.
+
 ---
 
 # 12. Blend 100 does not have to mean literal zero dry
@@ -464,17 +680,19 @@ If literal zero-dry produces a result that is obviously musically inferior, do n
 
 The product meaning is perceptual and creative, not dogmatic.
 
-So the contract is:
+So the contract is (post-release — see §2/§22):
 
 ```text
 Blend 0   = exact original
 
-Blend 50  = exact current VX
+Blend 50  = recommended/default VX balance, exactly the pre-Blend sound
 
 Blend 100 = maximum useful VX-forward sound
 ```
 
-Only 0 and 50 are hard algebraic endpoints.
+Both 0 and 50 are hard algebraic endpoints. 50 is also a hard **product**
+endpoint (the centre-referenced default) — see §2/§22 for how the
+implemented gain law makes this exact by construction, not just close.
 
 100 is a hard **product** endpoint whose DSP definition must be selected by listening.
 
@@ -709,15 +927,22 @@ This protects the conceptual model.
 
 ---
 
-# 21. Blend 0 exact-null test
+# 21. Blend 0 null testing
 
-At:
+This splits into two separate tests — a static endpoint invariant and a
+separate automation-behaviour check. Do not conflate them.
+
+## Static endpoint test
+
+Hold `Blend = 0` from processor reset/priming through the complete test
+render. After any unavoidable DSP warm-up required by the existing
+architecture:
 
 ```text
-Blend = 0
+output == untouched dry
 ```
 
-the plugin must output the untouched original input.
+within floating-point tolerance.
 
 Test across:
 
@@ -732,17 +957,42 @@ Test across:
 * all Tightness positions;
 * all Focus positions.
 
-The output should null against dry input within floating-point tolerance.
+This is the hard acceptance criterion. `Blend = 0` is an exact DSP endpoint.
 
-This is a hard acceptance criterion.
+## Automation test
+
+For transitions `50 → 0` or `100 → 0`, do **not** require instantaneous null
+while smoothing is still settling. Instead verify:
+
+* the transition is click-free;
+* output moves monotonically toward dry;
+* no overshoot;
+* no stale generated content lingers past the transition;
+* once the smoothed Blend parameter reaches/settles at 0, output nulls
+  against dry.
+
+Moving away from 0 should ramp normally rather than jump. Parameter
+automation approaches the Blend 0 endpoint through the normal smoothing
+law — it is not required to be discontinuously exact mid-ramp.
 
 ---
 
-# 22. Blend 50 backwards-compatibility test
+# 22. Blend 50 exact-reproduction check
 
-Create a reference render from the current pre-Blend processor.
+**Hard pass/fail requirement, matching §21's Blend-0 treatment.** VX Width
+1.0 has shipped, so Blend 50 must reproduce the approved **PRE-BLEND
+BASELINE** commit (§34) exactly (or within normal floating-point
+tolerance) — not merely close in intent and character. §34's corrected
+ADT placement, coherence guardrail, and loudness-compensator fixes must
+already be in that baseline.
 
-Then compare with the new processor at:
+By construction, `blendGain(0.5) = 1` and `existingBlendGain`/
+`existingSideBlendGain`/`midOwnBlendGain` all reduce to their pre-Blend
+values at that gain, so `midOut`/`side` (and therefore `left[i]`/`right[i]`)
+at Blend 50 are algebraically unchanged from the pre-Blend build - the
+gain law satisfies this requirement structurally, not just empirically.
+
+Compare with the processor at:
 
 ```text
 Blend = 50
@@ -758,9 +1008,10 @@ using identical:
 * sample rate;
 * block size.
 
-The result must null or match within expected floating-point tolerance.
-
-This is also a hard acceptance criterion.
+Record the PRE-BLEND BASELINE commit hash and the reference-render fixture
+ID alongside the Blend regression notes. A deviation here is a regression,
+not a listening judgement call - it means the gain law's Blend-50 identity
+has been broken and must be fixed, not re-justified by ear.
 
 ---
 
@@ -835,7 +1086,8 @@ Instead the full VX engine should render normally, then Blend controls presentat
 
 Safety analysis should generally evaluate the actual spatial DSP before final loudness management.
 
-Preferred order:
+Superseded by §6: loudness management no longer sits after Blend. Preferred
+order is now:
 
 ```text
 dry input
@@ -844,12 +1096,19 @@ Width/Double DSP
    ↓
 spatial/phase safety
    ↓
+loudness management  (Blend-independent — see §26)
+   ↓
 Blend
    ↓
-loudness management
-   ↓
-output trim
+output trim / hard output safety only
 ```
+
+Phase-risk and mono guardrail restraints (monoRiskRestraint,
+phaseRiskRestraintWidth/Double, etc.) continue to be measured from the
+widthOnly/doubleOnly hypothetical outputs — i.e. from NORMAL_VX's own DSP
+geometry, never from the live Blended output. This is unchanged by Blend
+and must not be broken when Blend is added: Blend must not alter what these
+guardrails see or feed back into.
 
 However, high Blend values may expose effect-only content that creates additional audible risk.
 
@@ -866,11 +1125,46 @@ Do not feed normal Blend changes back into the Width target-seeking solver unles
 
 # 26. Loudness management
 
-Blend may cause large perceived-level differences, particularly above 50.
+**This section is now a hard architectural rule, not gentle guidance,**
+following the §6/§25 revision:
 
-Loudness compensation may gently manage gross level differences.
+> The loudness compensator must calculate its gain from the normal
+> Width/Double processing path exactly as if Blend were fixed at 50. Blend
+> must never feed its live output RMS back into the loudness compensator.
 
-It must not:
+`compGain` remains a property of NORMAL_VX (the underlying Width/Double
+processing), not of the Blend setting. Concretely:
+
+```text
+Blend 0
+= untouched dry
+= no compGain applied to dry
+
+Blend 50
+= NORMAL_VX, including its existing baseline loudness compensation
+
+Blend 100
+= EFFECT_ENDPOINT, built on the same underlying compGain basis
+  rather than being independently renormalised toward input RMS
+```
+
+For EFFECT_ENDPOINT (§10-12), reuse the same `compGain` derived from
+NORMAL_VX where applicable. Do not compute a second, Blend-100-specific
+adaptive compensation value — a second normaliser would make Candidate A
+and Candidate B converge perceptually for the wrong reason, defeating the
+listening comparison in §11.
+
+The reasoning: the compensator's feedback loop drives toward
+`compGain = 1/effectRms` (a fixed point relative to whatever it measures).
+If it measured Blend's own live output, pushing Blend toward 100 to expose
+more effect would cause the compensator to partially renormalise that
+increase away — directly undermining the control it's supposed to serve.
+Keeping the compensator's input Blend-independent removes that feedback
+path entirely.
+
+The output trimmer downstream of Blend may still prevent genuine overload,
+but it must remain a hard-safety mechanism, not a loudness normaliser. It
+must not:
 
 * flatten the Blend control;
 * make Blend 100 sound as conservative as 50;
@@ -878,8 +1172,6 @@ It must not:
 * cause Width/Double safety cross-coupling.
 
 Blend should remain clearly audible.
-
-Loudness management is level housekeeping, not effect-strength management.
 
 ---
 
@@ -897,7 +1189,7 @@ must resolve to:
 Blend = 50
 ```
 
-so they reproduce the existing sound.
+so they land on the default/recommended VX balance (§2).
 
 New presets may intentionally store other Blend values.
 
@@ -1068,9 +1360,18 @@ The Blend implementation must:
 
 Prefer retaining one dry reference rather than reprocessing the entire engine twice.
 
----
-
-# 33. Minimal-code principle
+**Review fix: an exceptional-path allocation was found and removed.** The
+headroom-solve scratch buffers (§9-12's implementation) were initially
+sized in `prepareSuite()` to the host's declared block size, with a
+defensive `.assign()` fallback in `processProduct()` in case a host ever
+sent a larger block than declared. That fallback was itself a possible
+audio-thread allocation, "no allocations in normal operation" is not the
+same guarantee as "no allocations" - removed per review. The VST3/AU/AAX
+contract (enforced by the JUCE wrapper layer, not just convention) is that
+a host must call `prepareToPlay()` again before sending a larger block
+than previously declared, so the scratch size from `prepareSuite()` is a
+true upper bound, not a normal-case assumption; a debug-only `jassert`
+replaces the runtime resize.
 
 Follow CLAUDE.md:
 
@@ -1090,17 +1391,42 @@ The smallest clean implementation local to VX Width is preferred.
 
 # 34. Interaction with the pending ADT and guardrail fixes
 
-The current pending architecture work still has priority:
+The current pending architecture work still has priority, and must be
+landed as a named, stable baseline before Blend implementation starts —
+not merely "in progress on the same branch":
 
-1. Correct ADT spatial placement in M/S.
-2. Add processed-output coherence to the phase-risk guardrail.
-3. Revalidate direct-Side authority at 12/15/18 dB.
-4. Correct loudness-compensator/safety coupling.
-5. Add Blend against that stable topology.
+```text
+Step 1
+Land/commit corrected ADT M/S spatial placement.
 
-If Blend work is performed in the same branch, do not use Blend results to validate the old ADT geometry or old coherence measurement.
+Step 2
+Land/commit processed-output coherence guardrail.
 
-Blend should be evaluated against the corrected spatial engine.
+Step 3
+Revalidate and choose direct-Side ceiling (12/15/18 dB).
+
+Step 4
+Land/commit corrected loudness-compensator/safety coupling.
+
+Step 5
+Run full regressions/listening and declare that commit:
+PRE-BLEND BASELINE.
+
+Step 6
+Generate reference renders from that exact commit (§22).
+
+Step 7
+Begin Blend implementation.
+```
+
+Do not begin Blend implementation until steps 1-5 have landed as a stable
+baseline. If Blend work is performed in the same branch regardless, do not
+use Blend results to validate the old ADT geometry or old coherence
+measurement.
+
+Blend must be evaluated against, and its Blend-50 contract (§22) defined
+against, the PRE-BLEND BASELINE commit specifically — not an older VX
+Width build, and not a moving target.
 
 ---
 
@@ -1161,14 +1487,15 @@ Focus
 = where the generated performance sits spectrally
 ```
 
-And these Blend landmarks are non-negotiable:
+And these Blend landmarks hold, both 0 and 50 algebraic endpoints post-release (§2/§12/§22):
 
 ```text
 0
 = exact untouched original
 
 50
-= exact current/default VX sound
+= recommended/default VX balance, exactly the pre-Blend sound
+  (byte-exact/floating-point-tolerance - see §22)
 
 100
 = strongest musically useful VX-forward result
@@ -1178,6 +1505,6 @@ The top half of Blend is deliberately **not defined as literal zero-dry** unless
 
 The guiding principle is:
 
-> **Blend 0 is mathematically dry. Blend 50 is mathematically the current VX result. Blend 100 is perceptually the maximum useful effect.**
+> **Blend 0 is mathematically dry. Blend 50 is exactly the pre-Blend VX result. Blend 100 is perceptually the maximum useful effect.**
 
-That is the product contract.
+That is the shipped product contract (§22).
