@@ -14,7 +14,6 @@
 #include "../Source/vxstudio/products/tone_refine/VxToneRefineProcessor.h"
 #include "../Source/vxstudio/products/tune/VxTuneProcessor.h"
 #include "../Source/vxstudio/products/width/VxWidthProcessor.h"
-#include "../Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.h"
 #include "../Source/vxstudio/products/repair/VxRepairProcessor.h"
 #include "VxStudioProcessorTestUtils.h"
 
@@ -3662,13 +3661,6 @@ bool testNoSteadyStateAllocationsOnAudioThread() {
     setParamNormalized(leveler, "level", 0.72f);
     setParamNormalized(leveler, "control", 0.58f);
     if (!expectNoSteadyStateAllocations("leveler", leveler, noisy))
-        return false;
-
-    VXProximityClassicAudioProcessor proximityClassic;
-    proximityClassic.prepareToPlay(sr, 256);
-    setParamNormalized(proximityClassic, "closer", 0.55f);
-    setParamNormalized(proximityClassic, "air", 0.35f);
-    if (!expectNoSteadyStateAllocations("proximityClassic", proximityClassic, speech))
         return false;
 
     VXToneRefineAudioProcessor toneRefine;

@@ -17,7 +17,6 @@ endif()
 set(VXSTUDIO_FRAMEWORK_VERSION "0.2.2")
 set(VXSTUDIO_PLUGIN_VERSION_VXDEVERB "0.2.1")
 set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITY "0.3.0")
-set(VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC "0.1.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY "0.2.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXFINISH "0.3.0")
 set(VXSTUDIO_PLUGIN_VERSION_VXOPTOCOMP "0.3.0")
@@ -357,35 +356,6 @@ target_include_directories(VXProximity PRIVATE Source)
 target_link_libraries(VXProximity PRIVATE VxStudioFramework juce::juce_dsp)
 add_custom_target(VXProximityPlugin ALL DEPENDS VXProximity_VST3)
 vxstudio_stage_vst3_bundle(VXProximity_VST3 "VXProximity")
-
-juce_add_plugin(VXProximityClassic
-  VERSION ${VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC}
-  BUILD_VERSION ${VXSTUDIO_PLUGIN_VERSION_VXPROXIMITYCLASSIC}
-  FORMATS VST3
-  COMPANY_NAME "VX Suite"
-  BUNDLE_ID "com.vxstudio.vxProximityClassic"
-  IS_SYNTH FALSE
-  NEEDS_MIDI_INPUT FALSE
-  NEEDS_MIDI_OUTPUT FALSE
-  IS_MIDI_EFFECT FALSE
-  PLUGIN_MANUFACTURER_CODE "VXS1"
-  PLUGIN_CODE "VXP2"
-)
-target_compile_definitions(VXProximityClassic PRIVATE
-  JUCE_VST3_CAN_REPLACE_VST2=0
-  JUCE_FORCE_USE_LEGACY_PARAM_IDS=0
-  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
-  JUCE_WEB_BROWSER=0
-)
-juce_generate_juce_header(VXProximityClassic)
-target_sources(VXProximityClassic PRIVATE
-  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
-  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
-)
-target_include_directories(VXProximityClassic PRIVATE Source)
-target_link_libraries(VXProximityClassic PRIVATE VxStudioFramework juce::juce_dsp)
-add_custom_target(VXProximityClassicPlugin ALL DEPENDS VXProximityClassic_VST3)
-vxstudio_stage_vst3_bundle(VXProximityClassic_VST3 "VXProximityClassic")
 
 juce_add_plugin(VXClarity
   VERSION ${VXSTUDIO_PLUGIN_VERSION_VXSPEECHCLARITY}
@@ -1013,7 +983,6 @@ add_custom_target(VXSuite_VST3
   DEPENDS
     VXDeverb_VST3
     VXProximity_VST3
-    VXProximityClassic_VST3
     VXClarity_VST3
     VXFinish_VST3
     VXOptoComp_VST3
@@ -1297,8 +1266,6 @@ add_executable(VXStudioPluginRegressionTests
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
-  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
-  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
   Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
   Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
@@ -1433,8 +1400,6 @@ add_executable(VXStudioBatchAudioCheck
   Source/vxstudio/products/OptoComp/VxOptoCompProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
-  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
-  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
   Source/vxstudio/products/rebalance/VxRebalanceProcessor.cpp
   Source/vxstudio/products/rebalance/VxRebalanceEditor.cpp
   Source/vxstudio/products/rebalance/dsp/VxRebalanceDsp.cpp
@@ -1464,8 +1429,6 @@ add_executable(VXSuiteProfile
   Source/vxstudio/products/finish/VxFinishProcessor.cpp
   Source/vxstudio/products/proximity/VxProximityProcessor.cpp
   Source/vxstudio/products/proximity/dsp/VxProximityDsp.cpp
-  Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.cpp
-  Source/vxstudio/products/ProximityClassic/dsp/VxProximityClassicDsp.cpp
   Source/vxstudio/products/subtract/VxSubtractProcessor.cpp
   Source/vxstudio/products/subtract/dsp/VxSubtractDsp.cpp
   Source/vxstudio/products/tone/VxToneProcessor.cpp
@@ -1532,7 +1495,6 @@ vxstudio_add_pluginval_test(VXDeverb)
 vxstudio_add_pluginval_test(VXFinish)
 vxstudio_add_pluginval_test(VXOptoComp)
 vxstudio_add_pluginval_test(VXProximity)
-vxstudio_add_pluginval_test(VXProximityClassic)
 vxstudio_add_pluginval_test(VXStudioAnalyser)
 vxstudio_add_pluginval_test(VXSubtract)
 vxstudio_add_pluginval_test(VXTone)

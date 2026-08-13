@@ -20,7 +20,6 @@ This README and the in-plugin Help popup are a shared documentation contract. Wh
 | VXDeverb | LRSV dereverberation with RT60 tracking | `Reduce`, `Blend` | Echoey rooms, distant speech, reverberant dialogue |
 | VXSpeechClarity | Focused speech-artifact cleanup | `Sibilance`, `Plosive`, `Breath`, `Click` | De-essing, pop control, breath cleanup, click repair |
 | VXProximity | Directional proximity model with adaptive filtering | `Closer`, `Air`, `Mud` | Intimacy, warmth, fullness, boom control after cleanup |
-| VXProximityClassic | Simplified two-control proximity simulator | `Closer`, `Air` | Warmth and intimacy without the full three-dial model |
 | VXTone | Bass, mid, and treble shaping | `Bass`, `Treble`, `Mid` | Warmth, presence, brightness, tonal balance |
 | VXToneRefine | Guided tonal correction | `Mud`, `Harshness`, `Smooth` | Boxiness, brittleness, transparent smoothing |
 | VXFinish | Final polish and level control | `Finish`, `Body`, `Gain` | Compression, recovery lift, controlled loudness |
@@ -47,7 +46,6 @@ Framework and plugin DSP versions are tracked independently.
 | VXDeverb | `0.2.1` |
 | VXSpeechClarity | `0.2.0` |
 | VXProximity | `0.3.0` |
-| VXProximityClassic | `0.1.0` |
 | VXTone | `0.2.0` |
 | VXToneRefine | `0.1.0` |
 | VXFinish | `0.3.0` |
@@ -63,11 +61,10 @@ Framework and plugin DSP versions are tracked independently.
 
 ## Current status
 
-- `17` focused plugins are implemented and shipping in the shared VX Studio shell.
+- `16` focused plugins are implemented and shipping in the shared VX Studio shell.
 - VXWidth is now a released stereo image and doubling plugin (build order tracked in `docs/Task Based/VXWIDTH_BUILD.md`). Landed: a target-seeking Width engine (measures the source's actual stereo width and solves for the existing-Side gain needed to reach the requested target, rather than applying a fixed widening curve), the ADT doubling engine (now with a permanent, always-on subtle micro-pitch stage), Focus spectral placement, a live spatial-width visualiser, mono-in/stereo-out bus support, and CPU/allocation hardening (verified realtime-safe, no audio-thread allocations). Focus and Tightness are structurally Double-only controls - a dedicated audit (`docs/Task Based/VX_ENGINE_AUDIT.md`) traced every signal path and closed several found couplings (shared adaptive filters/restraints that let Double's own behaviour nudge Width's output) down to exact-bit-equality; neither control can move Width's output at all, even with Double active. Validated against real DAW playback (REAPER), not just automated/headless tests. Also landed: harmonic/residual/transient-aware decorrelation (a lightweight, block-rate autocorrelation-based weighting - tonal content decorrelates less, "protecting fundamentals"; noise-like content decorrelates more; zero added latency, no STFT), the full mono/phase-risk guardrail (per-band coherence, downmix spectral deviation, centre-image displacement, and sustained negative-correlation duration, on top of the existing broadband correlation restraints - all split per-source so Focus/Tightness still cannot move Width's own output), and a fifth `Blend` control (`docs/Task Based/VXWIDTH_BLEND.md`) that balances the original signal against VXWidth's processed result - 50% (default) is exactly the pre-Blend VXWidth sound, extrapolating further past it toward a more effect-forward result on the way to 100%, with a headroom-limited split-gain solve (separate ceilings for existing vs. generated content) so it can't invert Side polarity or exceed the output ceiling. A follow-up "control ownership + effect authority" pass re-checked every internal restraint against the principle that user controls, not internal analysis, should determine effect strength: ADT's generated-double placement is now driven by Width itself (equal-power Mid/Side crossfade, centred at Width=0 rather than a fixed 50/50 split), several restraint constants that were found to be more conservative than necessary were loosened with measured evidence (direct-Side ceiling 12dB to 18dB, transient-protect floor lowered, harmonic decorrelation factor raised), and a redundant centre-confidence gate on Double was removed after the newer phase-risk/mono-downmix guardrails were shown to already cover the same failure mode. Full control-isolation regression suite (exact-bit-equality Width/Double independence) and Width/Double monotonicity checks (including the top half of each control's range) re-verified passing after these changes.
 - VXTune is a new confidence-gated vocal pitch correction plugin: performance decomposition separates sung centre pitch from expression (vibrato, bends, slides), a Bayesian target estimator picks the intended note, and a Signalsmith Stretch-based shifter renders the correction with a live sung-vs-tuned pitch trace. Round-trip latency is ~30-45ms, low enough to monitor through while tracking.
 - VXSpeechClarity and VXToneRefine are live product-facing names; their current VST3 build targets remain `VXClarity` and `VXRefine`.
-- VXProximityClassic is a new two-control simplified proximity model.
 - VXProximity's `Closer` now also drives a dereverberation pre-stage (shared with VXDeverb) so higher settings thin room tone, not just boost bass; this adds ~16ms of latency at 48kHz (compensated automatically by the host).
 - VXRepair is a new all-in-one guided repair assistant combining noise, clicks, clarity, and deverb in a single analysed workflow.
 - VXCleanup has been removed from the active product set and replaced by VXSpeechClarity for speech artifacts plus VXToneRefine for tonal refinement.
@@ -315,28 +312,6 @@ Practical scenarios:
 - Phone or room mics that feel too far away
 - Voice tracks that need warmth after cleanup
 - Pre-tone-shaping enhancement before `VXTone`
-
-### VXProximityClassic
-
-A simplified two-control proximity simulator. Adds low-end body and upper-presence shimmer without the full three-dial model. Use this when VXProximity's Mud control is more than the source needs.
-
-How to use it:
-
-- Raise `Closer` to add weight and intimacy.
-- Use `Air` to prevent the sound becoming too thick or congested.
-- Apply it after noise and room problems are under control.
-
-Example settings:
-
-- Thin distant voice: `Closer 65%`, `Air 45%`
-- Subtle warmth lift: `Closer 40%`, `Air 35%`
-- Spoken-word polish: `Closer 55%`, `Air 40%`
-
-Practical scenarios:
-
-- Phone or room mics that feel too far away
-- Voice tracks that need warmth after cleanup
-- Situations where the three-dial version is more than needed
 
 ### VXTone
 
@@ -668,7 +643,6 @@ Useful plugin targets:
 | `VXSubtract_VST3` | Subtract plugin |
 | `VXDeverb_VST3` | Deverb plugin |
 | `VXProximity_VST3` | Proximity plugin |
-| `VXProximityClassic_VST3` | ProximityClassic plugin |
 | `VXClarity_VST3` | Speech Clarity plugin |
 | `VXTone_VST3` | Tone plugin |
 | `VXRefine_VST3` | ToneRefine plugin |
@@ -700,7 +674,6 @@ Source/
       subtract/       VXSubtract processor and DSP
       deverb/         VXDeverb processor and DSP
       proximity/      VXProximity processor and DSP
-      proximityClassic/ VXProximityClassic processor and DSP
       speech_clarity/ VXSpeechClarity processor and DSP (built as VXClarity)
       tone/           VXTone processor
       tone_refine/    VXToneRefine processor and DSP (built as VXRefine)

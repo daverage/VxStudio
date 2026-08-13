@@ -5,7 +5,6 @@
 #include "../Source/vxstudio/products/leveler/VxLevelerProcessor.h"
 #include "../Source/vxstudio/products/OptoComp/VxOptoCompProcessor.h"
 #include "../Source/vxstudio/products/proximity/VxProximityProcessor.h"
-#include "../Source/vxstudio/products/ProximityClassic/VxProximityClassicProcessor.h"
 #include "../Source/vxstudio/products/rebalance/VxRebalanceProcessor.h"
 #include "../Source/vxstudio/products/repair/VxRepairProcessor.h"
 #include "../Source/vxstudio/products/speech_clarity/VxSpeechClarityProcessor.h"
@@ -122,11 +121,6 @@ int main() {
             std::cout << "Block size: " << blockSize << "\n";
 
             runProfile<VXProximityAudioProcessor>("Proximity", speech, sr, blockSize, passes, [](auto& p) {
-                setParamNormalized(p, "closer", 0.24f);
-                setParamNormalized(p, "air", 0.18f);
-            });
-
-            runProfile<VXProximityClassicAudioProcessor>("ProximityClassic", speech, sr, blockSize, passes, [](auto& p) {
                 setParamNormalized(p, "closer", 0.24f);
                 setParamNormalized(p, "air", 0.18f);
             });
